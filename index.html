@@ -2626,11 +2626,11 @@
 
       setupPlayerVersionSwitcher(groupOrMovie, selectedVersion, allVersions);
 
-      const item = selectedVersion.item || {};
-      const poster = groupOrMovie.poster || item.stream_icon || '';
+      const item = selectedVersion.item || selectedVersion || {};
+      const poster = groupOrMovie.poster || item.stream_icon || item.poster || '';
       const year = groupOrMovie.year || item.year || '';
       const plot = groupOrMovie.plot || item.plot || '';
-      const cast = groupOrMovie.cast || item.cast || item.actors || '';
+      const cast = groupOrMovie.cast || item.cast || item.actors || groupOrMovie.actors || '';
       const director = groupOrMovie.director || item.director || '';
       const genre = groupOrMovie.genre || item.genre || '';
       const rating = groupOrMovie.rating || item.rating || groupOrMovie.rating_5based || item.rating_5based || '';
@@ -3211,6 +3211,39 @@
       toggleMovieInfoSidebar(movieSidebarOpen);
     }
 
+    // Dicionário de tradução de gêneros do IMDb (inglês) para exibição amigável em português
+    const IMDB_GENRE_TRANSLATIONS = {
+      'action': 'Ação',
+      'adventure': 'Aventura',
+      'animation': 'Animação',
+      'biography': 'Biografia',
+      'comedy': 'Comédia',
+      'crime': 'Crime',
+      'documentary': 'Documentário',
+      'drama': 'Drama',
+      'family': 'Família',
+      'fantasy': 'Fantasia',
+      'film-noir': 'Noir',
+      'history': 'História',
+      'horror': 'Terror',
+      'music': 'Música',
+      'musical': 'Musical',
+      'mystery': 'Mistério',
+      'romance': 'Romance',
+      'sci-fi': 'Ficção Científica',
+      'science fiction': 'Ficção Científica',
+      'sport': 'Esporte',
+      'thriller': 'Suspense',
+      'war': 'Guerra',
+      'western': 'Faroeste'
+    };
+
+    function translateGenreName(name) {
+      if (!name) return '';
+      const key = String(name).trim().toLowerCase();
+      return IMDB_GENRE_TRANSLATIONS[key] || name.trim();
+    }
+
     function populateMovieSidebar(mediaMeta) {
       if (!elements.movieInfoSidebar) return;
 
@@ -3273,7 +3306,7 @@
         if (genre) {
           const gList = String(genre).split(/[,/|]/).map(g => g.trim()).filter(Boolean);
           if (gList.length > 0) {
-            elements.sidebarGenres.innerHTML = gList.slice(0, 5).map(g => `<span class="genre-pill">${escapeHtml(g)}</span>`).join('');
+            elements.sidebarGenres.innerHTML = gList.slice(0, 5).map(g => `<span class="genre-pill">${escapeHtml(translateGenreName(g))}</span>`).join('');
             elements.sidebarGenres.style.display = 'flex';
           } else {
             elements.sidebarGenres.style.display = 'none';
@@ -3285,10 +3318,10 @@
 
       // Sinopse
       if (elements.sidebarPlot) {
-        if (plot && String(plot).trim()) {
+        if (plot && String(plot).trim() && String(plot).trim().length > 15) {
           elements.sidebarPlot.textContent = String(plot).trim();
         } else {
-          elements.sidebarPlot.textContent = 'Sinopse em processamento ou não disponível.';
+          elements.sidebarPlot.innerHTML = '<span style="color:#888; font-style: italic;">Buscando ficha técnica no IMDb...</span>';
         }
       }
 
@@ -3298,7 +3331,8 @@
           elements.sidebarDirector.textContent = String(director).trim();
           elements.sidebarDirectorContainer.style.display = 'flex';
         } else {
-          elements.sidebarDirectorContainer.style.display = 'none';
+          elements.sidebarDirector.textContent = '-';
+          elements.sidebarDirectorContainer.style.display = 'flex';
         }
       }
 
@@ -3308,14 +3342,173 @@
           elements.sidebarCast.textContent = String(cast).trim();
           elements.sidebarCastContainer.style.display = 'flex';
         } else {
-          elements.sidebarCastContainer.style.display = 'none';
+          elements.sidebarCast.textContent = '-';
+          elements.sidebarCastContainer.style.display = 'flex';
         }
       }
 
-      // Enriquecimento assíncrono para filmes se streamId disponível
+      // Dispara busca e enriquecimento no IMDb em segundo plano (sem travar nem pausar o vídeo)
+      fetchImdbSidebarMetadataAsync(title, mediaMeta?.mediaType || 'movie', mediaMeta);
+
       const streamId = mediaMeta?.streamId || mediaMeta?.stream_id;
       if (mediaMeta?.mediaType !== 'series' && streamId) {
         enrichMovieMetadataAsync(streamId, title);
+      }
+    }
+
+    async function fetchImdbSidebarMetadataAsync(title, mediaType, mediaMeta) {
+      const currentStreamId = mediaMeta?.streamId || mediaMeta?.stream_id;
+      const catalogType = (mediaType === 'series') ? 'series' : 'movie';
+
+      try {
+        let imdbId = null;
+
+        // 1. Tentar encontrar ID IMDb já mapeado ou salvo
+        if (mediaType !== 'series' && currentStreamId && KNOWN_STREAM_CORRECTIONS[currentStreamId]?.imdbId) {
+          imdbId = KNOWN_STREAM_CORRECTIONS[currentStreamId].imdbId;
+        } else if (mediaMeta?.imdbId || mediaMeta?.imdb_id) {
+          imdbId = mediaMeta.imdbId || mediaMeta.imdb_id;
+        } else {
+          const targetKeySource = (mediaType === 'series') ? mediaMeta : (mediaMeta?.rawTitle || title);
+          const saved = getSavedMediaMatch(mediaType, targetKeySource);
+          if (saved && saved.id && saved.id.startsWith('tt')) {
+            imdbId = saved.id;
+          }
+        }
+
+        // 2. Se não tiver ID IMDb direto, busca pelo catálogo Cinemeta
+        if (!imdbId) {
+          let searchStr = mediaMeta?.rawTitle || mediaMeta?.seriesName || title || '';
+          searchStr = parseTitleInfo(searchStr);
+          if (!searchStr) searchStr = cleanTitleKey(title);
+
+          if (searchStr) {
+            const searchUrl = `https://v3-cinemeta.strem.io/catalog/${catalogType}/top/search=${encodeURIComponent(searchStr)}.json`;
+            const sRes = await fetch(searchUrl);
+            if (sRes.ok) {
+              const sData = await sRes.json();
+              const metas = sData?.metas || [];
+              if (metas.length > 0) {
+                const expectedYear = mediaMeta?.year || '';
+                let best = metas[0];
+                if (expectedYear) {
+                  const withYear = metas.find(m => (m.releaseInfo && m.releaseInfo.includes(expectedYear)) || (m.year && String(m.year).includes(expectedYear)));
+                  if (withYear) best = withYear;
+                }
+                imdbId = best.id;
+              }
+            }
+          }
+        }
+
+        if (!imdbId) {
+          if (elements.sidebarPlot && elements.sidebarPlot.textContent.includes('Buscando')) {
+            elements.sidebarPlot.textContent = 'Sinopse não disponível para este título.';
+          }
+          return;
+        }
+
+        // 3. Buscar os detalhes completos do IMDb no Cinemeta
+        const metaUrl = `https://v3-cinemeta.strem.io/meta/${catalogType}/${imdbId}.json`;
+        const mRes = await fetch(metaUrl);
+        if (!mRes.ok) return;
+        const mData = await mRes.json();
+        const meta = mData?.meta;
+        if (!meta) return;
+
+        // 4. Se o usuário já fechou o vídeo ou trocou de mídia enquanto baixava, descarta
+        if (currentPlaybackMeta?.streamId && currentStreamId && String(currentPlaybackMeta.streamId) !== String(currentStreamId)) {
+          return;
+        }
+
+        // 5. Aplicar os dados na ficha técnica lateral esquerda
+
+        // Sinopse: se estiver vazia ou com texto de carregando/não disponível, atualiza
+        if (meta.description && elements.sidebarPlot) {
+          const curPlot = elements.sidebarPlot.textContent || '';
+          if (!curPlot || curPlot.includes('processamento') || curPlot.includes('não disponível') || curPlot.includes('Buscando') || curPlot.includes('Carregando') || curPlot.length < 20) {
+            elements.sidebarPlot.textContent = meta.description;
+          }
+        }
+
+        // Direção
+        if (elements.sidebarDirector && elements.sidebarDirectorContainer) {
+          let dirStr = '';
+          if (Array.isArray(meta.director)) {
+            dirStr = meta.director.filter(Boolean).join(', ');
+          } else if (typeof meta.director === 'string') {
+            dirStr = meta.director;
+          }
+          if (dirStr && (elements.sidebarDirectorContainer.style.display === 'none' || elements.sidebarDirector.textContent === '-' || elements.sidebarDirector.textContent.includes('Carregando'))) {
+            elements.sidebarDirector.textContent = dirStr;
+            elements.sidebarDirectorContainer.style.display = 'flex';
+          }
+        }
+
+        // Elenco Principal
+        if (elements.sidebarCast && elements.sidebarCastContainer) {
+          let castStr = '';
+          if (Array.isArray(meta.cast)) {
+            castStr = meta.cast.filter(Boolean).slice(0, 10).join(', ');
+          } else if (typeof meta.cast === 'string') {
+            castStr = meta.cast;
+          }
+          if (castStr && (elements.sidebarCastContainer.style.display === 'none' || elements.sidebarCast.textContent === '-' || elements.sidebarCast.textContent.includes('Carregando'))) {
+            elements.sidebarCast.textContent = castStr;
+            elements.sidebarCastContainer.style.display = 'flex';
+          }
+        }
+
+        // Duração
+        if (elements.sidebarDuration) {
+          const curDurHidden = elements.sidebarDuration.style.display === 'none';
+          if (curDurHidden && meta.runtime) {
+            const dStr = formatDurationString(meta.runtime);
+            if (dStr) {
+              elements.sidebarDuration.textContent = '⏱️ ' + dStr;
+              elements.sidebarDuration.style.display = 'inline';
+              if (elements.sidebarMetaDot) elements.sidebarMetaDot.style.display = 'inline';
+            }
+          }
+        }
+
+        // Nota IMDb
+        if (elements.sidebarRating) {
+          const curRatingHidden = elements.sidebarRating.style.display === 'none';
+          if (curRatingHidden && meta.imdbRating && Number(meta.imdbRating) > 0) {
+            elements.sidebarRating.innerHTML = `★ ${Number(meta.imdbRating).toFixed(1)}`;
+            elements.sidebarRating.style.display = 'inline-flex';
+          }
+        }
+
+        // Gêneros
+        if (elements.sidebarGenres) {
+          const curGenresHidden = elements.sidebarGenres.style.display === 'none' || elements.sidebarGenres.children.length === 0;
+          if (curGenresHidden) {
+            const genreList = Array.isArray(meta.genres) ? meta.genres : (Array.isArray(meta.genre) ? meta.genre : (meta.genre ? [meta.genre] : []));
+            if (genreList.length > 0) {
+              elements.sidebarGenres.innerHTML = genreList.slice(0, 5).map(g => `<span class="genre-pill">${escapeHtml(translateGenreName(g))}</span>`).join('');
+              elements.sidebarGenres.style.display = 'flex';
+            }
+          }
+        }
+
+        // Pôster
+        if (elements.sidebarPoster) {
+          if ((!elements.sidebarPoster.src || elements.sidebarPoster.style.display === 'none') && meta.poster) {
+            elements.sidebarPoster.src = meta.poster;
+            elements.sidebarPoster.style.display = 'block';
+          }
+        }
+
+        // Ano se não informado
+        if (elements.sidebarYear && (elements.sidebarYear.textContent === 'Ano N/D' || !elements.sidebarYear.textContent)) {
+          const y = meta.year || meta.releaseInfo;
+          if (y) elements.sidebarYear.textContent = String(y).substring(0, 4);
+        }
+
+      } catch (err) {
+        console.warn('Erro ao carregar metadados do IMDb em segundo plano:', err);
       }
     }
 
@@ -3329,17 +3522,17 @@
         const info = data?.info;
         if (!info) return;
 
-        if (currentPlaybackMeta?.streamId !== streamId) return;
+        if (currentPlaybackMeta?.streamId && String(currentPlaybackMeta.streamId) !== String(streamId)) return;
 
-        if (info.plot && elements.sidebarPlot && (!elements.sidebarPlot.textContent || elements.sidebarPlot.textContent.includes('não disponível') || elements.sidebarPlot.textContent.includes('processamento'))) {
+        if (info.plot && elements.sidebarPlot && (!elements.sidebarPlot.textContent || elements.sidebarPlot.textContent.includes('não disponível') || elements.sidebarPlot.textContent.includes('processamento') || elements.sidebarPlot.textContent.includes('Buscando'))) {
           elements.sidebarPlot.textContent = info.plot;
         }
-        if (info.director && elements.sidebarDirector && elements.sidebarDirectorContainer && elements.sidebarDirectorContainer.style.display === 'none') {
+        if (info.director && elements.sidebarDirector && elements.sidebarDirectorContainer && (elements.sidebarDirectorContainer.style.display === 'none' || elements.sidebarDirector.textContent === '-')) {
           elements.sidebarDirector.textContent = info.director;
           elements.sidebarDirectorContainer.style.display = 'flex';
         }
         const castStr = info.actors || info.cast;
-        if (castStr && elements.sidebarCast && elements.sidebarCastContainer && elements.sidebarCastContainer.style.display === 'none') {
+        if (castStr && elements.sidebarCast && elements.sidebarCastContainer && (elements.sidebarCastContainer.style.display === 'none' || elements.sidebarCast.textContent === '-')) {
           elements.sidebarCast.textContent = castStr;
           elements.sidebarCastContainer.style.display = 'flex';
         }
@@ -3351,10 +3544,10 @@
             if (elements.sidebarMetaDot) elements.sidebarMetaDot.style.display = 'inline';
           }
         }
-        if (info.genre && elements.sidebarGenres && elements.sidebarGenres.style.display === 'none') {
+        if (info.genre && elements.sidebarGenres && (elements.sidebarGenres.style.display === 'none' || elements.sidebarGenres.children.length === 0)) {
           const genres = String(info.genre).split(/[,/|]/).map(g => g.trim()).filter(Boolean);
           if (genres.length > 0) {
-            elements.sidebarGenres.innerHTML = genres.slice(0, 5).map(g => `<span class="genre-pill">${escapeHtml(g)}</span>`).join('');
+            elements.sidebarGenres.innerHTML = genres.slice(0, 5).map(g => `<span class="genre-pill">${escapeHtml(translateGenreName(g))}</span>`).join('');
             elements.sidebarGenres.style.display = 'flex';
           }
         }
@@ -3763,9 +3956,16 @@
         return;
       }
 
-      // Caso seja um candidato novo adicionado via busca manual
       const selectedOpt = elements.subCandidateSelect.options[elements.subCandidateSelect.selectedIndex];
       const candName = selectedOpt ? selectedOpt.textContent.trim() : 'Filme';
+
+      if (selectedVal.startsWith('tt')) {
+        fetchImdbSidebarMetadataAsync(candName, currentSubContext.mediaType, {
+          ...currentSubContext.mediaMeta,
+          imdbId: selectedVal
+        });
+      }
+
       elements.modalFormat.textContent = `Buscando legendas para ${candName}...`;
       elements.subSelect.innerHTML = '<option value="loading" disabled selected>💬 Carregando opções...</option>';
 
@@ -3953,6 +4153,12 @@
       if (elements.videoPlayer && elements.videoPlayer.paused) {
         elements.videoPlayer.play().catch(() => {});
       }
+
+      // Atualiza a ficha técnica com os dados do IMDb selecionado
+      fetchImdbSidebarMetadataAsync(matchData.name, currentSubContext.mediaType, {
+        ...currentSubContext.mediaMeta,
+        imdbId: item.id
+      });
 
       // Atualiza o dropdown de candidatos com o item selecionado e memorizado
       const candYear = matchData.year ? ` (${matchData.year})` : '';
