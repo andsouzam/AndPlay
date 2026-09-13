@@ -1369,6 +1369,31 @@
         year: '2014',
         poster: 'https://images.metahub.space/poster/medium/tt2316801/img',
         imdbId: 'tt2316801'
+      },
+      // 3. Vamos, Time! (2024) - Comédia "Gracias, equipo" / "Go Team!" (estava incorretamente como "Time!" com capa de Questão de Tempo)
+      6071584: {
+        name: 'Vamos, Time!',
+        year: '2024',
+        poster: 'https://images.metahub.space/poster/medium/tt38616652/img',
+        imdbId: 'tt38616652'
+      },
+      6071588: {
+        name: 'Vamos, Time! [L]',
+        year: '2024',
+        poster: 'https://images.metahub.space/poster/medium/tt38616652/img',
+        imdbId: 'tt38616652'
+      },
+      6071596: {
+        name: 'Vamos, Time! [Lançamento]',
+        year: '2024',
+        poster: 'https://images.metahub.space/poster/medium/tt38616652/img',
+        imdbId: 'tt38616652'
+      },
+      6072337: {
+        name: 'Vamos, Time! 4K [DV][HDR]',
+        year: '2024',
+        poster: 'https://images.metahub.space/poster/medium/tt38616652/img',
+        imdbId: 'tt38616652'
       }
     };
 
@@ -2366,6 +2391,8 @@
       // Equivalências e traduções comuns diretas
       if (metaClean === cleanTitle) {
         score += 150;
+      } else if (cleanTitle === 'vamos time' && (metaClean === 'gracias equipo' || metaClean === 'go team' || metaClean === 'vamos time')) {
+        score += 150;
       } else if (cleanTitle === 'a fera' && metaClean === 'beast') {
         score += 150;
       } else if (cleanTitle === 'carros' && metaClean === 'cars') {
@@ -2453,12 +2480,31 @@
           allSubtitles: []
         };
 
-        // 1. VERIFICAR SE JÁ EXISTE VÍNCULO MEMORIZADO NO LOCALSTORAGE
+        // 1. VERIFICAR SE JÁ EXISTE VÍNCULO MEMORIZADO NO LOCALSTORAGE OU CORREÇÃO CONHECIDA
         const targetKeySource = (mediaType === 'series') ? mediaMeta : rawTitle;
-        const savedMatch = getSavedMediaMatch(mediaType, targetKeySource);
+        let savedMatch = getSavedMediaMatch(mediaType, targetKeySource);
+        let tagLabel = '[Memorizado]';
+
+        if (!savedMatch && mediaType !== 'series') {
+          const sid = mediaMeta?.stream_id || 
+                      mediaMeta?.selectedVersion?.streamId || 
+                      mediaMeta?.primaryItem?.stream_id || 
+                      mediaMeta?.groupOrMovie?.stream_id;
+          if (sid && KNOWN_STREAM_CORRECTIONS[sid]?.imdbId) {
+            const corr = KNOWN_STREAM_CORRECTIONS[sid];
+            savedMatch = {
+              id: corr.imdbId,
+              name: corr.name.replace(/\s*\[.*?\]/g, '').replace(/\s*\(.*?\)/g, '').trim(),
+              year: corr.year || '',
+              poster: corr.poster || '',
+              catalogType: 'movie'
+            };
+            tagLabel = '[Verificado]';
+          }
+        }
 
         if (savedMatch && savedMatch.id) {
-          elements.modalFormat.textContent = `Carregando legendas de ${savedMatch.name} [Memorizado]...`;
+          elements.modalFormat.textContent = `Carregando legendas de ${savedMatch.name} ${tagLabel}...`;
 
           currentSubContext.candidates = [{
             id: savedMatch.id,
@@ -2471,7 +2517,7 @@
           const opt = document.createElement('option');
           opt.value = savedMatch.id;
           const y = savedMatch.year ? ` (${savedMatch.year})` : '';
-          opt.textContent = `🎯 ${savedMatch.name}${y} [Memorizado]`;
+          opt.textContent = `🎯 ${savedMatch.name}${y} ${tagLabel}`;
           elements.subCandidateSelect.appendChild(opt);
 
           const subs = await fetchCandidateSubtitles(savedMatch.id, savedMatch.name, savedMatch.year, savedMatch.catalogType || catalogType);
