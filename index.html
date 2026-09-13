@@ -476,6 +476,23 @@
       background: #444;
     }
 
+    .sync-btn {
+      background: #2a2a2a;
+      border: 1px solid #444;
+      color: #fff;
+      border-radius: 4px;
+      padding: 3px 7px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .sync-btn:hover {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+
     /* Series Drawer Modal */
     .series-header-info {
       display: flex;
@@ -892,13 +909,29 @@
       <div class="modal-footer">
         <div style="font-size: 13px; color: #888;" id="modalFormat">Formato: MP4 • Link Direto</div>
         <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-          <button class="btn btn-secondary" id="subToggleBtn" title="Ativar ou desativar legenda">💬 Legenda: Auto</button>
-          <label class="btn btn-secondary" style="cursor: pointer;" title="Carregar outra legenda .srt ou .vtt manualmente">
+          <!-- Dropdown com todas as opções de legenda -->
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 12px; color: #bbb;">💬 Legenda:</span>
+            <select id="subSelect" style="min-width: 170px; max-width: 260px; padding: 6px 12px; font-size: 12px; border-radius: 6px;">
+              <option value="none">Desativada</option>
+              <option value="loading" disabled>Buscando legendas...</option>
+            </select>
+          </div>
+
+          <!-- Ajuste de sincronia -->
+          <div id="subSyncControls" style="display: none; align-items: center; gap: 5px; background: #222; padding: 4px 8px; border-radius: 6px; border: 1px solid #333;">
+            <span style="font-size: 11px; color: #aaa;">Sync:</span>
+            <button class="sync-btn" id="subDelayMinusBtn" title="Atrasar legenda 0.5s">-0.5s</button>
+            <span id="subOffsetDisplay" style="font-size: 11px; color: #ffc107; font-weight: bold; min-width: 32px; text-align: center;">0.0s</span>
+            <button class="sync-btn" id="subDelayPlusBtn" title="Adiantar legenda 0.5s">+0.5s</button>
+          </div>
+
+          <label class="btn btn-secondary" style="cursor: pointer; padding: 7px 14px; font-size: 12px;" title="Carregar outra legenda .srt ou .vtt manualmente">
             📁 Carregar .srt
             <input type="file" id="subFileInput" accept=".srt,.vtt" style="display: none;">
           </label>
-          <button class="btn btn-secondary" id="copyLinkBtn">🔗 Copiar Link</button>
-          <a class="btn btn-primary" id="downloadBtn" href="#" target="_blank" download>📥 Baixar Vídeo (MP4)</a>
+          <button class="btn btn-secondary" id="copyLinkBtn" style="padding: 7px 14px; font-size: 12px;">🔗 Copiar Link</button>
+          <a class="btn btn-primary" id="downloadBtn" style="padding: 7px 14px; font-size: 12px;" href="#" target="_blank" download>📥 Baixar Vídeo (MP4)</a>
         </div>
       </div>
     </div>
@@ -981,8 +1014,12 @@
       downloadBtn: document.getElementById('downloadBtn'),
       copyLinkBtn: document.getElementById('copyLinkBtn'),
       modalFormat: document.getElementById('modalFormat'),
+      subSelect: document.getElementById('subSelect'),
+      subSyncControls: document.getElementById('subSyncControls'),
+      subOffsetDisplay: document.getElementById('subOffsetDisplay'),
+      subDelayMinusBtn: document.getElementById('subDelayMinusBtn'),
+      subDelayPlusBtn: document.getElementById('subDelayPlusBtn'),
       subFileInput: document.getElementById('subFileInput'),
-      subToggleBtn: document.getElementById('subToggleBtn'),
 
       // Series Modal
       seriesModal: document.getElementById('seriesModal'),
@@ -1063,7 +1100,9 @@
         if (e.target === elements.videoModal) closePlayer();
       });
       elements.copyLinkBtn.addEventListener('click', copyDirectLink);
-      elements.subToggleBtn.addEventListener('click', toggleSubtitles);
+      elements.subSelect.addEventListener('change', (e) => onSubtitleSelectChange(e.target.value));
+      elements.subDelayMinusBtn.addEventListener('click', () => changeSubtitleOffset(-0.5));
+      elements.subDelayPlusBtn.addEventListener('click', () => changeSubtitleOffset(0.5));
 
       // Carregamento de legendas (.srt ou .vtt)
       elements.subFileInput.addEventListener('change', (e) => {
@@ -1439,6 +1478,10 @@
     // ==========================================
     // REPRODUÇÃO DE VÍDEO (FILMES E EPISÓDIOS)
     // ==========================================
+    let currentRawSubtitleText = '';
+    let currentSubtitleLabel = '';
+    let currentSubtitleOffset = 0.0;
+
     function openPlayer(title, url, mediaType = 'movie', mediaMeta = null) {
       activeVideoUrl = url;
       elements.modalTitle.textContent = title;
@@ -1446,16 +1489,22 @@
       elements.downloadBtn.href = url;
       elements.videoModal.style.display = 'flex';
       elements.modalFormat.textContent = 'Carregando vídeo...';
-      elements.subToggleBtn.textContent = '💬 Buscando legenda...';
-      elements.subToggleBtn.style.background = '#333';
+      
+      // Reset de legendas
+      currentRawSubtitleText = '';
+      currentSubtitleLabel = '';
+      currentSubtitleOffset = 0.0;
+      elements.subOffsetDisplay.textContent = '0.0s';
+      elements.subSyncControls.style.display = 'none';
+      elements.subSelect.innerHTML = '<option value="loading" disabled selected>💬 Buscando legendas...</option>';
 
-      // Limpar legendas anteriores
+      // Limpar faixas de vídeo anteriores
       const oldTracks = elements.videoPlayer.querySelectorAll('track');
       oldTracks.forEach(t => t.remove());
 
       elements.videoPlayer.play().catch(() => {});
 
-      // Buscar legenda automática em português (PT-BR)
+      // Buscar legendas automáticas
       autoFetchSubtitle(title, mediaType, mediaMeta);
     }
 
@@ -1469,27 +1518,9 @@
       const oldTracks = elements.videoPlayer.querySelectorAll('track');
       oldTracks.forEach(t => t.remove());
       elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
-      elements.subToggleBtn.textContent = '💬 Legenda: Auto';
-      elements.subToggleBtn.style.background = '#333';
+      elements.subSyncControls.style.display = 'none';
+      elements.subSelect.innerHTML = '<option value="none">Desativada</option>';
       if (elements.subFileInput) elements.subFileInput.value = '';
-    }
-
-    function toggleSubtitles() {
-      const tracks = elements.videoPlayer.textTracks;
-      if (!tracks || tracks.length === 0) {
-        alert('Nenhuma legenda carregada no momento.');
-        return;
-      }
-      const track = tracks[0];
-      if (track.mode === 'showing') {
-        track.mode = 'hidden';
-        elements.subToggleBtn.textContent = '💬 Legenda: Desligada';
-        elements.subToggleBtn.style.background = '#333';
-      } else {
-        track.mode = 'showing';
-        elements.subToggleBtn.textContent = '💬 Legenda: Ligada (PT-BR)';
-        elements.subToggleBtn.style.background = 'var(--primary)';
-      }
     }
 
     // Busca automática no OpenSubtitles via Stremio Cinemeta
@@ -1504,11 +1535,11 @@
 
         if (!searchTerm) {
           elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
-          elements.subToggleBtn.textContent = '💬 Sem Legenda';
+          elements.subSelect.innerHTML = '<option value="none">Nenhuma Legenda Encontrada</option>';
           return;
         }
 
-        elements.modalFormat.textContent = 'Buscando legenda automática (PT-BR)...';
+        elements.modalFormat.textContent = 'Buscando opções de legenda...';
 
         // 1. Obter IMDB ID via Cinemeta
         const catalogType = (mediaType === 'series') ? 'series' : 'movie';
@@ -1518,7 +1549,7 @@
 
         if (!cinemetaData || !cinemetaData.metas || cinemetaData.metas.length === 0) {
           elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
-          elements.subToggleBtn.textContent = '💬 Sem Legenda Auto';
+          elements.subSelect.innerHTML = '<option value="none">Nenhuma Legenda Encontrada</option>';
           return;
         }
 
@@ -1537,36 +1568,83 @@
 
         if (!subsData || !subsData.subtitles || subsData.subtitles.length === 0) {
           elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
-          elements.subToggleBtn.textContent = '💬 Sem Legenda Auto';
+          elements.subSelect.innerHTML = '<option value="none">Sem legendas para este título</option>';
           return;
         }
 
         // 3. Filtrar por Português (pob = Brasil, por = Portugal)
-        const ptSub = subsData.subtitles.find(s => s.lang === 'pob') || subsData.subtitles.find(s => s.lang === 'por');
+        const ptSubs = subsData.subtitles.filter(s => s.lang === 'pob' || s.lang === 'por');
 
-        if (!ptSub || !ptSub.url) {
-          elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
-          elements.subToggleBtn.textContent = '💬 Sem Legenda PT';
+        elements.subSelect.innerHTML = '<option value="none">Desativada</option>';
+
+        if (ptSubs.length === 0) {
+          elements.modalFormat.textContent = 'Sem legendas em Português no momento';
           return;
         }
 
-        // 4. Baixar a legenda
-        const srtRes = await fetch(ptSub.url);
-        const srtText = await srtRes.text();
+        // Adicionar todas as opções de legenda encontradas
+        ptSubs.forEach((sub, idx) => {
+          const opt = document.createElement('option');
+          opt.value = sub.url;
+          const fileName = (sub.subtitleFileName || sub.movieReleaseName || `Opção ${idx + 1}`).replace(/\.srt$/i, '');
+          opt.textContent = `🇧🇷 Opção ${idx + 1} (${fileName.substring(0, 32)})`;
+          elements.subSelect.appendChild(opt);
+        });
 
-        // 5. Aplicar legenda no player
-        applySubtitleText(srtText, 'Português (Automática)');
+        // Selecionar a primeira opção e carregar automaticamente
+        elements.subSelect.value = ptSubs[0].url;
+        await loadSubtitleFromUrl(ptSubs[0].url, `Opção 1`);
       } catch (err) {
         console.warn('Erro ao buscar legenda automática:', err);
         elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
-        elements.subToggleBtn.textContent = '💬 Sem Legenda Auto';
+        elements.subSelect.innerHTML = '<option value="none">Erro na busca de legendas</option>';
       }
+    }
+
+    async function onSubtitleSelectChange(url) {
+      if (!url || url === 'none') {
+        const oldTracks = elements.videoPlayer.querySelectorAll('track');
+        oldTracks.forEach(t => t.remove());
+        elements.subSyncControls.style.display = 'none';
+        elements.modalFormat.textContent = 'Legenda desativada';
+        currentRawSubtitleText = '';
+        return;
+      }
+
+      const selectedOpt = elements.subSelect.options[elements.subSelect.selectedIndex];
+      const label = selectedOpt ? selectedOpt.textContent.split('(')[0].trim() : 'Legenda';
+      await loadSubtitleFromUrl(url, label);
+    }
+
+    async function loadSubtitleFromUrl(url, label) {
+      try {
+        elements.modalFormat.textContent = `Carregando ${label}...`;
+        const res = await fetch(url);
+        const srtText = await res.text();
+        currentRawSubtitleText = srtText;
+        currentSubtitleLabel = label;
+        currentSubtitleOffset = 0.0;
+        elements.subOffsetDisplay.textContent = '0.0s';
+        elements.subSyncControls.style.display = 'inline-flex';
+        applySubtitleText(srtText, label);
+      } catch (err) {
+        console.error('Erro ao baixar arquivo de legenda:', err);
+        elements.modalFormat.textContent = 'Erro ao carregar esta legenda';
+      }
+    }
+
+    function changeSubtitleOffset(delta) {
+      if (!currentRawSubtitleText) return;
+      currentSubtitleOffset = parseFloat((currentSubtitleOffset + delta).toFixed(1));
+      const sign = currentSubtitleOffset > 0 ? '+' : '';
+      elements.subOffsetDisplay.textContent = `${sign}${currentSubtitleOffset.toFixed(1)}s`;
+      applySubtitleText(currentRawSubtitleText, currentSubtitleLabel);
     }
 
     function applySubtitleText(text, label = 'Português') {
       let vttContent = text;
       if (!text.startsWith('WEBVTT')) {
-        vttContent = srtToVtt(text);
+        vttContent = srtToVtt(text, currentSubtitleOffset);
       }
 
       // Limpar faixas anteriores
@@ -1588,17 +1666,31 @@
         if (elements.videoPlayer.textTracks && elements.videoPlayer.textTracks[0]) {
           elements.videoPlayer.textTracks[0].mode = 'showing';
         }
-      }, 150);
+      }, 100);
 
-      elements.modalFormat.textContent = `💬 Legenda automática ativa: ${label}`;
-      elements.subToggleBtn.textContent = '💬 Legenda: Ligada (PT-BR)';
-      elements.subToggleBtn.style.background = 'var(--primary)';
+      const offsetText = currentSubtitleOffset !== 0 ? ` (sync: ${currentSubtitleOffset > 0 ? '+' : ''}${currentSubtitleOffset}s)` : '';
+      elements.modalFormat.textContent = `💬 ${label} ativa${offsetText}`;
     }
 
-    function srtToVtt(srtText) {
+    function srtToVtt(srtText, offsetSeconds = 0) {
       let vtt = "WEBVTT\n\n";
       const normalized = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
       const blocks = normalized.trim().split(/\n\n+/);
+
+      function shiftTime(timeStr, offset) {
+        if (!offset) return timeStr.replace(',', '.');
+        const parts = timeStr.trim().split(':');
+        if (parts.length < 3) return timeStr.replace(',', '.');
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const s = parseFloat(parts[2].replace(',', '.'));
+        let total = h * 3600 + m * 60 + s + offset;
+        if (total < 0) total = 0;
+        const newH = Math.floor(total / 3600).toString().padStart(2, '0');
+        const newM = Math.floor((total % 3600) / 60).toString().padStart(2, '0');
+        const newS = (total % 60).toFixed(3).padStart(6, '0');
+        return `${newH}:${newM}:${newS}`;
+      }
 
       blocks.forEach(block => {
         const lines = block.split('\n');
@@ -1608,9 +1700,13 @@
             timeIndex = 1;
           }
           if (lines[timeIndex] && lines[timeIndex].includes('-->')) {
-            const timeLine = lines[timeIndex].replace(/,/g, '.');
-            const textLines = lines.slice(timeIndex + 1).join('\n');
-            vtt += `${timeLine}\n${textLines}\n\n`;
+            const timeParts = lines[timeIndex].split('-->');
+            if (timeParts.length === 2) {
+              const start = shiftTime(timeParts[0], offsetSeconds);
+              const end = shiftTime(timeParts[1], offsetSeconds);
+              const textLines = lines.slice(timeIndex + 1).join('\n');
+              vtt += `${start} --> ${end}\n${textLines}\n\n`;
+            }
           }
         }
       });
@@ -1620,7 +1716,20 @@
     function loadSubtitleFromFile(file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        applySubtitleText(e.target.result, file.name.replace(/\.(srt|vtt)$/i, ''));
+        currentRawSubtitleText = e.target.result;
+        currentSubtitleLabel = file.name.replace(/\.(srt|vtt)$/i, '');
+        currentSubtitleOffset = 0.0;
+        elements.subOffsetDisplay.textContent = '0.0s';
+        elements.subSyncControls.style.display = 'inline-flex';
+        
+        // Adicionar no select
+        const opt = document.createElement('option');
+        opt.value = 'custom_file';
+        opt.textContent = `📁 ${currentSubtitleLabel}`;
+        elements.subSelect.appendChild(opt);
+        elements.subSelect.value = 'custom_file';
+
+        applySubtitleText(currentRawSubtitleText, currentSubtitleLabel);
       };
       reader.readAsText(file);
     }
