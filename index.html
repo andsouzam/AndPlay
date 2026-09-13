@@ -1470,6 +1470,14 @@
         const demoCatIds = new Set(movieCategories.filter(c => c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
         fullMoviesCache = rawMovies.filter(m => !demoCatIds.has(String(m.category_id)) && (!m.name || m.name.toLowerCase().trim() !== 'demo'));
 
+        // Ordenar por data de adição (mais recentes primeiro)
+        fullMoviesCache.sort((a, b) => {
+          const timeA = Number(a.added || a.last_modified || 0);
+          const timeB = Number(b.added || b.last_modified || 0);
+          if (timeB !== timeA) return timeB - timeA;
+          return Number(b.stream_id || 0) - Number(a.stream_id || 0);
+        });
+
         // Construir índice de posters limpos para cobrir filmes 4K sem capa
         moviePosterMap.clear();
         fullMoviesCache.forEach(m => {
@@ -1502,6 +1510,14 @@
         // Ocultar itens pertencentes à categoria DEMO
         const demoCatIds = new Set(seriesCategories.filter(c => c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
         fullSeriesCache = rawSeries.filter(s => !demoCatIds.has(String(s.category_id)) && (!s.name || s.name.toLowerCase().trim() !== 'demo'));
+
+        // Ordenar por data de adição / atualização (mais recentes primeiro)
+        fullSeriesCache.sort((a, b) => {
+          const timeA = Number(a.last_modified || a.added || 0);
+          const timeB = Number(b.last_modified || b.added || 0);
+          if (timeB !== timeA) return timeB - timeA;
+          return Number(b.series_id || 0) - Number(a.series_id || 0);
+        });
 
         currentMediaList = fullSeriesCache;
         elements.categorySelect.value = 'ALL';
