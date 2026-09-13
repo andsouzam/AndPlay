@@ -1372,28 +1372,32 @@
         poster: 'https://images.metahub.space/poster/medium/tt2316801/img',
         imdbId: 'tt2316801'
       },
-      // 3. Vamos, Time! (2024) - Comédia "Gracias, equipo" / "Go Team!" (estava incorretamente como "Time!" com capa de Questão de Tempo)
+      // 3. Vamos, Time! (2024) - Comédia mexicana "Gracias, equipo" (estava incorretamente como "Time!" com capa de Questão de Tempo no servidor IPTV)
       6071584: {
-        name: 'Vamos, Time!',
+        name: 'Vamos, Time! (2024)',
         year: '2024',
+        originalName: 'Gracias, equipo / Time!',
         poster: 'https://images.metahub.space/poster/medium/tt38616652/img',
         imdbId: 'tt38616652'
       },
       6071588: {
-        name: 'Vamos, Time! [L]',
+        name: 'Vamos, Time! [L] (2024)',
         year: '2024',
+        originalName: 'Gracias, equipo / Time!',
         poster: 'https://images.metahub.space/poster/medium/tt38616652/img',
         imdbId: 'tt38616652'
       },
       6071596: {
-        name: 'Vamos, Time! [Lançamento]',
+        name: 'Vamos, Time! [Lançamento] (2024)',
         year: '2024',
+        originalName: 'Gracias, equipo / Time!',
         poster: 'https://images.metahub.space/poster/medium/tt38616652/img',
         imdbId: 'tt38616652'
       },
       6072337: {
-        name: 'Vamos, Time! 4K [DV][HDR]',
+        name: 'Vamos, Time! 4K [DV][HDR] (2024)',
         year: '2024',
+        originalName: 'Gracias, equipo / Time!',
         poster: 'https://images.metahub.space/poster/medium/tt38616652/img',
         imdbId: 'tt38616652'
       },
@@ -2015,10 +2019,32 @@
           return Number(b.stream_id || 0) - Number(a.stream_id || 0);
         });
 
+        // Limpeza preventiva de vínculos antigos e conflitantes no navegador do usuário
+        try {
+          const badKeys = ['andplay_match_movie_time'];
+          badKeys.forEach(k => {
+            const v = localStorage.getItem(k);
+            if (v && v.includes('tt2194499')) localStorage.removeItem(k);
+          });
+          [6071584, 6071588, 6071596, 6072337].forEach(sid => {
+            const n = localStorage.getItem(`andplay_name_override_${sid}`);
+            if (n && n.toLowerCase().includes('about time')) {
+              localStorage.removeItem(`andplay_name_override_${sid}`);
+              localStorage.removeItem(`andplay_poster_override_${sid}`);
+            }
+          });
+        } catch (e) {}
+
         // Aplica correções automáticas de metadados e customizações salvas pelo usuário
         validMovies.forEach(m => {
           const override = KNOWN_STREAM_CORRECTIONS[m.stream_id];
           if (override) {
+            // Limpa overrides do usuário em conflito com a correção oficial
+            try {
+              localStorage.removeItem(`andplay_poster_override_${m.stream_id}`);
+              localStorage.removeItem(`andplay_name_override_${m.stream_id}`);
+            } catch (e) {}
+
             if (override.name) m.name = override.name;
             if (override.year) m.year = override.year;
             if (override.originalName) m.originalName = override.originalName;
@@ -2026,15 +2052,16 @@
               m.stream_icon = override.poster;
               m.poster = override.poster;
             }
-          }
-          const userPoster = localStorage.getItem(`andplay_poster_override_${m.stream_id}`);
-          if (userPoster) {
-            m.stream_icon = userPoster;
-            m.poster = userPoster;
-          }
-          const userName = localStorage.getItem(`andplay_name_override_${m.stream_id}`);
-          if (userName) {
-            m.name = userName;
+          } else {
+            const userPoster = localStorage.getItem(`andplay_poster_override_${m.stream_id}`);
+            if (userPoster) {
+              m.stream_icon = userPoster;
+              m.poster = userPoster;
+            }
+            const userName = localStorage.getItem(`andplay_name_override_${m.stream_id}`);
+            if (userName) {
+              m.name = userName;
+            }
           }
         });
 
@@ -2738,12 +2765,12 @@
           allSubtitles: []
         };
 
-        // 1. VERIFICAR SE JÁ EXISTE VÍNCULO MEMORIZADO NO LOCALSTORAGE OU CORREÇÃO CONHECIDA
+        // 1. VERIFICAR SE JÁ EXISTE CORREÇÃO CONHECIDA OU VÍNCULO MEMORIZADO NO LOCALSTORAGE
         const targetKeySource = (mediaType === 'series') ? mediaMeta : rawTitle;
-        let savedMatch = getSavedMediaMatch(mediaType, targetKeySource);
-        let tagLabel = '[Memorizado]';
+        let savedMatch = null;
+        let tagLabel = '[Verificado]';
 
-        if (!savedMatch && mediaType !== 'series') {
+        if (mediaType !== 'series') {
           const sid = mediaMeta?.stream_id || 
                       mediaMeta?.selectedVersion?.streamId || 
                       mediaMeta?.primaryItem?.stream_id || 
@@ -2757,8 +2784,12 @@
               poster: corr.poster || '',
               catalogType: 'movie'
             };
-            tagLabel = '[Verificado]';
           }
+        }
+
+        if (!savedMatch) {
+          savedMatch = getSavedMediaMatch(mediaType, targetKeySource);
+          tagLabel = '[Memorizado]';
         }
 
         const isLeg = isLegendadoMedia(mediaMeta) || isLegendadoMedia({ name: rawTitle });
@@ -3227,6 +3258,13 @@
       const isSeries = currentSubContext.mediaType === 'series';
       const targetKeySource = isSeries ? currentSubContext.mediaMeta : currentSubContext.rawTitle;
       removeMediaMatch(currentSubContext.mediaType, targetKeySource);
+      const sid = currentSubContext.mediaMeta?.stream_id || (currentSubContext.mediaMeta?.primaryItem && currentSubContext.mediaMeta.primaryItem.stream_id);
+      if (sid) {
+        try {
+          localStorage.removeItem(`andplay_poster_override_${sid}`);
+          localStorage.removeItem(`andplay_name_override_${sid}`);
+        } catch (e) {}
+      }
       updateMemoryBanner(null);
 
       // Reexecuta busca normal no modal
