@@ -1554,7 +1554,7 @@
       elements.subSyncControls.style.display = 'none';
       closeSubOptionsPanel();
       elements.subCandidateSelect.innerHTML = '<option value="">Identificando...</option>';
-      elements.subSelect.innerHTML = '<option value="loading" disabled selected>💬 Buscando legendas...</option>';
+      elements.subSelect.innerHTML = '<option value="none" selected>Desativada</option>';
 
       // Limpar faixas de vídeo anteriores
       const oldTracks = elements.videoPlayer.querySelectorAll('track');
@@ -1791,13 +1791,13 @@
       }
     }
 
-    function renderSubtitleOptions(filterCandidateId = 'all') {
+    function renderSubtitleOptions(filterCandidateId = 'all', autoSelectFirst = false) {
       const allSubs = currentSubContext.allSubtitles || [];
       const filtered = (filterCandidateId === 'all')
         ? allSubs
         : allSubs.filter(s => s.candidateId === filterCandidateId);
 
-      elements.subSelect.innerHTML = '<option value="none">Desativada</option>';
+      elements.subSelect.innerHTML = '<option value="none" selected>Desativada</option>';
 
       if (filtered.length === 0) {
         elements.modalFormat.textContent = 'Sem legendas em Português para este filtro';
@@ -1813,12 +1813,18 @@
         elements.subSelect.appendChild(opt);
       });
 
-      // Carregar automaticamente a primeira opção
-      elements.subSelect.value = filtered[0].url;
-      const initialLabel = (filterCandidateId === 'all') 
-        ? `${filtered[0].candidateTitle} (Opção 1)` 
-        : 'Opção 1';
-      loadSubtitleFromUrl(filtered[0].url, initialLabel);
+      if (autoSelectFirst && filtered.length > 0) {
+        elements.subSelect.value = filtered[0].url;
+        const initialLabel = (filterCandidateId === 'all') 
+          ? `${filtered[0].candidateTitle} (Opção 1)` 
+          : 'Opção 1';
+        loadSubtitleFromUrl(filtered[0].url, initialLabel);
+      } else {
+        // Por padrão: legendas desativadas até o usuário escolher uma opção
+        elements.subSelect.value = 'none';
+        elements.subSyncControls.style.display = 'none';
+        elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+      }
     }
 
     async function onCandidateSelectChange(selectedVal) {
