@@ -906,32 +906,51 @@
       <div class="video-container">
         <video id="videoPlayer" controls preload="metadata"></video>
       </div>
-      <div class="modal-footer">
-        <div style="font-size: 13px; color: #888;" id="modalFormat">Formato: MP4 • Link Direto</div>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-          <!-- Dropdown com todas as opções de legenda -->
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span style="font-size: 12px; color: #bbb;">💬 Legenda:</span>
-            <select id="subSelect" style="min-width: 170px; max-width: 260px; padding: 6px 12px; font-size: 12px; border-radius: 6px;">
-              <option value="none">Desativada</option>
-              <option value="loading" disabled>Buscando legendas...</option>
-            </select>
+      <div class="modal-footer" style="flex-direction: column; align-items: stretch; gap: 10px;">
+        <!-- Faixa de Controle de Legendas e Identificação -->
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <!-- Seletor de Título Detectado (IMDb) -->
+            <div style="display: flex; align-items: center; gap: 5px;">
+              <span style="font-size: 11px; color: #888; text-transform: uppercase; font-weight: 600;">🎯 Título:</span>
+              <select id="subCandidateSelect" style="min-width: 160px; max-width: 240px; padding: 5px 8px; font-size: 12px; border-radius: 6px; background: #222; color: #fff; border: 1px solid #333;" title="Título reconhecido no catálogo de legendas">
+                <option value="">Identificando...</option>
+              </select>
+              <button class="btn btn-secondary" id="searchCustomSubBtn" style="padding: 5px 8px; font-size: 11px; line-height: 1;" title="Buscar por outro nome ou código IMDb (ex: tt1234567)">🔍 Buscar</button>
+            </div>
+
+            <!-- Dropdown com todas as opções de legenda -->
+            <div style="display: flex; align-items: center; gap: 5px;">
+              <span style="font-size: 11px; color: #888; text-transform: uppercase; font-weight: 600;">💬 Legenda:</span>
+              <select id="subSelect" style="min-width: 160px; max-width: 240px; padding: 5px 8px; font-size: 12px; border-radius: 6px; background: #222; color: #fff; border: 1px solid #333;">
+                <option value="none">Desativada</option>
+                <option value="loading" disabled>Buscando legendas...</option>
+              </select>
+            </div>
+
+            <!-- Ajuste de sincronia -->
+            <div id="subSyncControls" style="display: none; align-items: center; gap: 4px; background: #1c1c1c; padding: 2px 6px; border-radius: 6px; border: 1px solid #333;">
+              <span style="font-size: 11px; color: #aaa;">Sync:</span>
+              <button class="sync-btn" id="subDelayMinusBtn" title="Atrasar legenda 0.5s">-0.5s</button>
+              <span id="subOffsetDisplay" style="font-size: 11px; color: #ffc107; font-weight: bold; min-width: 28px; text-align: center;">0.0s</span>
+              <button class="sync-btn" id="subDelayPlusBtn" title="Adiantar legenda 0.5s">+0.5s</button>
+            </div>
           </div>
 
-          <!-- Ajuste de sincronia -->
-          <div id="subSyncControls" style="display: none; align-items: center; gap: 5px; background: #222; padding: 4px 8px; border-radius: 6px; border: 1px solid #333;">
-            <span style="font-size: 11px; color: #aaa;">Sync:</span>
-            <button class="sync-btn" id="subDelayMinusBtn" title="Atrasar legenda 0.5s">-0.5s</button>
-            <span id="subOffsetDisplay" style="font-size: 11px; color: #ffc107; font-weight: bold; min-width: 32px; text-align: center;">0.0s</span>
-            <button class="sync-btn" id="subDelayPlusBtn" title="Adiantar legenda 0.5s">+0.5s</button>
-          </div>
-
-          <label class="btn btn-secondary" style="cursor: pointer; padding: 7px 14px; font-size: 12px;" title="Carregar outra legenda .srt ou .vtt manualmente">
-            📁 Carregar .srt
+          <!-- Carregar srt local -->
+          <label class="btn btn-secondary" style="cursor: pointer; padding: 5px 10px; font-size: 11px; margin: 0;" title="Carregar legenda .srt ou .vtt do seu dispositivo">
+            📁 .srt local
             <input type="file" id="subFileInput" accept=".srt,.vtt" style="display: none;">
           </label>
-          <button class="btn btn-secondary" id="copyLinkBtn" style="padding: 7px 14px; font-size: 12px;">🔗 Copiar Link</button>
-          <a class="btn btn-primary" id="downloadBtn" style="padding: 7px 14px; font-size: 12px;" href="#" target="_blank" download>📥 Baixar Vídeo (MP4)</a>
+        </div>
+
+        <!-- Linha de Ações: Formato, Link e Download -->
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div style="font-size: 12px; color: #888;" id="modalFormat">Formato: MP4 • Link Direto</div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+            <button class="btn btn-secondary" id="copyLinkBtn" style="padding: 6px 12px; font-size: 12px;">🔗 Copiar Link</button>
+            <a class="btn btn-primary" id="downloadBtn" style="padding: 6px 12px; font-size: 12px;" href="#" target="_blank" download>📥 Baixar Vídeo (MP4)</a>
+          </div>
         </div>
       </div>
     </div>
@@ -1014,6 +1033,8 @@
       downloadBtn: document.getElementById('downloadBtn'),
       copyLinkBtn: document.getElementById('copyLinkBtn'),
       modalFormat: document.getElementById('modalFormat'),
+      subCandidateSelect: document.getElementById('subCandidateSelect'),
+      searchCustomSubBtn: document.getElementById('searchCustomSubBtn'),
       subSelect: document.getElementById('subSelect'),
       subSyncControls: document.getElementById('subSyncControls'),
       subOffsetDisplay: document.getElementById('subOffsetDisplay'),
@@ -1101,6 +1122,8 @@
       });
       elements.copyLinkBtn.addEventListener('click', copyDirectLink);
       elements.subSelect.addEventListener('change', (e) => onSubtitleSelectChange(e.target.value));
+      elements.subCandidateSelect.addEventListener('change', (e) => onCandidateSelectChange(e.target.value));
+      elements.searchCustomSubBtn.addEventListener('click', onSearchCustomSubClick);
       elements.subDelayMinusBtn.addEventListener('click', () => changeSubtitleOffset(-0.5));
       elements.subDelayPlusBtn.addEventListener('click', () => changeSubtitleOffset(0.5));
 
@@ -1419,7 +1442,7 @@
         if (isMovie) {
           const ext = item.container_extension || 'mp4';
           const videoUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${item.stream_id}.${ext}`;
-          card.addEventListener('click', () => openPlayer(title, videoUrl, 'movie', { title: title }));
+          card.addEventListener('click', () => openPlayer(title, videoUrl, 'movie', item));
         } else {
           card.addEventListener('click', () => openSeriesModal(item));
         }
@@ -1481,6 +1504,15 @@
     let currentRawSubtitleText = '';
     let currentSubtitleLabel = '';
     let currentSubtitleOffset = 0.0;
+    let currentSubContext = {
+      rawTitle: '',
+      mediaType: 'movie',
+      mediaMeta: null,
+      cleanTitle: '',
+      targetYear: null,
+      catalogType: 'movie',
+      candidates: []
+    };
 
     function openPlayer(title, url, mediaType = 'movie', mediaMeta = null) {
       activeVideoUrl = url;
@@ -1496,6 +1528,7 @@
       currentSubtitleOffset = 0.0;
       elements.subOffsetDisplay.textContent = '0.0s';
       elements.subSyncControls.style.display = 'none';
+      elements.subCandidateSelect.innerHTML = '<option value="">Identificando...</option>';
       elements.subSelect.innerHTML = '<option value="loading" disabled selected>💬 Buscando legendas...</option>';
 
       // Limpar faixas de vídeo anteriores
@@ -1504,7 +1537,7 @@
 
       elements.videoPlayer.play().catch(() => {});
 
-      // Buscar legendas automáticas
+      // Iniciar busca inteligente de legendas
       autoFetchSubtitle(title, mediaType, mediaMeta);
     }
 
@@ -1519,86 +1552,257 @@
       oldTracks.forEach(t => t.remove());
       elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
       elements.subSyncControls.style.display = 'none';
+      elements.subCandidateSelect.innerHTML = '<option value="">Identificando...</option>';
       elements.subSelect.innerHTML = '<option value="none">Desativada</option>';
       if (elements.subFileInput) elements.subFileInput.value = '';
+    }
+
+    // Extrai o título limpo e o ano para busca precisa
+    function parseTitleInfo(rawTitle, mediaMeta) {
+      if (!rawTitle) return { clean: '', year: null };
+
+      let year = null;
+      if (mediaMeta) {
+        if (mediaMeta.year) {
+          const ym = String(mediaMeta.year).match(/\b(19\d\d|20\d\d)\b/);
+          if (ym) year = parseInt(ym[1], 10);
+        } else if (mediaMeta.release_date) {
+          const ym = String(mediaMeta.release_date).match(/\b(19\d\d|20\d\d)\b/);
+          if (ym) year = parseInt(ym[1], 10);
+        }
+      }
+
+      if (!year) {
+        const yearMatch = rawTitle.match(/\b(19\d\d|20\d\d)\b/);
+        if (yearMatch) {
+          year = parseInt(yearMatch[1], 10);
+        }
+      }
+
+      const clean = rawTitle
+        .replace(/^[0-9]+\s*[-–—]\s*/, '')      // '1 - ', '02 - '
+        .replace(/\b(4k|uhd|hdr|dv|hdcam|cinema|dublado|dub|legendado|leg|lancamento|lançamento)\b/gi, '')
+        .replace(/\[.*?\]/g, '')                // '[HDR]', '[DV]', '[L]'
+        .replace(/\(.*?\)/g, '')                // '(2017)', etc.
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      return { clean, year };
+    }
+
+    // Pontua candidatos com base no ano e na similaridade do título
+    function scoreCandidate(meta, targetYear, cleanTitle) {
+      let score = 50;
+      
+      let metaYear = null;
+      const yStr = meta.releaseInfo || meta.year || '';
+      const yMatch = String(yStr).match(/\b(19\d\d|20\d\d)\b/);
+      if (yMatch) {
+        metaYear = parseInt(yMatch[1], 10);
+      }
+
+      if (targetYear && metaYear) {
+        const diff = Math.abs(targetYear - metaYear);
+        if (diff === 0) {
+          score += 100; // Ano idêntico
+        } else if (diff === 1) {
+          score += 50;  // Tolerância de 1 ano
+        } else {
+          score -= (diff * 30); // Penalidade severa para filmes de anos diferentes
+        }
+      }
+
+      const metaClean = (meta.name || '')
+        .toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (metaClean === cleanTitle) {
+        score += 60;
+      } else if (metaClean.includes(cleanTitle) || cleanTitle.includes(metaClean)) {
+        score += 30;
+      }
+
+      return score;
     }
 
     // Busca automática no OpenSubtitles via Stremio Cinemeta
     async function autoFetchSubtitle(rawTitle, mediaType, mediaMeta) {
       try {
-        let searchTerm = '';
+        const catalogType = (mediaType === 'series') ? 'series' : 'movie';
+        let baseSearch = rawTitle;
         if (mediaType === 'series' && mediaMeta && mediaMeta.seriesName) {
-          searchTerm = cleanTitleKey(mediaMeta.seriesName);
-        } else {
-          searchTerm = cleanTitleKey(rawTitle);
+          baseSearch = mediaMeta.seriesName;
         }
 
-        if (!searchTerm) {
+        const info = parseTitleInfo(baseSearch, mediaMeta);
+        currentSubContext = {
+          rawTitle,
+          mediaType,
+          mediaMeta,
+          cleanTitle: info.clean,
+          targetYear: info.year,
+          catalogType,
+          candidates: []
+        };
+
+        if (!info.clean) {
           elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+          elements.subCandidateSelect.innerHTML = '<option value="">Sem título identificado</option>';
           elements.subSelect.innerHTML = '<option value="none">Nenhuma Legenda Encontrada</option>';
           return;
         }
 
-        elements.modalFormat.textContent = 'Buscando opções de legenda...';
+        elements.modalFormat.textContent = 'Buscando título no catálogo IMDb...';
+        await searchAndPopulateCandidates(info.clean, info.year, catalogType);
+      } catch (err) {
+        console.warn('Erro ao buscar legenda automática:', err);
+        elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+        elements.subCandidateSelect.innerHTML = '<option value="">Erro na busca</option>';
+        elements.subSelect.innerHTML = '<option value="none">Erro na busca de legendas</option>';
+      }
+    }
 
-        // 1. Obter IMDB ID via Cinemeta
-        const catalogType = (mediaType === 'series') ? 'series' : 'movie';
+    async function searchAndPopulateCandidates(searchTerm, targetYear, catalogType) {
+      elements.subCandidateSelect.innerHTML = '<option value="">Buscando títulos...</option>';
+      elements.subSelect.innerHTML = '<option value="loading" disabled selected>💬 Buscando legendas...</option>';
+
+      try {
         const searchUrl = `https://v3-cinemeta.strem.io/catalog/${catalogType}/top/search=${encodeURIComponent(searchTerm)}.json`;
         const cinemetaRes = await fetch(searchUrl);
         const cinemetaData = await cinemetaRes.json();
 
-        if (!cinemetaData || !cinemetaData.metas || cinemetaData.metas.length === 0) {
-          elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
-          elements.subSelect.innerHTML = '<option value="none">Nenhuma Legenda Encontrada</option>';
+        let metas = (cinemetaData && cinemetaData.metas) ? cinemetaData.metas : [];
+
+        if (metas.length === 0) {
+          elements.subCandidateSelect.innerHTML = '<option value="">Nenhum título encontrado</option>';
+          elements.subSelect.innerHTML = '<option value="none">Sem legendas para este título</option>';
+          elements.modalFormat.textContent = 'Nenhum título compatível encontrado';
           return;
         }
 
-        const imdbId = cinemetaData.metas[0].id;
+        // Pontuar candidatos priorizando ano correspondente
+        const scored = metas.map(m => ({
+          ...m,
+          score: scoreCandidate(m, targetYear, searchTerm)
+        })).sort((a, b) => b.score - a.score);
+
+        // Pegar candidatos de pontuação positiva ou os 5 primeiros
+        const topCandidates = scored.filter(m => m.score > 0).slice(0, 8);
+        const finalCandidates = topCandidates.length > 0 ? topCandidates : scored.slice(0, 5);
+
+        currentSubContext.candidates = finalCandidates;
+
+        elements.subCandidateSelect.innerHTML = '';
+        finalCandidates.forEach((cand, idx) => {
+          const opt = document.createElement('option');
+          opt.value = cand.id;
+          const y = cand.releaseInfo || cand.year || '';
+          opt.textContent = `${idx === 0 ? '⭐ ' : ''}${cand.name} ${y ? `(${y})` : ''}`;
+          elements.subCandidateSelect.appendChild(opt);
+        });
+
+        // Selecionar o primeiro colocado
+        const best = finalCandidates[0];
+        elements.subCandidateSelect.value = best.id;
+
+        // Carregar as legendas desse candidato
+        await fetchSubtitlesForCandidate(best.id, best.name);
+      } catch (err) {
+        console.error('Erro ao buscar candidatos no Cinemeta:', err);
+        elements.subCandidateSelect.innerHTML = '<option value="">Erro ao buscar títulos</option>';
+        elements.subSelect.innerHTML = '<option value="none">Erro na busca de legendas</option>';
+      }
+    }
+
+    async function fetchSubtitlesForCandidate(imdbId, candidateName) {
+      try {
+        elements.subSelect.innerHTML = '<option value="loading" disabled selected>💬 Carregando opções...</option>';
+        elements.modalFormat.textContent = `Buscando legendas para ${candidateName}...`;
+
         let subQueryId = imdbId;
-        if (mediaType === 'series' && mediaMeta) {
-          const seasonNum = mediaMeta.season || 1;
-          const epNum = mediaMeta.episodeNum || 1;
+        const catalogType = currentSubContext.catalogType || 'movie';
+
+        if (currentSubContext.mediaType === 'series' && currentSubContext.mediaMeta) {
+          const seasonNum = currentSubContext.mediaMeta.season || 1;
+          const epNum = currentSubContext.mediaMeta.episodeNum || 1;
           subQueryId = `${imdbId}:${seasonNum}:${epNum}`;
         }
 
-        // 2. Buscar legendas no OpenSubtitles v3
         const subApiUrl = `https://opensubtitles-v3.strem.io/subtitles/${catalogType}/${subQueryId}.json`;
         const subsRes = await fetch(subApiUrl);
         const subsData = await subsRes.json();
 
         if (!subsData || !subsData.subtitles || subsData.subtitles.length === 0) {
-          elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
           elements.subSelect.innerHTML = '<option value="none">Sem legendas para este título</option>';
+          elements.modalFormat.textContent = `Nenhuma legenda encontrada para ${candidateName}`;
           return;
         }
 
-        // 3. Filtrar por Português (pob = Brasil, por = Portugal)
         const ptSubs = subsData.subtitles.filter(s => s.lang === 'pob' || s.lang === 'por');
 
         elements.subSelect.innerHTML = '<option value="none">Desativada</option>';
 
         if (ptSubs.length === 0) {
-          elements.modalFormat.textContent = 'Sem legendas em Português no momento';
+          elements.modalFormat.textContent = `Sem legendas em Português para ${candidateName}`;
           return;
         }
 
-        // Adicionar todas as opções de legenda encontradas
         ptSubs.forEach((sub, idx) => {
           const opt = document.createElement('option');
           opt.value = sub.url;
           const fileName = (sub.subtitleFileName || sub.movieReleaseName || `Opção ${idx + 1}`).replace(/\.srt$/i, '');
-          opt.textContent = `🇧🇷 Opção ${idx + 1} (${fileName.substring(0, 32)})`;
+          const flag = sub.lang === 'por' ? '🇵🇹' : '🇧🇷';
+          opt.textContent = `${flag} Opção ${idx + 1} (${fileName.substring(0, 28)})`;
           elements.subSelect.appendChild(opt);
         });
 
-        // Selecionar a primeira opção e carregar automaticamente
+        // Carregar automaticamente a primeira opção
         elements.subSelect.value = ptSubs[0].url;
         await loadSubtitleFromUrl(ptSubs[0].url, `Opção 1`);
       } catch (err) {
-        console.warn('Erro ao buscar legenda automática:', err);
-        elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
-        elements.subSelect.innerHTML = '<option value="none">Erro na busca de legendas</option>';
+        console.error('Erro ao buscar legendas do candidato:', err);
+        elements.subSelect.innerHTML = '<option value="none">Erro ao carregar legendas</option>';
       }
+    }
+
+    async function onCandidateSelectChange(imdbId) {
+      if (!imdbId) return;
+      const selectedOpt = elements.subCandidateSelect.options[elements.subCandidateSelect.selectedIndex];
+      const name = selectedOpt ? selectedOpt.textContent.replace('⭐ ', '').split('(')[0].trim() : 'Filme';
+      await fetchSubtitlesForCandidate(imdbId, name);
+    }
+
+    async function onSearchCustomSubClick() {
+      const defaultVal = currentSubContext.cleanTitle || '';
+      const promptText = `Buscar Legenda no IMDb:\n\nDigite o nome do filme/série (em português ou inglês) ou o código IMDb direto (ex: Beast, Top Gun, tt5628302):`;
+      const query = window.prompt(promptText, defaultVal);
+
+      if (!query || !query.trim()) return;
+
+      const trimmed = query.trim();
+
+      // Se digitou código IMDb direto (ex: tt5628302) ou colou link do IMDb
+      const imdbMatch = trimmed.match(/\btt\d+\b/i);
+      if (imdbMatch) {
+        const id = imdbMatch[0].toLowerCase();
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = `🔍 IMDb: ${id}`;
+        elements.subCandidateSelect.insertBefore(opt, elements.subCandidateSelect.firstChild);
+        elements.subCandidateSelect.value = id;
+        await fetchSubtitlesForCandidate(id, `IMDb ${id}`);
+        return;
+      }
+
+      // Se digitou texto ou nome
+      const info = parseTitleInfo(trimmed);
+      await searchAndPopulateCandidates(info.clean, info.year || currentSubContext.targetYear, currentSubContext.catalogType);
     }
 
     async function onSubtitleSelectChange(url) {
@@ -1822,11 +2026,13 @@
 
         epCard.querySelector('.btn-primary').addEventListener('click', (e) => {
           e.stopPropagation();
-          const sName = currentSeriesData.info ? currentSeriesData.info.name : '';
+          const sInfo = currentSeriesData.info || {};
+          const sName = sInfo.name || '';
           openPlayer(`${sName} - ${epTitle}`, epUrl, 'series', {
             seriesName: sName,
             season: seasonNum,
-            episodeNum: ep.episode_num
+            episodeNum: ep.episode_num,
+            year: sInfo.release_date || sInfo.year
           });
         });
 
