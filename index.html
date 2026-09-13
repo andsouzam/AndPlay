@@ -891,9 +891,10 @@
       </div>
       <div class="modal-footer">
         <div style="font-size: 13px; color: #888;" id="modalFormat">Formato: MP4 • Link Direto</div>
-        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-          <label class="btn btn-secondary" style="cursor: pointer;" title="Carregar legenda .srt ou .vtt do seu computador">
-            💬 Legenda (.srt)
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+          <button class="btn btn-secondary" id="subToggleBtn" title="Ativar ou desativar legenda">💬 Legenda: Auto</button>
+          <label class="btn btn-secondary" style="cursor: pointer;" title="Carregar outra legenda .srt ou .vtt manualmente">
+            📁 Carregar .srt
             <input type="file" id="subFileInput" accept=".srt,.vtt" style="display: none;">
           </label>
           <button class="btn btn-secondary" id="copyLinkBtn">🔗 Copiar Link</button>
@@ -981,6 +982,7 @@
       copyLinkBtn: document.getElementById('copyLinkBtn'),
       modalFormat: document.getElementById('modalFormat'),
       subFileInput: document.getElementById('subFileInput'),
+      subToggleBtn: document.getElementById('subToggleBtn'),
 
       // Series Modal
       seriesModal: document.getElementById('seriesModal'),
@@ -1061,6 +1063,7 @@
         if (e.target === elements.videoModal) closePlayer();
       });
       elements.copyLinkBtn.addEventListener('click', copyDirectLink);
+      elements.subToggleBtn.addEventListener('click', toggleSubtitles);
 
       // Carregamento de legendas (.srt ou .vtt)
       elements.subFileInput.addEventListener('change', (e) => {
@@ -1377,7 +1380,7 @@
         if (isMovie) {
           const ext = item.container_extension || 'mp4';
           const videoUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${item.stream_id}.${ext}`;
-          card.addEventListener('click', () => openPlayer(title, videoUrl));
+          card.addEventListener('click', () => openPlayer(title, videoUrl, 'movie', { title: title }));
         } else {
           card.addEventListener('click', () => openSeriesModal(item));
         }
@@ -1436,13 +1439,24 @@
     // ==========================================
     // REPRODUÇÃO DE VÍDEO (FILMES E EPISÓDIOS)
     // ==========================================
-    function openPlayer(title, url) {
+    function openPlayer(title, url, mediaType = 'movie', mediaMeta = null) {
       activeVideoUrl = url;
       elements.modalTitle.textContent = title;
       elements.videoPlayer.src = url;
       elements.downloadBtn.href = url;
       elements.videoModal.style.display = 'flex';
+      elements.modalFormat.textContent = 'Carregando vídeo...';
+      elements.subToggleBtn.textContent = '💬 Buscando legenda...';
+      elements.subToggleBtn.style.background = '#333';
+
+      // Limpar legendas anteriores
+      const oldTracks = elements.videoPlayer.querySelectorAll('track');
+      oldTracks.forEach(t => t.remove());
+
       elements.videoPlayer.play().catch(() => {});
+
+      // Buscar legenda automática em português (PT-BR)
+      autoFetchSubtitle(title, mediaType, mediaMeta);
     }
 
     function closePlayer() {
@@ -1455,7 +1469,130 @@
       const oldTracks = elements.videoPlayer.querySelectorAll('track');
       oldTracks.forEach(t => t.remove());
       elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+      elements.subToggleBtn.textContent = '💬 Legenda: Auto';
+      elements.subToggleBtn.style.background = '#333';
       if (elements.subFileInput) elements.subFileInput.value = '';
+    }
+
+    function toggleSubtitles() {
+      const tracks = elements.videoPlayer.textTracks;
+      if (!tracks || tracks.length === 0) {
+        alert('Nenhuma legenda carregada no momento.');
+        return;
+      }
+      const track = tracks[0];
+      if (track.mode === 'showing') {
+        track.mode = 'hidden';
+        elements.subToggleBtn.textContent = '💬 Legenda: Desligada';
+        elements.subToggleBtn.style.background = '#333';
+      } else {
+        track.mode = 'showing';
+        elements.subToggleBtn.textContent = '💬 Legenda: Ligada (PT-BR)';
+        elements.subToggleBtn.style.background = 'var(--primary)';
+      }
+    }
+
+    // Busca automática no OpenSubtitles via Stremio Cinemeta
+    async function autoFetchSubtitle(rawTitle, mediaType, mediaMeta) {
+      try {
+        let searchTerm = '';
+        if (mediaType === 'series' && mediaMeta && mediaMeta.seriesName) {
+          searchTerm = cleanTitleKey(mediaMeta.seriesName);
+        } else {
+          searchTerm = cleanTitleKey(rawTitle);
+        }
+
+        if (!searchTerm) {
+          elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+          elements.subToggleBtn.textContent = '💬 Sem Legenda';
+          return;
+        }
+
+        elements.modalFormat.textContent = 'Buscando legenda automática (PT-BR)...';
+
+        // 1. Obter IMDB ID via Cinemeta
+        const catalogType = (mediaType === 'series') ? 'series' : 'movie';
+        const searchUrl = `https://v3-cinemeta.strem.io/catalog/${catalogType}/top/search=${encodeURIComponent(searchTerm)}.json`;
+        const cinemetaRes = await fetch(searchUrl);
+        const cinemetaData = await cinemetaRes.json();
+
+        if (!cinemetaData || !cinemetaData.metas || cinemetaData.metas.length === 0) {
+          elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+          elements.subToggleBtn.textContent = '💬 Sem Legenda Auto';
+          return;
+        }
+
+        const imdbId = cinemetaData.metas[0].id;
+        let subQueryId = imdbId;
+        if (mediaType === 'series' && mediaMeta) {
+          const seasonNum = mediaMeta.season || 1;
+          const epNum = mediaMeta.episodeNum || 1;
+          subQueryId = `${imdbId}:${seasonNum}:${epNum}`;
+        }
+
+        // 2. Buscar legendas no OpenSubtitles v3
+        const subApiUrl = `https://opensubtitles-v3.strem.io/subtitles/${catalogType}/${subQueryId}.json`;
+        const subsRes = await fetch(subApiUrl);
+        const subsData = await subsRes.json();
+
+        if (!subsData || !subsData.subtitles || subsData.subtitles.length === 0) {
+          elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+          elements.subToggleBtn.textContent = '💬 Sem Legenda Auto';
+          return;
+        }
+
+        // 3. Filtrar por Português (pob = Brasil, por = Portugal)
+        const ptSub = subsData.subtitles.find(s => s.lang === 'pob') || subsData.subtitles.find(s => s.lang === 'por');
+
+        if (!ptSub || !ptSub.url) {
+          elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+          elements.subToggleBtn.textContent = '💬 Sem Legenda PT';
+          return;
+        }
+
+        // 4. Baixar a legenda
+        const srtRes = await fetch(ptSub.url);
+        const srtText = await srtRes.text();
+
+        // 5. Aplicar legenda no player
+        applySubtitleText(srtText, 'Português (Automática)');
+      } catch (err) {
+        console.warn('Erro ao buscar legenda automática:', err);
+        elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+        elements.subToggleBtn.textContent = '💬 Sem Legenda Auto';
+      }
+    }
+
+    function applySubtitleText(text, label = 'Português') {
+      let vttContent = text;
+      if (!text.startsWith('WEBVTT')) {
+        vttContent = srtToVtt(text);
+      }
+
+      // Limpar faixas anteriores
+      const oldTracks = elements.videoPlayer.querySelectorAll('track');
+      oldTracks.forEach(t => t.remove());
+
+      const blob = new Blob([vttContent], { type: 'text/vtt' });
+      const trackUrl = URL.createObjectURL(blob);
+
+      const track = document.createElement('track');
+      track.kind = 'subtitles';
+      track.label = label;
+      track.srclang = 'pt';
+      track.src = trackUrl;
+      track.default = true;
+
+      elements.videoPlayer.appendChild(track);
+      setTimeout(() => {
+        if (elements.videoPlayer.textTracks && elements.videoPlayer.textTracks[0]) {
+          elements.videoPlayer.textTracks[0].mode = 'showing';
+        }
+      }, 150);
+
+      elements.modalFormat.textContent = `💬 Legenda automática ativa: ${label}`;
+      elements.subToggleBtn.textContent = '💬 Legenda: Ligada (PT-BR)';
+      elements.subToggleBtn.style.background = 'var(--primary)';
     }
 
     function srtToVtt(srtText) {
@@ -1483,34 +1620,7 @@
     function loadSubtitleFromFile(file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const text = e.target.result;
-        let vttContent = text;
-        if (!text.startsWith('WEBVTT')) {
-          vttContent = srtToVtt(text);
-        }
-
-        // Limpar faixas anteriores
-        const oldTracks = elements.videoPlayer.querySelectorAll('track');
-        oldTracks.forEach(t => t.remove());
-
-        const blob = new Blob([vttContent], { type: 'text/vtt' });
-        const trackUrl = URL.createObjectURL(blob);
-
-        const track = document.createElement('track');
-        track.kind = 'subtitles';
-        track.label = file.name.replace(/\.(srt|vtt)$/i, '');
-        track.srclang = 'pt';
-        track.src = trackUrl;
-        track.default = true;
-
-        elements.videoPlayer.appendChild(track);
-        setTimeout(() => {
-          if (elements.videoPlayer.textTracks && elements.videoPlayer.textTracks[0]) {
-            elements.videoPlayer.textTracks[0].mode = 'showing';
-          }
-        }, 100);
-
-        elements.modalFormat.textContent = `💬 Legenda ativa: ${file.name}`;
+        applySubtitleText(e.target.result, file.name.replace(/\.(srt|vtt)$/i, ''));
       };
       reader.readAsText(file);
     }
@@ -1603,7 +1713,12 @@
 
         epCard.querySelector('.btn-primary').addEventListener('click', (e) => {
           e.stopPropagation();
-          openPlayer(`${currentSeriesData.info ? currentSeriesData.info.name : ''} - ${epTitle}`, epUrl);
+          const sName = currentSeriesData.info ? currentSeriesData.info.name : '';
+          openPlayer(`${sName} - ${epTitle}`, epUrl, 'series', {
+            seriesName: sName,
+            season: seasonNum,
+            episodeNum: ep.episode_num
+          });
         });
 
         elements.episodesList.appendChild(epCard);
