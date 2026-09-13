@@ -1128,7 +1128,6 @@
           <button class="btn btn-secondary" id="toggleSubPanelBtn" style="padding: 7px 14px; font-size: 12px; display: flex; align-items: center; gap: 6px;" title="Mostrar ou ocultar opções de legenda">
             💬 Opções de Legenda
           </button>
-          <button class="btn btn-secondary" id="copyLinkBtn" style="padding: 7px 14px; font-size: 12px;">🔗 Copiar Link</button>
           <a class="btn btn-primary" id="downloadBtn" style="padding: 7px 14px; font-size: 12px;" href="#" target="_blank" download>📥 Baixar Vídeo (MP4)</a>
         </div>
       </div>
@@ -1275,7 +1274,6 @@
       videoPlayer: document.getElementById('videoPlayer'),
       closeVideoModal: document.getElementById('closeVideoModal'),
       downloadBtn: document.getElementById('downloadBtn'),
-      copyLinkBtn: document.getElementById('copyLinkBtn'),
       modalFormat: document.getElementById('modalFormat'),
       subOptionsPanel: document.getElementById('subOptionsPanel'),
       toggleSubPanelBtn: document.getElementById('toggleSubPanelBtn'),
@@ -1657,7 +1655,6 @@
       elements.videoModal.addEventListener('click', (e) => {
         if (e.target === elements.videoModal) closePlayer();
       });
-      elements.copyLinkBtn.addEventListener('click', copyDirectLink);
       elements.toggleSubPanelBtn.addEventListener('click', toggleSubOptionsPanel);
       elements.closeSubPanelBtn.addEventListener('click', closeSubOptionsPanel);
       elements.subSelect.addEventListener('change', (e) => onSubtitleSelectChange(e.target.value));
@@ -3073,15 +3070,6 @@
         applySubtitleText(currentRawSubtitleText, currentSubtitleLabel);
       };
       reader.readAsText(file);
-    }
-
-    function copyDirectLink() {
-      if (!activeVideoUrl) return;
-      navigator.clipboard.writeText(activeVideoUrl).then(() => {
-        const originalText = elements.copyLinkBtn.textContent;
-        elements.copyLinkBtn.textContent = '✅ Copiado!';
-        setTimeout(() => elements.copyLinkBtn.textContent = originalText, 2000);
-      });
     }
 
     // ==========================================
