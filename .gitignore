@@ -1,3 +1,7 @@
 atualizar.bat
 *.ps1
 *.log
+.github/
+.gradle/
+**/build/
+local.properties

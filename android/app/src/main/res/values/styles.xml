@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.AndPlay" parent="@android:style/Theme.NoTitleBar.Fullscreen">
+        <item name="android:windowBackground">#121212</item>
+    </style>
+
+    <style name="Theme.AndPlay.Fullscreen" parent="Theme.AndPlay">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+    </style>
+</resources>
