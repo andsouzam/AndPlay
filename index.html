@@ -1398,6 +1398,20 @@
         .trim();
     }
 
+    function isSpecialMovieCategory(catId) {
+      const c = Number(catId);
+      return (c === 630 || c === 765 || c === 632); // 630: Legendados, 765: 4K, 632: Lançamentos
+    }
+
+    function isAnimationMovieCategory(catId) {
+      const c = Number(catId);
+      return (c === 621 || c === 764); // 621: Animação, 764: Infantis
+    }
+
+    function isLancamentoMovieItem(item) {
+      return Number(item.category_id) === 632 || /\[\s*lan[cç]amentos?\s*\]/i.test(item.name || item.title || '');
+    }
+
     // Agrupa filmes duplicados (Dublado, Legendado e 4K) em um único card inteligente
     function groupMoviesByTitle(moviesList) {
       const groups = [];
@@ -1409,8 +1423,11 @@
         if (!clean) return;
 
         const yMatch = raw.match(/\((19\d\d|20\d\d)\)/);
-        const itemYear = yMatch ? yMatch[1] : (item.year ? String(item.year).trim() : '');
+        const itemYear = yMatch ? yMatch[1] : (item.year && String(item.year).trim().length === 4 ? String(item.year).trim() : '');
         const versionInfo = detectMovieVersion(item);
+        const isLanc = isLancamentoMovieItem(item);
+        const isAnim = isAnimationMovieCategory(item.category_id);
+        const isSpec = isSpecialMovieCategory(item.category_id) || (versionInfo.type !== 'dublado') || isLanc;
 
         let matchedGroup = null;
 
@@ -1418,35 +1435,59 @@
           const candidateIndices = cleanToGroupIndices.get(clean);
           for (const idx of candidateIndices) {
             const g = groups[idx];
-            // Se algum não tiver ano, ou se os anos forem compatíveis (até 1 ano de diferença para lançamentos)
-            if (!itemYear || !g.year || itemYear === g.year || Math.abs(Number(itemYear) - Number(g.year)) <= 1) {
-              matchedGroup = g;
-              break;
+
+            // 1. Verificação de Ano: Não agrupar filmes com anos diferentes (evita fundir refilmagens como Bela e a Fera, Cinderela, etc.)
+            if (itemYear && g.year) {
+              if (Math.abs(Number(itemYear) - Number(g.year)) > 1) {
+                continue; // Anos diferentes -> São filmes/refilmagens distintas!
+              }
+            } else if (itemYear && !g.year) {
+              if (!g.isSpecial) continue;
+            } else if (!itemYear && g.year) {
+              if (!isSpec) continue;
             }
+
+            // 2. Separação de Animação vs Live-Action:
+            // Desenho animado (Cat 621/764) NUNCA se funde com filme live-action de outro gênero
+            if (isAnim && g.hasLiveActionGenre) {
+              continue;
+            }
+            if (!isAnim && !isSpec && g.isAnimation) {
+              continue;
+            }
+
+            // 3. Verificação de versão do mesmo tipo (Dublado com Dublado):
+            // Duas mídias com o MESMO tipo de versão (ex: duas dubladas) só se agrupam se uma delas for [LANÇAMENTO]!
+            // Se nenhuma for [Lançamento], são produções/refilmagens/cortes diferentes e devem ficar separados!
+            const existingVer = g.versions.find(v => v.versionInfo.type === versionInfo.type);
+            if (existingVer) {
+              const existingIsLanc = existingVer.isLanc;
+              if (!isLanc && !existingIsLanc) {
+                continue; // Duas mídias dubladas regulares -> Refilmagens ou produções diferentes!
+              }
+            }
+
+            matchedGroup = g;
+            break;
           }
         }
 
         if (matchedGroup) {
-          // Desduplicação de versão: só deve existir 1 entrada por tipo (dublado, legendado, 4k_dub, 4k_leg)
-          // Isso elimina duplicatas idênticas causadas pela tag [LANÇAMENTO] no servidor IPTV
           const existingVer = matchedGroup.versions.find(v => v.versionInfo.type === versionInfo.type);
           if (!existingVer) {
             matchedGroup.versions.push({
               item,
               versionInfo,
               streamId: item.stream_id,
-              ext: item.container_extension || 'mp4'
+              ext: item.container_extension || 'mp4',
+              isLanc
             });
-          } else {
-            // Se já temos este tipo de versão (ex: Dublado duplicado por [Lançamento]):
-            // Preferimos a versão permanente (sem a tag [Lançamento])
-            const isLancamentoTag = /\[\s*lan[cç]amentos?\s*\]/i;
-            if (isLancamentoTag.test(existingVer.item?.name || '') && !isLancamentoTag.test(item.name || '')) {
-              existingVer.item = item;
-              existingVer.streamId = item.stream_id;
-              existingVer.ext = item.container_extension || 'mp4';
-              existingVer.versionInfo = versionInfo;
-            }
+          } else if (existingVer.isLanc && !isLanc) {
+            existingVer.item = item;
+            existingVer.streamId = item.stream_id;
+            existingVer.ext = item.container_extension || 'mp4';
+            existingVer.versionInfo = versionInfo;
+            existingVer.isLanc = false;
           }
 
           const cid = Number(item.category_id);
@@ -1469,10 +1510,14 @@
           if (itAdd > Number(matchedGroup.added || 0)) {
             matchedGroup.added = item.added;
           }
+          if (isAnim) {
+            matchedGroup.isAnimation = true;
+          }
+          if (!isSpec && !isAnim) {
+            matchedGroup.hasLiveActionGenre = true;
+          }
 
-          // Se o grupo foi criado a partir de um item com [Lançamento] e encontramos a versão com nome definitivo:
-          const isLancamentoTag = /\[\s*lan[cç]amentos?\s*\]/i;
-          if (isLancamentoTag.test(matchedGroup.originalName) && !isLancamentoTag.test(raw)) {
+          if (/\[\s*lan[cç]amentos?\s*\]/i.test(matchedGroup.originalName) && !/\[\s*lan[cç]amentos?\s*\]/i.test(raw)) {
             matchedGroup.originalName = raw;
             matchedGroup.name = cleanDisplayTitle(raw);
             matchedGroup.primaryItem = item;
@@ -1485,6 +1530,7 @@
               if (numC && !catIds.includes(numC)) catIds.push(numC);
             });
           }
+          const hasLive = (!isSpec && !isAnim);
           const newGroup = {
             isGroup: true,
             cleanKey: clean,
@@ -1502,11 +1548,15 @@
             plot: item.plot,
             poster: (item.stream_icon && item.stream_icon.startsWith('http')) ? item.stream_icon : '',
             primaryItem: item,
+            isAnimation: isAnim,
+            hasLiveActionGenre: hasLive,
+            isSpecial: isSpec,
             versions: [{
               item,
               versionInfo,
               streamId: item.stream_id,
-              ext: item.container_extension || 'mp4'
+              ext: item.container_extension || 'mp4',
+              isLanc
             }]
           };
           const newIdx = groups.length;
