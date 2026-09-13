@@ -1443,6 +1443,24 @@
       return { type: 'dublado', label: 'Dublado', badge: 'DUB', icon: '🔊', desc: 'Áudio Dublado em Português' };
     }
 
+    // Identifica se uma mídia/versão é legendada (com legenda impressa/embutida no frame)
+    function isLegendadoMedia(itemOrMeta) {
+      if (!itemOrMeta) return false;
+      if (itemOrMeta.selectedVersion && itemOrMeta.selectedVersion.versionInfo) {
+        const t = itemOrMeta.selectedVersion.versionInfo.type;
+        if (t === 'legendado' || t === '4k_leg') return true;
+      }
+      if (itemOrMeta.versionInfo && itemOrMeta.versionInfo.type) {
+        const t = itemOrMeta.versionInfo.type;
+        if (t === 'legendado' || t === '4k_leg') return true;
+      }
+      const raw = itemOrMeta.rawTitle || itemOrMeta.name || itemOrMeta.title || (itemOrMeta.item && (itemOrMeta.item.name || itemOrMeta.item.title)) || '';
+      if (/\[\s*(?:l|leg|legendado)\s*\]/i.test(raw) || /\b(legendado)\b/i.test(raw)) return true;
+      const catId = String(itemOrMeta.category_id || (itemOrMeta.item && itemOrMeta.item.category_id) || '');
+      if (catId === '630') return true;
+      return false;
+    }
+
     // Título limpo e elegante para exibição no card
     function cleanDisplayTitle(rawTitle) {
       if (!rawTitle) return '';
@@ -2202,6 +2220,10 @@
         selectedVersion,
         allVersions
       });
+
+      if (isLegendadoMedia(selectedVersion)) {
+        disableActiveSubtitle('Formato: MP4 • Legenda impressa no frame');
+      }
     }
 
     function setupPlayerVersionSwitcher(groupOrMovie, activeVersion, allVersions) {
@@ -2256,7 +2278,23 @@
       elements.downloadBtn.href = newUrl;
       elements.videoPlayer.src = newUrl;
 
+      if (currentSubContext && currentSubContext.mediaMeta) {
+        currentSubContext.mediaMeta.selectedVersion = targetVersion;
+      }
+
       setupPlayerVersionSwitcher(groupOrMovie, targetVersion, allVersions);
+
+      const isLeg = isLegendadoMedia(targetVersion);
+      if (isLeg) {
+        // Ao selecionar a opção "Legendado", retirar/ocultar a legenda ativada
+        // já que o vídeo já vem com a legenda impressa no frame
+        disableActiveSubtitle('Legenda externa desativada (Vídeo já possui legenda impressa no frame)');
+        closeSubOptionsPanel();
+      } else {
+        if (elements.subSelect && elements.subSelect.options[0] && elements.subSelect.options[0].value === 'none') {
+          elements.subSelect.options[0].textContent = 'Desativada';
+        }
+      }
 
       function onLoaded() {
         elements.videoPlayer.removeEventListener('loadedmetadata', onLoaded);
@@ -2269,7 +2307,9 @@
       }
 
       elements.videoPlayer.addEventListener('loadedmetadata', onLoaded);
-      elements.modalFormat.textContent = `Versão alterada para ${targetVersion.versionInfo.label}`;
+      if (!isLeg) {
+        elements.modalFormat.textContent = `Versão alterada para ${targetVersion.versionInfo.label}`;
+      }
     }
 
     // ==========================================
@@ -2288,6 +2328,37 @@
       candidates: []
     };
 
+    function disableActiveSubtitle(reasonMessage = '') {
+      currentRawSubtitleText = '';
+      currentSubtitleLabel = '';
+      currentSubtitleOffset = 0.0;
+      if (elements.subOffsetDisplay) elements.subOffsetDisplay.textContent = '0.0s';
+      if (elements.subSyncControls) elements.subSyncControls.style.display = 'none';
+      if (elements.subSelect) {
+        elements.subSelect.value = 'none';
+        const firstOpt = elements.subSelect.options[0];
+        if (firstOpt && firstOpt.value === 'none') {
+          firstOpt.textContent = 'Desativada (Legenda já no vídeo)';
+        }
+      }
+
+      if (elements.videoPlayer) {
+        const oldTracks = elements.videoPlayer.querySelectorAll('track');
+        oldTracks.forEach(t => t.remove());
+        if (elements.videoPlayer.textTracks) {
+          for (let i = 0; i < elements.videoPlayer.textTracks.length; i++) {
+            try {
+              elements.videoPlayer.textTracks[i].mode = 'disabled';
+            } catch (e) {}
+          }
+        }
+      }
+
+      if (reasonMessage && elements.modalFormat) {
+        elements.modalFormat.textContent = reasonMessage;
+      }
+    }
+
     function openPlayer(title, url, mediaType = 'movie', mediaMeta = null) {
       activeVideoUrl = url;
       elements.modalTitle.textContent = title;
@@ -2304,11 +2375,22 @@
       elements.subSyncControls.style.display = 'none';
       closeSubOptionsPanel();
       elements.subCandidateSelect.innerHTML = '<option value="">Identificando...</option>';
-      elements.subSelect.innerHTML = '<option value="none" selected>Desativada</option>';
+      
+      const isLeg = isLegendadoMedia(mediaMeta) || isLegendadoMedia({ name: title });
+      elements.subSelect.innerHTML = isLeg 
+        ? '<option value="none" selected>Desativada (Legenda já no vídeo)</option>'
+        : '<option value="none" selected>Desativada</option>';
 
       // Limpar faixas de vídeo anteriores
       const oldTracks = elements.videoPlayer.querySelectorAll('track');
       oldTracks.forEach(t => t.remove());
+      if (elements.videoPlayer.textTracks) {
+        for (let i = 0; i < elements.videoPlayer.textTracks.length; i++) {
+          try {
+            elements.videoPlayer.textTracks[i].mode = 'disabled';
+          } catch (e) {}
+        }
+      }
 
       elements.videoPlayer.play().catch(() => {});
 
@@ -2500,8 +2582,14 @@
           }
         }
 
+        const isLeg = isLegendadoMedia(mediaMeta) || isLegendadoMedia({ name: rawTitle });
+
         if (savedMatch && savedMatch.id) {
-          elements.modalFormat.textContent = `Carregando legendas de ${savedMatch.name} ${tagLabel}...`;
+          if (isLeg) {
+            elements.modalFormat.textContent = 'Formato: MP4 • Legenda impressa no frame (Legenda externa desativada)';
+          } else {
+            elements.modalFormat.textContent = `Carregando legendas de ${savedMatch.name} ${tagLabel}...`;
+          }
 
           currentSubContext.candidates = [{
             id: savedMatch.id,
@@ -2522,9 +2610,14 @@
 
           // Legendas desativadas por padrão
           renderSubtitleOptions(savedMatch.id, false);
-          elements.modalFormat.textContent = subs.length > 0 
-            ? `Formato: MP4 • Link Direto (${subs.length} legendas disponíveis)`
-            : `Formato: MP4 • Link Direto`;
+
+          if (isLeg) {
+            disableActiveSubtitle('Formato: MP4 • Legenda impressa no frame');
+          } else {
+            elements.modalFormat.textContent = subs.length > 0 
+              ? `Formato: MP4 • Link Direto (${subs.length} legendas disponíveis)`
+              : `Formato: MP4 • Link Direto`;
+          }
           return;
         }
 
@@ -2606,7 +2699,11 @@
         currentSubContext.allSubtitles = combinedSubs;
 
         // Renderizar opções no dropdown
-        renderSubtitleOptions('all');
+        renderSubtitleOptions('all', false);
+
+        if (isLegendadoMedia(currentSubContext?.mediaMeta) || isLegendadoMedia({ name: currentSubContext?.rawTitle })) {
+          disableActiveSubtitle('Formato: MP4 • Legenda impressa no frame');
+        }
 
       } catch (err) {
         console.error('Erro ao buscar candidatos no Cinemeta:', err);
@@ -2651,10 +2748,14 @@
         ? allSubs
         : allSubs.filter(s => s.candidateId === filterCandidateId);
 
-      elements.subSelect.innerHTML = '<option value="none" selected>Desativada</option>';
+      const isLeg = isLegendadoMedia(currentSubContext?.mediaMeta) || isLegendadoMedia({ name: currentSubContext?.rawTitle });
+
+      elements.subSelect.innerHTML = isLeg 
+        ? '<option value="none" selected>Desativada (Legenda já no vídeo)</option>'
+        : '<option value="none" selected>Desativada</option>';
 
       if (filtered.length === 0) {
-        elements.modalFormat.textContent = 'Sem legendas em Português para este filtro';
+        if (!isLeg) elements.modalFormat.textContent = 'Sem legendas em Português para este filtro';
         return;
       }
 
@@ -2667,17 +2768,30 @@
         elements.subSelect.appendChild(opt);
       });
 
-      if (autoSelectFirst && filtered.length > 0) {
+      if (autoSelectFirst && !isLeg && filtered.length > 0) {
         elements.subSelect.value = filtered[0].url;
         const initialLabel = (filterCandidateId === 'all') 
           ? `${filtered[0].candidateTitle} (Opção 1)` 
           : 'Opção 1';
         await loadSubtitleFromUrl(filtered[0].url, initialLabel);
       } else {
-        // Por padrão: legendas desativadas até o usuário escolher uma opção
+        // Por padrão ou se for versão legendada: legendas desativadas
         elements.subSelect.value = 'none';
         elements.subSyncControls.style.display = 'none';
-        elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+        if (isLeg) {
+          const oldTracks = elements.videoPlayer.querySelectorAll('track');
+          oldTracks.forEach(t => t.remove());
+          if (elements.videoPlayer.textTracks) {
+            for (let i = 0; i < elements.videoPlayer.textTracks.length; i++) {
+              try {
+                elements.videoPlayer.textTracks[i].mode = 'disabled';
+              } catch (e) {}
+            }
+          }
+          elements.modalFormat.textContent = 'Formato: MP4 • Legenda impressa no frame';
+        } else {
+          elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+        }
       }
     }
 
@@ -2908,15 +3022,19 @@
       const newSubs = await fetchCandidateSubtitles(item.id, matchData.name, matchData.year, catalogType);
       currentSubContext.allSubtitles = newSubs;
 
-      // Auto-selecionar Opção 1 saindo da opção de legenda desativada
-      await renderSubtitleOptions(item.id, true);
+      const isLeg = isLegendadoMedia(currentSubContext?.mediaMeta) || isLegendadoMedia({ name: currentSubContext?.rawTitle });
+
+      // Auto-selecionar Opção 1 saindo da opção de legenda desativada (apenas se NÃO for mídia com legenda no frame)
+      await renderSubtitleOptions(item.id, !isLeg);
 
       // Garante que o play está ativo ao voltar ao player
       if (elements.videoPlayer && elements.videoPlayer.paused) {
         elements.videoPlayer.play().catch(() => {});
       }
 
-      if (newSubs.length === 0) {
+      if (isLeg) {
+        disableActiveSubtitle('Legenda externa desativada (Vídeo possui legenda no frame)');
+      } else if (newSubs.length === 0) {
         elements.modalFormat.textContent = `Nenhuma legenda em Português encontrada para ${matchData.name}`;
       }
 
@@ -2941,11 +3059,7 @@
 
     async function onSubtitleSelectChange(url) {
       if (!url || url === 'none') {
-        const oldTracks = elements.videoPlayer.querySelectorAll('track');
-        oldTracks.forEach(t => t.remove());
-        elements.subSyncControls.style.display = 'none';
-        elements.modalFormat.textContent = 'Legenda desativada';
-        currentRawSubtitleText = '';
+        disableActiveSubtitle('Legenda desativada');
         return;
       }
 
