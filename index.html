@@ -1557,29 +1557,11 @@
       if (elements.subFileInput) elements.subFileInput.value = '';
     }
 
-    // Extrai o título limpo e o ano para busca precisa
-    function parseTitleInfo(rawTitle, mediaMeta) {
-      if (!rawTitle) return { clean: '', year: null };
+    // Extrai o título limpo para busca no catálogo
+    function parseTitleInfo(rawTitle) {
+      if (!rawTitle) return '';
 
-      let year = null;
-      if (mediaMeta) {
-        if (mediaMeta.year) {
-          const ym = String(mediaMeta.year).match(/\b(19\d\d|20\d\d)\b/);
-          if (ym) year = parseInt(ym[1], 10);
-        } else if (mediaMeta.release_date) {
-          const ym = String(mediaMeta.release_date).match(/\b(19\d\d|20\d\d)\b/);
-          if (ym) year = parseInt(ym[1], 10);
-        }
-      }
-
-      if (!year) {
-        const yearMatch = rawTitle.match(/\b(19\d\d|20\d\d)\b/);
-        if (yearMatch) {
-          year = parseInt(yearMatch[1], 10);
-        }
-      }
-
-      const clean = rawTitle
+      return rawTitle
         .replace(/^[0-9]+\s*[-–—]\s*/, '')      // '1 - ', '02 - '
         .replace(/\b(4k|uhd|hdr|dv|hdcam|cinema|dublado|dub|legendado|leg|lancamento|lançamento)\b/gi, '')
         .replace(/\[.*?\]/g, '')                // '[HDR]', '[DV]', '[L]'
@@ -1589,44 +1571,40 @@
         .replace(/[^a-z0-9\s]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-
-      return { clean, year };
     }
 
-    // Pontua candidatos com base no ano e na similaridade do título
-    function scoreCandidate(meta, targetYear, cleanTitle) {
-      let score = 50;
-      
-      let metaYear = null;
-      const yStr = meta.releaseInfo || meta.year || '';
-      const yMatch = String(yStr).match(/\b(19\d\d|20\d\d)\b/);
-      if (yMatch) {
-        metaYear = parseInt(yMatch[1], 10);
-      }
+    // Pontua relevância do título sem descartar por ano (cadastros IPTV frequentemente têm ano errado)
+    function scoreCandidate(meta, cleanTitle) {
+      let score = 100;
+      if (!meta || !meta.name) return 0;
 
-      if (targetYear && metaYear) {
-        const diff = Math.abs(targetYear - metaYear);
-        if (diff === 0) {
-          score += 100; // Ano idêntico
-        } else if (diff === 1) {
-          score += 50;  // Tolerância de 1 ano
-        } else {
-          score -= (diff * 30); // Penalidade severa para filmes de anos diferentes
-        }
-      }
-
-      const metaClean = (meta.name || '')
+      const metaClean = meta.name
         .toLowerCase()
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9\s]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
+      // Equivalências e traduções comuns diretas
       if (metaClean === cleanTitle) {
+        score += 150;
+      } else if (cleanTitle === 'a fera' && metaClean === 'beast') {
+        score += 150;
+      } else if (cleanTitle === 'carros' && metaClean === 'cars') {
+        score += 150;
+      } else if (cleanTitle === 'panico' && metaClean === 'scream') {
+        score += 150;
+      } else if (metaClean.startsWith(cleanTitle) || cleanTitle.startsWith(metaClean)) {
         score += 60;
       } else if (metaClean.includes(cleanTitle) || cleanTitle.includes(metaClean)) {
-        score += 30;
+        score += 40;
       }
+
+      // Priorizar títulos mais concisos (evita que títulos longos fiquem na frente do filme principal)
+      const metaWords = metaClean.split(' ').filter(Boolean).length;
+      const queryWords = cleanTitle.split(' ').filter(Boolean).length;
+      const wordDiff = Math.abs(metaWords - queryWords);
+      score -= (wordDiff * 8);
 
       return score;
     }
@@ -1640,36 +1618,36 @@
           baseSearch = mediaMeta.seriesName;
         }
 
-        const info = parseTitleInfo(baseSearch, mediaMeta);
+        const clean = parseTitleInfo(baseSearch);
         currentSubContext = {
           rawTitle,
           mediaType,
           mediaMeta,
-          cleanTitle: info.clean,
-          targetYear: info.year,
+          cleanTitle: clean,
           catalogType,
-          candidates: []
+          candidates: [],
+          allSubtitles: []
         };
 
-        if (!info.clean) {
+        if (!clean) {
           elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
-          elements.subCandidateSelect.innerHTML = '<option value="">Sem título identificado</option>';
+          elements.subCandidateSelect.innerHTML = '<option value="none">Sem título identificado</option>';
           elements.subSelect.innerHTML = '<option value="none">Nenhuma Legenda Encontrada</option>';
           return;
         }
 
-        elements.modalFormat.textContent = 'Buscando título no catálogo IMDb...';
-        await searchAndPopulateCandidates(info.clean, info.year, catalogType);
+        elements.modalFormat.textContent = 'Buscando opções no catálogo de legendas...';
+        await searchAndPopulateCandidates(clean, catalogType);
       } catch (err) {
         console.warn('Erro ao buscar legenda automática:', err);
         elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
-        elements.subCandidateSelect.innerHTML = '<option value="">Erro na busca</option>';
+        elements.subCandidateSelect.innerHTML = '<option value="none">Erro na busca</option>';
         elements.subSelect.innerHTML = '<option value="none">Erro na busca de legendas</option>';
       }
     }
 
-    async function searchAndPopulateCandidates(searchTerm, targetYear, catalogType) {
-      elements.subCandidateSelect.innerHTML = '<option value="">Buscando títulos...</option>';
+    async function searchAndPopulateCandidates(searchTerm, catalogType) {
+      elements.subCandidateSelect.innerHTML = '<option value="loading">Buscando títulos...</option>';
       elements.subSelect.innerHTML = '<option value="loading" disabled selected>💬 Buscando legendas...</option>';
 
       try {
@@ -1680,54 +1658,67 @@
         let metas = (cinemetaData && cinemetaData.metas) ? cinemetaData.metas : [];
 
         if (metas.length === 0) {
-          elements.subCandidateSelect.innerHTML = '<option value="">Nenhum título encontrado</option>';
+          elements.subCandidateSelect.innerHTML = '<option value="none">Nenhum título encontrado</option>';
           elements.subSelect.innerHTML = '<option value="none">Sem legendas para este título</option>';
           elements.modalFormat.textContent = 'Nenhum título compatível encontrado';
           return;
         }
 
-        // Pontuar candidatos priorizando ano correspondente
+        // Pontuar candidatos por relevância do nome (sem descartar datas)
         const scored = metas.map(m => ({
           ...m,
-          score: scoreCandidate(m, targetYear, searchTerm)
+          score: scoreCandidate(m, searchTerm)
         })).sort((a, b) => b.score - a.score);
 
-        // Pegar candidatos de pontuação positiva ou os 5 primeiros
-        const topCandidates = scored.filter(m => m.score > 0).slice(0, 8);
-        const finalCandidates = topCandidates.length > 0 ? topCandidates : scored.slice(0, 5);
+        // Manter até 6 candidatos
+        const topCandidates = scored.slice(0, 6);
+        currentSubContext.candidates = topCandidates;
 
-        currentSubContext.candidates = finalCandidates;
-
+        // Atualizar seletor de títulos
         elements.subCandidateSelect.innerHTML = '';
-        finalCandidates.forEach((cand, idx) => {
+        const allOpt = document.createElement('option');
+        allOpt.value = 'all';
+        allOpt.textContent = '🌟 Todos os Títulos Detectados';
+        elements.subCandidateSelect.appendChild(allOpt);
+
+        topCandidates.forEach((cand) => {
           const opt = document.createElement('option');
           opt.value = cand.id;
           const y = cand.releaseInfo || cand.year || '';
-          opt.textContent = `${idx === 0 ? '⭐ ' : ''}${cand.name} ${y ? `(${y})` : ''}`;
+          opt.textContent = `${cand.name} ${y ? `(${y})` : ''}`;
           elements.subCandidateSelect.appendChild(opt);
         });
 
-        // Selecionar o primeiro colocado
-        const best = finalCandidates[0];
-        elements.subCandidateSelect.value = best.id;
+        // Buscar legendas dos até 3 melhores candidatos em paralelo
+        const fetchList = topCandidates.slice(0, 3);
+        elements.modalFormat.textContent = 'Buscando legendas em Português...';
 
-        // Carregar as legendas desse candidato
-        await fetchSubtitlesForCandidate(best.id, best.name);
+        const fetchedResults = await Promise.allSettled(
+          fetchList.map(cand => fetchCandidateSubtitles(cand.id, cand.name, cand.releaseInfo || cand.year || '', catalogType))
+        );
+
+        let combinedSubs = [];
+        fetchedResults.forEach(res => {
+          if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+            combinedSubs = combinedSubs.concat(res.value);
+          }
+        });
+
+        currentSubContext.allSubtitles = combinedSubs;
+
+        // Renderizar opções no dropdown
+        renderSubtitleOptions('all');
+
       } catch (err) {
         console.error('Erro ao buscar candidatos no Cinemeta:', err);
-        elements.subCandidateSelect.innerHTML = '<option value="">Erro ao buscar títulos</option>';
+        elements.subCandidateSelect.innerHTML = '<option value="none">Erro ao buscar títulos</option>';
         elements.subSelect.innerHTML = '<option value="none">Erro na busca de legendas</option>';
       }
     }
 
-    async function fetchSubtitlesForCandidate(imdbId, candidateName) {
+    async function fetchCandidateSubtitles(imdbId, candidateName, candidateYear, catalogType) {
       try {
-        elements.subSelect.innerHTML = '<option value="loading" disabled selected>💬 Carregando opções...</option>';
-        elements.modalFormat.textContent = `Buscando legendas para ${candidateName}...`;
-
         let subQueryId = imdbId;
-        const catalogType = currentSubContext.catalogType || 'movie';
-
         if (currentSubContext.mediaType === 'series' && currentSubContext.mediaMeta) {
           const seasonNum = currentSubContext.mediaMeta.season || 1;
           const epNum = currentSubContext.mediaMeta.episodeNum || 1;
@@ -1735,59 +1726,92 @@
         }
 
         const subApiUrl = `https://opensubtitles-v3.strem.io/subtitles/${catalogType}/${subQueryId}.json`;
-        const subsRes = await fetch(subApiUrl);
-        const subsData = await subsRes.json();
+        const res = await fetch(subApiUrl);
+        const data = await res.json();
 
-        if (!subsData || !subsData.subtitles || subsData.subtitles.length === 0) {
-          elements.subSelect.innerHTML = '<option value="none">Sem legendas para este título</option>';
-          elements.modalFormat.textContent = `Nenhuma legenda encontrada para ${candidateName}`;
-          return;
-        }
+        if (!data || !data.subtitles) return [];
 
-        const ptSubs = subsData.subtitles.filter(s => s.lang === 'pob' || s.lang === 'por');
+        const pt = data.subtitles.filter(s => s.lang === 'pob' || s.lang === 'por');
+        const shortTitle = `${candidateName}${candidateYear ? ` ${candidateYear}` : ''}`;
 
-        elements.subSelect.innerHTML = '<option value="none">Desativada</option>';
-
-        if (ptSubs.length === 0) {
-          elements.modalFormat.textContent = `Sem legendas em Português para ${candidateName}`;
-          return;
-        }
-
-        ptSubs.forEach((sub, idx) => {
-          const opt = document.createElement('option');
-          opt.value = sub.url;
-          const fileName = (sub.subtitleFileName || sub.movieReleaseName || `Opção ${idx + 1}`).replace(/\.srt$/i, '');
-          const flag = sub.lang === 'por' ? '🇵🇹' : '🇧🇷';
-          opt.textContent = `${flag} Opção ${idx + 1} (${fileName.substring(0, 28)})`;
-          elements.subSelect.appendChild(opt);
-        });
-
-        // Carregar automaticamente a primeira opção
-        elements.subSelect.value = ptSubs[0].url;
-        await loadSubtitleFromUrl(ptSubs[0].url, `Opção 1`);
-      } catch (err) {
-        console.error('Erro ao buscar legendas do candidato:', err);
-        elements.subSelect.innerHTML = '<option value="none">Erro ao carregar legendas</option>';
+        return pt.map(s => ({
+          candidateId: imdbId,
+          candidateTitle: shortTitle,
+          url: s.url,
+          lang: s.lang,
+          fileName: (s.subtitleFileName || s.movieReleaseName || 'Legenda').replace(/\.srt$/i, '')
+        }));
+      } catch (e) {
+        return [];
       }
     }
 
-    async function onCandidateSelectChange(imdbId) {
-      if (!imdbId) return;
+    function renderSubtitleOptions(filterCandidateId = 'all') {
+      const allSubs = currentSubContext.allSubtitles || [];
+      const filtered = (filterCandidateId === 'all')
+        ? allSubs
+        : allSubs.filter(s => s.candidateId === filterCandidateId);
+
+      elements.subSelect.innerHTML = '<option value="none">Desativada</option>';
+
+      if (filtered.length === 0) {
+        elements.modalFormat.textContent = 'Sem legendas em Português para este filtro';
+        return;
+      }
+
+      filtered.forEach((sub, idx) => {
+        const opt = document.createElement('option');
+        opt.value = sub.url;
+        const flag = sub.lang === 'por' ? '🇵🇹' : '🇧🇷';
+        const titlePrefix = (filterCandidateId === 'all') ? `[${sub.candidateTitle}] ` : '';
+        opt.textContent = `${flag} ${titlePrefix}Opção ${idx + 1} (${sub.fileName.substring(0, 24)})`;
+        elements.subSelect.appendChild(opt);
+      });
+
+      // Carregar automaticamente a primeira opção
+      elements.subSelect.value = filtered[0].url;
+      const initialLabel = (filterCandidateId === 'all') 
+        ? `${filtered[0].candidateTitle} (Opção 1)` 
+        : 'Opção 1';
+      loadSubtitleFromUrl(filtered[0].url, initialLabel);
+    }
+
+    async function onCandidateSelectChange(selectedVal) {
+      if (!selectedVal || selectedVal === 'none' || selectedVal === 'loading') return;
+
+      if (selectedVal === 'all') {
+        renderSubtitleOptions('all');
+        return;
+      }
+
+      // Se já temos legendas desse candidato em cache
+      const hasSubs = currentSubContext.allSubtitles.some(s => s.candidateId === selectedVal);
+      if (hasSubs) {
+        renderSubtitleOptions(selectedVal);
+        return;
+      }
+
+      // Caso seja um candidato novo adicionado via busca manual
       const selectedOpt = elements.subCandidateSelect.options[elements.subCandidateSelect.selectedIndex];
-      const name = selectedOpt ? selectedOpt.textContent.replace('⭐ ', '').split('(')[0].trim() : 'Filme';
-      await fetchSubtitlesForCandidate(imdbId, name);
+      const candName = selectedOpt ? selectedOpt.textContent.trim() : 'Filme';
+      elements.modalFormat.textContent = `Buscando legendas para ${candName}...`;
+      elements.subSelect.innerHTML = '<option value="loading" disabled selected>💬 Carregando opções...</option>';
+
+      const newSubs = await fetchCandidateSubtitles(selectedVal, candName, '', currentSubContext.catalogType || 'movie');
+      currentSubContext.allSubtitles = currentSubContext.allSubtitles.concat(newSubs);
+      renderSubtitleOptions(selectedVal);
     }
 
     async function onSearchCustomSubClick() {
       const defaultVal = currentSubContext.cleanTitle || '';
-      const promptText = `Buscar Legenda no IMDb:\n\nDigite o nome do filme/série (em português ou inglês) ou o código IMDb direto (ex: Beast, Top Gun, tt5628302):`;
+      const promptText = `Buscar Legenda no IMDb:\n\nDigite o nome do filme/série ou cole o link/código do IMDb (ex: Beast, Top Gun, tt13223398):`;
       const query = window.prompt(promptText, defaultVal);
 
       if (!query || !query.trim()) return;
 
       const trimmed = query.trim();
 
-      // Se digitou código IMDb direto (ex: tt5628302) ou colou link do IMDb
+      // Se colou link do IMDb ou código tt (ex: tt13223398)
       const imdbMatch = trimmed.match(/\btt\d+\b/i);
       if (imdbMatch) {
         const id = imdbMatch[0].toLowerCase();
@@ -1796,13 +1820,13 @@
         opt.textContent = `🔍 IMDb: ${id}`;
         elements.subCandidateSelect.insertBefore(opt, elements.subCandidateSelect.firstChild);
         elements.subCandidateSelect.value = id;
-        await fetchSubtitlesForCandidate(id, `IMDb ${id}`);
+        await onCandidateSelectChange(id);
         return;
       }
 
       // Se digitou texto ou nome
-      const info = parseTitleInfo(trimmed);
-      await searchAndPopulateCandidates(info.clean, info.year || currentSubContext.targetYear, currentSubContext.catalogType);
+      const clean = parseTitleInfo(trimmed);
+      await searchAndPopulateCandidates(clean, currentSubContext.catalogType || 'movie');
     }
 
     async function onSubtitleSelectChange(url) {
