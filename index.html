@@ -423,6 +423,16 @@
       outline: none;
     }
 
+    video::cue {
+      background-color: rgba(0, 0, 0, 0.8);
+      color: #ffffff;
+      font-family: 'Segoe UI', -apple-system, sans-serif;
+      font-size: 1.15rem;
+      font-weight: 600;
+      text-shadow: 0 2px 4px #000;
+      line-height: 1.4;
+    }
+
     .modal-footer {
       padding: 16px 22px;
       display: flex;
@@ -881,7 +891,11 @@
       </div>
       <div class="modal-footer">
         <div style="font-size: 13px; color: #888;" id="modalFormat">Formato: MP4 • Link Direto</div>
-        <div style="display: flex; gap: 10px;">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+          <label class="btn btn-secondary" style="cursor: pointer;" title="Carregar legenda .srt ou .vtt do seu computador">
+            💬 Legenda (.srt)
+            <input type="file" id="subFileInput" accept=".srt,.vtt" style="display: none;">
+          </label>
           <button class="btn btn-secondary" id="copyLinkBtn">🔗 Copiar Link</button>
           <a class="btn btn-primary" id="downloadBtn" href="#" target="_blank" download>📥 Baixar Vídeo (MP4)</a>
         </div>
@@ -966,6 +980,7 @@
       downloadBtn: document.getElementById('downloadBtn'),
       copyLinkBtn: document.getElementById('copyLinkBtn'),
       modalFormat: document.getElementById('modalFormat'),
+      subFileInput: document.getElementById('subFileInput'),
 
       // Series Modal
       seriesModal: document.getElementById('seriesModal'),
@@ -1046,6 +1061,26 @@
         if (e.target === elements.videoModal) closePlayer();
       });
       elements.copyLinkBtn.addEventListener('click', copyDirectLink);
+
+      // Carregamento de legendas (.srt ou .vtt)
+      elements.subFileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          loadSubtitleFromFile(e.target.files[0]);
+        }
+      });
+
+      // Arrastar e soltar legenda (.srt) direto na tela do vídeo
+      const dropZone = elements.videoModal.querySelector('.video-container');
+      dropZone.addEventListener('dragover', (e) => e.preventDefault());
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+          const file = e.dataTransfer.files[0];
+          if (file.name.toLowerCase().endsWith('.srt') || file.name.toLowerCase().endsWith('.vtt')) {
+            loadSubtitleFromFile(file);
+          }
+        }
+      });
 
       // Series Modal
       elements.closeSeriesModal.addEventListener('click', closeSeriesModal);
@@ -1148,7 +1183,10 @@
       optAll.textContent = `🌟 Todas as ${typeLabel} (Catálogo Completo)`;
       elements.categorySelect.appendChild(optAll);
 
-      categories.forEach(cat => {
+      // Oculta categorias DEMO / testes
+      const filteredCategories = categories.filter(cat => !cat.category_name.toLowerCase().includes('demo'));
+
+      filteredCategories.forEach(cat => {
         const opt = document.createElement('option');
         opt.value = cat.category_id;
         opt.textContent = cat.category_name.replace('⚡', '').trim();
@@ -1163,7 +1201,11 @@
       showLoading('Carregando catálogo de filmes e recuperando capas 4K...');
       try {
         const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_vod_streams`);
-        fullMoviesCache = await res.json();
+        const rawMovies = await res.json();
+
+        // Ocultar itens pertencentes à categoria DEMO
+        const demoCatIds = new Set(movieCategories.filter(c => c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
+        fullMoviesCache = rawMovies.filter(m => !demoCatIds.has(String(m.category_id)) && (!m.name || m.name.toLowerCase().trim() !== 'demo'));
 
         // Construir índice de posters limpos para cobrir filmes 4K sem capa
         moviePosterMap.clear();
@@ -1192,7 +1234,12 @@
       showLoading('Carregando catálogo de séries completas...');
       try {
         const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series`);
-        fullSeriesCache = await res.json();
+        const rawSeries = await res.json();
+
+        // Ocultar itens pertencentes à categoria DEMO
+        const demoCatIds = new Set(seriesCategories.filter(c => c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
+        fullSeriesCache = rawSeries.filter(s => !demoCatIds.has(String(s.category_id)) && (!s.name || s.name.toLowerCase().trim() !== 'demo'));
+
         currentMediaList = fullSeriesCache;
         elements.categorySelect.value = 'ALL';
         elements.resetCategoryBtn.style.display = 'none';
@@ -1403,6 +1450,69 @@
       elements.videoPlayer.pause();
       elements.videoPlayer.src = '';
       activeVideoUrl = '';
+
+      // Limpar legendas anteriores
+      const oldTracks = elements.videoPlayer.querySelectorAll('track');
+      oldTracks.forEach(t => t.remove());
+      elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+      if (elements.subFileInput) elements.subFileInput.value = '';
+    }
+
+    function srtToVtt(srtText) {
+      let vtt = "WEBVTT\n\n";
+      const normalized = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const blocks = normalized.trim().split(/\n\n+/);
+
+      blocks.forEach(block => {
+        const lines = block.split('\n');
+        if (lines.length >= 2) {
+          let timeIndex = 0;
+          if (/^\d+$/.test(lines[0].trim())) {
+            timeIndex = 1;
+          }
+          if (lines[timeIndex] && lines[timeIndex].includes('-->')) {
+            const timeLine = lines[timeIndex].replace(/,/g, '.');
+            const textLines = lines.slice(timeIndex + 1).join('\n');
+            vtt += `${timeLine}\n${textLines}\n\n`;
+          }
+        }
+      });
+      return vtt;
+    }
+
+    function loadSubtitleFromFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target.result;
+        let vttContent = text;
+        if (!text.startsWith('WEBVTT')) {
+          vttContent = srtToVtt(text);
+        }
+
+        // Limpar faixas anteriores
+        const oldTracks = elements.videoPlayer.querySelectorAll('track');
+        oldTracks.forEach(t => t.remove());
+
+        const blob = new Blob([vttContent], { type: 'text/vtt' });
+        const trackUrl = URL.createObjectURL(blob);
+
+        const track = document.createElement('track');
+        track.kind = 'subtitles';
+        track.label = file.name.replace(/\.(srt|vtt)$/i, '');
+        track.srclang = 'pt';
+        track.src = trackUrl;
+        track.default = true;
+
+        elements.videoPlayer.appendChild(track);
+        setTimeout(() => {
+          if (elements.videoPlayer.textTracks && elements.videoPlayer.textTracks[0]) {
+            elements.videoPlayer.textTracks[0].mode = 'showing';
+          }
+        }, 100);
+
+        elements.modalFormat.textContent = `💬 Legenda ativa: ${file.name}`;
+      };
+      reader.readAsText(file);
     }
 
     function copyDirectLink() {
