@@ -2043,7 +2043,7 @@
       }
     }
 
-    function renderSubtitleOptions(filterCandidateId = 'all', autoSelectFirst = false) {
+    async function renderSubtitleOptions(filterCandidateId = 'all', autoSelectFirst = false) {
       const allSubs = currentSubContext.allSubtitles || [];
       const filtered = (filterCandidateId === 'all')
         ? allSubs
@@ -2070,7 +2070,7 @@
         const initialLabel = (filterCandidateId === 'all') 
           ? `${filtered[0].candidateTitle} (Opção 1)` 
           : 'Opção 1';
-        loadSubtitleFromUrl(filtered[0].url, initialLabel);
+        await loadSubtitleFromUrl(filtered[0].url, initialLabel);
       } else {
         // Por padrão: legendas desativadas até o usuário escolher uma opção
         elements.subSelect.value = 'none';
@@ -2138,6 +2138,9 @@
 
     function closeImdbSearchModal() {
       elements.imdbSearchModal.style.display = 'none';
+      if (elements.videoPlayer && elements.videoPlayer.paused && elements.videoModal.style.display === 'flex') {
+        elements.videoPlayer.play().catch(() => {});
+      }
     }
 
     function updateMemoryBanner(saved) {
@@ -2266,8 +2269,11 @@
       saveMediaMatch(currentSubContext.mediaType, targetKeySource, matchData);
       updateMemoryBanner(matchData);
 
-      // Fecha o modal de busca
+      // Fecha o modal de busca e despausa (retoma o play) imediatamente ao voltar ao player
       closeImdbSearchModal();
+      if (elements.videoPlayer && elements.videoPlayer.paused) {
+        elements.videoPlayer.play().catch(() => {});
+      }
 
       // Atualiza o dropdown de candidatos com o item selecionado e memorizado
       const candYear = matchData.year ? ` (${matchData.year})` : '';
@@ -2289,11 +2295,16 @@
 
       const newSubs = await fetchCandidateSubtitles(item.id, matchData.name, matchData.year, catalogType);
       currentSubContext.allSubtitles = newSubs;
-      renderSubtitleOptions(item.id, false);
 
-      if (newSubs.length > 0) {
-        elements.modalFormat.textContent = `✓ ${newSubs.length} legenda(s) encontrada(s) para ${matchData.name} (Memorizado!)`;
-      } else {
+      // Auto-selecionar Opção 1 saindo da opção de legenda desativada
+      await renderSubtitleOptions(item.id, true);
+
+      // Garante que o play está ativo ao voltar ao player
+      if (elements.videoPlayer && elements.videoPlayer.paused) {
+        elements.videoPlayer.play().catch(() => {});
+      }
+
+      if (newSubs.length === 0) {
         elements.modalFormat.textContent = `Nenhuma legenda em Português encontrada para ${matchData.name}`;
       }
 
