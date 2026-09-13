@@ -1072,6 +1072,15 @@
       </div>
       <div class="video-container">
         <video id="videoPlayer" controls preload="metadata"></video>
+        <!-- Overlay de Erro e Tratamento de Streams Indisponíveis (503/404) -->
+        <div id="videoErrorOverlay" style="display: none; position: absolute; inset: 0; background: rgba(15, 15, 15, 0.96); z-index: 50; flex-direction: column; align-items: center; justify-content: center; padding: 25px 20px; text-align: center;">
+          <div style="font-size: 46px; margin-bottom: 12px;">⚠️</div>
+          <h3 style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px;" id="videoErrorTitle">Conteúdo Temporariamente Indisponível</h3>
+          <p style="font-size: 13px; color: #bbb; max-width: 520px; line-height: 1.5; margin-bottom: 22px;" id="videoErrorMessage">
+            O servidor de transmissão reportou que este arquivo está temporariamente fora do ar (Erro 503 / Stream Temporarily Unavailable).
+          </p>
+          <div id="videoErrorActions" style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; align-items: center;"></div>
+        </div>
       </div>
       <!-- Painel Expansível de Opções de Legenda -->
       <div id="subOptionsPanel" style="display: none; background: #161616; border-top: 1px solid #282828; border-bottom: 1px solid #222; padding: 12px 18px;">
@@ -1290,6 +1299,10 @@
       subDelayPlusBtn: document.getElementById('subDelayPlusBtn'),
       subFileInput: document.getElementById('subFileInput'),
       movieVersionSwitcher: document.getElementById('movieVersionSwitcher'),
+      videoErrorOverlay: document.getElementById('videoErrorOverlay'),
+      videoErrorTitle: document.getElementById('videoErrorTitle'),
+      videoErrorMessage: document.getElementById('videoErrorMessage'),
+      videoErrorActions: document.getElementById('videoErrorActions'),
 
       // Movie Version Modal
       movieVersionModal: document.getElementById('movieVersionModal'),
@@ -2563,14 +2576,227 @@
       }
     }
 
+    // ==========================================
+    // TRATAMENTO DE STREAMS INDISPONÍVEIS (503 / 404 / TIMEOUT)
+    // ==========================================
+    const BROKEN_STREAM_EXPIRY_MS = 4 * 60 * 60 * 1000; // 4 horas de validade
+
+    function markStreamBroken(streamId) {
+      if (!streamId) return;
+      try {
+        localStorage.setItem(`andplay_broken_stream_${streamId}`, Date.now().toString());
+      } catch (e) {}
+    }
+
+    function clearStreamBroken(streamId) {
+      if (!streamId) return;
+      try {
+        localStorage.removeItem(`andplay_broken_stream_${streamId}`);
+      } catch (e) {}
+    }
+
+    function isStreamMarkedBroken(streamId) {
+      if (!streamId) return false;
+      try {
+        const val = localStorage.getItem(`andplay_broken_stream_${streamId}`);
+        if (!val) return false;
+        const time = Number(val);
+        if (Date.now() - time > BROKEN_STREAM_EXPIRY_MS) {
+          localStorage.removeItem(`andplay_broken_stream_${streamId}`);
+          return false;
+        }
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    let videoLoadTimeout = null;
+    let currentPlaybackMeta = null;
+
+    function startVideoLoadTimeout() {
+      if (videoLoadTimeout) clearTimeout(videoLoadTimeout);
+      // Se em 14 segundos não carregar metadados ou iniciar playback, detecta timeout/falha no servidor
+      videoLoadTimeout = setTimeout(() => {
+        if (elements.videoPlayer && elements.videoPlayer.readyState === 0 && elements.videoModal.style.display === 'flex') {
+          showVideoErrorOverlay('timeout', 'O servidor de transmissão demorou muito para responder (tempo limite esgotado). O link pode estar inacessível ou fora do ar.');
+        }
+      }, 14000);
+    }
+
+    function hideVideoErrorOverlay() {
+      if (videoLoadTimeout) {
+        clearTimeout(videoLoadTimeout);
+        videoLoadTimeout = null;
+      }
+      if (elements.videoErrorOverlay) {
+        elements.videoErrorOverlay.style.display = 'none';
+        elements.videoErrorActions.innerHTML = '';
+      }
+    }
+
+    function showVideoErrorOverlay(errorType = 'server_503', customMsg = '') {
+      if (!elements.videoErrorOverlay) return;
+
+      const meta = currentPlaybackMeta || {};
+      const isSeries = (meta.mediaType === 'series');
+      const streamId = meta.streamId || (meta.mediaMeta && (meta.mediaMeta.stream_id || meta.mediaMeta.streamId));
+
+      if (streamId) {
+        markStreamBroken(streamId);
+      }
+
+      elements.videoErrorTitle.textContent = isSeries 
+        ? 'Episódio Temporariamente Indisponível' 
+        : 'Vídeo Temporariamente Indisponível';
+
+      let msg = customMsg || 'O servidor de transmissão reportou que este arquivo está indisponível ou inacessível no momento (Erro 503 / Stream Temporarily Unavailable).';
+      elements.videoErrorMessage.textContent = msg;
+      elements.modalFormat.textContent = 'Erro de Reprodução: Stream indisponível no servidor (503)';
+
+      elements.videoErrorActions.innerHTML = '';
+
+      // 1. Tentar Versão Alternativa (Dublado <-> Legendado)
+      if (isSeries && currentSeriesGroup && currentSeriesGroup.versions && currentSeriesGroup.versions.length > 1) {
+        const altVersions = currentSeriesGroup.versions.filter(v => v.seriesId !== currentActiveSeriesVersion?.seriesId);
+        altVersions.forEach(v => {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-primary';
+          btn.style.padding = '8px 16px';
+          btn.style.fontSize = '12px';
+          btn.innerHTML = `${v.versionInfo.icon} Tentar na Versão ${escapeHtml(v.versionInfo.label)}`;
+          btn.addEventListener('click', () => {
+            switchSeriesEpisodeToVersion(v, meta.seasonNum, meta.episodeNum);
+          });
+          elements.videoErrorActions.appendChild(btn);
+        });
+      } else if (!isSeries && meta.mediaMeta?.allVersions && meta.mediaMeta.allVersions.length > 1) {
+        const currentVId = meta.mediaMeta.selectedVersion?.streamId;
+        const altMovieVersions = meta.mediaMeta.allVersions.filter(v => v.streamId !== currentVId);
+        altMovieVersions.forEach(v => {
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-primary';
+          btn.style.padding = '8px 16px';
+          btn.style.fontSize = '12px';
+          btn.innerHTML = `${v.versionInfo.icon} Tentar Versão ${escapeHtml(v.versionInfo.label)}`;
+          btn.addEventListener('click', () => {
+            hideVideoErrorOverlay();
+            switchLiveMovieVersion(meta.mediaMeta.groupOrMovie, v, meta.mediaMeta.allVersions);
+          });
+          elements.videoErrorActions.appendChild(btn);
+        });
+      }
+
+      // 2. Próximo Episódio (Séries)
+      if (isSeries && currentSeriesData?.episodes && meta.seasonNum && meta.episodeNum) {
+        const seasonEps = currentSeriesData.episodes[meta.seasonNum] || [];
+        const nextEp = seasonEps.find(e => Number(e.episode_num) === Number(meta.episodeNum) + 1);
+        if (nextEp) {
+          const nextBtn = document.createElement('button');
+          nextBtn.className = 'btn btn-secondary';
+          nextBtn.style.padding = '8px 16px';
+          nextBtn.style.fontSize = '12px';
+          nextBtn.innerHTML = `⏭️ Pular para Episódio ${nextEp.episode_num}`;
+          nextBtn.addEventListener('click', () => {
+            hideVideoErrorOverlay();
+            playSeriesEpisode(nextEp, meta.seasonNum);
+          });
+          elements.videoErrorActions.appendChild(nextBtn);
+        }
+      }
+
+      // 3. Tentar Novamente
+      const retryBtn = document.createElement('button');
+      retryBtn.className = 'btn btn-secondary';
+      retryBtn.style.padding = '8px 16px';
+      retryBtn.style.fontSize = '12px';
+      retryBtn.innerHTML = '🔄 Tentar Novamente';
+      retryBtn.addEventListener('click', () => {
+        hideVideoErrorOverlay();
+        elements.modalFormat.textContent = 'Reconectando ao servidor...';
+        const sep = activeVideoUrl.includes('?') ? '&' : '?';
+        const retryUrl = `${activeVideoUrl.split('?retry=')[0]}${sep}retry=${Date.now()}`;
+        elements.videoPlayer.src = retryUrl;
+        elements.videoPlayer.load();
+        elements.videoPlayer.play().catch(() => {});
+        startVideoLoadTimeout();
+      });
+      elements.videoErrorActions.appendChild(retryBtn);
+
+      // 4. Voltar / Fechar
+      const backBtn = document.createElement('button');
+      backBtn.className = 'btn btn-secondary';
+      backBtn.style.padding = '8px 16px';
+      backBtn.style.fontSize = '12px';
+      backBtn.innerHTML = isSeries ? '📋 Voltar aos Episódios' : '❌ Fechar Player';
+      backBtn.addEventListener('click', () => {
+        closePlayer();
+      });
+      elements.videoErrorActions.appendChild(backBtn);
+
+      elements.videoErrorOverlay.style.display = 'flex';
+    }
+
+    async function switchSeriesEpisodeToVersion(targetVersion, seasonNum, epNum) {
+      if (!elements.videoErrorOverlay) return;
+      elements.videoErrorTitle.textContent = 'Carregando Versão Alternativa...';
+      elements.videoErrorMessage.innerHTML = `<div class="spinner" style="margin: 15px auto;"></div>Buscando episódio correspondente na versão <strong>${escapeHtml(targetVersion.versionInfo.label)}</strong>...`;
+      elements.videoErrorActions.innerHTML = '';
+
+      try {
+        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series_info&series_id=${targetVersion.seriesId}`);
+        const data = await res.json();
+        
+        currentSeriesData = data;
+        currentActiveSeriesVersion = targetVersion;
+
+        if (currentSeriesGroup && currentSeriesGroup.versions) {
+          renderSeriesVersionButtons(currentSeriesGroup.versions, currentActiveSeriesVersion);
+        }
+
+        const seasonEps = (data.episodes && data.episodes[seasonNum]) || [];
+        const matchedEp = seasonEps.find(e => Number(e.episode_num) === Number(epNum)) || seasonEps[0];
+
+        if (matchedEp) {
+          hideVideoErrorOverlay();
+          playSeriesEpisode(matchedEp, seasonNum);
+        } else {
+          elements.videoErrorTitle.textContent = 'Episódio Não Encontrado';
+          elements.videoErrorMessage.textContent = `A temporada ${seasonNum} ou o episódio ${epNum} não constam na versão ${targetVersion.versionInfo.label}.`;
+          elements.videoErrorActions.innerHTML = `
+            <button class="btn btn-secondary" onclick="closePlayer()">📋 Voltar aos Episódios</button>
+          `;
+        }
+      } catch (err) {
+        elements.videoErrorTitle.textContent = 'Erro ao Alternar Versão';
+        elements.videoErrorMessage.textContent = `Não foi possível carregar a versão ${targetVersion.versionInfo.label}: ${err.message}`;
+        elements.videoErrorActions.innerHTML = `
+          <button class="btn btn-secondary" onclick="closePlayer()">📋 Voltar aos Episódios</button>
+        `;
+      }
+    }
+
     function openPlayer(title, url, mediaType = 'movie', mediaMeta = null) {
       activeVideoUrl = url;
+      currentPlaybackMeta = {
+        title,
+        url,
+        mediaType,
+        mediaMeta,
+        seasonNum: mediaMeta?.seasonNum || mediaMeta?.season,
+        episodeNum: mediaMeta?.episodeNum,
+        streamId: mediaMeta?.streamId || mediaMeta?.stream_id
+      };
+      hideVideoErrorOverlay();
+
       elements.modalTitle.textContent = title;
       elements.videoPlayer.src = url;
       elements.downloadBtn.href = url;
       elements.videoModal.style.display = 'flex';
       elements.modalFormat.textContent = 'Carregando vídeo...';
       
+      startVideoLoadTimeout();
+
       // Reset de legendas e do painel
       currentRawSubtitleText = '';
       currentSubtitleLabel = '';
@@ -2603,6 +2829,15 @@
     }
 
     function closePlayer() {
+      if (videoLoadTimeout) {
+        clearTimeout(videoLoadTimeout);
+        videoLoadTimeout = null;
+      }
+      hideVideoErrorOverlay();
+
+      const lastMeta = currentPlaybackMeta;
+      currentPlaybackMeta = null;
+
       elements.videoModal.style.display = 'none';
       elements.videoPlayer.pause();
       elements.videoPlayer.src = '';
@@ -2611,6 +2846,11 @@
       if (elements.movieVersionSwitcher) {
         elements.movieVersionSwitcher.style.display = 'none';
         elements.movieVersionSwitcher.innerHTML = '';
+      }
+
+      // Se estávamos assistindo uma série, atualiza a lista de episódios para refletir os status de indisponibilidade
+      if (lastMeta?.mediaType === 'series' && lastMeta.seasonNum && currentSeriesData) {
+        renderSeasonEpisodes(lastMeta.seasonNum);
       }
 
       // Limpar legendas anteriores e fechar painel
@@ -2623,6 +2863,36 @@
       elements.subSelect.innerHTML = '<option value="none">Desativada</option>';
       if (elements.subFileInput) elements.subFileInput.value = '';
     }
+
+    // Eventos do player de vídeo para tratamento de disponibilidade
+    elements.videoPlayer.addEventListener('error', () => {
+      if (videoLoadTimeout) {
+        clearTimeout(videoLoadTimeout);
+        videoLoadTimeout = null;
+      }
+      showVideoErrorOverlay('error', 'O servidor de transmissão reportou que este arquivo está temporariamente indisponível (Erro 503 / Stream Temporarily Unavailable).');
+    });
+
+    elements.videoPlayer.addEventListener('loadeddata', () => {
+      if (videoLoadTimeout) {
+        clearTimeout(videoLoadTimeout);
+        videoLoadTimeout = null;
+      }
+      hideVideoErrorOverlay();
+      const sid = currentPlaybackMeta?.streamId;
+      if (sid) clearStreamBroken(sid);
+      elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
+    });
+
+    elements.videoPlayer.addEventListener('playing', () => {
+      if (videoLoadTimeout) {
+        clearTimeout(videoLoadTimeout);
+        videoLoadTimeout = null;
+      }
+      hideVideoErrorOverlay();
+      const sid = currentPlaybackMeta?.streamId;
+      if (sid) clearStreamBroken(sid);
+    });
 
     function toggleSubOptionsPanel() {
       const isCurrentlyOpen = elements.subOptionsPanel.style.display === 'block';
@@ -3533,37 +3803,56 @@
         const duration = (ep.info && ep.info.duration) ? ep.info.duration : '';
         const plot = (ep.info && ep.info.plot) ? ep.info.plot : 'Sem sinopse.';
 
+        const isBroken = isStreamMarkedBroken(ep.id);
+        const brokenBadge = isBroken 
+          ? `<span style="background: rgba(229, 9, 20, 0.2); color: #ff6b6b; border: 1px solid rgba(229, 9, 20, 0.4); padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-left: 8px;">⚠️ Indisponível no Servidor</span>` 
+          : '';
+        const watchBtnText = isBroken ? '⚠️ Tentar Assistir' : '▶ Assistir';
+        const watchBtnClass = isBroken ? 'btn btn-secondary' : 'btn btn-primary';
+
         epCard.innerHTML = `
           ${thumb ? `<img class="episode-thumb" src="${thumb}" alt="Episódio" onerror="this.style.display='none'">` : ''}
           <div class="episode-info">
-            <div class="episode-title">Episódio ${ep.episode_num}: ${epTitle}</div>
+            <div class="episode-title">Episódio ${ep.episode_num}: ${escapeHtml(epTitle)} ${brokenBadge}</div>
             <div style="font-size: 11px; color: #888;">${duration ? `Duração: ${duration}` : ''}</div>
-            <div class="episode-plot">${plot}</div>
+            <div class="episode-plot">${escapeHtml(plot)}</div>
           </div>
           <div class="episode-actions">
-            <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;">▶ Assistir</button>
+            <button class="${watchBtnClass}" style="padding: 6px 12px; font-size: 12px;">${watchBtnText}</button>
             <a class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" href="${epUrl}" target="_blank" download>📥 Baixar</a>
           </div>
         `;
 
-        epCard.querySelector('.btn-primary').addEventListener('click', (e) => {
+        epCard.querySelector('button').addEventListener('click', (e) => {
           e.stopPropagation();
-          const sInfo = currentSeriesData.info || {};
-          const sName = currentSeriesGroup?.name || sInfo.name || 'Série';
-          const versionLabel = (currentSeriesGroup?.versions && currentSeriesGroup.versions.length > 1 && currentActiveSeriesVersion) 
-            ? ` (${currentActiveSeriesVersion.versionInfo.label})` 
-            : '';
-          openPlayer(`${sName} - ${epTitle}${versionLabel}`, epUrl, 'series', {
-            seriesName: sName,
-            season: seasonNum,
-            episodeNum: ep.episode_num,
-            year: sInfo.release_date || sInfo.year,
-            selectedVersion: currentActiveSeriesVersion,
-            versionInfo: currentActiveSeriesVersion ? currentActiveSeriesVersion.versionInfo : null
-          });
+          playSeriesEpisode(ep, seasonNum);
         });
 
         elements.episodesList.appendChild(epCard);
+      });
+    }
+
+    function playSeriesEpisode(ep, seasonNum) {
+      const ext = ep.container_extension || 'mp4';
+      const epUrl = `${CONFIG.server}/series/${CONFIG.user}/${CONFIG.pass}/${ep.id}.${ext}`;
+      const epTitle = ep.title || `Episódio ${ep.episode_num}`;
+      const sInfo = currentSeriesData?.info || {};
+      const sName = currentSeriesGroup?.name || sInfo.name || 'Série';
+      const versionLabel = (currentSeriesGroup?.versions && currentSeriesGroup.versions.length > 1 && currentActiveSeriesVersion) 
+        ? ` (${currentActiveSeriesVersion.versionInfo.label})` 
+        : '';
+
+      openPlayer(`${sName} - ${epTitle}${versionLabel}`, epUrl, 'series', {
+        seriesName: sName,
+        season: seasonNum,
+        seasonNum: seasonNum,
+        episodeNum: ep.episode_num,
+        year: sInfo.release_date || sInfo.year,
+        selectedVersion: currentActiveSeriesVersion,
+        versionInfo: currentActiveSeriesVersion ? currentActiveSeriesVersion.versionInfo : null,
+        streamId: ep.id,
+        stream_id: ep.id,
+        ep
       });
     }
 
