@@ -1354,18 +1354,51 @@
         .trim();
     }
 
+    // Correções de metadados para itens mal etiquetados no servidor IPTV
+    const KNOWN_STREAM_CORRECTIONS = {
+      // 1. A Bela e a Fera (1991) - Animação Clássica Disney (Cat 621 Animação - estava incorretamente como 2017)
+      4443349: {
+        name: 'A Bela e a Fera (1991)',
+        year: '1991',
+        poster: 'https://images.metahub.space/poster/medium/tt0101414/img',
+        imdbId: 'tt0101414'
+      },
+      // 2. A Bela e a Fera (2014) - Versão Francesa com Léa Seydoux e Vincent Cassel (Cat 622 Fantasia, 113 min - estava como 2017)
+      4428986: {
+        name: 'A Bela e a Fera (2014)',
+        year: '2014',
+        poster: 'https://images.metahub.space/poster/medium/tt2316801/img',
+        imdbId: 'tt2316801'
+      }
+    };
+
     // Recupera a melhor imagem para um filme (Resolve a questão do Harry Potter e filmes 4K sem capa)
     function getBestPosterUrl(movie) {
       if (!movie) return '';
+      const streamId = movie.stream_id || (movie.primaryItem && movie.primaryItem.stream_id);
+      if (streamId) {
+        const userPoster = localStorage.getItem(`andplay_poster_override_${streamId}`);
+        if (userPoster) return userPoster;
+        if (KNOWN_STREAM_CORRECTIONS[streamId]?.poster) {
+          return KNOWN_STREAM_CORRECTIONS[streamId].poster;
+        }
+      }
       if (movie.poster && movie.poster.startsWith('http')) return movie.poster;
       if (movie.stream_icon && movie.stream_icon.startsWith('http')) return movie.stream_icon;
       if (movie.primaryItem) {
         if (movie.primaryItem.poster && movie.primaryItem.poster.startsWith('http')) return movie.primaryItem.poster;
         if (movie.primaryItem.stream_icon && movie.primaryItem.stream_icon.startsWith('http')) return movie.primaryItem.stream_icon;
       }
-      const key = cleanTitleKey(movie.name || movie.title || (movie.primaryItem && (movie.primaryItem.name || movie.primaryItem.title)));
-      if (key && moviePosterMap.has(key)) {
-        return moviePosterMap.get(key);
+      const raw = movie.name || movie.title || (movie.primaryItem && (movie.primaryItem.name || movie.primaryItem.title)) || '';
+      const clean = cleanTitleKey(raw);
+      const yMatch = raw.match(/\((19\d\d|20\d\d)\)/);
+      const y = yMatch ? yMatch[1] : (movie.year ? String(movie.year).trim() : '');
+      const keyWithYear = y ? `${clean}_${y}` : clean;
+      if (keyWithYear && moviePosterMap.has(keyWithYear)) {
+        return moviePosterMap.get(keyWithYear);
+      }
+      if (clean && moviePosterMap.has(clean)) {
+        return moviePosterMap.get(clean);
       }
       return '';
     }
@@ -1781,13 +1814,42 @@
           return Number(b.stream_id || 0) - Number(a.stream_id || 0);
         });
 
-        // Construir índice de posters limpos para cobrir filmes 4K sem capa
+        // Aplica correções automáticas de metadados e customizações salvas pelo usuário
+        validMovies.forEach(m => {
+          const override = KNOWN_STREAM_CORRECTIONS[m.stream_id];
+          if (override) {
+            if (override.name) m.name = override.name;
+            if (override.year) m.year = override.year;
+            if (override.poster) {
+              m.stream_icon = override.poster;
+              m.poster = override.poster;
+            }
+          }
+          const userPoster = localStorage.getItem(`andplay_poster_override_${m.stream_id}`);
+          if (userPoster) {
+            m.stream_icon = userPoster;
+            m.poster = userPoster;
+          }
+          const userName = localStorage.getItem(`andplay_name_override_${m.stream_id}`);
+          if (userName) {
+            m.name = userName;
+          }
+        });
+
+        // Construir índice de posters limpos para cobrir filmes 4K sem capa (respeitando ano quando presente)
         moviePosterMap.clear();
         validMovies.forEach(m => {
           if (m.stream_icon && m.stream_icon.startsWith('http')) {
-            const key = cleanTitleKey(m.name || m.title);
-            if (key && !moviePosterMap.has(key)) {
-              moviePosterMap.set(key, m.stream_icon);
+            const raw = m.name || m.title || '';
+            const clean = cleanTitleKey(raw);
+            const yMatch = raw.match(/\((19\d\d|20\d\d)\)/);
+            const y = yMatch ? yMatch[1] : (m.year ? String(m.year).trim() : '');
+            const keyWithYear = y ? `${clean}_${y}` : clean;
+            if (!moviePosterMap.has(keyWithYear)) {
+              moviePosterMap.set(keyWithYear, m.stream_icon);
+            }
+            if (!moviePosterMap.has(clean)) {
+              moviePosterMap.set(clean, m.stream_icon);
             }
           }
         });
@@ -1999,9 +2061,17 @@
     // Fallback de erro de imagem
     function onPosterError(imgElement, rawTitle) {
       imgElement.style.display = 'none';
-      const key = cleanTitleKey(rawTitle);
-      if (moviePosterMap.has(key)) {
-        imgElement.src = moviePosterMap.get(key);
+      const clean = cleanTitleKey(rawTitle);
+      const yMatch = (rawTitle || '').match(/\((19\d\d|20\d\d)\)/);
+      const y = yMatch ? yMatch[1] : '';
+      const keyWithYear = y ? `${clean}_${y}` : clean;
+      if (keyWithYear && moviePosterMap.has(keyWithYear)) {
+        imgElement.src = moviePosterMap.get(keyWithYear);
+        imgElement.style.display = 'block';
+        return;
+      }
+      if (clean && moviePosterMap.has(clean)) {
+        imgElement.src = moviePosterMap.get(clean);
         imgElement.style.display = 'block';
         return;
       }
@@ -2757,6 +2827,16 @@
 
       saveMediaMatch(currentSubContext.mediaType, targetKeySource, matchData);
       updateMemoryBanner(matchData);
+
+      // Salva customização de poster e título para o stream
+      if (matchData.poster) {
+        const streamId = currentSubContext.mediaMeta?.stream_id || (currentSubContext.mediaMeta?.primaryItem && currentSubContext.mediaMeta.primaryItem.stream_id);
+        if (streamId) {
+          const candYear = matchData.year ? ` (${matchData.year})` : '';
+          localStorage.setItem(`andplay_poster_override_${streamId}`, matchData.poster);
+          localStorage.setItem(`andplay_name_override_${streamId}`, `${matchData.name}${candYear}`);
+        }
+      }
 
       // Fecha o modal de busca e despausa (retoma o play) imediatamente ao voltar ao player
       closeImdbSearchModal();
