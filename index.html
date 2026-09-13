@@ -1393,7 +1393,7 @@
       return rawTitle
         .replace(/^[0-9]+\s*[-–—]\s*/, '')      // '1 - ', '02 - '
         .replace(/\b4k\b/gi, '')                // '4K', '4k'
-        .replace(/\[\s*(?:l|leg|legendado|dub|dublado|lancamento|lançamento|hdr|dv|hybrid|cinema)\s*\]/gi, '')
+        .replace(/\[\s*(?:l|leg|legendado|dub|dublado|lan[cç]amentos?|hdr|dv|hybrid|cinema|rec|corrigido)\s*\]/gi, '')
         .replace(/\s+/g, ' ')
         .trim();
     }
@@ -1427,14 +1427,28 @@
         }
 
         if (matchedGroup) {
-          if (!matchedGroup.versions.some(v => v.streamId === item.stream_id)) {
+          // Desduplicação de versão: só deve existir 1 entrada por tipo (dublado, legendado, 4k_dub, 4k_leg)
+          // Isso elimina duplicatas idênticas causadas pela tag [LANÇAMENTO] no servidor IPTV
+          const existingVer = matchedGroup.versions.find(v => v.versionInfo.type === versionInfo.type);
+          if (!existingVer) {
             matchedGroup.versions.push({
               item,
               versionInfo,
               streamId: item.stream_id,
               ext: item.container_extension || 'mp4'
             });
+          } else {
+            // Se já temos este tipo de versão (ex: Dublado duplicado por [Lançamento]):
+            // Preferimos a versão permanente (sem a tag [Lançamento])
+            const isLancamentoTag = /\[\s*lan[cç]amentos?\s*\]/i;
+            if (isLancamentoTag.test(existingVer.item?.name || '') && !isLancamentoTag.test(item.name || '')) {
+              existingVer.item = item;
+              existingVer.streamId = item.stream_id;
+              existingVer.ext = item.container_extension || 'mp4';
+              existingVer.versionInfo = versionInfo;
+            }
           }
+
           const cid = Number(item.category_id);
           if (cid && !matchedGroup.category_ids.includes(cid)) {
             matchedGroup.category_ids.push(cid);
@@ -1454,6 +1468,14 @@
           const itAdd = Number(item.added || item.last_modified || 0);
           if (itAdd > Number(matchedGroup.added || 0)) {
             matchedGroup.added = item.added;
+          }
+
+          // Se o grupo foi criado a partir de um item com [Lançamento] e encontramos a versão com nome definitivo:
+          const isLancamentoTag = /\[\s*lan[cç]amentos?\s*\]/i;
+          if (isLancamentoTag.test(matchedGroup.originalName) && !isLancamentoTag.test(raw)) {
+            matchedGroup.originalName = raw;
+            matchedGroup.name = cleanDisplayTitle(raw);
+            matchedGroup.primaryItem = item;
           }
         } else {
           const catIds = [Number(item.category_id)].filter(Boolean);
