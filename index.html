@@ -1176,9 +1176,12 @@
           <p class="series-synopsis" id="seriesPlot">Sinopse não disponível.</p>
         </div>
       </div>
-      <div class="season-bar">
-        <label for="seasonSelect" style="font-size: 14px; font-weight: 600;">Temporada:</label>
-        <select id="seasonSelect" style="min-width: 160px; padding: 6px 14px;"></select>
+      <div class="season-bar" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <label for="seasonSelect" style="font-size: 14px; font-weight: 600;">Temporada:</label>
+          <select id="seasonSelect" style="min-width: 160px; padding: 6px 14px;"></select>
+        </div>
+        <div id="seriesVersionSwitcher" style="display: none; align-items: center; gap: 6px;"></div>
       </div>
       <div class="episodes-list" id="episodesList">
         <div style="text-align: center; color: #888; padding: 30px;">Carregando episódios...</div>
@@ -1319,6 +1322,7 @@
       seriesYear: document.getElementById('seriesYear'),
       seriesPlot: document.getElementById('seriesPlot'),
       seasonSelect: document.getElementById('seasonSelect'),
+      seriesVersionSwitcher: document.getElementById('seriesVersionSwitcher'),
       episodesList: document.getElementById('episodesList')
     };
 
@@ -1392,6 +1396,14 @@
         year: '2024',
         poster: 'https://images.metahub.space/poster/medium/tt38616652/img',
         imdbId: 'tt38616652'
+      },
+      // 4. Questão de Tempo (2013) - Romance com Rachel McAdams e Domhnall Gleeson (título original: "About Time")
+      4425572: {
+        name: 'Questão de Tempo (2013)',
+        year: '2013',
+        originalName: 'About Time',
+        poster: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/uqEzxvGDYNzoQE7rayv7gRXBomt.jpg',
+        imdbId: 'tt2194499'
       }
     };
 
@@ -1457,8 +1469,19 @@
       const raw = itemOrMeta.rawTitle || itemOrMeta.name || itemOrMeta.title || (itemOrMeta.item && (itemOrMeta.item.name || itemOrMeta.item.title)) || '';
       if (/\[\s*(?:l|leg|legendado)\s*\]/i.test(raw) || /\b(legendado)\b/i.test(raw)) return true;
       const catId = String(itemOrMeta.category_id || (itemOrMeta.item && itemOrMeta.item.category_id) || '');
-      if (catId === '630') return true;
+      if (catId === '630' || catId === '671') return true;
       return false;
+    }
+
+    // Detecta se uma versão de série é Dublada ou Legendada
+    function detectSeriesVersion(item) {
+      const name = item.name || item.title || '';
+      const catId = String(item.category_id || '');
+      const isLeg = (catId === '671') || /\[\s*(?:L|LEG|LEGENDADO)\s*\]/i.test(name) || /\b(legendado)\b/i.test(name);
+      if (isLeg) {
+        return { type: 'legendado', label: 'Legendado', badge: 'LEG', icon: '💬', desc: 'Áudio Original com Legenda' };
+      }
+      return { type: 'dublado', label: 'Dublado', badge: 'DUB', icon: '🔊', desc: 'Áudio Dublado em Português' };
     }
 
     // Título limpo e elegante para exibição no card
@@ -1609,7 +1632,7 @@
             isGroup: true,
             cleanKey: clean,
             name: cleanDisplayTitle(raw),
-            originalName: raw,
+            originalName: item.originalName || raw,
             year: itemYear,
             category_id: item.category_id,
             category_ids: catIds,
@@ -1648,6 +1671,144 @@
         const timeB = Number(b.added || b.last_modified || 0);
         if (timeB !== timeA) return timeB - timeA;
         return Number(b.stream_id || 0) - Number(a.stream_id || 0);
+      });
+
+      return groups;
+    }
+
+    // Agrupa séries duplicadas (Dublado, Legendado e Lançamento) em um único card inteligente
+    function groupSeriesByTitle(seriesList) {
+      const groups = [];
+      const cleanToGroupIndices = new Map();
+
+      seriesList.forEach(item => {
+        const raw = item.name || item.title || '';
+        const clean = cleanTitleKey(raw);
+        if (!clean) return;
+
+        const yMatch = raw.match(/\((19\d\d|20\d\d)\)/);
+        const itemYear = yMatch ? yMatch[1] : (item.year ? String(item.year).trim() : (item.releaseDate ? item.releaseDate.substring(0, 4) : ''));
+        const versionInfo = detectSeriesVersion(item);
+        const isLanc = /\[\s*lan[cç]amentos?\s*\]/i.test(raw);
+
+        let matchedGroup = null;
+
+        if (cleanToGroupIndices.has(clean)) {
+          const candidateIndices = cleanToGroupIndices.get(clean);
+          for (const idx of candidateIndices) {
+            const g = groups[idx];
+
+            // 1. Verificação de Ano
+            if (itemYear && g.year) {
+              if (Math.abs(Number(itemYear) - Number(g.year)) > 1) {
+                continue;
+              }
+            }
+
+            // 2. Duas séries do mesmo tipo só se agrupam se uma delas for Lançamento
+            const existingVer = g.versions.find(v => v.versionInfo.type === versionInfo.type);
+            if (existingVer) {
+              const existingIsLanc = existingVer.isLanc;
+              if (!isLanc && !existingIsLanc) {
+                continue;
+              }
+            }
+
+            matchedGroup = g;
+            break;
+          }
+        }
+
+        if (matchedGroup) {
+          const existingVer = matchedGroup.versions.find(v => v.versionInfo.type === versionInfo.type);
+          if (!existingVer) {
+            matchedGroup.versions.push({
+              item,
+              versionInfo,
+              seriesId: item.series_id,
+              isLanc
+            });
+          } else if (existingVer.isLanc && !isLanc) {
+            existingVer.item = item;
+            existingVer.seriesId = item.series_id;
+            existingVer.versionInfo = versionInfo;
+            existingVer.isLanc = false;
+          }
+
+          const cid = Number(item.category_id);
+          if (cid && !matchedGroup.category_ids.includes(cid)) {
+            matchedGroup.category_ids.push(cid);
+          }
+          if (Array.isArray(item.category_ids)) {
+            item.category_ids.forEach(c => {
+              const numC = Number(c);
+              if (numC && !matchedGroup.category_ids.includes(numC)) matchedGroup.category_ids.push(numC);
+            });
+          }
+          if (!matchedGroup.cover && item.cover && item.cover.startsWith('http')) {
+            matchedGroup.cover = item.cover;
+          }
+          if (!matchedGroup.year && itemYear) {
+            matchedGroup.year = itemYear;
+          }
+          const itAdd = Number(item.last_modified || item.added || 0);
+          if (itAdd > Number(matchedGroup.added || 0)) {
+            matchedGroup.added = item.added;
+            matchedGroup.last_modified = item.last_modified;
+          }
+          if (/\[\s*lan[cç]amentos?\s*\]/i.test(matchedGroup.originalName) && !/\[\s*lan[cç]amentos?\s*\]/i.test(raw)) {
+            matchedGroup.originalName = raw;
+            matchedGroup.name = cleanDisplayTitle(raw);
+            matchedGroup.primaryItem = item;
+          }
+        } else {
+          const catIds = [Number(item.category_id)].filter(Boolean);
+          if (Array.isArray(item.category_ids)) {
+            item.category_ids.forEach(c => {
+              const numC = Number(c);
+              if (numC && !catIds.includes(numC)) catIds.push(numC);
+            });
+          }
+
+          const newGroup = {
+            isGroup: true,
+            cleanKey: clean,
+            name: cleanDisplayTitle(raw),
+            originalName: raw,
+            year: itemYear,
+            category_id: item.category_id,
+            category_ids: catIds,
+            rating: item.rating,
+            rating_5based: item.rating_5based,
+            added: item.added,
+            last_modified: item.last_modified,
+            series_id: item.series_id,
+            plot: item.plot,
+            genre: item.genre,
+            cover: item.cover || item.stream_icon || '',
+            primaryItem: item,
+            versions: [{
+              item,
+              versionInfo,
+              seriesId: item.series_id,
+              isLanc
+            }]
+          };
+          const newIdx = groups.length;
+          groups.push(newGroup);
+          if (!cleanToGroupIndices.has(clean)) {
+            cleanToGroupIndices.set(clean, []);
+          }
+          cleanToGroupIndices.get(clean).push(newIdx);
+        }
+      });
+
+      // Ordenar por data de adição / atualização (mais recentes primeiro)
+      groups.sort((a, b) => {
+        const timeA = Number(a.last_modified || a.added || 0);
+        const timeB = Number(b.last_modified || b.added || 0);
+        if (timeB !== timeA) return timeB - timeA;
+        return Number(b.series_id || 0) - Number(a.series_id || 0);
       });
 
       return groups;
@@ -1860,6 +2021,7 @@
           if (override) {
             if (override.name) m.name = override.name;
             if (override.year) m.year = override.year;
+            if (override.originalName) m.originalName = override.originalName;
             if (override.poster) {
               m.stream_icon = override.poster;
               m.poster = override.poster;
@@ -1917,15 +2079,18 @@
 
         // Ocultar itens pertencentes à categoria DEMO
         const demoCatIds = new Set(seriesCategories.filter(c => c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
-        fullSeriesCache = rawSeries.filter(s => !demoCatIds.has(String(s.category_id)) && (!s.name || s.name.toLowerCase().trim() !== 'demo'));
+        const validSeries = rawSeries.filter(s => !demoCatIds.has(String(s.category_id)) && (!s.name || s.name.toLowerCase().trim() !== 'demo'));
 
         // Ordenar por data de adição / atualização (mais recentes primeiro)
-        fullSeriesCache.sort((a, b) => {
+        validSeries.sort((a, b) => {
           const timeA = Number(a.last_modified || a.added || 0);
           const timeB = Number(b.last_modified || b.added || 0);
           if (timeB !== timeA) return timeB - timeA;
           return Number(b.series_id || 0) - Number(a.series_id || 0);
         });
+
+        // Unificar versões duplicadas (Dublado, Legendado e Lançamento) em cards únicos
+        fullSeriesCache = groupSeriesByTitle(validSeries);
 
         currentMediaList = fullSeriesCache;
         elements.categorySelect.value = 'ALL';
@@ -2055,7 +2220,19 @@
           }
         } else {
           poster = item.cover || item.stream_icon || '';
-          badgeHtml = `<div class="badge-series">SÉRIE</div>`;
+          const hasLeg = item.versions ? item.versions.some(v => v.versionInfo.type === 'legendado') : /\[\s*L\s*\]/i.test(title);
+          const hasDub = item.versions ? item.versions.some(v => v.versionInfo.type === 'dublado') : true;
+
+          if (item.versions && item.versions.length > 1) {
+            const badges = [];
+            if (hasDub) badges.push('DUB');
+            if (hasLeg) badges.push('LEG');
+            badgeHtml = `<div class="badge-versions">${badges.join(' • ')}</div>`;
+          } else if (hasLeg) {
+            badgeHtml = `<div class="badge-leg">LEGENDADO</div>`;
+          } else {
+            badgeHtml = `<div class="badge-series">SÉRIE</div>`;
+          }
         }
 
         const rating = (item.rating && Number(item.rating) > 0) ? Number(item.rating).toFixed(1) : null;
@@ -2470,6 +2647,8 @@
       // Equivalências e traduções comuns diretas
       if (metaClean === cleanTitle) {
         score += 150;
+      } else if ((cleanTitle === 'questao de tempo' || cleanTitle === 'about time') && (metaClean === 'about time' || metaClean === 'questao de tempo')) {
+        score += 180;
       } else if (cleanTitle === 'vamos time' && (metaClean === 'gracias equipo' || metaClean === 'go team' || metaClean === 'vamos time')) {
         score += 150;
       } else if (cleanTitle === 'a fera' && metaClean === 'beast') {
@@ -3189,21 +3368,85 @@
     // ==========================================
     // DETALHES E EPISÓDIOS DA SÉRIE
     // ==========================================
-    async function openSeriesModal(seriesItem) {
-      elements.seriesModalTitle.textContent = seriesItem.name;
-      elements.seriesTitle.textContent = seriesItem.name;
-      elements.seriesPoster.src = seriesItem.cover || '';
-      elements.seriesRating.textContent = `★ ${Number(seriesItem.rating || 0).toFixed(1)}`;
-      elements.seriesGenre.textContent = seriesItem.genre || 'Série';
-      elements.seriesYear.textContent = seriesItem.releaseDate ? seriesItem.releaseDate.substring(0, 4) : '';
-      elements.seriesPlot.textContent = seriesItem.plot || 'Sinopse não disponível.';
-      elements.episodesList.innerHTML = '<div style="text-align:center; color:#aaa; padding:40px;"><div class="spinner" style="margin: 0 auto 15px;"></div>Carregando temporadas e episódios...</div>';
+    let currentSeriesGroup = null;
+    let currentActiveSeriesVersion = null;
+
+    async function openSeriesModal(seriesGroupOrItem) {
+      currentSeriesGroup = seriesGroupOrItem;
+      const title = seriesGroupOrItem.name || seriesGroupOrItem.title || 'Série';
+      elements.seriesModalTitle.textContent = title;
+      elements.seriesTitle.textContent = title;
+      elements.seriesPoster.src = seriesGroupOrItem.cover || '';
+      elements.seriesRating.textContent = `★ ${Number(seriesGroupOrItem.rating || 0).toFixed(1)}`;
+      elements.seriesGenre.textContent = seriesGroupOrItem.genre || 'Série';
+      elements.seriesYear.textContent = seriesGroupOrItem.releaseDate ? seriesGroupOrItem.releaseDate.substring(0, 4) : '';
+      elements.seriesPlot.textContent = seriesGroupOrItem.plot || 'Sinopse não disponível.';
+
+      const versions = seriesGroupOrItem.versions || [{
+        item: seriesGroupOrItem,
+        versionInfo: detectSeriesVersion(seriesGroupOrItem),
+        seriesId: seriesGroupOrItem.series_id
+      }];
+
+      setupSeriesVersionSwitcher(versions);
+
+      // Preferência: Dublado (ou primeira versão da lista)
+      const defaultVer = versions.find(v => v.versionInfo.type === 'dublado') || versions[0];
+      elements.seriesModal.style.display = 'flex';
+      await loadSeriesVersion(defaultVer);
+    }
+
+    function setupSeriesVersionSwitcher(versions) {
+      if (!elements.seriesVersionSwitcher) return;
+
+      if (!versions || versions.length <= 1) {
+        elements.seriesVersionSwitcher.style.display = 'none';
+        elements.seriesVersionSwitcher.innerHTML = '';
+        return;
+      }
+
+      elements.seriesVersionSwitcher.style.display = 'inline-flex';
+      renderSeriesVersionButtons(versions, currentActiveSeriesVersion);
+    }
+
+    function renderSeriesVersionButtons(versions, activeVersion) {
+      if (!elements.seriesVersionSwitcher) return;
+      elements.seriesVersionSwitcher.innerHTML = '';
+      const orderMap = { 'dublado': 1, 'legendado': 2 };
+      const sorted = [...versions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
+
+      sorted.forEach(v => {
+        const isCurrent = activeVersion && (v.seriesId === activeVersion.seriesId);
+        const btn = document.createElement('button');
+        btn.className = `btn ${isCurrent ? 'btn-primary' : 'btn-secondary'}`;
+        btn.style.padding = '6px 12px';
+        btn.style.fontSize = '12px';
+        btn.style.display = 'inline-flex';
+        btn.style.alignItems = 'center';
+        btn.style.gap = '6px';
+        btn.style.cursor = 'pointer';
+        btn.innerHTML = `${v.versionInfo.icon} ${v.versionInfo.label}`;
+
+        btn.addEventListener('click', () => {
+          if (isCurrent) return;
+          const selectedSeason = elements.seasonSelect ? elements.seasonSelect.value : null;
+          loadSeriesVersion(v, selectedSeason);
+        });
+
+        elements.seriesVersionSwitcher.appendChild(btn);
+      });
+    }
+
+    async function loadSeriesVersion(versionObj, preferredSeason = null) {
+      currentActiveSeriesVersion = versionObj;
+      const versions = currentSeriesGroup?.versions || [versionObj];
+      renderSeriesVersionButtons(versions, currentActiveSeriesVersion);
+
+      elements.episodesList.innerHTML = `<div style="text-align:center; color:#aaa; padding:40px;"><div class="spinner" style="margin: 0 auto 15px;"></div>Carregando episódios (${versionObj.versionInfo.label})...</div>`;
       elements.seasonSelect.innerHTML = '<option>Carregando...</option>';
 
-      elements.seriesModal.style.display = 'flex';
-
       try {
-        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series_info&series_id=${seriesItem.series_id}`);
+        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series_info&series_id=${versionObj.seriesId}`);
         currentSeriesData = await res.json();
 
         const episodesBySeason = currentSeriesData.episodes || {};
@@ -3211,7 +3454,7 @@
 
         elements.seasonSelect.innerHTML = '';
         if (seasons.length === 0) {
-          elements.episodesList.innerHTML = '<div style="text-align:center; color:#888; padding:30px;">Nenhum episódio cadastrado.</div>';
+          elements.episodesList.innerHTML = '<div style="text-align:center; color:#888; padding:30px;">Nenhum episódio cadastrado nesta versão.</div>';
           return;
         }
 
@@ -3222,8 +3465,10 @@
           elements.seasonSelect.appendChild(opt);
         });
 
-        // Renderiza a primeira temporada
-        renderSeasonEpisodes(seasons[0]);
+        // Mantém a temporada que o usuário já estava assistindo ou a primeira
+        const targetSeason = (preferredSeason && seasons.includes(String(preferredSeason))) ? String(preferredSeason) : seasons[0];
+        elements.seasonSelect.value = targetSeason;
+        renderSeasonEpisodes(targetSeason);
       } catch (err) {
         elements.episodesList.innerHTML = `<div style="color:#e50914; padding:20px; text-align:center;">Erro ao carregar episódios: ${err.message}</div>`;
       }
@@ -3266,12 +3511,17 @@
         epCard.querySelector('.btn-primary').addEventListener('click', (e) => {
           e.stopPropagation();
           const sInfo = currentSeriesData.info || {};
-          const sName = sInfo.name || '';
-          openPlayer(`${sName} - ${epTitle}`, epUrl, 'series', {
+          const sName = currentSeriesGroup?.name || sInfo.name || 'Série';
+          const versionLabel = (currentSeriesGroup?.versions && currentSeriesGroup.versions.length > 1 && currentActiveSeriesVersion) 
+            ? ` (${currentActiveSeriesVersion.versionInfo.label})` 
+            : '';
+          openPlayer(`${sName} - ${epTitle}${versionLabel}`, epUrl, 'series', {
             seriesName: sName,
             season: seasonNum,
             episodeNum: ep.episode_num,
-            year: sInfo.release_date || sInfo.year
+            year: sInfo.release_date || sInfo.year,
+            selectedVersion: currentActiveSeriesVersion,
+            versionInfo: currentActiveSeriesVersion ? currentActiveSeriesVersion.versionInfo : null
           });
         });
 
@@ -3282,6 +3532,8 @@
     function closeSeriesModal() {
       elements.seriesModal.style.display = 'none';
       currentSeriesData = null;
+      currentSeriesGroup = null;
+      currentActiveSeriesVersion = null;
     }
 
     function escapeHtml(str) {
