@@ -277,6 +277,33 @@
       border-radius: 4px;
     }
 
+    .badge-versions {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: rgba(0, 0, 0, 0.88);
+      color: #fff;
+      font-weight: 800;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      letter-spacing: 0.5px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.6);
+    }
+
+    .badge-leg {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: #4a148c;
+      color: #fff;
+      font-weight: 700;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
     .rating-badge {
       position: absolute;
       top: 8px;
@@ -361,12 +388,37 @@
       z-index: 1500;
     }
 
+    #movieVersionModal {
+      z-index: 2000;
+    }
+
     #videoModal {
       z-index: 2500;
     }
 
     #imdbSearchModal {
       z-index: 3500;
+    }
+
+    .version-btn {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 13px 18px;
+      background: #202020;
+      border: 1px solid #353535;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      color: #fff;
+      width: 100%;
+    }
+
+    .version-btn:hover {
+      background: #2a2a2a;
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(229, 9, 20, 0.3);
     }
 
     .imdb-card {
@@ -1072,12 +1124,36 @@
       <div class="modal-footer">
         <div style="font-size: 13px; color: #aaa;" id="modalFormat">Formato: MP4 • Link Direto</div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <div id="movieVersionSwitcher" style="display: none; gap: 6px; align-items: center;"></div>
           <button class="btn btn-secondary" id="toggleSubPanelBtn" style="padding: 7px 14px; font-size: 12px; display: flex; align-items: center; gap: 6px;" title="Mostrar ou ocultar opções de legenda">
             💬 Opções de Legenda
           </button>
           <button class="btn btn-secondary" id="copyLinkBtn" style="padding: 7px 14px; font-size: 12px;">🔗 Copiar Link</button>
           <a class="btn btn-primary" id="downloadBtn" style="padding: 7px 14px; font-size: 12px;" href="#" target="_blank" download>📥 Baixar Vídeo (MP4)</a>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Movie Version Selector Modal (Dublado / Legendado / 4K) -->
+  <div id="movieVersionModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3 style="margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+          🎬 Escolha a Versão do Filme
+        </h3>
+        <button class="close-btn" id="closeMovieVersionModal">&times;</button>
+      </div>
+      <div style="display: flex; gap: 16px; padding: 18px 20px 10px; align-items: center;">
+        <img id="versionModalPoster" src="" alt="Capa" style="width: 75px; height: 112px; border-radius: 6px; object-fit: cover; background: #222; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.6);">
+        <div style="display: flex; flex-direction: column; gap: 4px; overflow: hidden;">
+          <h4 id="versionModalTitle" style="margin: 0; font-size: 15px; color: #fff; line-height: 1.3;">Nome do Filme</h4>
+          <div style="font-size: 12px; color: #aaa;" id="versionModalMeta">Ano</div>
+          <div style="font-size: 12px; color: #ffc107; font-weight: 600; margin-top: 2px;">Como você deseja assistir?</div>
+        </div>
+      </div>
+      <div id="versionOptionsList" style="display: flex; flex-direction: column; gap: 10px; padding: 10px 20px 22px;">
+        <!-- Botões gerados dinamicamente via JS -->
       </div>
     </div>
   </div>
@@ -1212,6 +1288,15 @@
       subDelayMinusBtn: document.getElementById('subDelayMinusBtn'),
       subDelayPlusBtn: document.getElementById('subDelayPlusBtn'),
       subFileInput: document.getElementById('subFileInput'),
+      movieVersionSwitcher: document.getElementById('movieVersionSwitcher'),
+
+      // Movie Version Modal
+      movieVersionModal: document.getElementById('movieVersionModal'),
+      closeMovieVersionModal: document.getElementById('closeMovieVersionModal'),
+      versionModalPoster: document.getElementById('versionModalPoster'),
+      versionModalTitle: document.getElementById('versionModalTitle'),
+      versionModalMeta: document.getElementById('versionModalMeta'),
+      versionOptionsList: document.getElementById('versionOptionsList'),
 
       // IMDb Visual Search Modal
       imdbSearchModal: document.getElementById('imdbSearchModal'),
@@ -1271,16 +1356,155 @@
 
     // Recupera a melhor imagem para um filme (Resolve a questão do Harry Potter e filmes 4K sem capa)
     function getBestPosterUrl(movie) {
-      // 1. Se já tem imagem válida
-      if (movie.stream_icon && movie.stream_icon.startsWith('http')) {
-        return movie.stream_icon;
+      if (!movie) return '';
+      if (movie.poster && movie.poster.startsWith('http')) return movie.poster;
+      if (movie.stream_icon && movie.stream_icon.startsWith('http')) return movie.stream_icon;
+      if (movie.primaryItem) {
+        if (movie.primaryItem.poster && movie.primaryItem.poster.startsWith('http')) return movie.primaryItem.poster;
+        if (movie.primaryItem.stream_icon && movie.primaryItem.stream_icon.startsWith('http')) return movie.primaryItem.stream_icon;
       }
-      // 2. Procura no índice inteligente do catálogo completo pelo título limpo
-      const key = cleanTitleKey(movie.name || movie.title);
+      const key = cleanTitleKey(movie.name || movie.title || (movie.primaryItem && (movie.primaryItem.name || movie.primaryItem.title)));
       if (key && moviePosterMap.has(key)) {
         return moviePosterMap.get(key);
       }
       return '';
+    }
+
+    // Detecta se uma versão é Dublada, Legendada, 4K Dublada ou 4K Legendada
+    function detectMovieVersion(item) {
+      const name = item.name || item.title || '';
+      const catId = String(item.category_id || '');
+      const is4K = (catId === '765') || /\b4k\b/i.test(name) || /\[(?:HDR|DV|Hybrid)\]/i.test(name);
+      const isLeg = (catId === '630') || /\[\s*(?:L|LEG|LEGENDADO)\s*\]/i.test(name) || /\b(legendado)\b/i.test(name);
+
+      if (is4K) {
+        if (isLeg) return { type: '4k_leg', label: '4K Legendado', badge: '4K LEG', icon: '✨', desc: 'Resolução 4K Ultra HD • Áudio Original com Legenda' };
+        return { type: '4k_dub', label: '4K Ultra HD', badge: '4K DUB', icon: '✨', desc: 'Resolução 4K Ultra HD • Dublado em Português' };
+      }
+      if (isLeg) {
+        return { type: 'legendado', label: 'Legendado', badge: 'LEG', icon: '💬', desc: 'Áudio Original com Legendas em Português' };
+      }
+      return { type: 'dublado', label: 'Dublado', badge: 'DUB', icon: '🔊', desc: 'Áudio Dublado em Português' };
+    }
+
+    // Título limpo e elegante para exibição no card
+    function cleanDisplayTitle(rawTitle) {
+      if (!rawTitle) return '';
+      return rawTitle
+        .replace(/^[0-9]+\s*[-–—]\s*/, '')      // '1 - ', '02 - '
+        .replace(/\b4k\b/gi, '')                // '4K', '4k'
+        .replace(/\[\s*(?:l|leg|legendado|dub|dublado|lancamento|lançamento|hdr|dv|hybrid|cinema)\s*\]/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    // Agrupa filmes duplicados (Dublado, Legendado e 4K) em um único card inteligente
+    function groupMoviesByTitle(moviesList) {
+      const groups = [];
+      const cleanToGroupIndices = new Map();
+
+      moviesList.forEach(item => {
+        const raw = item.name || item.title || '';
+        const clean = cleanTitleKey(raw);
+        if (!clean) return;
+
+        const yMatch = raw.match(/\((19\d\d|20\d\d)\)/);
+        const itemYear = yMatch ? yMatch[1] : (item.year ? String(item.year).trim() : '');
+        const versionInfo = detectMovieVersion(item);
+
+        let matchedGroup = null;
+
+        if (cleanToGroupIndices.has(clean)) {
+          const candidateIndices = cleanToGroupIndices.get(clean);
+          for (const idx of candidateIndices) {
+            const g = groups[idx];
+            // Se algum não tiver ano, ou se os anos forem compatíveis (até 1 ano de diferença para lançamentos)
+            if (!itemYear || !g.year || itemYear === g.year || Math.abs(Number(itemYear) - Number(g.year)) <= 1) {
+              matchedGroup = g;
+              break;
+            }
+          }
+        }
+
+        if (matchedGroup) {
+          if (!matchedGroup.versions.some(v => v.streamId === item.stream_id)) {
+            matchedGroup.versions.push({
+              item,
+              versionInfo,
+              streamId: item.stream_id,
+              ext: item.container_extension || 'mp4'
+            });
+          }
+          const cid = Number(item.category_id);
+          if (cid && !matchedGroup.category_ids.includes(cid)) {
+            matchedGroup.category_ids.push(cid);
+          }
+          if (Array.isArray(item.category_ids)) {
+            item.category_ids.forEach(c => {
+              const numC = Number(c);
+              if (numC && !matchedGroup.category_ids.includes(numC)) matchedGroup.category_ids.push(numC);
+            });
+          }
+          if (!matchedGroup.poster && item.stream_icon && item.stream_icon.startsWith('http')) {
+            matchedGroup.poster = item.stream_icon;
+          }
+          if (!matchedGroup.year && itemYear) {
+            matchedGroup.year = itemYear;
+          }
+          const itAdd = Number(item.added || item.last_modified || 0);
+          if (itAdd > Number(matchedGroup.added || 0)) {
+            matchedGroup.added = item.added;
+          }
+        } else {
+          const catIds = [Number(item.category_id)].filter(Boolean);
+          if (Array.isArray(item.category_ids)) {
+            item.category_ids.forEach(c => {
+              const numC = Number(c);
+              if (numC && !catIds.includes(numC)) catIds.push(numC);
+            });
+          }
+          const newGroup = {
+            isGroup: true,
+            cleanKey: clean,
+            name: cleanDisplayTitle(raw),
+            originalName: raw,
+            year: itemYear,
+            category_id: item.category_id,
+            category_ids: catIds,
+            rating: item.rating,
+            rating_5based: item.rating_5based,
+            added: item.added,
+            last_modified: item.last_modified,
+            stream_id: item.stream_id,
+            container_extension: item.container_extension || 'mp4',
+            plot: item.plot,
+            poster: (item.stream_icon && item.stream_icon.startsWith('http')) ? item.stream_icon : '',
+            primaryItem: item,
+            versions: [{
+              item,
+              versionInfo,
+              streamId: item.stream_id,
+              ext: item.container_extension || 'mp4'
+            }]
+          };
+          const newIdx = groups.length;
+          groups.push(newGroup);
+          if (!cleanToGroupIndices.has(clean)) {
+            cleanToGroupIndices.set(clean, []);
+          }
+          cleanToGroupIndices.get(clean).push(newIdx);
+        }
+      });
+
+      // Manter ordenação decrescente de adição
+      groups.sort((a, b) => {
+        const timeA = Number(a.added || a.last_modified || 0);
+        const timeB = Number(b.added || b.last_modified || 0);
+        if (timeB !== timeA) return timeB - timeA;
+        return Number(b.stream_id || 0) - Number(a.stream_id || 0);
+      });
+
+      return groups;
     }
 
     // ==========================================
@@ -1351,11 +1575,18 @@
       });
       elements.seasonSelect.addEventListener('change', (e) => renderSeasonEpisodes(e.target.value));
 
+      // Movie Version Modal
+      elements.closeMovieVersionModal.addEventListener('click', closeMovieVersionModal);
+      elements.movieVersionModal.addEventListener('click', (e) => {
+        if (e.target === elements.movieVersionModal) closeMovieVersionModal();
+      });
+
       window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
           closePlayer();
           closeSeriesModal();
           closeImdbSearchModal();
+          closeMovieVersionModal();
         }
       });
 
@@ -1468,10 +1699,10 @@
 
         // Ocultar itens pertencentes à categoria DEMO
         const demoCatIds = new Set(movieCategories.filter(c => c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
-        fullMoviesCache = rawMovies.filter(m => !demoCatIds.has(String(m.category_id)) && (!m.name || m.name.toLowerCase().trim() !== 'demo'));
+        const validMovies = rawMovies.filter(m => !demoCatIds.has(String(m.category_id)) && (!m.name || m.name.toLowerCase().trim() !== 'demo'));
 
         // Ordenar por data de adição (mais recentes primeiro)
-        fullMoviesCache.sort((a, b) => {
+        validMovies.sort((a, b) => {
           const timeA = Number(a.added || a.last_modified || 0);
           const timeB = Number(b.added || b.last_modified || 0);
           if (timeB !== timeA) return timeB - timeA;
@@ -1480,7 +1711,7 @@
 
         // Construir índice de posters limpos para cobrir filmes 4K sem capa
         moviePosterMap.clear();
-        fullMoviesCache.forEach(m => {
+        validMovies.forEach(m => {
           if (m.stream_icon && m.stream_icon.startsWith('http')) {
             const key = cleanTitleKey(m.name || m.title);
             if (key && !moviePosterMap.has(key)) {
@@ -1488,6 +1719,9 @@
             }
           }
         });
+
+        // Unificar versões duplicadas (Dublado, Legendado e 4K) em cards únicos inteligentes
+        fullMoviesCache = groupMoviesByTitle(validMovies);
 
         currentMediaList = fullMoviesCache;
         elements.categorySelect.value = 'ALL';
@@ -1559,8 +1793,8 @@
       const sourceList = (currentMode === 'movies') ? fullMoviesCache : fullSeriesCache;
       if (sourceList) {
         currentMediaList = sourceList.filter(item => {
-          if (item.category_id == catId) return true;
-          if (Array.isArray(item.category_ids) && item.category_ids.includes(Number(catId))) return true;
+          if (String(item.category_id) === String(catId)) return true;
+          if (Array.isArray(item.category_ids) && item.category_ids.some(c => String(c) === String(catId))) return true;
           return false;
         });
         applyFilterAndRender('');
@@ -1582,7 +1816,12 @@
         currentFilteredList = currentMediaList.filter(item => {
           const rawName = normalizeSearch(item.name || item.title || '');
           const cleanKey = cleanTitleKey(item.name || item.title || '');
-          return rawName.includes(q) || cleanKey.includes(q);
+          const origName = normalizeSearch(item.originalName || '');
+          const hasVersionMatch = item.versions && item.versions.some(v => {
+            const vName = normalizeSearch(v.item?.name || v.item?.title || '');
+            return vName.includes(q);
+          });
+          return rawName.includes(q) || cleanKey.includes(q) || origName.includes(q) || hasVersionMatch;
         });
       }
 
@@ -1624,10 +1863,21 @@
         let badgeHtml = '';
 
         if (isMovie) {
-          poster = getBestPosterUrl(item);
-          const is4K = (item.category_id == '765') || /\b4k\b/i.test(title);
-          if (is4K) {
+          poster = getBestPosterUrl(item.primaryItem || item);
+          const has4K = item.versions ? item.versions.some(v => v.versionInfo.type.startsWith('4k')) : (item.category_id == '765' || /\b4k\b/i.test(title));
+          const hasLeg = item.versions ? item.versions.some(v => v.versionInfo.type.includes('leg')) : /\[\s*L\s*\]/i.test(title);
+          const hasDub = item.versions ? item.versions.some(v => v.versionInfo.type === 'dublado' || v.versionInfo.type === '4k_dub') : true;
+
+          if (item.versions && item.versions.length > 1) {
+            const badges = [];
+            if (has4K) badges.push('4K');
+            if (hasDub) badges.push('DUB');
+            if (hasLeg) badges.push('LEG');
+            badgeHtml = `<div class="badge-versions">${badges.join(' • ')}</div>`;
+          } else if (has4K) {
             badgeHtml = `<div class="badge-4k">4K ULTRA HD</div>`;
+          } else if (hasLeg) {
+            badgeHtml = `<div class="badge-leg">LEGENDADO</div>`;
           }
         } else {
           poster = item.cover || item.stream_icon || '';
@@ -1654,9 +1904,7 @@
         `;
 
         if (isMovie) {
-          const ext = item.container_extension || 'mp4';
-          const videoUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${item.stream_id}.${ext}`;
-          card.addEventListener('click', () => openPlayer(title, videoUrl, 'movie', item));
+          card.addEventListener('click', () => onMovieCardClick(item));
         } else {
           card.addEventListener('click', () => openSeriesModal(item));
         }
@@ -1713,6 +1961,154 @@
     }
 
     // ==========================================
+    // SELETOR E GERENCIAMENTO DE VERSÕES DE FILME (DUB / LEG / 4K)
+    // ==========================================
+    function onMovieCardClick(groupOrMovie) {
+      const versions = groupOrMovie.versions || [{
+        item: groupOrMovie,
+        versionInfo: detectMovieVersion(groupOrMovie),
+        streamId: groupOrMovie.stream_id,
+        ext: groupOrMovie.container_extension || 'mp4'
+      }];
+
+      if (versions.length > 1) {
+        openMovieVersionModal(groupOrMovie, versions);
+      } else {
+        playMovieVersion(groupOrMovie, versions[0], versions);
+      }
+    }
+
+    function openMovieVersionModal(groupOrMovie, versions) {
+      const title = groupOrMovie.name || groupOrMovie.title || 'Filme';
+      const poster = groupOrMovie.poster || getBestPosterUrl(groupOrMovie.primaryItem || groupOrMovie);
+      const year = groupOrMovie.year || '';
+      const rating = (groupOrMovie.rating && Number(groupOrMovie.rating) > 0) ? `★ ${Number(groupOrMovie.rating).toFixed(1)}` : '';
+
+      elements.versionModalTitle.textContent = title;
+      elements.versionModalPoster.src = poster;
+      elements.versionModalMeta.textContent = [year, rating].filter(Boolean).join(' • ');
+      elements.versionOptionsList.innerHTML = '';
+
+      const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4 };
+      const sortedVersions = [...versions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
+
+      sortedVersions.forEach(v => {
+        const btn = document.createElement('button');
+        btn.className = 'version-btn';
+        btn.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="font-size: 24px;">${v.versionInfo.icon}</span>
+            <div style="text-align: left;">
+              <div style="font-weight: 700; font-size: 14px; color: #fff;">${escapeHtml(v.versionInfo.label)}</div>
+              <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${escapeHtml(v.versionInfo.desc)}</div>
+            </div>
+          </div>
+          <span style="font-size: 13px; color: #ffc107; font-weight: 700; display: flex; align-items: center; gap: 4px;">Assistir ▶</span>
+        `;
+        btn.addEventListener('click', () => {
+          closeMovieVersionModal();
+          playMovieVersion(groupOrMovie, v, versions);
+        });
+        elements.versionOptionsList.appendChild(btn);
+      });
+
+      elements.movieVersionModal.style.display = 'flex';
+    }
+
+    function closeMovieVersionModal() {
+      if (elements.movieVersionModal) {
+        elements.movieVersionModal.style.display = 'none';
+      }
+    }
+
+    function playMovieVersion(groupOrMovie, selectedVersion, allVersions) {
+      const ext = selectedVersion.ext || 'mp4';
+      const videoUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${selectedVersion.streamId}.${ext}`;
+      const baseTitle = groupOrMovie.name || groupOrMovie.title || 'Filme';
+      const displayTitle = (allVersions && allVersions.length > 1) 
+        ? `${baseTitle} (${selectedVersion.versionInfo.label})` 
+        : baseTitle;
+
+      setupPlayerVersionSwitcher(groupOrMovie, selectedVersion, allVersions);
+
+      openPlayer(displayTitle, videoUrl, 'movie', {
+        ...(selectedVersion.item || {}),
+        rawTitle: baseTitle,
+        groupOrMovie,
+        selectedVersion,
+        allVersions
+      });
+    }
+
+    function setupPlayerVersionSwitcher(groupOrMovie, activeVersion, allVersions) {
+      if (!elements.movieVersionSwitcher) return;
+
+      if (!allVersions || allVersions.length <= 1) {
+        elements.movieVersionSwitcher.style.display = 'none';
+        elements.movieVersionSwitcher.innerHTML = '';
+        return;
+      }
+
+      elements.movieVersionSwitcher.style.display = 'inline-flex';
+      elements.movieVersionSwitcher.innerHTML = '';
+
+      const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4 };
+      const sorted = [...allVersions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
+
+      sorted.forEach(v => {
+        const isCurrent = (v.streamId === activeVersion.streamId);
+        const btn = document.createElement('button');
+        btn.className = `btn ${isCurrent ? 'btn-primary' : 'btn-secondary'}`;
+        btn.style.padding = '7px 12px';
+        btn.style.fontSize = '12px';
+        btn.style.display = 'inline-flex';
+        btn.style.alignItems = 'center';
+        btn.style.gap = '6px';
+        btn.style.cursor = 'pointer';
+        btn.title = `Alternar para versão ${v.versionInfo.label}`;
+        btn.innerHTML = `${v.versionInfo.icon} ${v.versionInfo.label}`;
+
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (isCurrent) return;
+          switchLiveMovieVersion(groupOrMovie, v, allVersions);
+        });
+
+        elements.movieVersionSwitcher.appendChild(btn);
+      });
+    }
+
+    function switchLiveMovieVersion(groupOrMovie, targetVersion, allVersions) {
+      const currentPos = elements.videoPlayer ? elements.videoPlayer.currentTime : 0;
+      const wasPaused = elements.videoPlayer ? elements.videoPlayer.paused : false;
+
+      const ext = targetVersion.ext || 'mp4';
+      const newUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${targetVersion.streamId}.${ext}`;
+      const baseTitle = groupOrMovie.name || groupOrMovie.title || 'Filme';
+      const newTitle = `${baseTitle} (${targetVersion.versionInfo.label})`;
+
+      activeVideoUrl = newUrl;
+      elements.modalTitle.textContent = newTitle;
+      elements.downloadBtn.href = newUrl;
+      elements.videoPlayer.src = newUrl;
+
+      setupPlayerVersionSwitcher(groupOrMovie, targetVersion, allVersions);
+
+      function onLoaded() {
+        elements.videoPlayer.removeEventListener('loadedmetadata', onLoaded);
+        if (currentPos > 0) {
+          elements.videoPlayer.currentTime = currentPos;
+        }
+        if (!wasPaused) {
+          elements.videoPlayer.play().catch(() => {});
+        }
+      }
+
+      elements.videoPlayer.addEventListener('loadedmetadata', onLoaded);
+      elements.modalFormat.textContent = `Versão alterada para ${targetVersion.versionInfo.label}`;
+    }
+
+    // ==========================================
     // REPRODUÇÃO DE VÍDEO (FILMES E EPISÓDIOS)
     // ==========================================
     let currentRawSubtitleText = '';
@@ -1761,6 +2157,11 @@
       elements.videoPlayer.pause();
       elements.videoPlayer.src = '';
       activeVideoUrl = '';
+
+      if (elements.movieVersionSwitcher) {
+        elements.movieVersionSwitcher.style.display = 'none';
+        elements.movieVersionSwitcher.innerHTML = '';
+      }
 
       // Limpar legendas anteriores e fechar painel
       closeSubOptionsPanel();
