@@ -365,6 +365,107 @@
       z-index: 2500;
     }
 
+    #imdbSearchModal {
+      z-index: 3500;
+    }
+
+    .imdb-card {
+      background: #1f1f1f;
+      border: 1px solid #333;
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .imdb-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-4px);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.7);
+    }
+    .imdb-card.selected-saved {
+      border-color: #46d369;
+      box-shadow: 0 0 12px rgba(70, 211, 105, 0.4);
+    }
+    .imdb-thumb-container {
+      width: 100%;
+      aspect-ratio: 2/3;
+      background: #111;
+      position: relative;
+      overflow: hidden;
+    }
+    .imdb-thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .imdb-year-badge {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: rgba(0, 0, 0, 0.8);
+      color: #ffc107;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .imdb-card-body {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      justify-content: space-between;
+    }
+    .imdb-card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      line-height: 1.3;
+      margin-bottom: 4px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .imdb-card-id {
+      font-size: 11px;
+      color: #777;
+    }
+
+    .imdb-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 14px;
+      padding: 16px 20px;
+      overflow-y: auto;
+      max-height: 55vh;
+    }
+
+    .imdb-search-bar {
+      display: flex;
+      gap: 10px;
+      padding: 14px 20px;
+      background: #141414;
+      border-bottom: 1px solid #252525;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .imdb-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgba(70, 211, 105, 0.15);
+      color: #46d369;
+      border: 1px solid rgba(70, 211, 105, 0.3);
+    }
+
     .modal-content {
       background: #181818;
       border-radius: 12px;
@@ -715,6 +816,12 @@
         gap: 12px;
       }
 
+      .imdb-grid {
+        grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+        gap: 10px;
+        padding: 12px 14px;
+      }
+
       .card-info {
         padding: 8px;
         gap: 4px;
@@ -1004,6 +1111,48 @@
     </div>
   </div>
 
+  <!-- IMDb Visual Search & Memory Modal -->
+  <div id="imdbSearchModal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 860px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <h3 style="margin: 0; font-size: 17px;">🔍 Buscar Título no IMDb</h3>
+          <span id="imdbSearchTargetDesc" style="font-size: 12px; color: #bbb; background: #262626; padding: 3px 10px; border-radius: 4px; border: 1px solid #3a3a3a;"></span>
+        </div>
+        <button class="close-btn" id="closeImdbSearchModal">&times;</button>
+      </div>
+
+      <!-- Barra de Pesquisa IMDb -->
+      <div class="imdb-search-bar">
+        <div style="display: flex; gap: 8px; flex: 1; min-width: 260px;">
+          <select id="imdbSearchType" style="padding: 8px 10px; font-size: 13px; background: #222; color: #fff; border: 1px solid #383838; border-radius: 6px; cursor: pointer;">
+            <option value="movie">🎬 Filme</option>
+            <option value="series">📺 Série</option>
+          </select>
+          <input type="text" id="imdbSearchInput" placeholder="Nome do título ou código IMDb (ex: Beast, tt13223398)..." style="flex: 1; padding: 8px 12px; font-size: 13px; background: #222; color: #fff; border: 1px solid #383838; border-radius: 6px;">
+        </div>
+        <button class="btn btn-primary" id="doImdbSearchBtn" style="padding: 8px 18px; font-size: 13px; white-space: nowrap;">🔍 Pesquisar</button>
+      </div>
+
+      <!-- Memória Atual / Instrução -->
+      <div id="imdbMemoryBanner" style="padding: 10px 20px; background: #181818; border-bottom: 1px solid #252525; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 12px;">
+        <div id="imdbMemoryInfo" style="color: #bbb; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;">
+          Selecione o poster correto para memorizar e carregar as legendas.
+        </div>
+        <button id="clearMemoryBtn" class="btn btn-secondary" style="display: none; padding: 4px 10px; font-size: 11px; color: #e50914; border-color: #551114;">
+          🗑️ Desvincular Título Memorizado
+        </button>
+      </div>
+
+      <!-- Grade com Resultados e Posters -->
+      <div id="imdbSearchResults" class="imdb-grid">
+        <div style="grid-column: 1 / -1; text-align: center; color: #888; padding: 40px;">
+          Digite o nome ou clique em pesquisar.
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     const CONFIG = {
       server: 'https://2kbrfonte.space',
@@ -1063,6 +1212,18 @@
       subDelayMinusBtn: document.getElementById('subDelayMinusBtn'),
       subDelayPlusBtn: document.getElementById('subDelayPlusBtn'),
       subFileInput: document.getElementById('subFileInput'),
+
+      // IMDb Visual Search Modal
+      imdbSearchModal: document.getElementById('imdbSearchModal'),
+      closeImdbSearchModal: document.getElementById('closeImdbSearchModal'),
+      imdbSearchTargetDesc: document.getElementById('imdbSearchTargetDesc'),
+      imdbSearchType: document.getElementById('imdbSearchType'),
+      imdbSearchInput: document.getElementById('imdbSearchInput'),
+      doImdbSearchBtn: document.getElementById('doImdbSearchBtn'),
+      imdbMemoryBanner: document.getElementById('imdbMemoryBanner'),
+      imdbMemoryInfo: document.getElementById('imdbMemoryInfo'),
+      clearMemoryBtn: document.getElementById('clearMemoryBtn'),
+      imdbSearchResults: document.getElementById('imdbSearchResults'),
 
       // Series Modal
       seriesModal: document.getElementById('seriesModal'),
@@ -1147,9 +1308,21 @@
       elements.closeSubPanelBtn.addEventListener('click', closeSubOptionsPanel);
       elements.subSelect.addEventListener('change', (e) => onSubtitleSelectChange(e.target.value));
       elements.subCandidateSelect.addEventListener('change', (e) => onCandidateSelectChange(e.target.value));
-      elements.searchCustomSubBtn.addEventListener('click', onSearchCustomSubClick);
+      elements.searchCustomSubBtn.addEventListener('click', openImdbSearchModal);
       elements.subDelayMinusBtn.addEventListener('click', () => changeSubtitleOffset(-0.5));
       elements.subDelayPlusBtn.addEventListener('click', () => changeSubtitleOffset(0.5));
+
+      // IMDb Visual Search Modal
+      elements.closeImdbSearchModal.addEventListener('click', closeImdbSearchModal);
+      elements.imdbSearchModal.addEventListener('click', (e) => {
+        if (e.target === elements.imdbSearchModal) closeImdbSearchModal();
+      });
+      elements.doImdbSearchBtn.addEventListener('click', () => executeImdbSearch());
+      elements.imdbSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') executeImdbSearch();
+      });
+      elements.imdbSearchType.addEventListener('change', () => executeImdbSearch());
+      elements.clearMemoryBtn.addEventListener('click', clearMediaMatch);
 
       // Carregamento de legendas (.srt ou .vtt)
       elements.subFileInput.addEventListener('change', (e) => {
@@ -1182,6 +1355,7 @@
         if (e.key === 'Escape') {
           closePlayer();
           closeSeriesModal();
+          closeImdbSearchModal();
         }
       });
 
@@ -1654,6 +1828,52 @@
       return score;
     }
 
+    // ==========================================
+    // MEMÓRIA E PERSISTÊNCIA DE VÍNCULOS IMDB (LOCALSTORAGE)
+    // ==========================================
+    function getMediaStorageKey(mediaType, titleOrMeta) {
+      if (mediaType === 'series') {
+        const sName = (typeof titleOrMeta === 'object' && titleOrMeta && titleOrMeta.seriesName)
+          ? titleOrMeta.seriesName
+          : String(titleOrMeta || '');
+        return `andplay_match_series_${cleanTitleKey(sName)}`;
+      } else {
+        const mName = (typeof titleOrMeta === 'object' && titleOrMeta && titleOrMeta.rawTitle)
+          ? titleOrMeta.rawTitle
+          : String(titleOrMeta || '');
+        return `andplay_match_movie_${cleanTitleKey(mName)}`;
+      }
+    }
+
+    function getSavedMediaMatch(mediaType, titleOrMeta) {
+      try {
+        const key = getMediaStorageKey(mediaType, titleOrMeta);
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function saveMediaMatch(mediaType, titleOrMeta, matchData) {
+      try {
+        const key = getMediaStorageKey(mediaType, titleOrMeta);
+        localStorage.setItem(key, JSON.stringify(matchData));
+      } catch (e) {
+        console.error('Erro ao salvar vínculo no localStorage:', e);
+      }
+    }
+
+    function removeMediaMatch(mediaType, titleOrMeta) {
+      try {
+        const key = getMediaStorageKey(mediaType, titleOrMeta);
+        localStorage.removeItem(key);
+      } catch (e) {
+        console.error('Erro ao remover vínculo do localStorage:', e);
+      }
+    }
+
     // Busca automática no OpenSubtitles via Stremio Cinemeta
     async function autoFetchSubtitle(rawTitle, mediaType, mediaMeta) {
       try {
@@ -1673,6 +1893,38 @@
           candidates: [],
           allSubtitles: []
         };
+
+        // 1. VERIFICAR SE JÁ EXISTE VÍNCULO MEMORIZADO NO LOCALSTORAGE
+        const targetKeySource = (mediaType === 'series') ? mediaMeta : rawTitle;
+        const savedMatch = getSavedMediaMatch(mediaType, targetKeySource);
+
+        if (savedMatch && savedMatch.id) {
+          elements.modalFormat.textContent = `Carregando legendas de ${savedMatch.name} [Memorizado]...`;
+
+          currentSubContext.candidates = [{
+            id: savedMatch.id,
+            name: savedMatch.name,
+            year: savedMatch.year,
+            poster: savedMatch.poster
+          }];
+
+          elements.subCandidateSelect.innerHTML = '';
+          const opt = document.createElement('option');
+          opt.value = savedMatch.id;
+          const y = savedMatch.year ? ` (${savedMatch.year})` : '';
+          opt.textContent = `🎯 ${savedMatch.name}${y} [Memorizado]`;
+          elements.subCandidateSelect.appendChild(opt);
+
+          const subs = await fetchCandidateSubtitles(savedMatch.id, savedMatch.name, savedMatch.year, savedMatch.catalogType || catalogType);
+          currentSubContext.allSubtitles = subs;
+
+          // Legendas desativadas por padrão
+          renderSubtitleOptions(savedMatch.id, false);
+          elements.modalFormat.textContent = subs.length > 0 
+            ? `Formato: MP4 • Link Direto (${subs.length} legendas disponíveis)`
+            : `Formato: MP4 • Link Direto`;
+          return;
+        }
 
         if (!clean) {
           elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
@@ -1853,31 +2105,215 @@
       renderSubtitleOptions(selectedVal);
     }
 
-    async function onSearchCustomSubClick() {
-      const defaultVal = currentSubContext.cleanTitle || '';
-      const promptText = `Buscar Legenda no IMDb:\n\nDigite o nome do filme/série ou cole o link/código do IMDb (ex: Beast, Top Gun, tt13223398):`;
-      const query = window.prompt(promptText, defaultVal);
+    // ==========================================
+    // MODAL DE BUSCA VISUAL NO IMDB COM POSTERS
+    // ==========================================
+    function openImdbSearchModal() {
+      // 1. Pausa o vídeo imediatamente
+      if (elements.videoPlayer && !elements.videoPlayer.paused) {
+        elements.videoPlayer.pause();
+      }
 
-      if (!query || !query.trim()) return;
+      const isSeries = currentSubContext.mediaType === 'series';
+      const targetName = isSeries 
+        ? (currentSubContext.mediaMeta?.seriesName || currentSubContext.rawTitle) 
+        : currentSubContext.rawTitle;
 
-      const trimmed = query.trim();
+      elements.imdbSearchType.value = isSeries ? 'series' : 'movie';
+      elements.imdbSearchTargetDesc.textContent = (isSeries ? '📺 Série: ' : '🎬 Filme: ') + (targetName || 'Vídeo');
 
-      // Se colou link do IMDb ou código tt (ex: tt13223398)
-      const imdbMatch = trimmed.match(/\btt\d+\b/i);
-      if (imdbMatch) {
-        const id = imdbMatch[0].toLowerCase();
-        const opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = `🔍 IMDb: ${id}`;
-        elements.subCandidateSelect.insertBefore(opt, elements.subCandidateSelect.firstChild);
-        elements.subCandidateSelect.value = id;
-        await onCandidateSelectChange(id);
+      const targetKeySource = isSeries ? currentSubContext.mediaMeta : currentSubContext.rawTitle;
+      const saved = getSavedMediaMatch(currentSubContext.mediaType, targetKeySource);
+
+      updateMemoryBanner(saved);
+
+      const initialQuery = currentSubContext.cleanTitle || parseTitleInfo(targetName);
+      elements.imdbSearchInput.value = initialQuery;
+
+      elements.imdbSearchModal.style.display = 'flex';
+
+      // Executa busca inicial para exibir os posters imediatamente
+      executeImdbSearch(initialQuery);
+    }
+
+    function closeImdbSearchModal() {
+      elements.imdbSearchModal.style.display = 'none';
+    }
+
+    function updateMemoryBanner(saved) {
+      const isSeries = currentSubContext.mediaType === 'series';
+      if (saved && saved.id) {
+        elements.imdbMemoryInfo.innerHTML = `
+          <span class="imdb-status-badge">✓ Título Memorizado: <strong>${escapeHtml(saved.name)}</strong> (${saved.year || 'IMDb'})</span>
+          <span style="color: #aaa; margin-left: 6px;">Vínculo salvo para ${isSeries ? 'todos os episódios desta série' : 'este filme'}.</span>
+        `;
+        elements.clearMemoryBtn.style.display = 'inline-block';
+      } else {
+        elements.imdbMemoryInfo.innerHTML = `
+          <span style="color: #bbb;">ℹ️ Selecione o poster correto abaixo para memorizar permanentemente para ${isSeries ? 'todos os episódios desta série' : 'este filme'}.</span>
+        `;
+        elements.clearMemoryBtn.style.display = 'none';
+      }
+    }
+
+    async function executeImdbSearch(queryOverride) {
+      const query = (queryOverride !== undefined ? queryOverride : elements.imdbSearchInput.value || '').trim();
+      const catalogType = elements.imdbSearchType.value || 'movie';
+
+      if (!query) {
+        elements.imdbSearchResults.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: #888; padding: 30px;">Digite um nome ou código IMDb para pesquisar.</div>';
         return;
       }
 
-      // Se digitou texto ou nome
-      const clean = parseTitleInfo(trimmed);
-      await searchAndPopulateCandidates(clean, currentSubContext.catalogType || 'movie');
+      elements.imdbSearchResults.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; color: #aaa; padding: 40px;"><div class="spinner" style="margin: 0 auto 15px;"></div>Buscando títulos e posters no catálogo...</div>';
+
+      const isSeries = currentSubContext.mediaType === 'series';
+      const targetKeySource = isSeries ? currentSubContext.mediaMeta : currentSubContext.rawTitle;
+      const saved = getSavedMediaMatch(currentSubContext.mediaType, targetKeySource);
+
+      try {
+        const imdbMatch = query.match(/\btt\d+\b/i);
+        let metas = [];
+
+        if (imdbMatch) {
+          const ttId = imdbMatch[0].toLowerCase();
+          try {
+            const metaRes = await fetch(`https://v3-cinemeta.strem.io/meta/${catalogType}/${ttId}.json`);
+            const metaData = await metaRes.json();
+            if (metaData && metaData.meta) {
+              metas = [metaData.meta];
+            } else {
+              metas = [{ id: ttId, name: query, type: catalogType }];
+            }
+          } catch (e) {
+            metas = [{ id: ttId, name: query, type: catalogType }];
+          }
+        } else {
+          const searchUrl = `https://v3-cinemeta.strem.io/catalog/${catalogType}/top/search=${encodeURIComponent(query)}.json`;
+          const res = await fetch(searchUrl);
+          const data = await res.json();
+          metas = (data && data.metas) ? data.metas : [];
+        }
+
+        if (metas.length === 0) {
+          elements.imdbSearchResults.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; color: #aaa; padding: 30px;">
+              <p>Nenhum título encontrado para "<strong>${escapeHtml(query)}</strong>" em ${catalogType === 'series' ? 'Séries' : 'Filmes'}.</p>
+              <p style="font-size: 12px; color: #777; margin-top: 6px;">Dica: Tente pesquisar pelo nome original em inglês ou cole o código IMDb (ex: tt13223398).</p>
+            </div>
+          `;
+          return;
+        }
+
+        elements.imdbSearchResults.innerHTML = '';
+
+        metas.forEach(item => {
+          const isCurrentlySaved = saved && saved.id === item.id;
+          const card = document.createElement('div');
+          card.className = `imdb-card ${isCurrentlySaved ? 'selected-saved' : ''}`;
+
+          const year = item.releaseInfo || item.year || '';
+          const poster = item.poster || '';
+          const title = item.name || 'Sem título';
+
+          card.innerHTML = `
+            <div class="imdb-thumb-container">
+              ${poster 
+                ? `<img class="imdb-thumb" src="${poster}" alt="${escapeHtml(title)}" loading="lazy" onerror="this.style.display='none'; if (this.nextElementSibling) this.nextElementSibling.style.display='flex';">
+                   <div style="display:none;height:100%;align-items:center;justify-content:center;color:#666;font-size:32px;">🎬</div>`
+                : `<div style="display:flex;height:100%;align-items:center;justify-content:center;color:#666;font-size:32px;">🎬</div>`
+              }
+              ${year ? `<div class="imdb-year-badge">${year}</div>` : ''}
+              ${isCurrentlySaved ? `<div style="position:absolute;bottom:6px;left:6px;right:6px;background:rgba(70,211,105,0.92);color:#000;font-size:10px;font-weight:bold;padding:2px 4px;border-radius:3px;text-align:center;">✓ Memorizado</div>` : ''}
+            </div>
+            <div class="imdb-card-body">
+              <div>
+                <div class="imdb-card-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+                <div class="imdb-card-id">${item.id}</div>
+              </div>
+              <button class="btn ${isCurrentlySaved ? 'btn-secondary' : 'btn-primary'}" style="padding: 6px 8px; font-size: 11px; margin-top: 8px; width: 100%;">
+                ${isCurrentlySaved ? '✓ Memorizado' : 'Selecionar & Salvar'}
+              </button>
+            </div>
+          `;
+
+          card.addEventListener('click', () => {
+            selectAndMemorizeMedia(item, catalogType);
+          });
+
+          elements.imdbSearchResults.appendChild(card);
+        });
+
+      } catch (err) {
+        console.error('Erro na pesquisa IMDb:', err);
+        elements.imdbSearchResults.innerHTML = `<div style="grid-column: 1 / -1; text-align: center; color: #e50914; padding: 30px;">Erro ao buscar resultados: ${err.message}</div>`;
+      }
+    }
+
+    async function selectAndMemorizeMedia(item, catalogType) {
+      const isSeries = currentSubContext.mediaType === 'series';
+      const targetKeySource = isSeries ? currentSubContext.mediaMeta : currentSubContext.rawTitle;
+
+      const matchData = {
+        id: item.id,
+        name: item.name,
+        year: item.releaseInfo || item.year || '',
+        poster: item.poster || '',
+        catalogType: catalogType,
+        savedAt: Date.now()
+      };
+
+      saveMediaMatch(currentSubContext.mediaType, targetKeySource, matchData);
+      updateMemoryBanner(matchData);
+
+      // Fecha o modal de busca
+      closeImdbSearchModal();
+
+      // Atualiza o dropdown de candidatos com o item selecionado e memorizado
+      const candYear = matchData.year ? ` (${matchData.year})` : '';
+      const candLabel = `🎯 ${matchData.name}${candYear} [Memorizado]`;
+
+      Array.from(elements.subCandidateSelect.options).forEach(opt => {
+        if (opt.value === item.id) opt.remove();
+      });
+
+      const opt = document.createElement('option');
+      opt.value = item.id;
+      opt.textContent = candLabel;
+      elements.subCandidateSelect.insertBefore(opt, elements.subCandidateSelect.firstChild);
+      elements.subCandidateSelect.value = item.id;
+
+      // Carregar as legendas desse candidato
+      elements.modalFormat.textContent = `Buscando legendas de "${matchData.name}"...`;
+      elements.subSelect.innerHTML = '<option value="loading" disabled selected>💬 Carregando opções...</option>';
+
+      const newSubs = await fetchCandidateSubtitles(item.id, matchData.name, matchData.year, catalogType);
+      currentSubContext.allSubtitles = newSubs;
+      renderSubtitleOptions(item.id, false);
+
+      if (newSubs.length > 0) {
+        elements.modalFormat.textContent = `✓ ${newSubs.length} legenda(s) encontrada(s) para ${matchData.name} (Memorizado!)`;
+      } else {
+        elements.modalFormat.textContent = `Nenhuma legenda em Português encontrada para ${matchData.name}`;
+      }
+
+      // Abre o painel de legendas para facilitar a seleção de versão pelo usuário
+      if (elements.subOptionsPanel.style.display !== 'block') {
+        toggleSubOptionsPanel();
+      }
+    }
+
+    function clearMediaMatch() {
+      const isSeries = currentSubContext.mediaType === 'series';
+      const targetKeySource = isSeries ? currentSubContext.mediaMeta : currentSubContext.rawTitle;
+      removeMediaMatch(currentSubContext.mediaType, targetKeySource);
+      updateMemoryBanner(null);
+
+      // Reexecuta busca normal no modal
+      executeImdbSearch(elements.imdbSearchInput.value);
+
+      // Recarrega candidatos padrão no player
+      autoFetchSubtitle(currentSubContext.rawTitle, currentSubContext.mediaType, currentSubContext.mediaMeta);
     }
 
     async function onSubtitleSelectChange(url) {
