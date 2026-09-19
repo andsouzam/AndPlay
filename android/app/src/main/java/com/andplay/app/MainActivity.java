@@ -115,7 +115,11 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                return false; // Abre tudo no próprio WebView
+                // Bloqueia navegações geradas por iframes (players embed) para fora do app
+                if (!request.isForMainFrame()) {
+                    return true; // Bloqueia silenciosamente navegação de sub-frames (iframes)
+                }
+                return false; // Navegação principal: abre no próprio WebView
             }
         });
 

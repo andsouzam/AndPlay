@@ -1446,7 +1446,7 @@
         <div class="player-main-area">
           <div class="video-container">
             <video id="videoPlayer" controls preload="metadata"></video>
-            <iframe id="embedPlayer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background: #000;" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-forms allow-presentation" referrerpolicy="no-referrer-when-downgrade"></iframe>
+            <iframe id="embedPlayer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background: #000;" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-presentation" referrerpolicy="no-referrer-when-downgrade"></iframe>
             <div id="liveSyncToast" style="display: none; position: absolute; top: 16px; right: 16px; background: rgba(10, 10, 10, 0.92); color: #00e676; border: 1px solid #00e676; padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; z-index: 60; box-shadow: 0 4px 15px rgba(0,0,0,0.6); pointer-events: none; transition: opacity 0.3s ease;">âš¡ TransmissÃ£o em Tempo Real</div>
             <!-- Overlay de Erro e Tratamento de Streams Indisponíveis (503/404) -->
             <div id="videoErrorOverlay" style="display: none; position: absolute; inset: 0; background: rgba(15, 15, 15, 0.96); z-index: 50; flex-direction: column; align-items: center; justify-content: center; padding: 25px 20px; text-align: center;">
@@ -3655,7 +3655,7 @@
         elements.videoPlayer.style.display = 'none';
 
         elements.embedPlayer.style.display = 'block';
-        elements.embedPlayer.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation');
+        elements.embedPlayer.setAttribute('sandbox', 'allow-scripts allow-presentation');
         
         let finalEmbedUrl = streamUrl;
         if (!finalEmbedUrl.includes('youtube')) {
