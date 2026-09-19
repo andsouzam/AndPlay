@@ -1446,8 +1446,8 @@
         <div class="player-main-area">
           <div class="video-container">
             <video id="videoPlayer" controls preload="metadata"></video>
-            <iframe id="embedPlayer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background: #000;" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-forms allow-presentation" referrerpolicy="no-referrer-when-downgrade"></iframe>
-            <div id="liveSyncToast" style="display: none; position: absolute; top: 16px; right: 16px; background: rgba(10, 10, 10, 0.92); color: #00e676; border: 1px solid #00e676; padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; z-index: 60; box-shadow: 0 4px 15px rgba(0,0,0,0.6); pointer-events: none; transition: opacity 0.3s ease;">âš¡ Transmissão em Tempo Real</div>
+            <iframe id="embedPlayer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background: #000;" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="no-referrer-when-downgrade"></iframe>
+            <div id="liveSyncToast" style="display: none; position: absolute; top: 16px; right: 16px; background: rgba(10, 10, 10, 0.92); color: #00e676; border: 1px solid #00e676; padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; z-index: 60; box-shadow: 0 4px 15px rgba(0,0,0,0.6); pointer-events: none; transition: opacity 0.3s ease;">⚡ Transmissão em Tempo Real</div>
             <!-- Overlay de Erro e Tratamento de Streams Indisponíveis (503/404) -->
             <div id="videoErrorOverlay" style="display: none; position: absolute; inset: 0; background: rgba(15, 15, 15, 0.96); z-index: 50; flex-direction: column; align-items: center; justify-content: center; padding: 25px 20px; text-align: center;">
               <div style="font-size: 46px; margin-bottom: 12px;">⚠️</div>
@@ -1513,10 +1513,10 @@
         <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
           <div id="movieVersionSwitcher" style="display: none; gap: 6px; align-items: center;"></div>
           <button class="btn" id="syncLiveBtn" style="display: none; padding: 7px 14px; font-size: 12px; font-weight: 700; background: #ff9800; color: #000; border: none; align-items: center; gap: 6px; cursor: pointer; border-radius: 16px; box-shadow: 0 2px 8px rgba(255,152,0,0.4);" title="Sincronizar instantaneamente com a borda ao vivo (zero delay)">
-            âš¡ Tempo Real
+            ⚡ Tempo Real
           </button>
           <button class="btn btn-secondary" id="toggleLatencyModeBtn" style="display: none; padding: 7px 14px; font-size: 12px; font-weight: 700; align-items: center; gap: 6px; cursor: pointer; border-radius: 16px; border: 1px solid #ffc107;" title="Alternar entre Buffer Mínimo (Zero Delay) e Buffer Estável">
-            âš¡ Buffer Mínimo: 1s
+            ⚡ Buffer Mínimo: 1s
           </button>
           <button class="btn btn-secondary" id="toggleMovieInfoBtn" style="padding: 7px 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;" title="Mostrar ou ocultar ficha técnica na lateral esquerda">
             ℹ️ Ficha Técnica
@@ -2727,17 +2727,17 @@
       elements.categorySelect.innerHTML = '';
 
       const liveCategories = [
-        { id: 'ALL', name: 'ðŸ“º Todos os Canais e Jogos Ao Vivo' },
-        { id: 'JOGOS', name: 'âš½ Jogos de Hoje & Transmissões' },
-        { id: 'sports', name: 'ðŸ† Canais de Esportes (114)' },
-        { id: 'open_tv', name: 'ðŸ“¡ TV Aberta Nacional & Regional (45)' },
-        { id: 'movies', name: 'ðŸ¿ Filmes & Séries 24H (37)' },
-        { id: 'kids', name: 'ðŸ§¸ Infantil & Desenhos (18)' },
-        { id: 'news', name: 'ðŸ“° Notícias 24H (10)' },
-        { id: 'channels_24h', name: 'â­ Clássicos 24 Horas (10)' },
-        { id: 'reality', name: 'ðŸ¤  Reality Shows (9)' },
-        { id: 'variety', name: 'ðŸŽ­ Variedades & Documentários (74)' },
-        { id: 'adult', name: 'ðŸ”ž Adulto +18 (11)' }
+        { id: 'ALL', name: '📺 Todos os Canais e Jogos Ao Vivo' },
+        { id: 'JOGOS', name: '⚽ Jogos de Hoje & Transmissões' },
+        { id: 'sports', name: '🏆 Canais de Esportes (114)' },
+        { id: 'open_tv', name: '📡 TV Aberta Nacional & Regional (45)' },
+        { id: 'movies', name: '🎬 Filmes & Séries 24H (37)' },
+        { id: 'kids', name: '🧸 Infantil & Desenhos (18)' },
+        { id: 'news', name: '📰 Notícias 24H (10)' },
+        { id: 'channels_24h', name: '⭐ Clássicos 24 Horas (10)' },
+        { id: 'reality', name: '🤠 Reality Shows (9)' },
+        { id: 'variety', name: '🎭 Variedades & Documentários (74)' },
+        { id: 'adult', name: '🔞 Adulto +18 (11)' }
       ];
 
       liveCategories.forEach(cat => {
@@ -2777,7 +2777,7 @@
             }
             if (Array.isArray(ev.embeds)) {
               ev.embeds.forEach((emb, i) => {
-                const embUrl = emb.url || emb.link || emb;
+                const embUrl = emb.embed_url || emb.url || emb.link || (typeof emb === 'string' ? emb : '');
                 if (embUrl && typeof embUrl === 'string') {
                   fallbacks.push({ name: emb.name || `Canal Alternativo ${i + 1}`, url: embUrl, isEmbed: true });
                 }
@@ -2840,7 +2840,7 @@
               }
               if (Array.isArray(ev.embeds)) {
                 ev.embeds.forEach((emb, i) => {
-                  const embUrl = emb.url || emb.link || emb;
+                  const embUrl = emb.embed_url || emb.url || emb.link || (typeof emb === 'string' ? emb : '');
                   if (embUrl && typeof embUrl === 'string') {
                     fallbacks.push({ name: emb.name || `Canal ${i + 1} HD`, url: embUrl, isEmbed: true });
                   }
@@ -2897,7 +2897,7 @@
             fallbacks: [
               { name: 'Premiere 1 HD', url: 'https://v2.rdembed.sbs/premiere', isEmbed: true },
               { name: 'SporTV HD', url: 'https://v2.rdembed.sbs/sportv', isEmbed: true },
-              { name: 'Servidor 2 (BRFLIX)', url: 'https://v2.rdse.site/premiere', isEmbed: true }
+              { name: 'CazéTV HD', url: 'https://v2.rdembed.sbs/cazetv', isEmbed: true }
             ]
           },
           {
@@ -3485,7 +3485,7 @@
     }
 
         // ==========================================
-    // MOTOR DE REPRODUÃ‡ÃƒO AO VIVO (LOW LATENCY / ULTRA BUFFER / EPG)
+    // MOTOR DE REPRODUÇÃO AO VIVO (LOW LATENCY / ULTRA BUFFER / EPG)
     // ==========================================
     let liveBufferMinimizationEnabled = true; // Ativado por padrão para transmissão em tempo real
     let liveDriftInterval = null;
@@ -3515,18 +3515,18 @@
         openLivePlayer(item, idx);
       }
 
-      showLiveSyncToast(liveBufferMinimizationEnabled ? 'âš¡ Buffer Mínimo Ativado (~1s delay)' : 'ðŸ›¡ï¸ Buffer Estável Ativado (~8s delay)');
+      showLiveSyncToast(liveBufferMinimizationEnabled ? '⚡ Buffer Mínimo Ativado (~1s delay)' : '🛡️ Buffer Estável Ativado (~8s delay)');
     }
 
     function updateLatencyButtonUI() {
       if (!elements.toggleLatencyModeBtn) return;
       if (liveBufferMinimizationEnabled) {
-        elements.toggleLatencyModeBtn.innerHTML = 'âš¡ Buffer Mínimo: 1s';
+        elements.toggleLatencyModeBtn.innerHTML = '⚡ Buffer Mínimo: 1s';
         elements.toggleLatencyModeBtn.className = 'btn btn-secondary';
         elements.toggleLatencyModeBtn.style.border = '1px solid #ffc107';
         elements.toggleLatencyModeBtn.style.color = '#ffc107';
       } else {
-        elements.toggleLatencyModeBtn.innerHTML = 'ðŸ›¡ï¸ Buffer Estável: 8s';
+        elements.toggleLatencyModeBtn.innerHTML = '🛡️ Buffer Estável: 8s';
         elements.toggleLatencyModeBtn.className = 'btn btn-secondary';
         elements.toggleLatencyModeBtn.style.border = '1px solid #666';
         elements.toggleLatencyModeBtn.style.color = '#ccc';
@@ -3542,14 +3542,9 @@
 
       if (isEmbed) {
         if (elements.embedPlayer && elements.embedPlayer.src && elements.embedPlayer.src !== 'about:blank') {
-          try {
-            const u = new URL(elements.embedPlayer.src);
-            u.searchParams.set('_sync', Date.now());
-            elements.embedPlayer.src = u.toString();
-          } catch (e) {
-            const base = elements.embedPlayer.src.split('?')[0];
-            elements.embedPlayer.src = `${base}?_sync=${Date.now()}&autoplay=1`;
-          }
+          const cur = elements.embedPlayer.src;
+          elements.embedPlayer.src = 'about:blank';
+          setTimeout(() => { elements.embedPlayer.src = cur; }, 60);
         }
       } else {
         if (activeHls && activeHls.liveSyncPosition) {
@@ -3559,7 +3554,7 @@
         elements.videoPlayer.play().catch(() => {});
       }
 
-      showLiveSyncToast('âš¡ Sincronizado ao vivo em tempo real!');
+      showLiveSyncToast('⚡ Sincronizado ao vivo em tempo real!');
     }
 
     function openLivePlayer(item, fallbackIdx = 0) {
@@ -3591,7 +3586,7 @@
 
       // Abre modal de vídeo
       elements.videoModal.style.display = 'flex';
-      elements.modalTitle.textContent = `ðŸ”´ ${title}`;
+      elements.modalTitle.textContent = `🔴 ${title}`;
       elements.modalFormat.textContent = isEmbed ? 'Sinal: HD Protegido (Zero Anúncios)' : 'Sinal: HLS Nativo 1080p (Zero Anúncios)';
 
       // Oculta botões irrelevantes para transmissões ao vivo
@@ -3612,14 +3607,14 @@
 
         const switcherLabel = document.createElement('span');
         switcherLabel.style.cssText = 'color: #ffc107; font-size: 13px; font-weight: 800; display: flex; align-items: center; margin-right: 8px; letter-spacing: 0.5px;';
-        switcherLabel.innerHTML = 'âš¡ SERVIDORES:';
+        switcherLabel.innerHTML = '⚡ SERVIDORES:';
         elements.movieVersionSwitcher.appendChild(switcherLabel);
 
         fallbacks.forEach((opt, idx) => {
           const btn = document.createElement('button');
           btn.className = `btn btn-sm ${idx === fallbackIdx ? 'btn-primary' : 'btn-secondary'}`;
           btn.style.cssText = 'font-size: 12px; padding: 5px 14px; border-radius: 16px; white-space: nowrap; font-weight: 700;';
-          btn.innerHTML = `${idx === fallbackIdx ? 'âœ“ ' : ''}${escapeHtml(opt.name)}`;
+          btn.innerHTML = `${idx === fallbackIdx ? '✓ ' : ''}${escapeHtml(opt.name)}`;
           btn.addEventListener('click', () => {
             openLivePlayer(item, idx);
           });
@@ -3655,7 +3650,7 @@
         elements.videoPlayer.style.display = 'none';
 
         elements.embedPlayer.style.display = 'block';
-        elements.embedPlayer.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation');
+        // sandbox removido para evitar detectSandbox do Rei dos Embeds
         
         // Usar a URL limpa do servidor — parâmetros extras causam redirect para homepage
         elements.embedPlayer.src = streamUrl;
@@ -3733,7 +3728,7 @@
       }
     }
 
-    const DEFAULT_LIVE_LOGO = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%231a1a1a' rx='10'/%3E%3Ccircle cx='50' cy='50' r='36' fill='%23222' stroke='%23383838' stroke-width='2'/%3E%3Ctext x='50' y='57' font-size='36' text-anchor='middle'%3EðŸ“º%3C/text%3E%3C/svg%3E";
+    const DEFAULT_LIVE_LOGO = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%231a1a1a' rx='10'/%3E%3Ccircle cx='50' cy='50' r='36' fill='%23222' stroke='%23383838' stroke-width='2'/%3E%3Ctext x='50' y='57' font-size='36' text-anchor='middle'%3E📺%3C/text%3E%3C/svg%3E";
 
     function populateLiveSidebar(item, currentOpt) {
       if (!elements.movieInfoSidebar) return;
@@ -3752,10 +3747,10 @@
 
       if (elements.sidebarGenres) {
         elements.sidebarGenres.innerHTML = `
-          <span class="genre-tag">ðŸ”´ AO VIVO</span>
+          <span class="genre-tag">🔴 AO VIVO</span>
           <span class="genre-tag">${escapeHtml(category)}</span>
-          <span class="genre-tag" style="background: rgba(0, 200, 83, 0.2); color: #00e676; border-color: rgba(0, 200, 83, 0.4);">ðŸ›¡ï¸ ZERO ANÃšNCIOS</span>
-          <span class="genre-tag" style="background: rgba(255, 193, 7, 0.2); color: #ffc107; border-color: rgba(255, 193, 7, 0.4);">âš¡ TEMPO REAL</span>
+          <span class="genre-tag" style="background: rgba(0, 200, 83, 0.2); color: #00e676; border-color: rgba(0, 200, 83, 0.4);">🛡️ ZERO ANÚNCIOS</span>
+          <span class="genre-tag" style="background: rgba(255, 193, 7, 0.2); color: #ffc107; border-color: rgba(255, 193, 7, 0.4);">⚡ TEMPO REAL</span>
         `;
       }
 
@@ -3765,20 +3760,20 @@
             <strong>Partida Ao Vivo:</strong> ${escapeHtml(title)}<br>
             <strong>Competição:</strong> ${escapeHtml(item.league || 'Campeonato')}<br>
             <strong>Horário:</strong> ${escapeHtml(item.matchTime || 'Em andamento')}<br><br>
-            âš¡ <em>Modo Tempo Real ativo: O buffer foi minimizado para você assistir com o menor atraso possível. Use o botão 'âš¡ Tempo Real' para pular para o último segundo da transmissão.</em>
+            ⚡ <em>Modo Tempo Real ativo: O buffer foi minimizado para você assistir com o menor atraso possível. Use o botão '⚡ Tempo Real' para pular para o último segundo da transmissão.</em>
           `;
         } else {
           let epgHtml = '';
           if (item.nowTitle) {
             epgHtml += `<div style="background: rgba(255,82,82,0.15); border: 1px solid rgba(255,82,82,0.4); border-radius: 8px; padding: 10px; margin: 10px 0;">
-              <div style="font-size: 11px; font-weight: 700; color: #ff5252; text-transform: uppercase;">ðŸ”´ No Ar Agora</div>
+              <div style="font-size: 11px; font-weight: 700; color: #ff5252; text-transform: uppercase;">🔴 No Ar Agora</div>
               <div style="font-size: 13px; font-weight: 600; color: #fff; margin: 4px 0;">${escapeHtml(item.nowTitle)}</div>
               ${item.nowProgress > 0 ? `<div style="width: 100%; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; overflow: hidden; margin-top: 6px;"><div style="width: ${Math.min(100, item.nowProgress)}%; height: 100%; background: #ff5252;"></div></div><div style="font-size: 10px; color: #aaa; margin-top: 4px; text-align: right;">${item.nowProgress}% concluído</div>` : ''}
             </div>`;
           }
 
           if (Array.isArray(item.nextProgrammes) && item.nextProgrammes.length > 0) {
-            epgHtml += `<div style="margin-top: 12px;"><strong style="font-size: 11px; text-transform: uppercase; color: #ffc107;">ðŸ“‹ Próximas Atrações:</strong><div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">`;
+            epgHtml += `<div style="margin-top: 12px;"><strong style="font-size: 11px; text-transform: uppercase; color: #ffc107;">📋 Próximas Atrações:</strong><div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">`;
             item.nextProgrammes.forEach(np => {
               epgHtml += `<div style="font-size: 12px; color: #bbb; display: flex; gap: 8px;"><span style="color: #ffc107; font-weight: 600; min-width: 42px;">${escapeHtml(np.s || '')}</span><span>${escapeHtml(np.t || '')}</span></div>`;
             });
@@ -3790,7 +3785,7 @@
             <strong>Categoria:</strong> ${escapeHtml(category)}<br>
             <strong>Servidor Conectado:</strong> ${escapeHtml(currentOpt.name || 'Servidor 1')}<br>
             ${epgHtml}
-            <br>âš¡ <em>Transmissão contínua com isolamento total contra anúncios e buffer calibrado para menor latência em tempo real.</em>
+            <br>⚡ <em>Transmissão contínua com isolamento total contra anúncios e buffer calibrado para menor latência em tempo real.</em>
           `;
         }
       }
