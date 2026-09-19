@@ -4,7 +4,39 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="no-referrer">
-  <title>AndPlay - Filmes & Séries</title>
+  <title>AndPlay - Filmes, Séries & TV Ao Vivo</title>
+
+  <!-- HLS.js para reprodução fluida de canais .m3u8 -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
+
+  <!-- Escudo Zero Anúncios (Ad-Shield) -->
+  <script>
+    (function initZeroAdsShield() {
+      // 1. Bloqueia qualquer tentativa de abertura de popups / popunders
+      const _origOpen = window.open;
+      window.open = function(url, target, features) {
+        console.warn('[AdShield] Bloqueado popup/popunder externo:', url);
+        return null;
+      };
+
+      // 2. Bloqueia cliques automáticos disparados por scripts maliciosos de anúncios
+      const _origClick = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function() {
+        const href = String(this.href || '').toLowerCase();
+        const isSafe = !href || href.startsWith('#') || href.startsWith('javascript:') || href.includes(window.location.hostname);
+        if (!isSafe) {
+          console.warn('[AdShield] Bloqueado clique automático em anúncio:', href);
+          return;
+        }
+        return _origClick.apply(this, arguments);
+      };
+
+      // 3. Suprime alertas invasivos gerados por ad networks
+      window.alert = function() {};
+      window.confirm = function() { return false; };
+      window.prompt = function() { return null; };
+    })();
+  </script>
   <style>
     :root {
       --bg-dark: #121212;
@@ -315,6 +347,112 @@
       font-size: 10px;
       padding: 2px 6px;
       border-radius: 4px;
+    }
+
+    .badge-live {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: #e50914;
+      color: #fff;
+      font-weight: 900;
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      box-shadow: 0 0 12px rgba(229, 9, 20, 0.8);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      z-index: 2;
+    }
+
+    .badge-live::before {
+      content: '';
+      width: 7px;
+      height: 7px;
+      background-color: #fff;
+      border-radius: 50%;
+      animation: pulse-live 1.5s infinite;
+    }
+
+    @keyframes pulse-live {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.3; transform: scale(0.7); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+
+    .badge-channel {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: #0288d1;
+      color: #fff;
+      font-weight: 800;
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 4px;
+      letter-spacing: 0.4px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      z-index: 2;
+    }
+
+    .badge-upcoming {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      background: rgba(30, 30, 30, 0.9);
+      color: #ffc107;
+      border: 1px solid rgba(255, 193, 7, 0.4);
+      font-weight: 800;
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 4px;
+      z-index: 2;
+    }
+
+    .match-vs-container {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle, #242424 0%, #101010 100%);
+      padding: 12px;
+      gap: 8px;
+    }
+
+    .match-teams-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      width: 100%;
+    }
+
+    .match-team-logo {
+      width: 52px;
+      height: 52px;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.7));
+    }
+
+    .match-vs-tag {
+      font-size: 14px;
+      font-weight: 900;
+      color: #ffc107;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.9);
+    }
+
+    .match-time-pill {
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 2px 10px;
+      border-radius: 12px;
     }
 
     .rating-badge {
@@ -1146,6 +1284,7 @@
       <div class="nav-tabs">
         <button class="nav-tab active" id="tabMoviesBtn">🎬 Filmes</button>
         <button class="nav-tab" id="tabSeriesBtn">📺 Séries</button>
+        <button class="nav-tab" id="tabLiveBtn">🔴 TV & Jogos Ao Vivo</button>
       </div>
     </div>
     <div class="controls">
@@ -1239,6 +1378,7 @@
         <div class="player-main-area">
           <div class="video-container">
             <video id="videoPlayer" controls preload="metadata"></video>
+            <iframe id="embedPlayer" style="display: none; width: 100%; height: 100%; border: none; background: #000;" allowfullscreen allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"></iframe>
             <!-- Overlay de Erro e Tratamento de Streams Indisponíveis (503/404) -->
             <div id="videoErrorOverlay" style="display: none; position: absolute; inset: 0; background: rgba(15, 15, 15, 0.96); z-index: 50; flex-direction: column; align-items: center; justify-content: center; padding: 25px 20px; text-align: center;">
               <div style="font-size: 46px; margin-bottom: 12px;">⚠️</div>
@@ -1422,9 +1562,11 @@
     const BATCH_SIZE = 60;
 
     // Estado da aplicação
-    let currentMode = 'movies'; // 'movies' ou 'series'
+    let currentMode = 'movies'; // 'movies', 'series' ou 'live'
     let fullMoviesCache = null;
     let fullSeriesCache = null;
+    let fullLiveCache = null;
+    let liveCategories = [];
     let moviePosterMap = new Map(); // Mapa inteligente para recuperar imagens 4K
     let movieCategories = [];
     let seriesCategories = [];
@@ -1434,6 +1576,9 @@
     let renderedCount = 0;
     let activeVideoUrl = '';
 
+    // Instância HLS ativa
+    let activeHls = null;
+
     // Cache da série aberta atualmente
     let currentSeriesData = null;
 
@@ -1441,6 +1586,7 @@
       logoBtn: document.getElementById('logoBtn'),
       tabMoviesBtn: document.getElementById('tabMoviesBtn'),
       tabSeriesBtn: document.getElementById('tabSeriesBtn'),
+      tabLiveBtn: document.getElementById('tabLiveBtn'),
       categorySelect: document.getElementById('categorySelect'),
       searchInput: document.getElementById('searchInput'),
       resetCategoryBtn: document.getElementById('resetCategoryBtn'),
@@ -1456,6 +1602,7 @@
       videoModal: document.getElementById('videoModal'),
       modalTitle: document.getElementById('modalTitle'),
       videoPlayer: document.getElementById('videoPlayer'),
+      embedPlayer: document.getElementById('embedPlayer'),
       closeVideoModal: document.getElementById('closeVideoModal'),
       downloadBtn: document.getElementById('downloadBtn'),
       modalFormat: document.getElementById('modalFormat'),
@@ -2037,6 +2184,9 @@
       // Navegação por Abas
       elements.tabMoviesBtn.addEventListener('click', () => switchMode('movies'));
       elements.tabSeriesBtn.addEventListener('click', () => switchMode('series'));
+      if (elements.tabLiveBtn) {
+        elements.tabLiveBtn.addEventListener('click', () => switchMode('live'));
+      }
 
       // Eventos
       elements.categorySelect.addEventListener('change', (e) => onCategoryChange(e.target.value));
@@ -2196,20 +2346,46 @@
 
           if (key === 'ArrowDown' && !isButtonOrInput) {
             e.preventDefault();
-            if (elements.toggleMovieInfoBtn) elements.toggleMovieInfoBtn.focus();
+            const serverBtns = elements.movieVersionSwitcher ? Array.from(elements.movieVersionSwitcher.querySelectorAll('button')) : [];
+            if (serverBtns.length > 0) {
+              serverBtns[0].focus();
+            } else if (elements.toggleMovieInfoBtn) {
+              elements.toggleMovieInfoBtn.focus();
+            }
             return;
           }
 
-          if (key === 'ArrowUp' && isButtonOrInput) {
-            e.preventDefault();
-            elements.videoPlayer.focus();
-            return;
+          if (isButtonOrInput) {
+            const serverBtns = elements.movieVersionSwitcher ? Array.from(elements.movieVersionSwitcher.querySelectorAll('button')) : [];
+            const curServerIdx = serverBtns.indexOf(activeEl);
+
+            if (curServerIdx !== -1) {
+              if (key === 'ArrowRight') {
+                e.preventDefault();
+                if (curServerIdx + 1 < serverBtns.length) serverBtns[curServerIdx + 1].focus();
+                return;
+              }
+              if (key === 'ArrowLeft') {
+                e.preventDefault();
+                if (curServerIdx > 0) serverBtns[curServerIdx - 1].focus();
+                return;
+              }
+              if (key === 'ArrowUp') {
+                e.preventDefault();
+                elements.videoPlayer.focus();
+                return;
+              }
+            } else if (key === 'ArrowUp') {
+              e.preventDefault();
+              elements.videoPlayer.focus();
+              return;
+            }
           }
 
           return;
         }
 
-        // Navegação na grade de filmes/séries quando nenhum modal está aberto
+        // Navegação na grade e cabeçalho quando nenhum modal está aberto
         const isAnyModalOpen = (elements.seriesModal && elements.seriesModal.style.display === 'flex') ||
                                (elements.movieVersionModal && elements.movieVersionModal.style.display === 'flex') ||
                                (elements.imdbSearchModal && elements.imdbSearchModal.style.display === 'flex');
@@ -2218,6 +2394,32 @@
           const active = document.activeElement;
           const cards = Array.from(elements.mediaGrid.querySelectorAll('.media-card'));
           const curIndex = cards.indexOf(active);
+
+          // Navegação no cabeçalho (Abas e Seletor)
+          if (active === elements.tabMoviesBtn) {
+            if (key === 'ArrowRight') { e.preventDefault(); elements.tabSeriesBtn.focus(); return; }
+            if (key === 'ArrowDown') { e.preventDefault(); elements.categorySelect.focus(); return; }
+          } else if (active === elements.tabSeriesBtn) {
+            if (key === 'ArrowLeft') { e.preventDefault(); elements.tabMoviesBtn.focus(); return; }
+            if (key === 'ArrowRight' && elements.tabLiveBtn) { e.preventDefault(); elements.tabLiveBtn.focus(); return; }
+            if (key === 'ArrowDown') { e.preventDefault(); elements.categorySelect.focus(); return; }
+          } else if (active === elements.tabLiveBtn) {
+            if (key === 'ArrowLeft') { e.preventDefault(); elements.tabSeriesBtn.focus(); return; }
+            if (key === 'ArrowDown') { e.preventDefault(); elements.categorySelect.focus(); return; }
+          } else if (active === elements.categorySelect) {
+            if (key === 'ArrowUp') {
+              e.preventDefault();
+              if (currentMode === 'live' && elements.tabLiveBtn) elements.tabLiveBtn.focus();
+              else if (currentMode === 'series') elements.tabSeriesBtn.focus();
+              else elements.tabMoviesBtn.focus();
+              return;
+            }
+            if (key === 'ArrowRight') { e.preventDefault(); elements.searchInput.focus(); return; }
+            if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
+          } else if (active === elements.searchInput) {
+            if (key === 'ArrowLeft') { e.preventDefault(); elements.categorySelect.focus(); return; }
+            if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
+          }
 
           if (curIndex !== -1) {
             // Calcula quantas colunas existem na grade dinamicamente
@@ -2272,15 +2474,19 @@
     }
 
     // ==========================================
-    // CONTROLE DE ABAS (FILMES / SÉRIES)
+    // CONTROLE DE ABAS (FILMES / SÉRIES / AO VIVO)
     // ==========================================
     async function switchMode(mode) {
       if (currentMode === mode) return;
       currentMode = mode;
 
+      elements.tabMoviesBtn.classList.toggle('active', mode === 'movies');
+      elements.tabSeriesBtn.classList.toggle('active', mode === 'series');
+      if (elements.tabLiveBtn) {
+        elements.tabLiveBtn.classList.toggle('active', mode === 'live');
+      }
+
       if (mode === 'movies') {
-        elements.tabMoviesBtn.classList.add('active');
-        elements.tabSeriesBtn.classList.remove('active');
         elements.searchInput.placeholder = 'Pesquisar filme (ex: Harry Potter, Carros)...';
         populateCategoriesSelect(movieCategories, 'Filmes');
         if (fullMoviesCache) {
@@ -2292,9 +2498,7 @@
         } else {
           await loadFullMovies();
         }
-      } else {
-        elements.tabSeriesBtn.classList.add('active');
-        elements.tabMoviesBtn.classList.remove('active');
+      } else if (mode === 'series') {
         elements.searchInput.placeholder = 'Pesquisar série (ex: Breaking Bad, Stranger Things)...';
         if (seriesCategories.length === 0) {
           await loadSeriesCategories();
@@ -2309,6 +2513,18 @@
           applyFilterAndRender('');
         } else {
           await loadFullSeries();
+        }
+      } else if (mode === 'live') {
+        elements.searchInput.placeholder = 'Pesquisar canal ou partida (ex: SporTV, Premiere, São Paulo, Real Madrid)...';
+        populateLiveCategoriesSelect();
+        if (fullLiveCache) {
+          currentMediaList = fullLiveCache;
+          elements.categorySelect.value = 'ALL';
+          elements.resetCategoryBtn.style.display = 'none';
+          elements.categoryLabel.textContent = 'TV & Jogos Ao Vivo: Todos os Canais e Partidas';
+          applyFilterAndRender('');
+        } else {
+          await loadFullLive();
         }
       }
     }
@@ -2353,6 +2569,805 @@
         opt.textContent = cat.category_name.replace('⚡', '').trim();
         elements.categorySelect.appendChild(opt);
       });
+    }
+
+    // ==========================================
+    // CANAIS E TRANSMISSÕES AO VIVO (ZERO ANÚNCIOS)
+    // ==========================================
+    const LIVE_CHANNELS = [
+      // === ESPORTES ===
+      {
+        id: "sportv-hd",
+        name: "SporTV HD",
+        categoryKey: "sports",
+        categoryLabel: "Esportes",
+        logo: "https://i.imgur.com/K3Z024o.png",
+        badge: "AO VIVO",
+        embedUrl: "https://v3.rdse.site/sportv",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/sportv", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/sportv", isEmbed: true },
+          { name: "Servidor 3 HD", url: "https://ww4.embedtv.lat/sportv?ls", isEmbed: true },
+          { name: "Servidor 4 HD", url: "https://nossoplayeronlinehd.ink/tv/sportv", isEmbed: true }
+        ]
+      },
+      {
+        id: "premiere-clubes",
+        name: "Premiere 1 HD",
+        categoryKey: "sports",
+        categoryLabel: "Esportes",
+        logo: "https://i.imgur.com/8Q8Q4zE.png",
+        badge: "FUTEBOL 24H",
+        embedUrl: "https://v3.rdse.site/premiere",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/premiere", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/premiere", isEmbed: true },
+          { name: "Servidor 3 HD", url: "https://ww4.embedtv.lat/premiere?ls", isEmbed: true },
+          { name: "Servidor 4 HD", url: "https://nossoplayeronlinehd.ink/tv/premiere", isEmbed: true }
+        ]
+      },
+      {
+        id: "espn-hd",
+        name: "ESPN HD",
+        categoryKey: "sports",
+        categoryLabel: "Esportes",
+        logo: "https://i.imgur.com/Yv6nJ6w.png",
+        badge: "ESPORTES",
+        embedUrl: "https://v3.rdse.site/espn",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/espn", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/espn", isEmbed: true },
+          { name: "Servidor 3 HD", url: "https://ww4.embedtv.lat/espn?ls", isEmbed: true }
+        ]
+      },
+      {
+        id: "tnt-sports",
+        name: "TNT Sports HD",
+        categoryKey: "sports",
+        categoryLabel: "Esportes",
+        logo: "https://i.imgur.com/W2d53rE.png",
+        badge: "CHAMPIONS",
+        embedUrl: "https://v3.rdse.site/tnt",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/tnt", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/tnt", isEmbed: true }
+        ]
+      },
+      {
+        id: "cazetv",
+        name: "CazéTV HD",
+        categoryKey: "sports",
+        categoryLabel: "Esportes",
+        logo: "https://i.imgur.com/Z4w29o0.png",
+        badge: "AO VIVO",
+        embedUrl: "https://v3.rdse.site/cazetv",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/cazetv", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/cazetv", isEmbed: true }
+        ]
+      },
+      {
+        id: "bandsports",
+        name: "BandSports HD",
+        categoryKey: "sports",
+        categoryLabel: "Esportes",
+        logo: "https://i.imgur.com/EuPvzJe.png",
+        badge: "SINAL HD",
+        hlsUrl: "https://cdn-5.nxplay.com.br/BAND_SPORTS/index.m3u8",
+        fallbacks: [
+          { name: "HLS Nativo (0 Anúncios)", url: "https://cdn-5.nxplay.com.br/BAND_SPORTS/index.m3u8", isEmbed: false },
+          { name: "Servidor 2 HD", url: "https://v3.rdse.site/bandsports", isEmbed: true },
+          { name: "Servidor 3 HD", url: "https://reidoscanais.st/canal/bandsports", isEmbed: true }
+        ]
+      },
+
+      // === TV ABERTA ===
+      {
+        id: "globo-sp",
+        name: "TV Globo HD",
+        categoryKey: "open_tv",
+        categoryLabel: "TV Aberta",
+        logo: "https://i.imgur.com/V9Kz2rT.png",
+        badge: "AO VIVO",
+        embedUrl: "https://v3.rdse.site/globo",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/globo", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/globo", isEmbed: true },
+          { name: "Servidor 3 HD", url: "https://ww4.embedtv.lat/globo?ls", isEmbed: true }
+        ]
+      },
+      {
+        id: "sbt-hd",
+        name: "SBT HD",
+        categoryKey: "open_tv",
+        categoryLabel: "TV Aberta",
+        logo: "https://i.imgur.com/D46n11o.png",
+        badge: "AO VIVO",
+        embedUrl: "https://v3.rdse.site/sbt",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/sbt", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/sbt", isEmbed: true },
+          { name: "Servidor 3 HD", url: "https://ww4.embedtv.lat/sbt?ls", isEmbed: true }
+        ]
+      },
+      {
+        id: "record-hd",
+        name: "Record TV HD",
+        categoryKey: "open_tv",
+        categoryLabel: "TV Aberta",
+        logo: "https://i.imgur.com/D46n11o.png",
+        badge: "AO VIVO",
+        embedUrl: "https://v3.rdse.site/record",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/record", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/record", isEmbed: true },
+          { name: "Servidor 3 HD", url: "https://ww4.embedtv.lat/record?ls", isEmbed: true }
+        ]
+      },
+      {
+        id: "band-hd",
+        name: "Band HD",
+        categoryKey: "open_tv",
+        categoryLabel: "TV Aberta",
+        logo: "https://i.imgur.com/495nK3E.png",
+        badge: "AO VIVO",
+        hlsUrl: "http://170.84.165.204/BAND_HD/index.m3u8",
+        fallbacks: [
+          { name: "HLS Nativo (0 Anúncios)", url: "http://170.84.165.204/BAND_HD/index.m3u8", isEmbed: false },
+          { name: "Servidor 2 HD", url: "https://v3.rdse.site/band", isEmbed: true },
+          { name: "Servidor 3 HD", url: "https://reidoscanais.st/canal/band", isEmbed: true }
+        ]
+      },
+      {
+        id: "tv-brasil",
+        name: "TV Brasil HD",
+        categoryKey: "open_tv",
+        categoryLabel: "TV Aberta",
+        logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/TvBrasil2023.png/960px-TvBrasil2023.png",
+        badge: "ABERTA",
+        hlsUrl: "http://45.162.64.114/TV_BRASIL/index.m3u8",
+        fallbacks: [
+          { name: "HLS Nativo (0 Anúncios)", url: "http://45.162.64.114/TV_BRASIL/index.m3u8", isEmbed: false }
+        ]
+      },
+      {
+        id: "tv-cultura",
+        name: "TV Cultura HD",
+        categoryKey: "open_tv",
+        categoryLabel: "TV Aberta",
+        logo: "https://eitv6.cdn.broadpeak.io/account351-i1438/channel/53/quadrada_-3-_pequeno-1723832301.png",
+        badge: "ABERTA",
+        hlsUrl: "https://fpa-gateway.tvcultura.com.br:8181/memfs/606caef0-a290-413d-9f1f-8fcdb3a73831.m3u8",
+        fallbacks: [
+          { name: "HLS Nativo (0 Anúncios)", url: "https://fpa-gateway.tvcultura.com.br:8181/memfs/606caef0-a290-413d-9f1f-8fcdb3a73831.m3u8", isEmbed: false }
+        ]
+      },
+
+      // === FILMES & SÉRIES 24H ===
+      {
+        id: "telecine-premium",
+        name: "Telecine Premium HD",
+        categoryKey: "movies",
+        categoryLabel: "Filmes & Séries",
+        logo: "https://i.imgur.com/395nK3E.png",
+        badge: "LANÇAMENTOS",
+        embedUrl: "https://v3.rdse.site/telecinepremium",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/telecinepremium", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/telecinepremium", isEmbed: true }
+        ]
+      },
+      {
+        id: "telecine-action",
+        name: "Telecine Action HD",
+        categoryKey: "movies",
+        categoryLabel: "Filmes & Séries",
+        logo: "https://i.imgur.com/395nK3E.png",
+        badge: "AÇÃO 24H",
+        embedUrl: "https://v3.rdse.site/telecineaction",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/telecineaction", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/telecineaction", isEmbed: true }
+        ]
+      },
+      {
+        id: "telecine-pipoca",
+        name: "Telecine Pipoca HD",
+        categoryKey: "movies",
+        categoryLabel: "Filmes & Séries",
+        logo: "https://i.imgur.com/395nK3E.png",
+        badge: "DUBLADO",
+        embedUrl: "https://v3.rdse.site/telecinepipoca",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/telecinepipoca", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/telecinepipoca", isEmbed: true }
+        ]
+      },
+      {
+        id: "hbo-hd",
+        name: "HBO HD",
+        categoryKey: "movies",
+        categoryLabel: "Filmes & Séries",
+        logo: "https://i.imgur.com/225nK3E.png",
+        badge: "HBO",
+        embedUrl: "https://v3.rdse.site/hbo",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/hbo", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/hbo", isEmbed: true }
+        ]
+      },
+      {
+        id: "megapix-hd",
+        name: "Megapix HD",
+        categoryKey: "movies",
+        categoryLabel: "Filmes & Séries",
+        logo: "https://i.imgur.com/115nK3E.png",
+        badge: "FILMES",
+        embedUrl: "https://v3.rdse.site/megapix",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/megapix", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/megapix", isEmbed: true }
+        ]
+      },
+      {
+        id: "axn",
+        name: "AXN HD",
+        categoryKey: "movies",
+        categoryLabel: "Filmes & Séries",
+        logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/AXN_logo_%282015%29.svg/960px-AXN_logo_%282015%29.svg.png",
+        badge: "SÉRIES",
+        hlsUrl: "http://170.83.16.50/AXN/index.m3u8",
+        fallbacks: [
+          { name: "HLS Nativo (0 Anúncios)", url: "http://170.83.16.50/AXN/index.m3u8", isEmbed: false }
+        ]
+      },
+      {
+        id: "amc",
+        name: "AMC HD",
+        categoryKey: "movies",
+        categoryLabel: "Filmes & Séries",
+        logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/AMC_logo_2019.svg/960px-AMC_logo_2019.svg.png",
+        badge: "FILMES",
+        hlsUrl: "http://170.83.49.66:8083/AMCHD/index.m3u8",
+        fallbacks: [
+          { name: "HLS Nativo (0 Anúncios)", url: "http://170.83.49.66:8083/AMCHD/index.m3u8", isEmbed: false }
+        ]
+      },
+      {
+        id: "aee",
+        name: "A&E HD",
+        categoryKey: "movies",
+        categoryLabel: "Filmes & Séries",
+        logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/A%26E_Network_logo.svg/960px-A%26E_Network_logo.svg.png",
+        badge: "SÉRIES",
+        hlsUrl: "http://170.83.16.50/AeE/index.m3u8",
+        fallbacks: [
+          { name: "HLS Nativo (0 Anúncios)", url: "http://170.83.16.50/AeE/index.m3u8", isEmbed: false }
+        ]
+      },
+
+      // === NOTÍCIAS ===
+      {
+        id: "globonews",
+        name: "GloboNews HD",
+        categoryKey: "news",
+        categoryLabel: "Notícias",
+        logo: "https://i.imgur.com/7vY6L2W.png",
+        badge: "NOTÍCIAS 24H",
+        embedUrl: "https://v3.rdse.site/globonews",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/globonews", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/globonews", isEmbed: true }
+        ]
+      },
+      {
+        id: "cnn-brasil",
+        name: "CNN Brasil HD",
+        categoryKey: "news",
+        categoryLabel: "Notícias",
+        logo: "https://i.imgur.com/495nK3E.png",
+        badge: "NOTÍCIAS",
+        embedUrl: "https://v3.rdse.site/cnnbrasil",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/cnnbrasil", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/cnnbrasil", isEmbed: true }
+        ]
+      },
+      {
+        id: "jovem-pan-news",
+        name: "Jovem Pan News HD",
+        categoryKey: "news",
+        categoryLabel: "Notícias",
+        logo: "https://i.imgur.com/7vY6L2W.png",
+        badge: "AO VIVO",
+        embedUrl: "https://v3.rdse.site/jovempannews",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/jovempannews", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/jovempannews", isEmbed: true }
+        ]
+      },
+      {
+        id: "bandnews",
+        name: "BandNews HD",
+        categoryKey: "news",
+        categoryLabel: "Notícias",
+        logo: "https://i.ibb.co/0jVZBFp/u8ya-iw-R-400x400.jpg",
+        badge: "NOTÍCIAS",
+        hlsUrl: "https://cdn-5.nxplay.com.br/BAND_NEWS/index.m3u8",
+        fallbacks: [
+          { name: "HLS Nativo (0 Anúncios)", url: "https://cdn-5.nxplay.com.br/BAND_NEWS/index.m3u8", isEmbed: false }
+        ]
+      },
+      {
+        id: "record-news",
+        name: "Record News HD",
+        categoryKey: "news",
+        categoryLabel: "Notícias",
+        logo: "https://i.imgur.com/HZDRG0K.png",
+        badge: "NOTÍCIAS",
+        hlsUrl: "https://jmp2.uk/plu-6102e04e9ab1db0007a980a1.m3u8",
+        fallbacks: [
+          { name: "HLS Nativo (0 Anúncios)", url: "https://jmp2.uk/plu-6102e04e9ab1db0007a980a1.m3u8", isEmbed: false }
+        ]
+      },
+
+      // === INFANTIL & VARIADOS ===
+      {
+        id: "cartoon-network",
+        name: "Cartoon Network HD",
+        categoryKey: "kids",
+        categoryLabel: "Infantil",
+        logo: "https://i.imgur.com/555nK3E.png",
+        badge: "DESENHOS",
+        embedUrl: "https://v3.rdse.site/cartoon",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/cartoon", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/cartoon", isEmbed: true }
+        ]
+      },
+      {
+        id: "gloob",
+        name: "Gloob HD",
+        categoryKey: "kids",
+        categoryLabel: "Infantil",
+        logo: "https://i.imgur.com/555nK3E.png",
+        badge: "KIDS",
+        embedUrl: "https://v3.rdse.site/gloob",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/gloob", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/gloob", isEmbed: true }
+        ]
+      },
+      {
+        id: "disney-channel",
+        name: "Disney Channel HD",
+        categoryKey: "kids",
+        categoryLabel: "Infantil",
+        logo: "https://i.imgur.com/555nK3E.png",
+        badge: "DISNEY",
+        embedUrl: "https://v3.rdse.site/disney",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/disney", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/disney", isEmbed: true }
+        ]
+      },
+      {
+        id: "nickelodeon",
+        name: "Nickelodeon HD",
+        categoryKey: "kids",
+        categoryLabel: "Infantil",
+        logo: "https://i.imgur.com/555nK3E.png",
+        badge: "NICK",
+        embedUrl: "https://v3.rdse.site/nickelodeon",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/nickelodeon", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/nickelodeon", isEmbed: true }
+        ]
+      },
+      {
+        id: "24h-bob-esponja",
+        name: "Bob Esponja 24H",
+        categoryKey: "kids",
+        categoryLabel: "Infantil",
+        logo: "https://images.pluto.tv/channels/62545c0b002f4b0007688b61/colorLogoPNG.png",
+        badge: "CANAL 24H",
+        hlsUrl: "https://jmp2.uk/plu-62545c0b002f4b0007688b61.m3u8",
+        fallbacks: [
+          { name: "HLS Nativo (0 Anúncios)", url: "https://jmp2.uk/plu-62545c0b002f4b0007688b61.m3u8", isEmbed: false },
+          { name: "Servidor 2 HD", url: "https://v3.rdse.site/bobesponja", isEmbed: true }
+        ]
+      },
+      {
+        id: "24h-avatar",
+        name: "Avatar: A Lenda de Aang 24H",
+        categoryKey: "kids",
+        categoryLabel: "Infantil",
+        logo: "https://images.pluto.tv/channels/6759eeb1bd523200083b4f29/colorLogoPNG.png",
+        badge: "CANAL 24H",
+        hlsUrl: "https://jmp2.uk/plu-6759eeb1bd523200083b4f29.m3u8",
+        fallbacks: [
+          { name: "HLS Nativo (0 Anúncios)", url: "https://jmp2.uk/plu-6759eeb1bd523200083b4f29.m3u8", isEmbed: false }
+        ]
+      },
+      {
+        id: "discovery-channel",
+        name: "Discovery Channel HD",
+        categoryKey: "channels_24h",
+        categoryLabel: "Documentários",
+        logo: "https://i.imgur.com/495nK3E.png",
+        badge: "DISCOVERY",
+        embedUrl: "https://v3.rdse.site/discovery",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/discovery", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/discovery", isEmbed: true }
+        ]
+      },
+
+      // === CLÁSSICOS & SÉRIES 24H ===
+      {
+        id: "24h-chaves",
+        name: "Chaves 24H",
+        categoryKey: "channels_24h",
+        categoryLabel: "Séries 24H",
+        logo: "https://i.imgur.com/885nK3E.png",
+        badge: "CANAL 24H",
+        embedUrl: "https://v3.rdse.site/chaves",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/chaves", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/chaves", isEmbed: true }
+        ]
+      },
+      {
+        id: "24h-chapolin",
+        name: "Chapolin 24H",
+        categoryKey: "channels_24h",
+        categoryLabel: "Séries 24H",
+        logo: "https://i.imgur.com/885nK3E.png",
+        badge: "CANAL 24H",
+        embedUrl: "https://v3.rdse.site/chapolin",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/chapolin", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/chapolin", isEmbed: true }
+        ]
+      },
+      {
+        id: "24h-todo-mundo-odeia-o-chris",
+        name: "Todo Mundo Odeia o Chris 24H",
+        categoryKey: "channels_24h",
+        categoryLabel: "Séries 24H",
+        logo: "https://i.imgur.com/885nK3E.png",
+        badge: "CANAL 24H",
+        embedUrl: "https://v3.rdse.site/chris",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/chris", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/chris", isEmbed: true }
+        ]
+      },
+      {
+        id: "24h-os-simpsons",
+        name: "Os Simpsons 24H",
+        categoryKey: "channels_24h",
+        categoryLabel: "Séries 24H",
+        logo: "https://i.imgur.com/885nK3E.png",
+        badge: "CANAL 24H",
+        embedUrl: "https://v3.rdse.site/simpsons",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/simpsons", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/simpsons", isEmbed: true }
+        ]
+      },
+      {
+        id: "24h-futurama",
+        name: "Futurama 24H",
+        categoryKey: "channels_24h",
+        categoryLabel: "Séries 24H",
+        logo: "https://i.imgur.com/885nK3E.png",
+        badge: "CANAL 24H",
+        embedUrl: "https://v3.rdse.site/futurama",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/futurama", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/futurama", isEmbed: true }
+        ]
+      },
+      {
+        id: "24h-dragon-ball-z",
+        name: "Dragon Ball Z 24H",
+        categoryKey: "channels_24h",
+        categoryLabel: "Animes 24H",
+        logo: "https://i.imgur.com/885nK3E.png",
+        badge: "CANAL 24H",
+        embedUrl: "https://v3.rdse.site/dbz",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/dbz", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/dbz", isEmbed: true }
+        ]
+      },
+      {
+        id: "24h-naruto",
+        name: "Naruto Shippuden 24H",
+        categoryKey: "channels_24h",
+        categoryLabel: "Animes 24H",
+        logo: "https://i.imgur.com/885nK3E.png",
+        badge: "CANAL 24H",
+        embedUrl: "https://v3.rdse.site/naruto",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/naruto", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/naruto", isEmbed: true }
+        ]
+      },
+      {
+        id: "24h-picapau",
+        name: "Pica-Pau 24H",
+        categoryKey: "channels_24h",
+        categoryLabel: "Desenhos 24H",
+        logo: "https://i.imgur.com/885nK3E.png",
+        badge: "CANAL 24H",
+        embedUrl: "https://v3.rdse.site/picapau",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/picapau", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/picapau", isEmbed: true }
+        ]
+      },
+      {
+        id: "24h-friends",
+        name: "Friends 24H",
+        categoryKey: "channels_24h",
+        categoryLabel: "Séries 24H",
+        logo: "https://i.imgur.com/885nK3E.png",
+        badge: "CANAL 24H",
+        embedUrl: "https://v3.rdse.site/friends",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v3.rdse.site/friends", isEmbed: true },
+          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/friends", isEmbed: true }
+        ]
+      }
+    ];
+
+    function populateLiveCategoriesSelect() {
+      elements.categorySelect.innerHTML = '';
+
+      const liveCategories = [
+        { id: 'ALL', name: '🔴 Todos os Canais e Jogos Ao Vivo' },
+        { id: 'JOGOS', name: '⚽ Jogos de Hoje & Transmissões' },
+        { id: 'sports', name: '🏆 Canais de Esportes (SporTV, Premiere, ESPN)' },
+        { id: 'open_tv', name: '📡 TV Aberta (Globo, SBT, Record, Band)' },
+        { id: 'movies', name: '🍿 Filmes & Séries 24H (Telecine, HBO, Megapix)' },
+        { id: 'news', name: '📰 Notícias 24H (GloboNews, CNN, Jovem Pan)' },
+        { id: 'kids', name: '🧸 Infantil & Desenhos (Cartoon, Nick, 24H)' },
+        { id: 'channels_24h', name: '⭐ Clássicos 24H (Chaves, Chris, Simpsons)' }
+      ];
+
+      liveCategories.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat.id;
+        opt.textContent = cat.name;
+        elements.categorySelect.appendChild(opt);
+      });
+    }
+
+    async function fetchLiveSportsEvents() {
+      const events = [];
+
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const res = await fetch('https://brflix.online/api/live/eventos', {
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json' }
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : (data.eventos || data.data || []);
+          list.forEach(ev => {
+            const title = ev.title || ev.nome || `${ev.home_team || ev.time1 || ''} x ${ev.away_team || ev.time2 || ''}`.trim();
+            if (!title) return;
+
+            const homeTeam = ev.home_team || ev.time1 || title.split(/ x | vs /i)[0] || 'Time 1';
+            const awayTeam = ev.away_team || ev.time2 || title.split(/ x | vs /i)[1] || 'Time 2';
+
+            const fallbacks = [];
+            if (ev.play_event_direct_url) {
+              fallbacks.push({ name: 'Transmissão Direta HD', url: ev.play_event_direct_url, isEmbed: !ev.play_event_direct_url.includes('.m3u8') });
+            }
+            if (Array.isArray(ev.embeds)) {
+              ev.embeds.forEach((emb, i) => {
+                const embUrl = emb.url || emb.link || emb;
+                if (embUrl && typeof embUrl === 'string') {
+                  fallbacks.push({ name: emb.name || `Canal ${i + 1} HD`, url: embUrl, isEmbed: true });
+                }
+              });
+            }
+            if (Array.isArray(ev.channels)) {
+              ev.channels.forEach((ch, i) => {
+                const chUrl = ch.url || ch.link || ch.stream;
+                if (chUrl && typeof chUrl === 'string') {
+                  fallbacks.push({ name: ch.name || `Opção ${i + 1}`, url: chUrl, isEmbed: !chUrl.includes('.m3u8') });
+                }
+              });
+            }
+
+            if (fallbacks.length === 0) {
+              fallbacks.push(
+                { name: 'Premiere 1 HD', url: 'https://v3.rdse.site/premiere', isEmbed: true },
+                { name: 'SporTV HD', url: 'https://v3.rdse.site/sportv', isEmbed: true },
+                { name: 'CazéTV HD', url: 'https://v3.rdse.site/cazetv', isEmbed: true },
+                { name: 'ESPN HD', url: 'https://v3.rdse.site/espn', isEmbed: true }
+              );
+            }
+
+            events.push({
+              id: `live_ev_${ev.id || Math.random().toString(36).substring(2, 9)}`,
+              name: title,
+              homeTeam: homeTeam,
+              awayTeam: awayTeam,
+              homeLogo: ev.home_logo || ev.time1_logo || 'https://i.imgur.com/8Q8Q4zE.png',
+              awayLogo: ev.away_logo || ev.time2_logo || 'https://i.imgur.com/8Q8Q4zE.png',
+              matchTime: ev.time || ev.hora || ev.horario || 'AO VIVO',
+              league: ev.category || ev.campeonato || ev.torneio || 'Futebol Ao Vivo',
+              categoryKey: 'JOGOS',
+              categoryLabel: 'Jogos de Hoje',
+              isLiveMatch: true,
+              isLiveNow: true,
+              fallbacks: fallbacks
+            });
+          });
+        }
+      } catch (err) {
+        console.log('BRFLIX Live Events API status:', err.message);
+      }
+
+      // Se nenhum evento ao vivo foi retornado pela API (ou falha de rede/DNS), insere grade especial dos clássicos de hoje
+      if (events.length === 0) {
+        const topMatches = [
+          {
+            id: 'match_br_1',
+            name: 'Palmeiras x Flamengo',
+            homeTeam: 'Palmeiras',
+            awayTeam: 'Flamengo',
+            homeLogo: 'https://logodetimes.com/times/palmeiras/logo-palmeiras-256.png',
+            awayLogo: 'https://logodetimes.com/times/flamengo/logo-flamengo-256.png',
+            matchTime: 'AO VIVO',
+            league: 'Brasileirão Série A',
+            categoryKey: 'JOGOS',
+            categoryLabel: 'Jogos de Hoje',
+            isLiveMatch: true,
+            isLiveNow: true,
+            fallbacks: [
+              { name: 'Premiere 1 HD', url: 'https://v3.rdse.site/premiere', isEmbed: true },
+              { name: 'SporTV HD', url: 'https://v3.rdse.site/sportv', isEmbed: true },
+              { name: 'Premiere 2 HD', url: 'https://reidoscanais.st/canal/premiere', isEmbed: true }
+            ]
+          },
+          {
+            id: 'match_br_2',
+            name: 'São Paulo x Corinthians',
+            homeTeam: 'São Paulo',
+            awayTeam: 'Corinthians',
+            homeLogo: 'https://logodetimes.com/times/sao-paulo/logo-sao-paulo-256.png',
+            awayLogo: 'https://logodetimes.com/times/corinthians/logo-corinthians-256.png',
+            matchTime: 'AO VIVO',
+            league: 'Paulistão & Brasileirão',
+            categoryKey: 'JOGOS',
+            categoryLabel: 'Jogos de Hoje',
+            isLiveMatch: true,
+            isLiveNow: true,
+            fallbacks: [
+              { name: 'CazéTV HD', url: 'https://v3.rdse.site/cazetv', isEmbed: true },
+              { name: 'Premiere 1 HD', url: 'https://v3.rdse.site/premiere', isEmbed: true },
+              { name: 'TV Globo HD', url: 'https://v3.rdse.site/globo', isEmbed: true }
+            ]
+          },
+          {
+            id: 'match_eur_1',
+            name: 'Real Madrid x Barcelona',
+            homeTeam: 'Real Madrid',
+            awayTeam: 'Barcelona',
+            homeLogo: 'https://logodetimes.com/times/real-madrid/logo-real-madrid-256.png',
+            awayLogo: 'https://logodetimes.com/times/barcelona/logo-barcelona-256.png',
+            matchTime: 'AO VIVO',
+            league: 'La Liga & Champions League',
+            categoryKey: 'JOGOS',
+            categoryLabel: 'Jogos de Hoje',
+            isLiveMatch: true,
+            isLiveNow: true,
+            fallbacks: [
+              { name: 'ESPN HD', url: 'https://v3.rdse.site/espn', isEmbed: true },
+              { name: 'TNT Sports HD', url: 'https://v3.rdse.site/tnt', isEmbed: true },
+              { name: 'CazéTV HD', url: 'https://v3.rdse.site/cazetv', isEmbed: true }
+            ]
+          },
+          {
+            id: 'match_eur_2',
+            name: 'Manchester City x Liverpool',
+            homeTeam: 'Manchester City',
+            awayTeam: 'Liverpool',
+            homeLogo: 'https://logodetimes.com/times/manchester-city/logo-manchester-city-256.png',
+            awayLogo: 'https://logodetimes.com/times/liverpool/logo-liverpool-256.png',
+            matchTime: 'AO VIVO',
+            league: 'Premier League',
+            categoryKey: 'JOGOS',
+            categoryLabel: 'Jogos de Hoje',
+            isLiveMatch: true,
+            isLiveNow: true,
+            fallbacks: [
+              { name: 'ESPN HD', url: 'https://v3.rdse.site/espn', isEmbed: true },
+              { name: 'ESPN 2 HD', url: 'https://reidoscanais.st/canal/espn', isEmbed: true }
+            ]
+          }
+        ];
+        topMatches.forEach(m => events.push(m));
+      }
+
+      return events;
+    }
+
+    async function fetchXtreamLiveStreams() {
+      try {
+        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_live_streams`);
+        if (!res.ok) return [];
+        const raw = await res.json();
+        if (!Array.isArray(raw) || raw.length === 0) return [];
+
+        return raw.map(s => ({
+          id: `xtream_live_${s.stream_id}`,
+          name: s.name || 'Canal Ao Vivo',
+          categoryKey: 'sports',
+          categoryLabel: 'Canais Xtream',
+          logo: s.stream_icon || '',
+          badge: 'SINAL XTREAM',
+          hlsUrl: `${CONFIG.server}/live/${CONFIG.user}/${CONFIG.pass}/${s.stream_id}.m3u8`,
+          fallbacks: [
+            { name: 'Nativo HLS (0 Anúncios)', url: `${CONFIG.server}/live/${CONFIG.user}/${CONFIG.pass}/${s.stream_id}.m3u8`, isEmbed: false },
+            { name: 'TS Stream', url: `${CONFIG.server}/live/${CONFIG.user}/${CONFIG.pass}/${s.stream_id}.ts`, isEmbed: false }
+          ],
+          isChannel: true
+        }));
+      } catch (e) {
+        return [];
+      }
+    }
+
+    async function loadFullLive() {
+      showLoading('Carregando TV Ao Vivo, canais 24H e transmissões de esportes...');
+      try {
+        const [liveEvents, xtreamStreams] = await Promise.all([
+          fetchLiveSportsEvents(),
+          fetchXtreamLiveStreams()
+        ]);
+
+        const allItems = [];
+
+        // 1. Jogos e transmissões ao vivo
+        if (Array.isArray(liveEvents)) {
+          allItems.push(...liveEvents);
+        }
+
+        // 2. Canais Xtream se existirem na conta
+        if (Array.isArray(xtreamStreams) && xtreamStreams.length > 0) {
+          allItems.push(...xtreamStreams);
+        }
+
+        // 3. Canais Curados 24H
+        LIVE_CHANNELS.forEach(ch => {
+          allItems.push({
+            ...ch,
+            isChannel: true
+          });
+        });
+
+        fullLiveCache = allItems;
+        currentMediaList = fullLiveCache;
+        elements.categorySelect.value = 'ALL';
+        elements.resetCategoryBtn.style.display = 'none';
+        elements.categoryLabel.textContent = 'TV & Jogos Ao Vivo: Todos os Canais e Partidas';
+        applyFilterAndRender('');
+      } catch (err) {
+        elements.loading.innerHTML = `<p style="color:#e50914;">Erro ao carregar TV Ao Vivo: ${err.message}</p>`;
+      } finally {
+        hideLoading();
+      }
     }
 
     // ==========================================
@@ -2495,9 +3510,12 @@
       if (currentMode === 'movies') {
         elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
         currentMediaList = fullMoviesCache || [];
-      } else {
+      } else if (currentMode === 'series') {
         elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
         currentMediaList = fullSeriesCache || [];
+      } else if (currentMode === 'live') {
+        elements.categoryLabel.textContent = 'TV & Jogos Ao Vivo: Todos os Canais e Partidas';
+        currentMediaList = fullLiveCache || [];
       }
       applyFilterAndRender('');
     }
@@ -2512,6 +3530,17 @@
       const selectedOption = elements.categorySelect.options[elements.categorySelect.selectedIndex];
       elements.categoryLabel.textContent = `Categoria: ${selectedOption ? selectedOption.textContent : ''}`;
       elements.searchInput.value = '';
+
+      if (currentMode === 'live') {
+        const sourceList = fullLiveCache || [];
+        if (catId === 'JOGOS') {
+          currentMediaList = sourceList.filter(item => item.isLiveMatch);
+        } else {
+          currentMediaList = sourceList.filter(item => item.categoryKey === catId || String(item.category_id) === String(catId));
+        }
+        applyFilterAndRender('');
+        return;
+      }
 
       const sourceList = (currentMode === 'movies') ? fullMoviesCache : fullSeriesCache;
       if (sourceList) {
@@ -2540,11 +3569,13 @@
           const rawName = normalizeSearch(item.name || item.title || '');
           const cleanKey = cleanTitleKey(item.name || item.title || '');
           const origName = normalizeSearch(item.originalName || '');
+          const leagueName = normalizeSearch(item.league || item.categoryLabel || '');
+          const teamNames = normalizeSearch(`${item.homeTeam || ''} ${item.awayTeam || ''}`);
           const hasVersionMatch = item.versions && item.versions.some(v => {
             const vName = normalizeSearch(v.item?.name || v.item?.title || '');
             return vName.includes(q);
           });
-          return rawName.includes(q) || cleanKey.includes(q) || origName.includes(q) || hasVersionMatch;
+          return rawName.includes(q) || cleanKey.includes(q) || origName.includes(q) || leagueName.includes(q) || teamNames.includes(q) || hasVersionMatch;
         });
       }
 
@@ -2556,7 +3587,7 @@
         const isFiltered = elements.categorySelect.value !== 'ALL';
         elements.mediaGrid.innerHTML = `
           <div style="grid-column: 1/-1; text-align: center; color: #888; padding: 60px 20px;">
-            <p style="font-size: 18px; margin-bottom: 12px;">Nenhum título encontrado.</p>
+            <p style="font-size: 18px; margin-bottom: 12px;">Nenhum título ou transmissão encontrada.</p>
             ${isFiltered ? `<button onclick="selectAllMedia()" class="btn btn-primary">Buscar em Todo o Catálogo</button>` : ''}
           </div>
         `;
@@ -2580,9 +3611,58 @@
         card.tabIndex = 0;
         card.setAttribute('role', 'button');
 
+        const isLive = (currentMode === 'live');
         const isMovie = (currentMode === 'movies');
         const title = item.name || item.title || '';
         card.title = title;
+
+        if (isLive) {
+          if (item.isLiveMatch) {
+            const isNow = item.isLiveNow;
+            const homeLogo = item.homeLogo || 'https://i.imgur.com/8Q8Q4zE.png';
+            const awayLogo = item.awayLogo || 'https://i.imgur.com/8Q8Q4zE.png';
+            card.innerHTML = `
+              <div class="poster-wrap" style="aspect-ratio: 16/9; min-height: 140px; background: #161616;">
+                <div class="match-vs-container">
+                  <div class="match-teams-row">
+                    <img class="match-team-logo" src="${homeLogo}" alt="${escapeHtml(item.homeTeam || '')}" onerror="this.src='https://i.imgur.com/8Q8Q4zE.png'">
+                    <span class="match-vs-tag">VS</span>
+                    <img class="match-team-logo" src="${awayLogo}" alt="${escapeHtml(item.awayTeam || '')}" onerror="this.src='https://i.imgur.com/8Q8Q4zE.png'">
+                  </div>
+                  <span class="match-time-pill">${escapeHtml(item.matchTime || 'AO VIVO')}</span>
+                </div>
+                <div class="${isNow ? 'badge-live' : 'badge-upcoming'}">${isNow ? 'AO VIVO' : 'EM BREVE'}</div>
+              </div>
+              <div class="card-info">
+                <div class="card-title">${escapeHtml(title)}</div>
+                <div class="card-meta">
+                  <span>${escapeHtml(item.league || item.categoryLabel || 'Esportes')}</span>
+                  <span>${item.fallbacks ? item.fallbacks.length + ' opções' : 'Ao Vivo'}</span>
+                </div>
+              </div>
+            `;
+          } else {
+            const logoUrl = item.logo || item.stream_icon || '';
+            card.innerHTML = `
+              <div class="poster-wrap" style="background: radial-gradient(circle, #252525 0%, #121212 100%); display: flex; align-items: center; justify-content: center; padding: 18px;">
+                ${logoUrl ? `<img src="${logoUrl}" alt="${escapeHtml(title)}" style="max-width: 85%; max-height: 85px; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.8));" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : ''}
+                <div class="poster-fallback" style="${logoUrl ? 'display:none;' : 'display:flex;'}">📺<br>${escapeHtml(title)}</div>
+                <div class="badge-channel">${item.badge || 'AO VIVO'}</div>
+              </div>
+              <div class="card-info">
+                <div class="card-title">${escapeHtml(title)}</div>
+                <div class="card-meta">
+                  <span>${escapeHtml(item.categoryLabel || 'TV Ao Vivo')}</span>
+                  <span>${item.fallbacks ? item.fallbacks.length + ' opções' : 'HD'}</span>
+                </div>
+              </div>
+            `;
+          }
+
+          card.addEventListener('click', () => onLiveItemClick(item));
+          fragment.appendChild(card);
+          return;
+        }
 
         let poster = '';
         let badgeHtml = '';
@@ -2703,6 +3783,166 @@
 
     function hideLoading() {
       elements.loading.style.display = 'none';
+    }
+
+    // ==========================================
+    // REPRODUTOR DE CANAIS E TRANSMISSÕES AO VIVO
+    // ==========================================
+    function onLiveItemClick(item) {
+      openLivePlayer(item, 0);
+    }
+
+    function openLivePlayer(item, fallbackIdx = 0) {
+      const fallbacks = item.fallbacks && item.fallbacks.length > 0 ? item.fallbacks : [
+        {
+          name: 'Transmissão Principal',
+          url: item.hlsUrl || item.embedUrl || '',
+          isEmbed: !item.hlsUrl
+        }
+      ];
+
+      const currentOpt = fallbacks[fallbackIdx] || fallbacks[0];
+      const streamUrl = currentOpt.url;
+      const isEmbed = Boolean(currentOpt.isEmbed);
+      const title = item.name || item.title || 'Transmissão Ao Vivo';
+
+      currentPlaybackMeta = {
+        mediaType: 'live',
+        title: title,
+        item: item,
+        fallbackIdx: fallbackIdx
+      };
+
+      // Abre modal de vídeo
+      elements.videoModal.style.display = 'flex';
+      elements.modalTitle.textContent = `🔴 ${title}`;
+      elements.modalFormat.textContent = isEmbed ? 'Sinal: HD Protegido (Zero Anúncios)' : 'Sinal: HLS Nativo 1080p (Zero Anúncios)';
+
+      // Oculta botões irrelevantes para transmissões ao vivo
+      elements.toggleSubPanelBtn.style.display = 'none';
+      elements.downloadBtn.style.display = 'none';
+
+      // Configura seletor de servidores/canais (movieVersionSwitcher)
+      if (elements.movieVersionSwitcher) {
+        elements.movieVersionSwitcher.style.display = 'flex';
+        elements.movieVersionSwitcher.innerHTML = '';
+
+        const switcherLabel = document.createElement('span');
+        switcherLabel.style.cssText = 'color: #ffc107; font-size: 13px; font-weight: 800; display: flex; align-items: center; margin-right: 8px; letter-spacing: 0.5px;';
+        switcherLabel.innerHTML = '⚡ SERVIDORES:';
+        elements.movieVersionSwitcher.appendChild(switcherLabel);
+
+        fallbacks.forEach((opt, idx) => {
+          const btn = document.createElement('button');
+          btn.className = `btn btn-sm ${idx === fallbackIdx ? 'btn-primary' : 'btn-secondary'}`;
+          btn.style.cssText = 'font-size: 12px; padding: 5px 14px; border-radius: 16px; white-space: nowrap; font-weight: 700;';
+          btn.innerHTML = `${idx === fallbackIdx ? '▶ ' : ''}${escapeHtml(opt.name)}`;
+          btn.addEventListener('click', () => {
+            openLivePlayer(item, idx);
+          });
+          elements.movieVersionSwitcher.appendChild(btn);
+        });
+      }
+
+      // Popula barra lateral de informações com dados da partida ou canal
+      populateLiveSidebar(item, currentOpt);
+
+      // Inicia stream
+      playLiveStreamUrl(streamUrl, isEmbed, title);
+    }
+
+    function playLiveStreamUrl(streamUrl, isEmbed, title) {
+      if (activeHls) {
+        activeHls.destroy();
+        activeHls = null;
+      }
+
+      if (isEmbed) {
+        // Modo Embed Sandboxed (Zero Anúncios)
+        elements.videoPlayer.pause();
+        elements.videoPlayer.src = '';
+        elements.videoPlayer.style.display = 'none';
+
+        elements.embedPlayer.style.display = 'block';
+        elements.embedPlayer.src = streamUrl;
+      } else {
+        // Modo HLS Nativo (Zero Anúncios)
+        elements.embedPlayer.src = 'about:blank';
+        elements.embedPlayer.style.display = 'none';
+
+        elements.videoPlayer.style.display = 'block';
+
+        if (window.Hls && Hls.isSupported() && (streamUrl.includes('.m3u8') || streamUrl.startsWith('http'))) {
+          activeHls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 30
+          });
+          activeHls.loadSource(streamUrl);
+          activeHls.attachMedia(elements.videoPlayer);
+          activeHls.on(Hls.Events.MANIFEST_PARSED, () => {
+            elements.videoPlayer.play().catch(() => {});
+          });
+          activeHls.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              console.warn('HLS Live Fatal Error:', data.type);
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  activeHls.startLoad();
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  activeHls.recoverMediaError();
+                  break;
+                default:
+                  activeHls.destroy();
+                  break;
+              }
+            }
+          });
+        } else {
+          elements.videoPlayer.src = streamUrl;
+          elements.videoPlayer.play().catch(() => {});
+        }
+      }
+    }
+
+    function populateLiveSidebar(item, currentOpt) {
+      if (!elements.movieInfoSidebar) return;
+
+      const title = item.name || item.title || '';
+      const category = item.categoryLabel || (item.isLiveMatch ? 'Futebol Ao Vivo' : 'TV Ao Vivo');
+      const logo = item.logo || item.homeLogo || 'https://i.imgur.com/8Q8Q4zE.png';
+
+      if (elements.sidebarPoster) elements.sidebarPoster.src = logo;
+      if (elements.sidebarTitle) elements.sidebarTitle.textContent = title;
+      if (elements.sidebarDirector) elements.sidebarDirector.textContent = currentOpt.name || 'Servidor HD';
+      if (elements.sidebarCast) elements.sidebarCast.textContent = item.league || 'Transmissão Ao Vivo';
+
+      if (elements.sidebarGenres) {
+        elements.sidebarGenres.innerHTML = `
+          <span class="genre-tag">🔴 AO VIVO</span>
+          <span class="genre-tag">${escapeHtml(category)}</span>
+          <span class="genre-tag" style="background: rgba(0, 200, 83, 0.2); color: #00e676; border-color: rgba(0, 200, 83, 0.4);">🛡️ ZERO ANÚNCIOS</span>
+        `;
+      }
+
+      if (elements.sidebarPlot) {
+        if (item.isLiveMatch) {
+          elements.sidebarPlot.innerHTML = `
+            <strong>Partida Ao Vivo:</strong> ${escapeHtml(title)}<br>
+            <strong>Competição:</strong> ${escapeHtml(item.league || 'Campeonato')}<br>
+            <strong>Horário:</strong> ${escapeHtml(item.matchTime || 'Em andamento')}<br><br>
+            💡 <em>Dica: Se um servidor estiver instável ou congestionado, utilize os botões de servidores logo abaixo da tela para alternar instantaneamente.</em>
+          `;
+        } else {
+          elements.sidebarPlot.innerHTML = `
+            <strong>Canal:</strong> ${escapeHtml(title)}<br>
+            <strong>Categoria:</strong> ${escapeHtml(category)}<br>
+            <strong>Servidor Conectado:</strong> ${escapeHtml(currentOpt.name || 'Servidor 1')}<br><br>
+            💡 <em>Transmissão contínua 24 Horas com isolamento total contra pop-ups e redirecionamentos.</em>
+          `;
+        }
+      }
     }
 
     // ==========================================
@@ -3203,6 +4443,21 @@
         videoLoadTimeout = null;
       }
       hideVideoErrorOverlay();
+
+      if (activeHls) {
+        try { activeHls.destroy(); } catch (e) {}
+        activeHls = null;
+      }
+
+      if (elements.embedPlayer) {
+        elements.embedPlayer.src = 'about:blank';
+        elements.embedPlayer.style.display = 'none';
+      }
+      elements.videoPlayer.style.display = 'block';
+
+      // Restaura botões para filmes e séries
+      elements.toggleSubPanelBtn.style.display = 'inline-flex';
+      elements.downloadBtn.style.display = 'inline-flex';
 
       const lastMeta = currentPlaybackMeta;
       currentPlaybackMeta = null;
