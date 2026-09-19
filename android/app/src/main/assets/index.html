@@ -2696,7 +2696,7 @@
       // Apenas v2.rdembed.sbs resolve DNS — outros domínios estão bloqueados pelo ISP
       const fallbacks = [
         { name: 'Rei dos Embeds HD', url: raw.embed || ('https://v2.rdembed.sbs/' + raw.id), isEmbed: true },
-        { name: 'Rei dos Embeds HD 2', url: 'https://v2.rdembed.sbs/' + raw.id + '?srv=2', isEmbed: true }
+        { name: 'Rei dos Embeds HD 2', url: 'https://v2.rdembed.sbs/' + raw.id, isEmbed: true }
       ];
 
       if (KNOWN_NATIVE_STREAMS[raw.id]) {
@@ -3657,12 +3657,8 @@
         elements.embedPlayer.style.display = 'block';
         elements.embedPlayer.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation');
         
-        let finalEmbedUrl = streamUrl;
-        if (!finalEmbedUrl.includes('youtube')) {
-          const sep = finalEmbedUrl.includes('?') ? '&' : '?';
-          finalEmbedUrl = `${finalEmbedUrl}${sep}autoplay=1&lowlatency=1`;
-        }
-        elements.embedPlayer.src = finalEmbedUrl;
+        // Usar a URL limpa do servidor — parâmetros extras causam redirect para homepage
+        elements.embedPlayer.src = streamUrl;
       } else {
         // Modo HLS Nativo (Zero Anúncios com Ultra Low-Latency Tuning)
         elements.embedPlayer.src = 'about:blank';
