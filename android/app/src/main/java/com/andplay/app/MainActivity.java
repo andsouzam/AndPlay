@@ -115,11 +115,21 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                // Bloqueia navegações geradas por iframes (players embed) para fora do app
+                // Iframes: sempre permitir (gerenciados pelo sandbox HTML)
                 if (!request.isForMainFrame()) {
-                    return true; // Bloqueia silenciosamente navegação de sub-frames (iframes)
+                    return false;
                 }
-                return false; // Navegação principal: abre no próprio WebView
+                // Frame principal: só permite URLs conhecidas do app
+                String url = request.getUrl().toString();
+                if (url.startsWith("file://")
+                        || url.contains("andsouzam.github.io")
+                        || url.contains("v2.rdembed.sbs")
+                        || url.contains("about:blank")) {
+                    return false; // Permite navegação interna
+                }
+                // Bloqueia qualquer redirect externo inesperado (ex: reidosembeds.online)
+                android.util.Log.w("AndPlay", "Bloqueado redirect externo: " + url);
+                return true;
             }
         });
 

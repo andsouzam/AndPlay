@@ -1446,8 +1446,8 @@
         <div class="player-main-area">
           <div class="video-container">
             <video id="videoPlayer" controls preload="metadata"></video>
-            <iframe id="embedPlayer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background: #000;" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-presentation" referrerpolicy="no-referrer-when-downgrade"></iframe>
-            <div id="liveSyncToast" style="display: none; position: absolute; top: 16px; right: 16px; background: rgba(10, 10, 10, 0.92); color: #00e676; border: 1px solid #00e676; padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; z-index: 60; box-shadow: 0 4px 15px rgba(0,0,0,0.6); pointer-events: none; transition: opacity 0.3s ease;">âš¡ TransmissÃ£o em Tempo Real</div>
+            <iframe id="embedPlayer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background: #000;" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-forms allow-presentation" referrerpolicy="no-referrer-when-downgrade"></iframe>
+            <div id="liveSyncToast" style="display: none; position: absolute; top: 16px; right: 16px; background: rgba(10, 10, 10, 0.92); color: #00e676; border: 1px solid #00e676; padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: 700; z-index: 60; box-shadow: 0 4px 15px rgba(0,0,0,0.6); pointer-events: none; transition: opacity 0.3s ease;">âš¡ Transmissão em Tempo Real</div>
             <!-- Overlay de Erro e Tratamento de Streams Indisponíveis (503/404) -->
             <div id="videoErrorOverlay" style="display: none; position: absolute; inset: 0; background: rgba(15, 15, 15, 0.96); z-index: 50; flex-direction: column; align-items: center; justify-content: center; padding: 25px 20px; text-align: center;">
               <div style="font-size: 46px; margin-bottom: 12px;">⚠️</div>
@@ -1515,8 +1515,8 @@
           <button class="btn" id="syncLiveBtn" style="display: none; padding: 7px 14px; font-size: 12px; font-weight: 700; background: #ff9800; color: #000; border: none; align-items: center; gap: 6px; cursor: pointer; border-radius: 16px; box-shadow: 0 2px 8px rgba(255,152,0,0.4);" title="Sincronizar instantaneamente com a borda ao vivo (zero delay)">
             âš¡ Tempo Real
           </button>
-          <button class="btn btn-secondary" id="toggleLatencyModeBtn" style="display: none; padding: 7px 14px; font-size: 12px; font-weight: 700; align-items: center; gap: 6px; cursor: pointer; border-radius: 16px; border: 1px solid #ffc107;" title="Alternar entre Buffer MÃ­nimo (Zero Delay) e Buffer EstÃ¡vel">
-            âš¡ Buffer MÃ­nimo: 1s
+          <button class="btn btn-secondary" id="toggleLatencyModeBtn" style="display: none; padding: 7px 14px; font-size: 12px; font-weight: 700; align-items: center; gap: 6px; cursor: pointer; border-radius: 16px; border: 1px solid #ffc107;" title="Alternar entre Buffer Mínimo (Zero Delay) e Buffer Estável">
+            âš¡ Buffer Mínimo: 1s
           </button>
           <button class="btn btn-secondary" id="toggleMovieInfoBtn" style="padding: 7px 14px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px;" title="Mostrar ou ocultar ficha técnica na lateral esquerda">
             ℹ️ Ficha Técnica
@@ -2682,11 +2682,11 @@
       const c = rawCat.toLowerCase();
       if (c.includes('esporte')) return { key: 'sports', label: 'Esportes' };
       if (c.includes('aberto') || c.includes('aberta')) return { key: 'open_tv', label: 'TV Aberta' };
-      if (c.includes('filme') || c.includes('sÃ©rie') || c.includes('series')) return { key: 'movies', label: 'Filmes & SÃ©ries' };
-      if (c.includes('notÃ­cia') || c.includes('noticia')) return { key: 'news', label: 'NotÃ­cias' };
+      if (c.includes('filme') || c.includes('série') || c.includes('series')) return { key: 'movies', label: 'Filmes & Séries' };
+      if (c.includes('notícia') || c.includes('noticia')) return { key: 'news', label: 'Notícias' };
       if (c.includes('infantil') || c.includes('desenho')) return { key: 'kids', label: 'Infantil & Desenhos' };
       if (c.includes('reality')) return { key: 'reality', label: 'Realitys' };
-      if (c.includes('24 hora') || c.includes('24h')) return { key: 'channels_24h', label: 'ClÃ¡ssicos 24H' };
+      if (c.includes('24 hora') || c.includes('24h')) return { key: 'channels_24h', label: 'Clássicos 24H' };
       if (c.includes('adulto')) return { key: 'adult', label: 'Adulto (+18)' };
       return { key: 'variety', label: 'Variedades' };
     }
@@ -2728,15 +2728,15 @@
 
       const liveCategories = [
         { id: 'ALL', name: 'ðŸ“º Todos os Canais e Jogos Ao Vivo' },
-        { id: 'JOGOS', name: 'âš½ Jogos de Hoje & TransmissÃµes' },
+        { id: 'JOGOS', name: 'âš½ Jogos de Hoje & Transmissões' },
         { id: 'sports', name: 'ðŸ† Canais de Esportes (114)' },
         { id: 'open_tv', name: 'ðŸ“¡ TV Aberta Nacional & Regional (45)' },
-        { id: 'movies', name: 'ðŸ¿ Filmes & SÃ©ries 24H (37)' },
+        { id: 'movies', name: 'ðŸ¿ Filmes & Séries 24H (37)' },
         { id: 'kids', name: 'ðŸ§¸ Infantil & Desenhos (18)' },
-        { id: 'news', name: 'ðŸ“° NotÃ­cias 24H (10)' },
-        { id: 'channels_24h', name: 'â­ ClÃ¡ssicos 24 Horas (10)' },
+        { id: 'news', name: 'ðŸ“° Notícias 24H (10)' },
+        { id: 'channels_24h', name: 'â­ Clássicos 24 Horas (10)' },
         { id: 'reality', name: 'ðŸ¤  Reality Shows (9)' },
-        { id: 'variety', name: 'ðŸŽ­ Variedades & DocumentÃ¡rios (74)' },
+        { id: 'variety', name: 'ðŸŽ­ Variedades & Documentários (74)' },
         { id: 'adult', name: 'ðŸ”ž Adulto +18 (11)' }
       ];
 
@@ -2787,7 +2787,7 @@
               fallbacks.push(
                 { name: 'Premiere 1 HD', url: 'https://v2.rdembed.sbs/premiere', isEmbed: true },
                 { name: 'SporTV HD', url: 'https://v2.rdembed.sbs/sportv', isEmbed: true },
-                { name: 'CazÃ©TV HD', url: 'https://v2.rdembed.sbs/cazetv', isEmbed: true },
+                { name: 'CazéTV HD', url: 'https://v2.rdembed.sbs/cazetv', isEmbed: true },
                 { name: 'ESPN HD', url: 'https://v2.rdembed.sbs/espn', isEmbed: true }
               );
             }
@@ -2836,7 +2836,7 @@
 
               const fallbacks = [];
               if (ev.play_event_direct_url) {
-                fallbacks.push({ name: 'TransmissÃ£o Direta HD', url: ev.play_event_direct_url, isEmbed: !ev.play_event_direct_url.includes('.m3u8') });
+                fallbacks.push({ name: 'Transmissão Direta HD', url: ev.play_event_direct_url, isEmbed: !ev.play_event_direct_url.includes('.m3u8') });
               }
               if (Array.isArray(ev.embeds)) {
                 ev.embeds.forEach((emb, i) => {
@@ -2851,7 +2851,7 @@
                 fallbacks.push(
                   { name: 'Premiere 1 HD', url: 'https://v2.rdembed.sbs/premiere', isEmbed: true },
                   { name: 'SporTV HD', url: 'https://v2.rdembed.sbs/sportv', isEmbed: true },
-                  { name: 'CazÃ©TV HD', url: 'https://v2.rdembed.sbs/cazetv', isEmbed: true },
+                  { name: 'CazéTV HD', url: 'https://v2.rdembed.sbs/cazetv', isEmbed: true },
                   { name: 'ESPN HD', url: 'https://v2.rdembed.sbs/espn', isEmbed: true }
                 );
               }
@@ -2878,7 +2878,7 @@
         }
       }
 
-      // 3. Grade de contingÃªncia para os grandes jogos de hoje
+      // 3. Grade de contingência para os grandes jogos de hoje
       if (events.length === 0) {
         const topMatches = [
           {
@@ -2889,7 +2889,7 @@
             homeLogo: '',
             awayLogo: '',
             matchTime: 'AO VIVO',
-            league: 'BrasileirÃ£o SÃ©rie A',
+            league: 'Brasileirão Série A',
             categoryKey: 'JOGOS',
             categoryLabel: 'Jogos de Hoje',
             isLiveMatch: true,
@@ -2902,26 +2902,26 @@
           },
           {
             id: 'match_br_2',
-            name: 'Corinthians x SÃ£o Paulo',
+            name: 'Corinthians x São Paulo',
             homeTeam: 'Corinthians',
-            awayTeam: 'SÃ£o Paulo',
+            awayTeam: 'São Paulo',
             homeLogo: '',
             awayLogo: '',
             matchTime: 'AO VIVO',
-            league: 'BrasileirÃ£o SÃ©rie A',
+            league: 'Brasileirão Série A',
             categoryKey: 'JOGOS',
             categoryLabel: 'Jogos de Hoje',
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
               { name: 'Premiere 2 HD', url: 'https://v2.rdembed.sbs/premiere2', isEmbed: true },
-              { name: 'CazÃ©TV HD (0 Delay)', url: 'https://www.youtube-nocookie.com/embed/live_stream?channel=UCjE8gVqE5lM_x3Z_t_9y0YQ', isEmbed: true },
+              { name: 'CazéTV HD (0 Delay)', url: 'https://www.youtube-nocookie.com/embed/live_stream?channel=UCjE8gVqE5lM_x3Z_t_9y0YQ', isEmbed: true },
               { name: 'SporTV 2 HD', url: 'https://v2.rdembed.sbs/sportv2', isEmbed: true }
             ]
           },
           {
             id: 'match_br_3',
-            name: 'Real Madrid x Barcelona (El ClÃ¡sico)',
+            name: 'Real Madrid x Barcelona (El Clásico)',
             homeTeam: 'Real Madrid',
             awayTeam: 'Barcelona',
             homeLogo: '',
@@ -3345,7 +3345,7 @@
                 ` : ''}
                 <div class="card-meta" style="margin-top: 4px;">
                   <span>${escapeHtml(item.categoryLabel || 'TV Ao Vivo')}</span>
-                  <span>${item.fallbacks ? item.fallbacks.length + ' opÃ§Ãµes' : 'HD'}</span>
+                  <span>${item.fallbacks ? item.fallbacks.length + ' opções' : 'HD'}</span>
                 </div>
               </div>
             `;
@@ -3487,7 +3487,7 @@
         // ==========================================
     // MOTOR DE REPRODUÃ‡ÃƒO AO VIVO (LOW LATENCY / ULTRA BUFFER / EPG)
     // ==========================================
-    let liveBufferMinimizationEnabled = true; // Ativado por padrÃ£o para transmissÃ£o em tempo real
+    let liveBufferMinimizationEnabled = true; // Ativado por padrão para transmissão em tempo real
     let liveDriftInterval = null;
 
     function showLiveSyncToast(msg) {
@@ -3515,18 +3515,18 @@
         openLivePlayer(item, idx);
       }
 
-      showLiveSyncToast(liveBufferMinimizationEnabled ? 'âš¡ Buffer MÃ­nimo Ativado (~1s delay)' : 'ðŸ›¡ï¸ Buffer EstÃ¡vel Ativado (~8s delay)');
+      showLiveSyncToast(liveBufferMinimizationEnabled ? 'âš¡ Buffer Mínimo Ativado (~1s delay)' : 'ðŸ›¡ï¸ Buffer Estável Ativado (~8s delay)');
     }
 
     function updateLatencyButtonUI() {
       if (!elements.toggleLatencyModeBtn) return;
       if (liveBufferMinimizationEnabled) {
-        elements.toggleLatencyModeBtn.innerHTML = 'âš¡ Buffer MÃ­nimo: 1s';
+        elements.toggleLatencyModeBtn.innerHTML = 'âš¡ Buffer Mínimo: 1s';
         elements.toggleLatencyModeBtn.className = 'btn btn-secondary';
         elements.toggleLatencyModeBtn.style.border = '1px solid #ffc107';
         elements.toggleLatencyModeBtn.style.color = '#ffc107';
       } else {
-        elements.toggleLatencyModeBtn.innerHTML = 'ðŸ›¡ï¸ Buffer EstÃ¡vel: 8s';
+        elements.toggleLatencyModeBtn.innerHTML = 'ðŸ›¡ï¸ Buffer Estável: 8s';
         elements.toggleLatencyModeBtn.className = 'btn btn-secondary';
         elements.toggleLatencyModeBtn.style.border = '1px solid #666';
         elements.toggleLatencyModeBtn.style.color = '#ccc';
@@ -3571,7 +3571,7 @@
 
       const fallbacks = item.fallbacks && item.fallbacks.length > 0 ? item.fallbacks : [
         {
-          name: 'TransmissÃ£o Principal',
+          name: 'Transmissão Principal',
           url: item.hlsUrl || item.embedUrl || '',
           isEmbed: !item.hlsUrl
         }
@@ -3580,7 +3580,7 @@
       const currentOpt = fallbacks[fallbackIdx] || fallbacks[0];
       const streamUrl = currentOpt.url;
       const isEmbed = Boolean(currentOpt.isEmbed);
-      const title = item.name || item.title || 'TransmissÃ£o Ao Vivo';
+      const title = item.name || item.title || 'Transmissão Ao Vivo';
 
       currentPlaybackMeta = {
         mediaType: 'live',
@@ -3589,16 +3589,16 @@
         fallbackIdx: fallbackIdx
       };
 
-      // Abre modal de vÃ­deo
+      // Abre modal de vídeo
       elements.videoModal.style.display = 'flex';
       elements.modalTitle.textContent = `ðŸ”´ ${title}`;
-      elements.modalFormat.textContent = isEmbed ? 'Sinal: HD Protegido (Zero AnÃºncios)' : 'Sinal: HLS Nativo 1080p (Zero AnÃºncios)';
+      elements.modalFormat.textContent = isEmbed ? 'Sinal: HD Protegido (Zero Anúncios)' : 'Sinal: HLS Nativo 1080p (Zero Anúncios)';
 
-      // Oculta botÃµes irrelevantes para transmissÃµes ao vivo
+      // Oculta botões irrelevantes para transmissões ao vivo
       elements.toggleSubPanelBtn.style.display = 'none';
       elements.downloadBtn.style.display = 'none';
 
-      // Exibe controles de transmissÃ£o ao vivo em tempo real
+      // Exibe controles de transmissão ao vivo em tempo real
       if (elements.syncLiveBtn) elements.syncLiveBtn.style.display = 'inline-flex';
       if (elements.toggleLatencyModeBtn) {
         elements.toggleLatencyModeBtn.style.display = 'inline-flex';
@@ -3627,7 +3627,7 @@
         });
       }
 
-      // Popula barra lateral de informaÃ§Ãµes com dados da partida ou canal e EPG
+      // Popula barra lateral de informações com dados da partida ou canal e EPG
       populateLiveSidebar(item, currentOpt);
 
       // Inicia stream
@@ -3648,14 +3648,14 @@
       }
 
       if (isEmbed) {
-        // Modo Embed (Zero AnÃºncios com Sandbox Bloqueador de Popups)
+        // Modo Embed (Zero Anúncios com Sandbox Bloqueador de Popups)
         elements.videoPlayer.pause();
         elements.videoPlayer.removeAttribute('src');
         elements.videoPlayer.load();
         elements.videoPlayer.style.display = 'none';
 
         elements.embedPlayer.style.display = 'block';
-        elements.embedPlayer.setAttribute('sandbox', 'allow-scripts allow-presentation');
+        elements.embedPlayer.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation');
         
         let finalEmbedUrl = streamUrl;
         if (!finalEmbedUrl.includes('youtube')) {
@@ -3664,7 +3664,7 @@
         }
         elements.embedPlayer.src = finalEmbedUrl;
       } else {
-        // Modo HLS Nativo (Zero AnÃºncios com Ultra Low-Latency Tuning)
+        // Modo HLS Nativo (Zero Anúncios com Ultra Low-Latency Tuning)
         elements.embedPlayer.src = 'about:blank';
         elements.embedPlayer.style.display = 'none';
 
@@ -3676,9 +3676,9 @@
             lowLatencyMode: true,
             liveSyncDurationCount: 1,        // Sincroniza a 1 segmento da borda ao vivo (~2s)
             liveMaxLatencyDurationCount: 2, // Se afastar mais que 2 segmentos, sincroniza
-            maxBufferLength: 2,             // Buffer mÃ¡ximo de apenas 2 segundos para delay mÃ­nimo
+            maxBufferLength: 2,             // Buffer máximo de apenas 2 segundos para delay mínimo
             maxMaxBufferLength: 4,          // Teto absoluto de 4 segundos
-            backBufferLength: 0,            // Descarta histÃ³rico imediatamente para liberar memÃ³ria
+            backBufferLength: 0,            // Descarta histórico imediatamente para liberar memória
             liveDurationInfinity: true,
             highBufferWatchdogPeriod: 1
           } : {
@@ -3703,13 +3703,13 @@
               try { activeHls.destroy(); } catch (e) {}
               activeHls = null;
               if (item && item.fallbacks && item.fallbacks[fallbackIdx + 1]) {
-                console.log(`HLS indisponÃ­vel, alternando automaticamente para Servidor ${fallbackIdx + 2}`);
+                console.log(`HLS indisponível, alternando automaticamente para Servidor ${fallbackIdx + 2}`);
                 openLivePlayer(item, fallbackIdx + 1);
               }
             }
           });
 
-          // Monitor de Drift para transmissÃ£o em tempo real (Catch-Up Compensator)
+          // Monitor de Drift para transmissão em tempo real (Catch-Up Compensator)
           if (liveBufferMinimizationEnabled) {
             liveDriftInterval = setInterval(() => {
               if (!activeHls || !elements.videoPlayer || elements.videoPlayer.paused) return;
@@ -3723,7 +3723,7 @@
                 elements.videoPlayer.currentTime = target - 1.0;
                 elements.videoPlayer.playbackRate = 1.0;
               } else if (drift > 3.0) {
-                // Acelera suavemente para aproximar da transmissÃ£o ao vivo sem distorcer som
+                // Acelera suavemente para aproximar da transmissão ao vivo sem distorcer som
                 elements.videoPlayer.playbackRate = 1.08;
               } else if (drift <= 1.5) {
                 elements.videoPlayer.playbackRate = 1.0;
@@ -3752,7 +3752,7 @@
       }
       if (elements.sidebarTitle) elements.sidebarTitle.textContent = title;
       if (elements.sidebarDirector) elements.sidebarDirector.textContent = currentOpt.name || 'Servidor HD';
-      if (elements.sidebarCast) elements.sidebarCast.textContent = item.league || 'TransmissÃ£o Ao Vivo';
+      if (elements.sidebarCast) elements.sidebarCast.textContent = item.league || 'Transmissão Ao Vivo';
 
       if (elements.sidebarGenres) {
         elements.sidebarGenres.innerHTML = `
@@ -3767,9 +3767,9 @@
         if (item.isLiveMatch) {
           elements.sidebarPlot.innerHTML = `
             <strong>Partida Ao Vivo:</strong> ${escapeHtml(title)}<br>
-            <strong>CompetiÃ§Ã£o:</strong> ${escapeHtml(item.league || 'Campeonato')}<br>
-            <strong>HorÃ¡rio:</strong> ${escapeHtml(item.matchTime || 'Em andamento')}<br><br>
-            âš¡ <em>Modo Tempo Real ativo: O buffer foi minimizado para vocÃª assistir com o menor atraso possÃ­vel. Use o botÃ£o 'âš¡ Tempo Real' para pular para o Ãºltimo segundo da transmissÃ£o.</em>
+            <strong>Competição:</strong> ${escapeHtml(item.league || 'Campeonato')}<br>
+            <strong>Horário:</strong> ${escapeHtml(item.matchTime || 'Em andamento')}<br><br>
+            âš¡ <em>Modo Tempo Real ativo: O buffer foi minimizado para você assistir com o menor atraso possível. Use o botão 'âš¡ Tempo Real' para pular para o último segundo da transmissão.</em>
           `;
         } else {
           let epgHtml = '';
@@ -3777,12 +3777,12 @@
             epgHtml += `<div style="background: rgba(255,82,82,0.15); border: 1px solid rgba(255,82,82,0.4); border-radius: 8px; padding: 10px; margin: 10px 0;">
               <div style="font-size: 11px; font-weight: 700; color: #ff5252; text-transform: uppercase;">ðŸ”´ No Ar Agora</div>
               <div style="font-size: 13px; font-weight: 600; color: #fff; margin: 4px 0;">${escapeHtml(item.nowTitle)}</div>
-              ${item.nowProgress > 0 ? `<div style="width: 100%; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; overflow: hidden; margin-top: 6px;"><div style="width: ${Math.min(100, item.nowProgress)}%; height: 100%; background: #ff5252;"></div></div><div style="font-size: 10px; color: #aaa; margin-top: 4px; text-align: right;">${item.nowProgress}% concluÃ­do</div>` : ''}
+              ${item.nowProgress > 0 ? `<div style="width: 100%; height: 4px; background: rgba(255,255,255,0.2); border-radius: 2px; overflow: hidden; margin-top: 6px;"><div style="width: ${Math.min(100, item.nowProgress)}%; height: 100%; background: #ff5252;"></div></div><div style="font-size: 10px; color: #aaa; margin-top: 4px; text-align: right;">${item.nowProgress}% concluído</div>` : ''}
             </div>`;
           }
 
           if (Array.isArray(item.nextProgrammes) && item.nextProgrammes.length > 0) {
-            epgHtml += `<div style="margin-top: 12px;"><strong style="font-size: 11px; text-transform: uppercase; color: #ffc107;">ðŸ“‹ PrÃ³ximas AtraÃ§Ãµes:</strong><div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">`;
+            epgHtml += `<div style="margin-top: 12px;"><strong style="font-size: 11px; text-transform: uppercase; color: #ffc107;">ðŸ“‹ Próximas Atrações:</strong><div style="display: flex; flex-direction: column; gap: 6px; margin-top: 6px;">`;
             item.nextProgrammes.forEach(np => {
               epgHtml += `<div style="font-size: 12px; color: #bbb; display: flex; gap: 8px;"><span style="color: #ffc107; font-weight: 600; min-width: 42px;">${escapeHtml(np.s || '')}</span><span>${escapeHtml(np.t || '')}</span></div>`;
             });
@@ -3794,7 +3794,7 @@
             <strong>Categoria:</strong> ${escapeHtml(category)}<br>
             <strong>Servidor Conectado:</strong> ${escapeHtml(currentOpt.name || 'Servidor 1')}<br>
             ${epgHtml}
-            <br>âš¡ <em>TransmissÃ£o contÃ­nua com isolamento total contra anÃºncios e buffer calibrado para menor latÃªncia em tempo real.</em>
+            <br>âš¡ <em>Transmissão contínua com isolamento total contra anúncios e buffer calibrado para menor latência em tempo real.</em>
           `;
         }
       }
