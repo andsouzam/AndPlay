@@ -3347,6 +3347,7 @@
                 </div>
               </div>
             `;
+          }
 
           card.addEventListener('click', () => onLiveItemClick(item));
           fragment.appendChild(card);
@@ -5828,7 +5829,12 @@
       return (str || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
-    init();
+    init().catch(err => {
+      console.error('Initialization error:', err);
+      if (elements.loading) {
+        elements.loading.innerHTML = `<p style="color:#e50914;">Erro na inicialização: ${err.message}</p>`;
+      }
+    });
   </script>
 </body>
 </html>
