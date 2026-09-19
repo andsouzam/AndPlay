@@ -2693,11 +2693,10 @@
 
     function buildChannelItem(raw) {
       const catInfo = getCategoryInfo(raw.cat);
+      // Apenas v2.rdembed.sbs resolve DNS — outros domínios estão bloqueados pelo ISP
       const fallbacks = [
-        { name: 'Servidor 1 (Rei dos Embeds)', url: raw.embed || ('https://v2.rdembed.sbs/' + raw.id), isEmbed: true },
-        { name: 'Servidor 2 (BRFLIX v2)', url: 'https://v2.rdse.site/' + raw.id, isEmbed: true },
-        { name: 'Servidor 3 (WarezCDN)', url: 'https://warezcdn.lat/canal/' + raw.id, isEmbed: true },
-        { name: 'Servidor 4 (RDCanais)', url: 'https://rdcanais.net/' + raw.id, isEmbed: true }
+        { name: 'Rei dos Embeds HD', url: raw.embed || ('https://v2.rdembed.sbs/' + raw.id), isEmbed: true },
+        { name: 'Rei dos Embeds HD 2', url: 'https://v2.rdembed.sbs/' + raw.id + '?srv=2', isEmbed: true }
       ];
 
       if (KNOWN_NATIVE_STREAMS[raw.id]) {
@@ -2752,10 +2751,10 @@
     async function fetchLiveSportsEvents() {
       const events = [];
 
-      // 1. Tenta API do Rei dos Embeds (/api/eventos)
+      // 1. Tenta API do Rei dos Embeds (/api/eventos) — timeout rápido pois DNS pode estar bloqueado
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
+        const timeoutId = setTimeout(() => controller.abort(), 1000);
         const res = await fetch('https://reidosembeds.online/api/eventos', {
           signal: controller.signal,
           headers: { 'Accept': 'application/json' }
@@ -2798,8 +2797,8 @@
               name: title,
               homeTeam: homeTeam,
               awayTeam: awayTeam,
-              homeLogo: (ev.time1_logo && !ev.time1_logo.includes('8Q8Q4zE')) ? ev.time1_logo : ((ev.home_logo && !ev.home_logo.includes('8Q8Q4zE')) ? ev.home_logo : 'https://logodetimes.com/times/brasil/logo-brasil-256.png'),
-              awayLogo: (ev.time2_logo && !ev.time2_logo.includes('8Q8Q4zE')) ? ev.time2_logo : ((ev.away_logo && !ev.away_logo.includes('8Q8Q4zE')) ? ev.away_logo : 'https://logodetimes.com/times/brasil/logo-brasil-256.png'),
+              homeLogo: (ev.time1_logo && !ev.time1_logo.includes('8Q8Q4zE')) ? ev.time1_logo : ((ev.home_logo && !ev.home_logo.includes('8Q8Q4zE')) ? ev.home_logo : ''),
+              awayLogo: (ev.time2_logo && !ev.time2_logo.includes('8Q8Q4zE')) ? ev.time2_logo : ((ev.away_logo && !ev.away_logo.includes('8Q8Q4zE')) ? ev.away_logo : ''),
               matchTime: ev.start_time || ev.time || ev.hora || ev.horario || 'AO VIVO',
               league: ev.category || ev.campeonato || ev.torneio || 'Futebol Ao Vivo',
               categoryKey: 'JOGOS',
@@ -2862,8 +2861,8 @@
                 name: title,
                 homeTeam: homeTeam,
                 awayTeam: awayTeam,
-                homeLogo: (ev.home_logo && !ev.home_logo.includes('8Q8Q4zE')) ? ev.home_logo : ((ev.time1_logo && !ev.time1_logo.includes('8Q8Q4zE')) ? ev.time1_logo : 'https://logodetimes.com/times/brasil/logo-brasil-256.png'),
-                awayLogo: (ev.away_logo && !ev.away_logo.includes('8Q8Q4zE')) ? ev.away_logo : ((ev.time2_logo && !ev.time2_logo.includes('8Q8Q4zE')) ? ev.time2_logo : 'https://logodetimes.com/times/brasil/logo-brasil-256.png'),
+                homeLogo: (ev.home_logo && !ev.home_logo.includes('8Q8Q4zE')) ? ev.home_logo : ((ev.time1_logo && !ev.time1_logo.includes('8Q8Q4zE')) ? ev.time1_logo : ''),
+                awayLogo: (ev.away_logo && !ev.away_logo.includes('8Q8Q4zE')) ? ev.away_logo : ((ev.time2_logo && !ev.time2_logo.includes('8Q8Q4zE')) ? ev.time2_logo : ''),
                 matchTime: ev.time || ev.hora || ev.horario || 'AO VIVO',
                 league: ev.category || ev.campeonato || ev.torneio || 'Futebol Ao Vivo',
                 categoryKey: 'JOGOS',
@@ -2887,8 +2886,8 @@
             name: 'Palmeiras x Flamengo',
             homeTeam: 'Palmeiras',
             awayTeam: 'Flamengo',
-            homeLogo: 'https://logodetimes.com/times/palmeiras/logo-palmeiras-256.png',
-            awayLogo: 'https://logodetimes.com/times/flamengo/logo-flamengo-256.png',
+            homeLogo: '',
+            awayLogo: '',
             matchTime: 'AO VIVO',
             league: 'BrasileirÃ£o SÃ©rie A',
             categoryKey: 'JOGOS',
@@ -2906,8 +2905,8 @@
             name: 'Corinthians x SÃ£o Paulo',
             homeTeam: 'Corinthians',
             awayTeam: 'SÃ£o Paulo',
-            homeLogo: 'https://logodetimes.com/times/corinthians/logo-corinthians-256.png',
-            awayLogo: 'https://logodetimes.com/times/sao-paulo/logo-sao-paulo-256.png',
+            homeLogo: '',
+            awayLogo: '',
             matchTime: 'AO VIVO',
             league: 'BrasileirÃ£o SÃ©rie A',
             categoryKey: 'JOGOS',
@@ -2925,8 +2924,8 @@
             name: 'Real Madrid x Barcelona (El ClÃ¡sico)',
             homeTeam: 'Real Madrid',
             awayTeam: 'Barcelona',
-            homeLogo: 'https://logodetimes.com/times/espanha/real-madrid.png',
-            awayLogo: 'https://logodetimes.com/times/espanha/barcelona.png',
+            homeLogo: '',
+            awayLogo: '',
             matchTime: 'AO VIVO',
             league: 'La Liga / Champions League',
             categoryKey: 'JOGOS',
@@ -2949,7 +2948,7 @@
     async function fetchLiveChannelsFromApi() {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const timeoutId = setTimeout(() => controller.abort(), 1000);
         const res = await fetch('https://reidosembeds.online/api/channels', {
           signal: controller.signal,
           headers: { 'Accept': 'application/json' }
@@ -3301,16 +3300,17 @@
         if (isLive) {
           if (item.isLiveMatch) {
             const isNow = item.isLiveNow;
-            const defaultMatchLogo = 'https://logodetimes.com/times/brasil/logo-brasil-256.png';
-            const homeLogo = (item.homeLogo && !item.homeLogo.includes('8Q8Q4zE')) ? item.homeLogo : defaultMatchLogo;
-            const awayLogo = (item.awayLogo && !item.awayLogo.includes('8Q8Q4zE')) ? item.awayLogo : defaultMatchLogo;
+            // SVG inline como fallback garantido (sem dependência de rede)
+            const defaultMatchLogo = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23333'/%3E%3Ctext x='32' y='42' text-anchor='middle' fill='%23888' font-size='28'%3E%E2%9A%BD%3C/text%3E%3C/svg%3E`;
+            const homeLogo = (item.homeLogo && !item.homeLogo.includes('8Q8Q4zE') && !item.homeLogo.includes('logodetimes.com')) ? item.homeLogo : '';
+            const awayLogo = (item.awayLogo && !item.awayLogo.includes('8Q8Q4zE') && !item.awayLogo.includes('logodetimes.com')) ? item.awayLogo : '';
             card.innerHTML = `
               <div class="poster-wrap" style="aspect-ratio: 16/9; min-height: 140px; background: #161616;">
                 <div class="match-vs-container">
                   <div class="match-teams-row">
-                    <img class="match-team-logo" src="${homeLogo}" alt="${escapeHtml(item.homeTeam || '')}" onerror="this.src='${defaultMatchLogo}'">
+                    ${homeLogo ? `<img class="match-team-logo" src="${homeLogo}" alt="${escapeHtml(item.homeTeam || '')}" onerror="this.style.opacity='0.3'">` : `<span class="match-team-logo" style="display:flex;align-items:center;justify-content:center;width:52px;height:52px;font-size:32px;background:#333;border-radius:50%">⚽</span>`}
                     <span class="match-vs-tag">VS</span>
-                    <img class="match-team-logo" src="${awayLogo}" alt="${escapeHtml(item.awayTeam || '')}" onerror="this.src='${defaultMatchLogo}'">
+                    ${awayLogo ? `<img class="match-team-logo" src="${awayLogo}" alt="${escapeHtml(item.awayTeam || '')}" onerror="this.style.opacity='0.3'">` : `<span class="match-team-logo" style="display:flex;align-items:center;justify-content:center;width:52px;height:52px;font-size:32px;background:#333;border-radius:50%">⚽</span>`}
                   </div>
                   <span class="match-time-pill">${escapeHtml(item.matchTime || 'AO VIVO')}</span>
                 </div>
@@ -3325,7 +3325,9 @@
               </div>
             `;
           } else {
-            const logoUrl = item.logo || item.stream_icon || '';
+            // Filtra logos de domínios bloqueados pelo ISP (reidosembeds.online sem DNS)
+            const rawLogo = item.logo || item.stream_icon || '';
+            const logoUrl = (rawLogo && !rawLogo.includes('reidosembeds.online')) ? rawLogo : '';
             card.innerHTML = `
               <div class="poster-wrap" style="background: radial-gradient(circle, #252525 0%, #121212 100%); display: flex; align-items: center; justify-content: center; padding: 18px;">
                 ${logoUrl ? `<img src="${logoUrl}" alt="${escapeHtml(title)}" style="max-width: 85%; max-height: 85px; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.8));" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : ''}
@@ -3742,7 +3744,7 @@
 
       const title = item.name || item.title || '';
       const category = item.categoryLabel || (item.isLiveMatch ? 'Futebol Ao Vivo' : 'TV Ao Vivo');
-      const logo = (item.logo && !item.logo.includes('8Q8Q4zE')) ? item.logo : ((item.homeLogo && !item.homeLogo.includes('8Q8Q4zE')) ? item.homeLogo : DEFAULT_LIVE_LOGO);
+      const logo = (item.logo && !item.logo.includes('8Q8Q4zE') && !item.logo.includes('reidosembeds.online') && !item.logo.includes('logodetimes.com')) ? item.logo : ((item.homeLogo && !item.homeLogo.includes('8Q8Q4zE') && !item.homeLogo.includes('logodetimes.com')) ? item.homeLogo : DEFAULT_LIVE_LOGO);
 
       if (elements.sidebarPoster) {
         elements.sidebarPoster.onerror = () => { elements.sidebarPoster.src = DEFAULT_LIVE_LOGO; };
