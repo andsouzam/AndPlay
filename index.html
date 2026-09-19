@@ -12,14 +12,37 @@
   <!-- Escudo Zero Anúncios (Ad-Shield) -->
   <script>
     (function initZeroAdsShield() {
-      // 1. Bloqueia qualquer tentativa de abertura de popups / popunders
-      const _origOpen = window.open;
-      window.open = function(url, target, features) {
+      // 1. Bloqueia qualquer tentativa de abertura de popups / popunders com trava definitiva
+      const blockPopup = function(url) {
         console.warn('[AdShield] Bloqueado popup/popunder externo:', url);
         return null;
       };
+      try {
+        window.open = blockPopup;
+        Object.defineProperty(window, 'open', {
+          configurable: false,
+          writable: false,
+          value: blockPopup
+        });
+      } catch (e) {
+        window.open = blockPopup;
+      }
 
-      // 2. Bloqueia cliques automáticos disparados por scripts maliciosos de anúncios
+      // 2. Bloqueia cliques em links externos ou com target="_blank"
+      document.addEventListener('click', function(e) {
+        const a = e.target && e.target.closest ? e.target.closest('a') : null;
+        if (a) {
+          const href = String(a.href || '').trim().toLowerCase();
+          const isSafe = !href || href.startsWith('#') || href.startsWith('javascript:') || href.includes(window.location.hostname);
+          if (!isSafe || a.target === '_blank') {
+            console.warn('[AdShield] Bloqueado clique em link externo / popup:', href);
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }
+      }, true);
+
+      // 3. Bloqueia cliques automáticos disparados por scripts maliciosos de anúncios
       const _origClick = HTMLAnchorElement.prototype.click;
       HTMLAnchorElement.prototype.click = function() {
         const href = String(this.href || '').toLowerCase();
@@ -31,7 +54,7 @@
         return _origClick.apply(this, arguments);
       };
 
-      // 3. Suprime alertas invasivos gerados por ad networks
+      // 4. Suprime alertas invasivos gerados por ad networks
       window.alert = function() {};
       window.confirm = function() { return false; };
       window.prompt = function() { return null; };
@@ -720,7 +743,7 @@
 
     /* Video Player & Lateral Info Sidebar */
     #videoModal .modal-content {
-      max-width: 1260px;
+      max-width: 1300px;
       width: 96vw;
     }
 
@@ -729,9 +752,11 @@
       flex-direction: row;
       position: relative;
       width: 100%;
+      height: 68vh;
+      min-height: 480px;
+      max-height: 740px;
       background: #000;
       overflow: hidden;
-      min-height: 380px;
     }
 
     /* Painel Lateral Esquerdo (Ficha Técnica) */
@@ -739,6 +764,7 @@
       width: 330px;
       min-width: 330px;
       max-width: 330px;
+      height: 100%;
       background: #141414;
       border-right: 1px solid #282828;
       overflow-y: auto;
@@ -747,7 +773,6 @@
       gap: 14px;
       padding: 18px 20px;
       transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1), padding 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
-      max-height: 70vh;
       box-sizing: border-box;
       scrollbar-width: thin;
       scrollbar-color: #383838 transparent;
@@ -768,12 +793,15 @@
 
     .player-main-area {
       flex: 1;
+      height: 100%;
       display: flex;
       flex-direction: column;
       min-width: 0;
       position: relative;
       background: #000;
       justify-content: center;
+      align-items: center;
+      overflow: hidden;
     }
 
     .genre-pill {
@@ -805,14 +833,18 @@
     @media (max-width: 920px) {
       .player-body-wrapper {
         flex-direction: column-reverse;
+        height: auto !important;
+        min-height: auto !important;
+        max-height: none !important;
       }
       .player-info-sidebar {
-        width: 100%;
-        min-width: 100%;
-        max-width: 100%;
-        max-height: 38vh;
-        border-right: none;
-        border-top: 1px solid #282828;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        max-height: 38vh !important;
+        border-right: none !important;
+        border-top: 1px solid #282828 !important;
       }
       .player-info-sidebar.collapsed {
         max-height: 0 !important;
@@ -820,22 +852,58 @@
         padding-bottom: 0 !important;
         border-top: none !important;
       }
+      .player-main-area {
+        width: 100% !important;
+        height: auto !important;
+      }
+      .video-container {
+        width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 16 / 9;
+        min-height: 240px !important;
+      }
+      video {
+        width: 100% !important;
+        height: auto !important;
+        aspect-ratio: 16 / 9;
+      }
+      #embedPlayer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100% !important;
+        height: 100% !important;
+      }
     }
 
     .video-container {
       position: relative;
       width: 100%;
+      height: 100%;
       background: #000;
-      max-height: 70vh;
       display: flex;
       justify-content: center;
       align-items: center;
+      overflow: hidden;
     }
 
     video {
       width: 100%;
-      max-height: 70vh;
+      height: 100%;
+      max-height: 100%;
+      object-fit: contain;
       outline: none;
+      background: #000;
+    }
+
+    #embedPlayer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100% !important;
+      height: 100% !important;
+      border: none;
+      background: #000;
     }
 
     video::cue {
@@ -1338,7 +1406,7 @@
 
           <!-- Mini Ficha (Pôster + Título + Ano + Duração + Nota) -->
           <div style="display: flex; gap: 12px; align-items: flex-start;">
-            <img id="sidebarPoster" src="" alt="Capa" style="width: 72px; height: 108px; border-radius: 6px; object-fit: cover; background: #222; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.6);">
+            <img id="sidebarPoster" src="" alt="Capa" style="width: 72px; height: 108px; border-radius: 6px; object-fit: cover; background: #222; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.6);" onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 150\'%3E%3Crect width=\'100\' height=\'150\' fill=\'%23222\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' dominant-baseline=\'middle\' text-anchor=\'middle\' font-size=\'36\'%3E🎬%3C/text%3E%3C/svg%3E';">
             <div style="display: flex; flex-direction: column; gap: 4px; overflow: hidden;">
               <h4 id="sidebarTitle" style="margin: 0; font-size: 14px; font-weight: 700; color: #fff; line-height: 1.3;">Nome do Filme</h4>
               <div style="font-size: 11px; color: #aaa; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 2px;">
@@ -1378,7 +1446,7 @@
         <div class="player-main-area">
           <div class="video-container">
             <video id="videoPlayer" controls preload="metadata"></video>
-            <iframe id="embedPlayer" style="display: none; width: 100%; height: 100%; border: none; background: #000;" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="no-referrer-when-downgrade"></iframe>
+            <iframe id="embedPlayer" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background: #000;" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-forms allow-presentation" referrerpolicy="no-referrer-when-downgrade"></iframe>
             <!-- Overlay de Erro e Tratamento de Streams Indisponíveis (503/404) -->
             <div id="videoErrorOverlay" style="display: none; position: absolute; inset: 0; background: rgba(15, 15, 15, 0.96); z-index: 50; flex-direction: column; align-items: center; justify-content: center; padding: 25px 20px; text-align: center;">
               <div style="font-size: 46px; margin-bottom: 12px;">⚠️</div>
@@ -2596,7 +2664,7 @@
         name: "Premiere 1 HD",
         categoryKey: "sports",
         categoryLabel: "Esportes",
-        logo: "https://i.imgur.com/8Q8Q4zE.png",
+        logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c2/Premiere_logo_%282021%29.svg/512px-Premiere_logo_%282021%29.svg.png",
         badge: "FUTEBOL 24H",
         embedUrl: "https://v2.rdse.site/premiere",
         fallbacks: [
@@ -3169,8 +3237,8 @@
               name: title,
               homeTeam: homeTeam,
               awayTeam: awayTeam,
-              homeLogo: ev.home_logo || ev.time1_logo || 'https://i.imgur.com/8Q8Q4zE.png',
-              awayLogo: ev.away_logo || ev.time2_logo || 'https://i.imgur.com/8Q8Q4zE.png',
+              homeLogo: (ev.home_logo && !ev.home_logo.includes('8Q8Q4zE')) ? ev.home_logo : ((ev.time1_logo && !ev.time1_logo.includes('8Q8Q4zE')) ? ev.time1_logo : 'https://logodetimes.com/times/brasil/logo-brasil-256.png'),
+              awayLogo: (ev.away_logo && !ev.away_logo.includes('8Q8Q4zE')) ? ev.away_logo : ((ev.time2_logo && !ev.time2_logo.includes('8Q8Q4zE')) ? ev.time2_logo : 'https://logodetimes.com/times/brasil/logo-brasil-256.png'),
               matchTime: ev.time || ev.hora || ev.horario || 'AO VIVO',
               league: ev.category || ev.campeonato || ev.torneio || 'Futebol Ao Vivo',
               categoryKey: 'JOGOS',
@@ -3587,15 +3655,16 @@
         if (isLive) {
           if (item.isLiveMatch) {
             const isNow = item.isLiveNow;
-            const homeLogo = item.homeLogo || 'https://i.imgur.com/8Q8Q4zE.png';
-            const awayLogo = item.awayLogo || 'https://i.imgur.com/8Q8Q4zE.png';
+            const defaultMatchLogo = 'https://logodetimes.com/times/brasil/logo-brasil-256.png';
+            const homeLogo = (item.homeLogo && !item.homeLogo.includes('8Q8Q4zE')) ? item.homeLogo : defaultMatchLogo;
+            const awayLogo = (item.awayLogo && !item.awayLogo.includes('8Q8Q4zE')) ? item.awayLogo : defaultMatchLogo;
             card.innerHTML = `
               <div class="poster-wrap" style="aspect-ratio: 16/9; min-height: 140px; background: #161616;">
                 <div class="match-vs-container">
                   <div class="match-teams-row">
-                    <img class="match-team-logo" src="${homeLogo}" alt="${escapeHtml(item.homeTeam || '')}" onerror="this.src='https://i.imgur.com/8Q8Q4zE.png'">
+                    <img class="match-team-logo" src="${homeLogo}" alt="${escapeHtml(item.homeTeam || '')}" onerror="this.src='${defaultMatchLogo}'">
                     <span class="match-vs-tag">VS</span>
-                    <img class="match-team-logo" src="${awayLogo}" alt="${escapeHtml(item.awayTeam || '')}" onerror="this.src='https://i.imgur.com/8Q8Q4zE.png'">
+                    <img class="match-team-logo" src="${awayLogo}" alt="${escapeHtml(item.awayTeam || '')}" onerror="this.src='${defaultMatchLogo}'">
                   </div>
                   <span class="match-time-pill">${escapeHtml(item.matchTime || 'AO VIVO')}</span>
                 </div>
@@ -3834,13 +3903,14 @@
       }
 
       if (isEmbed) {
-        // Modo Embed (Zero Anúncios)
+        // Modo Embed (Zero Anúncios com Sandbox Bloqueador de Popups)
         elements.videoPlayer.pause();
         elements.videoPlayer.removeAttribute('src');
         elements.videoPlayer.load();
         elements.videoPlayer.style.display = 'none';
 
         elements.embedPlayer.style.display = 'block';
+        elements.embedPlayer.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation');
         elements.embedPlayer.src = streamUrl;
       } else {
         // Modo HLS Nativo (Zero Anúncios)
@@ -3878,14 +3948,19 @@
       }
     }
 
+    const DEFAULT_LIVE_LOGO = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%231a1a1a' rx='10'/%3E%3Ccircle cx='50' cy='50' r='36' fill='%23222' stroke='%23383838' stroke-width='2'/%3E%3Ctext x='50' y='57' font-size='36' text-anchor='middle'%3E⚽%3C/text%3E%3C/svg%3E";
+
     function populateLiveSidebar(item, currentOpt) {
       if (!elements.movieInfoSidebar) return;
 
       const title = item.name || item.title || '';
       const category = item.categoryLabel || (item.isLiveMatch ? 'Futebol Ao Vivo' : 'TV Ao Vivo');
-      const logo = item.logo || item.homeLogo || 'https://i.imgur.com/8Q8Q4zE.png';
+      const logo = (item.logo && !item.logo.includes('8Q8Q4zE')) ? item.logo : ((item.homeLogo && !item.homeLogo.includes('8Q8Q4zE')) ? item.homeLogo : DEFAULT_LIVE_LOGO);
 
-      if (elements.sidebarPoster) elements.sidebarPoster.src = logo;
+      if (elements.sidebarPoster) {
+        elements.sidebarPoster.onerror = () => { elements.sidebarPoster.src = DEFAULT_LIVE_LOGO; };
+        elements.sidebarPoster.src = logo;
+      }
       if (elements.sidebarTitle) elements.sidebarTitle.textContent = title;
       if (elements.sidebarDirector) elements.sidebarDirector.textContent = currentOpt.name || 'Servidor HD';
       if (elements.sidebarCast) elements.sidebarCast.textContent = item.league || 'Transmissão Ao Vivo';
