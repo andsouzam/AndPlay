@@ -1378,7 +1378,7 @@
         <div class="player-main-area">
           <div class="video-container">
             <video id="videoPlayer" controls preload="metadata"></video>
-            <iframe id="embedPlayer" style="display: none; width: 100%; height: 100%; border: none; background: #000;" allowfullscreen allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms"></iframe>
+            <iframe id="embedPlayer" style="display: none; width: 100%; height: 100%; border: none; background: #000;" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="no-referrer-when-downgrade"></iframe>
             <!-- Overlay de Erro e Tratamento de Streams Indisponíveis (503/404) -->
             <div id="videoErrorOverlay" style="display: none; position: absolute; inset: 0; background: rgba(15, 15, 15, 0.96); z-index: 50; flex-direction: column; align-items: center; justify-content: center; padding: 25px 20px; text-align: center;">
               <div style="font-size: 46px; margin-bottom: 12px;">⚠️</div>
@@ -2583,12 +2583,12 @@
         categoryLabel: "Esportes",
         logo: "https://i.imgur.com/K3Z024o.png",
         badge: "AO VIVO",
-        embedUrl: "https://v3.rdse.site/sportv",
+        embedUrl: "https://v2.rdse.site/sportv",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/sportv", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/sportv", isEmbed: true },
-          { name: "Servidor 3 HD", url: "https://ww4.embedtv.lat/sportv?ls", isEmbed: true },
-          { name: "Servidor 4 HD", url: "https://nossoplayeronlinehd.ink/tv/sportv", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/sportv", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/sportv", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/sportv", isEmbed: true },
+          { name: "Servidor 4 (EmbedTV)", url: "https://ww4.embedtv.lat/sportv?ls", isEmbed: true }
         ]
       },
       {
@@ -2598,12 +2598,12 @@
         categoryLabel: "Esportes",
         logo: "https://i.imgur.com/8Q8Q4zE.png",
         badge: "FUTEBOL 24H",
-        embedUrl: "https://v3.rdse.site/premiere",
+        embedUrl: "https://v2.rdse.site/premiere",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/premiere", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/premiere", isEmbed: true },
-          { name: "Servidor 3 HD", url: "https://ww4.embedtv.lat/premiere?ls", isEmbed: true },
-          { name: "Servidor 4 HD", url: "https://nossoplayeronlinehd.ink/tv/premiere", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/premiere", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/premiere", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/premiere", isEmbed: true },
+          { name: "Servidor 4 (EmbedTV)", url: "https://ww4.embedtv.lat/premiere?ls", isEmbed: true }
         ]
       },
       {
@@ -2613,11 +2613,11 @@
         categoryLabel: "Esportes",
         logo: "https://i.imgur.com/Yv6nJ6w.png",
         badge: "ESPORTES",
-        embedUrl: "https://v3.rdse.site/espn",
+        embedUrl: "https://v2.rdse.site/espn",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/espn", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/espn", isEmbed: true },
-          { name: "Servidor 3 HD", url: "https://ww4.embedtv.lat/espn?ls", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/espn", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/espn", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/espn", isEmbed: true }
         ]
       },
       {
@@ -2627,10 +2627,11 @@
         categoryLabel: "Esportes",
         logo: "https://i.imgur.com/W2d53rE.png",
         badge: "CHAMPIONS",
-        embedUrl: "https://v3.rdse.site/tnt",
+        embedUrl: "https://v2.rdse.site/tnt-sports",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/tnt", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/tnt", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/tnt-sports", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/tntsports", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/tnt", isEmbed: true }
         ]
       },
       {
@@ -2640,10 +2641,11 @@
         categoryLabel: "Esportes",
         logo: "https://i.imgur.com/Z4w29o0.png",
         badge: "AO VIVO",
-        embedUrl: "https://v3.rdse.site/cazetv",
+        embedUrl: "https://www.youtube-nocookie.com/embed/live_stream?channel=UC4p-T_yC3sH22t8hU_r108g",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/cazetv", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/cazetv", isEmbed: true }
+          { name: "Servidor 1 HD (Oficial 1080p)", url: "https://www.youtube-nocookie.com/embed/live_stream?channel=UC4p-T_yC3sH22t8hU_r108g", isEmbed: true },
+          { name: "Servidor 2 (BRFLIX v2)", url: "https://v2.rdse.site/cazetv", isEmbed: true },
+          { name: "Servidor 3 (WarezCDN)", url: "https://warezcdn.lat/canal/cazetv", isEmbed: true }
         ]
       },
       {
@@ -2653,11 +2655,11 @@
         categoryLabel: "Esportes",
         logo: "https://i.imgur.com/EuPvzJe.png",
         badge: "SINAL HD",
-        hlsUrl: "https://cdn-5.nxplay.com.br/BAND_SPORTS/index.m3u8",
+        embedUrl: "https://v2.rdse.site/bandsports",
         fallbacks: [
-          { name: "HLS Nativo (0 Anúncios)", url: "https://cdn-5.nxplay.com.br/BAND_SPORTS/index.m3u8", isEmbed: false },
-          { name: "Servidor 2 HD", url: "https://v3.rdse.site/bandsports", isEmbed: true },
-          { name: "Servidor 3 HD", url: "https://reidoscanais.st/canal/bandsports", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/bandsports", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/bandsports", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/bandsports", isEmbed: true }
         ]
       },
 
@@ -2669,11 +2671,12 @@
         categoryLabel: "TV Aberta",
         logo: "https://i.imgur.com/V9Kz2rT.png",
         badge: "AO VIVO",
-        embedUrl: "https://v3.rdse.site/globo",
+        embedUrl: "https://v2.rdse.site/globo-sp",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/globo", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/globo", isEmbed: true },
-          { name: "Servidor 3 HD", url: "https://ww4.embedtv.lat/globo?ls", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/globo-sp", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/globo", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/globo", isEmbed: true },
+          { name: "Servidor 4 (EmbedTV)", url: "https://ww4.embedtv.lat/globo?ls", isEmbed: true }
         ]
       },
       {
@@ -2683,11 +2686,11 @@
         categoryLabel: "TV Aberta",
         logo: "https://i.imgur.com/D46n11o.png",
         badge: "AO VIVO",
-        embedUrl: "https://v3.rdse.site/sbt",
+        embedUrl: "https://www.youtube-nocookie.com/embed/live_stream?channel=UCF8iN2C8q3zH_gY7u9j9L0Q",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/sbt", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/sbt", isEmbed: true },
-          { name: "Servidor 3 HD", url: "https://ww4.embedtv.lat/sbt?ls", isEmbed: true }
+          { name: "Servidor 1 HD (Oficial 1080p)", url: "https://www.youtube-nocookie.com/embed/live_stream?channel=UCF8iN2C8q3zH_gY7u9j9L0Q", isEmbed: true },
+          { name: "Servidor 2 (BRFLIX v2)", url: "https://v2.rdse.site/sbt", isEmbed: true },
+          { name: "Servidor 3 (WarezCDN)", url: "https://warezcdn.lat/canal/sbt", isEmbed: true }
         ]
       },
       {
@@ -2697,11 +2700,11 @@
         categoryLabel: "TV Aberta",
         logo: "https://i.imgur.com/D46n11o.png",
         badge: "AO VIVO",
-        embedUrl: "https://v3.rdse.site/record",
+        embedUrl: "https://v2.rdse.site/record",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/record", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/record", isEmbed: true },
-          { name: "Servidor 3 HD", url: "https://ww4.embedtv.lat/record?ls", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/record", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/record", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/record", isEmbed: true }
         ]
       },
       {
@@ -2711,11 +2714,11 @@
         categoryLabel: "TV Aberta",
         logo: "https://i.imgur.com/495nK3E.png",
         badge: "AO VIVO",
-        hlsUrl: "http://170.84.165.204/BAND_HD/index.m3u8",
+        embedUrl: "https://www.youtube-nocookie.com/embed/live_stream?channel=UCoa-D_VfckL3VTwBlp42C6Q",
         fallbacks: [
-          { name: "HLS Nativo (0 Anúncios)", url: "http://170.84.165.204/BAND_HD/index.m3u8", isEmbed: false },
-          { name: "Servidor 2 HD", url: "https://v3.rdse.site/band", isEmbed: true },
-          { name: "Servidor 3 HD", url: "https://reidoscanais.st/canal/band", isEmbed: true }
+          { name: "Servidor 1 HD (Oficial 1080p)", url: "https://www.youtube-nocookie.com/embed/live_stream?channel=UCoa-D_VfckL3VTwBlp42C6Q", isEmbed: true },
+          { name: "Servidor 2 (BRFLIX v2)", url: "https://v2.rdse.site/band", isEmbed: true },
+          { name: "Servidor 3 (WarezCDN)", url: "https://warezcdn.lat/canal/band", isEmbed: true }
         ]
       },
       {
@@ -2725,9 +2728,10 @@
         categoryLabel: "TV Aberta",
         logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/TvBrasil2023.png/960px-TvBrasil2023.png",
         badge: "ABERTA",
-        hlsUrl: "http://45.162.64.114/TV_BRASIL/index.m3u8",
+        embedUrl: "https://v2.rdse.site/tvbrasil",
         fallbacks: [
-          { name: "HLS Nativo (0 Anúncios)", url: "http://45.162.64.114/TV_BRASIL/index.m3u8", isEmbed: false }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/tvbrasil", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/tvbrasil", isEmbed: true }
         ]
       },
       {
@@ -2737,9 +2741,11 @@
         categoryLabel: "TV Aberta",
         logo: "https://eitv6.cdn.broadpeak.io/account351-i1438/channel/53/quadrada_-3-_pequeno-1723832301.png",
         badge: "ABERTA",
-        hlsUrl: "https://fpa-gateway.tvcultura.com.br:8181/memfs/606caef0-a290-413d-9f1f-8fcdb3a73831.m3u8",
+        embedUrl: "https://www.youtube-nocookie.com/embed/live_stream?channel=UC5m8nNlE0i714tXWcR6oGzg",
         fallbacks: [
-          { name: "HLS Nativo (0 Anúncios)", url: "https://fpa-gateway.tvcultura.com.br:8181/memfs/606caef0-a290-413d-9f1f-8fcdb3a73831.m3u8", isEmbed: false }
+          { name: "Servidor 1 HD (Oficial 1080p)", url: "https://www.youtube-nocookie.com/embed/live_stream?channel=UC5m8nNlE0i714tXWcR6oGzg", isEmbed: true },
+          { name: "Servidor 2 (BRFLIX v2)", url: "https://v2.rdse.site/cultura", isEmbed: true },
+          { name: "Servidor 3 (WarezCDN)", url: "https://warezcdn.lat/canal/cultura", isEmbed: true }
         ]
       },
 
@@ -2751,10 +2757,11 @@
         categoryLabel: "Filmes & Séries",
         logo: "https://i.imgur.com/395nK3E.png",
         badge: "LANÇAMENTOS",
-        embedUrl: "https://v3.rdse.site/telecinepremium",
+        embedUrl: "https://v2.rdse.site/telecine-premium",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/telecinepremium", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/telecinepremium", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/telecine-premium", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/telecinepremium", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/telecinepremium", isEmbed: true }
         ]
       },
       {
@@ -2764,10 +2771,11 @@
         categoryLabel: "Filmes & Séries",
         logo: "https://i.imgur.com/395nK3E.png",
         badge: "AÇÃO 24H",
-        embedUrl: "https://v3.rdse.site/telecineaction",
+        embedUrl: "https://v2.rdse.site/telecine-action",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/telecineaction", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/telecineaction", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/telecine-action", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/telecineaction", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/telecineaction", isEmbed: true }
         ]
       },
       {
@@ -2777,10 +2785,11 @@
         categoryLabel: "Filmes & Séries",
         logo: "https://i.imgur.com/395nK3E.png",
         badge: "DUBLADO",
-        embedUrl: "https://v3.rdse.site/telecinepipoca",
+        embedUrl: "https://v2.rdse.site/telecine-pipoca",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/telecinepipoca", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/telecinepipoca", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/telecine-pipoca", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/telecinepipoca", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/telecinepipoca", isEmbed: true }
         ]
       },
       {
@@ -2790,10 +2799,11 @@
         categoryLabel: "Filmes & Séries",
         logo: "https://i.imgur.com/225nK3E.png",
         badge: "HBO",
-        embedUrl: "https://v3.rdse.site/hbo",
+        embedUrl: "https://v2.rdse.site/hbo",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/hbo", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/hbo", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/hbo", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/hbo", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/hbo", isEmbed: true }
         ]
       },
       {
@@ -2803,10 +2813,11 @@
         categoryLabel: "Filmes & Séries",
         logo: "https://i.imgur.com/115nK3E.png",
         badge: "FILMES",
-        embedUrl: "https://v3.rdse.site/megapix",
+        embedUrl: "https://v2.rdse.site/megapix",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/megapix", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/megapix", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/megapix", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/megapix", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/megapix", isEmbed: true }
         ]
       },
       {
@@ -2816,37 +2827,28 @@
         categoryLabel: "Filmes & Séries",
         logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/AXN_logo_%282015%29.svg/960px-AXN_logo_%282015%29.svg.png",
         badge: "SÉRIES",
-        hlsUrl: "http://170.83.16.50/AXN/index.m3u8",
+        embedUrl: "https://v2.rdse.site/axn",
         fallbacks: [
-          { name: "HLS Nativo (0 Anúncios)", url: "http://170.83.16.50/AXN/index.m3u8", isEmbed: false }
-        ]
-      },
-      {
-        id: "amc",
-        name: "AMC HD",
-        categoryKey: "movies",
-        categoryLabel: "Filmes & Séries",
-        logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/AMC_logo_2019.svg/960px-AMC_logo_2019.svg.png",
-        badge: "FILMES",
-        hlsUrl: "http://170.83.49.66:8083/AMCHD/index.m3u8",
-        fallbacks: [
-          { name: "HLS Nativo (0 Anúncios)", url: "http://170.83.49.66:8083/AMCHD/index.m3u8", isEmbed: false }
-        ]
-      },
-      {
-        id: "aee",
-        name: "A&E HD",
-        categoryKey: "movies",
-        categoryLabel: "Filmes & Séries",
-        logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/df/A%26E_Network_logo.svg/960px-A%26E_Network_logo.svg.png",
-        badge: "SÉRIES",
-        hlsUrl: "http://170.83.16.50/AeE/index.m3u8",
-        fallbacks: [
-          { name: "HLS Nativo (0 Anúncios)", url: "http://170.83.16.50/AeE/index.m3u8", isEmbed: false }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/axn", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/axn", isEmbed: true }
         ]
       },
 
       // === NOTÍCIAS ===
+      {
+        id: "record-news",
+        name: "Record News HD",
+        categoryKey: "news",
+        categoryLabel: "Notícias",
+        logo: "https://i.imgur.com/HZDRG0K.png",
+        badge: "NOTÍCIAS 24H",
+        hlsUrl: "https://jmp2.uk/plu-6102e04e9ab1db0007a980a1.m3u8",
+        fallbacks: [
+          { name: "HLS Nativo 1080p (0 Anúncios)", url: "https://jmp2.uk/plu-6102e04e9ab1db0007a980a1.m3u8", isEmbed: false },
+          { name: "Servidor 2 HD (Oficial)", url: "https://www.youtube-nocookie.com/embed/live_stream?channel=UCuiLR4p6wQ3xLEm15pEn1Kg", isEmbed: true },
+          { name: "Servidor 3 (BRFLIX v2)", url: "https://v2.rdse.site/recordnews", isEmbed: true }
+        ]
+      },
       {
         id: "globonews",
         name: "GloboNews HD",
@@ -2854,10 +2856,11 @@
         categoryLabel: "Notícias",
         logo: "https://i.imgur.com/7vY6L2W.png",
         badge: "NOTÍCIAS 24H",
-        embedUrl: "https://v3.rdse.site/globonews",
+        embedUrl: "https://v2.rdse.site/globonews",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/globonews", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/globonews", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/globonews", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/globonews", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/globonews", isEmbed: true }
         ]
       },
       {
@@ -2867,10 +2870,11 @@
         categoryLabel: "Notícias",
         logo: "https://i.imgur.com/495nK3E.png",
         badge: "NOTÍCIAS",
-        embedUrl: "https://v3.rdse.site/cnnbrasil",
+        embedUrl: "https://www.youtube-nocookie.com/embed/live_stream?channel=UCvdwhh_fDyWccR42-rReFPQ",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/cnnbrasil", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/cnnbrasil", isEmbed: true }
+          { name: "Servidor 1 HD (Oficial 1080p)", url: "https://www.youtube-nocookie.com/embed/live_stream?channel=UCvdwhh_fDyWccR42-rReFPQ", isEmbed: true },
+          { name: "Servidor 2 (BRFLIX v2)", url: "https://v2.rdse.site/cnnbrasil", isEmbed: true },
+          { name: "Servidor 3 (WarezCDN)", url: "https://warezcdn.lat/canal/cnnbrasil", isEmbed: true }
         ]
       },
       {
@@ -2880,90 +2884,15 @@
         categoryLabel: "Notícias",
         logo: "https://i.imgur.com/7vY6L2W.png",
         badge: "AO VIVO",
-        embedUrl: "https://v3.rdse.site/jovempannews",
+        embedUrl: "https://www.youtube-nocookie.com/embed/live_stream?channel=UCvha7sO_rQJkH7p1WJ2x57A",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/jovempannews", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/jovempannews", isEmbed: true }
-        ]
-      },
-      {
-        id: "bandnews",
-        name: "BandNews HD",
-        categoryKey: "news",
-        categoryLabel: "Notícias",
-        logo: "https://i.ibb.co/0jVZBFp/u8ya-iw-R-400x400.jpg",
-        badge: "NOTÍCIAS",
-        hlsUrl: "https://cdn-5.nxplay.com.br/BAND_NEWS/index.m3u8",
-        fallbacks: [
-          { name: "HLS Nativo (0 Anúncios)", url: "https://cdn-5.nxplay.com.br/BAND_NEWS/index.m3u8", isEmbed: false }
-        ]
-      },
-      {
-        id: "record-news",
-        name: "Record News HD",
-        categoryKey: "news",
-        categoryLabel: "Notícias",
-        logo: "https://i.imgur.com/HZDRG0K.png",
-        badge: "NOTÍCIAS",
-        hlsUrl: "https://jmp2.uk/plu-6102e04e9ab1db0007a980a1.m3u8",
-        fallbacks: [
-          { name: "HLS Nativo (0 Anúncios)", url: "https://jmp2.uk/plu-6102e04e9ab1db0007a980a1.m3u8", isEmbed: false }
+          { name: "Servidor 1 HD (Oficial 1080p)", url: "https://www.youtube-nocookie.com/embed/live_stream?channel=UCvha7sO_rQJkH7p1WJ2x57A", isEmbed: true },
+          { name: "Servidor 2 (BRFLIX v2)", url: "https://v2.rdse.site/jovempannews", isEmbed: true },
+          { name: "Servidor 3 (WarezCDN)", url: "https://warezcdn.lat/canal/jovempannews", isEmbed: true }
         ]
       },
 
       // === INFANTIL & VARIADOS ===
-      {
-        id: "cartoon-network",
-        name: "Cartoon Network HD",
-        categoryKey: "kids",
-        categoryLabel: "Infantil",
-        logo: "https://i.imgur.com/555nK3E.png",
-        badge: "DESENHOS",
-        embedUrl: "https://v3.rdse.site/cartoon",
-        fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/cartoon", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/cartoon", isEmbed: true }
-        ]
-      },
-      {
-        id: "gloob",
-        name: "Gloob HD",
-        categoryKey: "kids",
-        categoryLabel: "Infantil",
-        logo: "https://i.imgur.com/555nK3E.png",
-        badge: "KIDS",
-        embedUrl: "https://v3.rdse.site/gloob",
-        fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/gloob", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/gloob", isEmbed: true }
-        ]
-      },
-      {
-        id: "disney-channel",
-        name: "Disney Channel HD",
-        categoryKey: "kids",
-        categoryLabel: "Infantil",
-        logo: "https://i.imgur.com/555nK3E.png",
-        badge: "DISNEY",
-        embedUrl: "https://v3.rdse.site/disney",
-        fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/disney", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/disney", isEmbed: true }
-        ]
-      },
-      {
-        id: "nickelodeon",
-        name: "Nickelodeon HD",
-        categoryKey: "kids",
-        categoryLabel: "Infantil",
-        logo: "https://i.imgur.com/555nK3E.png",
-        badge: "NICK",
-        embedUrl: "https://v3.rdse.site/nickelodeon",
-        fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/nickelodeon", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/nickelodeon", isEmbed: true }
-        ]
-      },
       {
         id: "24h-bob-esponja",
         name: "Bob Esponja 24H",
@@ -2973,8 +2902,8 @@
         badge: "CANAL 24H",
         hlsUrl: "https://jmp2.uk/plu-62545c0b002f4b0007688b61.m3u8",
         fallbacks: [
-          { name: "HLS Nativo (0 Anúncios)", url: "https://jmp2.uk/plu-62545c0b002f4b0007688b61.m3u8", isEmbed: false },
-          { name: "Servidor 2 HD", url: "https://v3.rdse.site/bobesponja", isEmbed: true }
+          { name: "HLS Nativo 1080p (0 Anúncios)", url: "https://jmp2.uk/plu-62545c0b002f4b0007688b61.m3u8", isEmbed: false },
+          { name: "Servidor 2 (BRFLIX v2)", url: "https://v2.rdse.site/bobesponja", isEmbed: true }
         ]
       },
       {
@@ -2986,20 +2915,61 @@
         badge: "CANAL 24H",
         hlsUrl: "https://jmp2.uk/plu-6759eeb1bd523200083b4f29.m3u8",
         fallbacks: [
-          { name: "HLS Nativo (0 Anúncios)", url: "https://jmp2.uk/plu-6759eeb1bd523200083b4f29.m3u8", isEmbed: false }
+          { name: "HLS Nativo 1080p (0 Anúncios)", url: "https://jmp2.uk/plu-6759eeb1bd523200083b4f29.m3u8", isEmbed: false },
+          { name: "Servidor 2 (BRFLIX v2)", url: "https://v2.rdse.site/avatar", isEmbed: true }
         ]
       },
       {
-        id: "discovery-channel",
-        name: "Discovery Channel HD",
-        categoryKey: "channels_24h",
-        categoryLabel: "Documentários",
-        logo: "https://i.imgur.com/495nK3E.png",
-        badge: "DISCOVERY",
-        embedUrl: "https://v3.rdse.site/discovery",
+        id: "cartoon-network",
+        name: "Cartoon Network HD",
+        categoryKey: "kids",
+        categoryLabel: "Infantil",
+        logo: "https://i.imgur.com/555nK3E.png",
+        badge: "DESENHOS",
+        embedUrl: "https://v2.rdse.site/cartoon-network",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/discovery", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/discovery", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/cartoon-network", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/cartoonnetwork", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/cartoon", isEmbed: true }
+        ]
+      },
+      {
+        id: "gloob",
+        name: "Gloob HD",
+        categoryKey: "kids",
+        categoryLabel: "Infantil",
+        logo: "https://i.imgur.com/555nK3E.png",
+        badge: "KIDS",
+        embedUrl: "https://v2.rdse.site/gloob",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/gloob", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/gloob", isEmbed: true }
+        ]
+      },
+      {
+        id: "disney-channel",
+        name: "Disney Channel HD",
+        categoryKey: "kids",
+        categoryLabel: "Infantil",
+        logo: "https://i.imgur.com/555nK3E.png",
+        badge: "DISNEY",
+        embedUrl: "https://v2.rdse.site/disney-channel",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/disney-channel", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/disneychannel", isEmbed: true }
+        ]
+      },
+      {
+        id: "nickelodeon",
+        name: "Nickelodeon HD",
+        categoryKey: "kids",
+        categoryLabel: "Infantil",
+        logo: "https://i.imgur.com/555nK3E.png",
+        badge: "NICK",
+        embedUrl: "https://v2.rdse.site/nickelodeon",
+        fallbacks: [
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/nickelodeon", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/nickelodeon", isEmbed: true }
         ]
       },
 
@@ -3011,10 +2981,11 @@
         categoryLabel: "Séries 24H",
         logo: "https://i.imgur.com/885nK3E.png",
         badge: "CANAL 24H",
-        embedUrl: "https://v3.rdse.site/chaves",
+        embedUrl: "https://v2.rdse.site/chaves",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/chaves", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/chaves", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/chaves", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/chaves", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/chaves", isEmbed: true }
         ]
       },
       {
@@ -3024,10 +2995,10 @@
         categoryLabel: "Séries 24H",
         logo: "https://i.imgur.com/885nK3E.png",
         badge: "CANAL 24H",
-        embedUrl: "https://v3.rdse.site/chapolin",
+        embedUrl: "https://v2.rdse.site/chapolin",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/chapolin", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/chapolin", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/chapolin", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/chapolin", isEmbed: true }
         ]
       },
       {
@@ -3037,10 +3008,11 @@
         categoryLabel: "Séries 24H",
         logo: "https://i.imgur.com/885nK3E.png",
         badge: "CANAL 24H",
-        embedUrl: "https://v3.rdse.site/chris",
+        embedUrl: "https://v2.rdse.site/chris",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/chris", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/chris", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/chris", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/chris", isEmbed: true },
+          { name: "Servidor 3 (RDCanais)", url: "https://rdcanais.net/chris", isEmbed: true }
         ]
       },
       {
@@ -3050,10 +3022,10 @@
         categoryLabel: "Séries 24H",
         logo: "https://i.imgur.com/885nK3E.png",
         badge: "CANAL 24H",
-        embedUrl: "https://v3.rdse.site/simpsons",
+        embedUrl: "https://v2.rdse.site/simpsons",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/simpsons", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/simpsons", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/simpsons", isEmbed: true },
+          { name: "Servidor 2 (WarezCDN)", url: "https://warezcdn.lat/canal/simpsons", isEmbed: true }
         ]
       },
       {
@@ -3063,10 +3035,9 @@
         categoryLabel: "Séries 24H",
         logo: "https://i.imgur.com/885nK3E.png",
         badge: "CANAL 24H",
-        embedUrl: "https://v3.rdse.site/futurama",
+        embedUrl: "https://v2.rdse.site/futurama",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/futurama", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/futurama", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/futurama", isEmbed: true }
         ]
       },
       {
@@ -3076,10 +3047,9 @@
         categoryLabel: "Animes 24H",
         logo: "https://i.imgur.com/885nK3E.png",
         badge: "CANAL 24H",
-        embedUrl: "https://v3.rdse.site/dbz",
+        embedUrl: "https://v2.rdse.site/dbz",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/dbz", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/dbz", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/dbz", isEmbed: true }
         ]
       },
       {
@@ -3089,10 +3059,9 @@
         categoryLabel: "Animes 24H",
         logo: "https://i.imgur.com/885nK3E.png",
         badge: "CANAL 24H",
-        embedUrl: "https://v3.rdse.site/naruto",
+        embedUrl: "https://v2.rdse.site/naruto",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/naruto", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/naruto", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/naruto", isEmbed: true }
         ]
       },
       {
@@ -3102,10 +3071,9 @@
         categoryLabel: "Desenhos 24H",
         logo: "https://i.imgur.com/885nK3E.png",
         badge: "CANAL 24H",
-        embedUrl: "https://v3.rdse.site/picapau",
+        embedUrl: "https://v2.rdse.site/picapau",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/picapau", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/picapau", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/picapau", isEmbed: true }
         ]
       },
       {
@@ -3115,10 +3083,9 @@
         categoryLabel: "Séries 24H",
         logo: "https://i.imgur.com/885nK3E.png",
         badge: "CANAL 24H",
-        embedUrl: "https://v3.rdse.site/friends",
+        embedUrl: "https://v2.rdse.site/friends",
         fallbacks: [
-          { name: "Servidor 1 HD", url: "https://v3.rdse.site/friends", isEmbed: true },
-          { name: "Servidor 2 HD", url: "https://reidoscanais.st/canal/friends", isEmbed: true }
+          { name: "Servidor 1 HD", url: "https://v2.rdse.site/friends", isEmbed: true }
         ]
       }
     ];
@@ -3190,10 +3157,10 @@
 
             if (fallbacks.length === 0) {
               fallbacks.push(
-                { name: 'Premiere 1 HD', url: 'https://v3.rdse.site/premiere', isEmbed: true },
-                { name: 'SporTV HD', url: 'https://v3.rdse.site/sportv', isEmbed: true },
-                { name: 'CazéTV HD', url: 'https://v3.rdse.site/cazetv', isEmbed: true },
-                { name: 'ESPN HD', url: 'https://v3.rdse.site/espn', isEmbed: true }
+                { name: 'Premiere 1 HD', url: 'https://v2.rdse.site/premiere', isEmbed: true },
+                { name: 'SporTV HD', url: 'https://v2.rdse.site/sportv', isEmbed: true },
+                { name: 'CazéTV HD', url: 'https://v2.rdse.site/cazetv', isEmbed: true },
+                { name: 'ESPN HD', url: 'https://v2.rdse.site/espn', isEmbed: true }
               );
             }
 
@@ -3235,9 +3202,9 @@
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere 1 HD', url: 'https://v3.rdse.site/premiere', isEmbed: true },
-              { name: 'SporTV HD', url: 'https://v3.rdse.site/sportv', isEmbed: true },
-              { name: 'Premiere 2 HD', url: 'https://reidoscanais.st/canal/premiere', isEmbed: true }
+              { name: 'Premiere 1 HD', url: 'https://v2.rdse.site/premiere', isEmbed: true },
+              { name: 'SporTV HD', url: 'https://v2.rdse.site/sportv', isEmbed: true },
+              { name: 'Servidor 3 (WarezCDN)', url: 'https://warezcdn.lat/canal/premiere', isEmbed: true }
             ]
           },
           {
@@ -3254,9 +3221,9 @@
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'CazéTV HD', url: 'https://v3.rdse.site/cazetv', isEmbed: true },
-              { name: 'Premiere 1 HD', url: 'https://v3.rdse.site/premiere', isEmbed: true },
-              { name: 'TV Globo HD', url: 'https://v3.rdse.site/globo', isEmbed: true }
+              { name: 'CazéTV HD', url: 'https://v2.rdse.site/cazetv', isEmbed: true },
+              { name: 'Premiere 1 HD', url: 'https://v2.rdse.site/premiere', isEmbed: true },
+              { name: 'TV Globo HD', url: 'https://v2.rdse.site/globo-sp', isEmbed: true }
             ]
           },
           {
@@ -3273,9 +3240,9 @@
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'ESPN HD', url: 'https://v3.rdse.site/espn', isEmbed: true },
-              { name: 'TNT Sports HD', url: 'https://v3.rdse.site/tnt', isEmbed: true },
-              { name: 'CazéTV HD', url: 'https://v3.rdse.site/cazetv', isEmbed: true }
+              { name: 'ESPN HD', url: 'https://v2.rdse.site/espn', isEmbed: true },
+              { name: 'TNT Sports HD', url: 'https://v2.rdse.site/tnt', isEmbed: true },
+              { name: 'Servidor 3 (WarezCDN)', url: 'https://warezcdn.lat/canal/espn', isEmbed: true }
             ]
           },
           {
@@ -3292,8 +3259,9 @@
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'ESPN HD', url: 'https://v3.rdse.site/espn', isEmbed: true },
-              { name: 'ESPN 2 HD', url: 'https://reidoscanais.st/canal/espn', isEmbed: true }
+              { name: 'ESPN HD', url: 'https://v2.rdse.site/espn', isEmbed: true },
+              { name: 'ESPN 2 HD', url: 'https://v2.rdse.site/espn2', isEmbed: true },
+              { name: 'Servidor 3 (WarezCDN)', url: 'https://warezcdn.lat/canal/espn', isEmbed: true }
             ]
           }
         ];
@@ -3793,6 +3761,12 @@
     }
 
     function openLivePlayer(item, fallbackIdx = 0) {
+      hideVideoErrorOverlay();
+      if (videoLoadTimeout) {
+        clearTimeout(videoLoadTimeout);
+        videoLoadTimeout = null;
+      }
+
       const fallbacks = item.fallbacks && item.fallbacks.length > 0 ? item.fallbacks : [
         {
           name: 'Transmissão Principal',
@@ -3848,19 +3822,22 @@
       populateLiveSidebar(item, currentOpt);
 
       // Inicia stream
-      playLiveStreamUrl(streamUrl, isEmbed, title);
+      playLiveStreamUrl(streamUrl, isEmbed, title, item, fallbackIdx);
     }
 
-    function playLiveStreamUrl(streamUrl, isEmbed, title) {
+    function playLiveStreamUrl(streamUrl, isEmbed, title, item, fallbackIdx) {
+      hideVideoErrorOverlay();
+
       if (activeHls) {
-        activeHls.destroy();
+        try { activeHls.destroy(); } catch (e) {}
         activeHls = null;
       }
 
       if (isEmbed) {
-        // Modo Embed Sandboxed (Zero Anúncios)
+        // Modo Embed (Zero Anúncios)
         elements.videoPlayer.pause();
-        elements.videoPlayer.src = '';
+        elements.videoPlayer.removeAttribute('src');
+        elements.videoPlayer.load();
         elements.videoPlayer.style.display = 'none';
 
         elements.embedPlayer.style.display = 'block';
@@ -3886,16 +3863,11 @@
           activeHls.on(Hls.Events.ERROR, (event, data) => {
             if (data.fatal) {
               console.warn('HLS Live Fatal Error:', data.type);
-              switch (data.type) {
-                case Hls.ErrorTypes.NETWORK_ERROR:
-                  activeHls.startLoad();
-                  break;
-                case Hls.ErrorTypes.MEDIA_ERROR:
-                  activeHls.recoverMediaError();
-                  break;
-                default:
-                  activeHls.destroy();
-                  break;
+              try { activeHls.destroy(); } catch (e) {}
+              activeHls = null;
+              if (item && item.fallbacks && item.fallbacks[fallbackIdx + 1]) {
+                console.log(`HLS indisponível, alternando automaticamente para Servidor ${fallbackIdx + 2}`);
+                openLivePlayer(item, fallbackIdx + 1);
               }
             }
           });
@@ -4222,8 +4194,10 @@
 
     function startVideoLoadTimeout() {
       if (videoLoadTimeout) clearTimeout(videoLoadTimeout);
+      if (currentPlaybackMeta?.mediaType === 'live') return;
       // Se em 14 segundos não carregar metadados ou iniciar playback, detecta timeout/falha no servidor
       videoLoadTimeout = setTimeout(() => {
+        if (currentPlaybackMeta?.mediaType === 'live') return;
         if (elements.videoPlayer && elements.videoPlayer.readyState === 0 && elements.videoModal.style.display === 'flex') {
           showVideoErrorOverlay('timeout', 'O servidor de transmissão demorou muito para responder (tempo limite esgotado). O link pode estar inacessível ou fora do ar.');
         }
@@ -4498,6 +4472,10 @@
 
     // Eventos do player de vídeo para tratamento de disponibilidade
     elements.videoPlayer.addEventListener('error', () => {
+      // Ignora erro se for transmissão ao vivo, se videoPlayer estiver oculto ou sem src válido
+      if (currentPlaybackMeta?.mediaType === 'live') return;
+      if (!elements.videoPlayer.src || elements.videoPlayer.src === 'about:blank' || elements.videoPlayer.style.display === 'none') return;
+
       if (videoLoadTimeout) {
         clearTimeout(videoLoadTimeout);
         videoLoadTimeout = null;
