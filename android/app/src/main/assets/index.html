@@ -2753,12 +2753,13 @@
 
     async function fetchLiveSportsEvents() {
       const events = [];
+      const API = 'https://api.reidoscanais.st';
 
-      // 1. Tenta API do Rei dos Embeds (/api/eventos) â€” timeout rÃ¡pido pois DNS pode estar bloqueado
+      // 1. API oficial reidoscanais.st — eventos ao vivo
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1000);
-        const res = await fetch('https://reidosembeds.online/api/eventos', {
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(`${API}/sports?status=live`, {
           signal: controller.signal,
           headers: { 'Accept': 'application/json' }
         });
@@ -2766,117 +2767,118 @@
 
         if (res.ok) {
           const json = await res.json();
-          const list = Array.isArray(json) ? json : (json.data || json.eventos || []);
-          list.forEach(ev => {
-            const title = ev.title || `${ev.time1 || ev.home_team || ''} x ${ev.time2 || ev.away_team || ''}`.trim();
+          (json.data || []).forEach(ev => {
+            const title = ev.title || `${ev.teams?.home?.name || ''} x ${ev.teams?.away?.name || ''}`.trim();
             if (!title) return;
 
-            const homeTeam = ev.time1 || ev.home_team || title.split(/ x | vs /i)[0] || 'Time 1';
-            const awayTeam = ev.time2 || ev.away_team || title.split(/ x | vs /i)[1] || 'Time 2';
+            const homeTeam = ev.teams?.home?.name || title.split(/ x | vs /i)[0]?.trim() || 'Time 1';
+            const awayTeam = ev.teams?.away?.name || title.split(/ x | vs /i)[1]?.trim() || 'Time 2';
 
             const fallbacks = [];
             if (Array.isArray(ev.embeds)) {
               ev.embeds.forEach((emb, i) => {
-                const embUrl = emb.embed_url || emb.url || emb.link || (typeof emb === 'string' ? emb : '');
-                if (embUrl && typeof embUrl === 'string' && !embUrl.includes('rdembed.sbs')) {
-                  fallbacks.push({ name: emb.name || emb.provider || `Canal ${i + 1} HD`, url: embUrl, isEmbed: true });
-                }
+                const embUrl = emb.embed_url || '';
+                if (embUrl) fallbacks.push({ name: emb.provider || emb.quality || `Canal ${i + 1}`, url: embUrl, isEmbed: true });
               });
             }
             if (fallbacks.length === 0) {
               fallbacks.push(
-                { name: 'Premiere 1', url: 'https://rdcanais.net/premiere', isEmbed: true },
-                { name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true },
-                { name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true }
+                { name: 'Premiere', url: 'https://rdcanais.net/premiere', isEmbed: true },
+                { name: 'SporTV', url: 'https://rdcanais.net/sportv', isEmbed: true }
               );
+            }
+
+            let matchTime = 'AO VIVO';
+            if (ev.start_timestamp) {
+              const d = new Date(ev.start_timestamp * 1000);
+              matchTime = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            } else if (ev.start_time) {
+              matchTime = ev.start_time.slice(11, 16) || 'AO VIVO';
             }
 
             events.push({
               id: `live_ev_${ev.id || Math.random().toString(36).substring(2, 9)}`,
               name: title,
-              homeTeam: homeTeam,
-              awayTeam: awayTeam,
-              homeLogo: (ev.time1_logo && !ev.time1_logo.includes('8Q8Q4zE')) ? ev.time1_logo : ((ev.home_logo && !ev.home_logo.includes('8Q8Q4zE')) ? ev.home_logo : ''),
-              awayLogo: (ev.time2_logo && !ev.time2_logo.includes('8Q8Q4zE')) ? ev.time2_logo : ((ev.away_logo && !ev.away_logo.includes('8Q8Q4zE')) ? ev.away_logo : ''),
-              matchTime: ev.start_time || ev.time || ev.hora || ev.horario || 'AO VIVO',
-              league: ev.category || ev.campeonato || ev.torneio || 'Futebol Ao Vivo',
+              homeTeam,
+              awayTeam,
+              homeLogo: ev.teams?.home?.logo || ev.poster || '',
+              awayLogo: ev.teams?.away?.logo || '',
+              matchTime,
+              league: ev.competition || ev.category || 'Futebol Ao Vivo',
               categoryKey: 'JOGOS',
               categoryLabel: 'Jogos de Hoje',
               isLiveMatch: true,
-              isLiveNow: (ev.status === 'live' || !ev.status),
-              fallbacks: fallbacks
+              isLiveNow: true,
+              fallbacks
             });
           });
         }
       } catch (err) {
-        console.log('Rei dos Embeds eventos API:', err.message);
+        console.log('api.reidoscanais.st/sports live:', err.message);
       }
 
-      // 2. Se vazio, tenta BRFLIX (/api/live/eventos)
+      // 2. Se vazio, tenta upcoming (em breve) da mesma API
       if (events.length === 0) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 3500);
-          const res = await fetch('https://brflix.online/api/live/eventos', {
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const res = await fetch(`${API}/sports?status=upcoming&popular=true`, {
             signal: controller.signal,
             headers: { 'Accept': 'application/json' }
           });
           clearTimeout(timeoutId);
 
           if (res.ok) {
-            const data = await res.json();
-            const list = Array.isArray(data) ? data : (data.eventos || data.data || []);
-            list.forEach(ev => {
-              const title = ev.title || ev.nome || `${ev.home_team || ev.time1 || ''} x ${ev.away_team || ev.time2 || ''}`.trim();
+            const json = await res.json();
+            (json.data || []).forEach(ev => {
+              const title = ev.title || `${ev.teams?.home?.name || ''} x ${ev.teams?.away?.name || ''}`.trim();
               if (!title) return;
 
-              const homeTeam = ev.home_team || ev.time1 || title.split(/ x | vs /i)[0] || 'Time 1';
-              const awayTeam = ev.away_team || ev.time2 || title.split(/ x | vs /i)[1] || 'Time 2';
+              const homeTeam = ev.teams?.home?.name || title.split(/ x | vs /i)[0]?.trim() || 'Time 1';
+              const awayTeam = ev.teams?.away?.name || title.split(/ x | vs /i)[1]?.trim() || 'Time 2';
 
               const fallbacks = [];
-              if (ev.play_event_direct_url) {
-                fallbacks.push({ name: 'TransmissÃ£o Direta HD', url: ev.play_event_direct_url, isEmbed: !ev.play_event_direct_url.includes('.m3u8') });
-              }
               if (Array.isArray(ev.embeds)) {
                 ev.embeds.forEach((emb, i) => {
-                  const embUrl = emb.embed_url || emb.url || emb.link || (typeof emb === 'string' ? emb : '');
-                  if (embUrl && typeof embUrl === 'string') {
-                    fallbacks.push({ name: emb.name || `Canal ${i + 1} HD`, url: embUrl, isEmbed: true });
-                  }
+                  const embUrl = emb.embed_url || '';
+                  if (embUrl) fallbacks.push({ name: emb.provider || `Canal ${i + 1}`, url: embUrl, isEmbed: true });
                 });
               }
-
               if (fallbacks.length === 0) {
-                fallbacks.push(
-                  { name: 'Premiere 1', url: 'https://rdcanais.net/premiere', isEmbed: true },
-                  { name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true },
-                  { name: 'CazÃ©TV HD', url: 'https://www.youtube-nocookie.com/embed/live_stream?channel=UCjE8gVqE5lM_x3Z_t_9y0YQ', isEmbed: true }
-                );
+                fallbacks.push({ name: 'Premiere', url: 'https://rdcanais.net/premiere', isEmbed: true });
+              }
+
+              let matchTime = 'EM BREVE';
+              if (ev.start_timestamp) {
+                const d = new Date(ev.start_timestamp * 1000);
+                matchTime = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+              } else if (ev.start_time) {
+                matchTime = ev.start_time.slice(11, 16) || 'EM BREVE';
               }
 
               events.push({
                 id: `live_ev_${ev.id || Math.random().toString(36).substring(2, 9)}`,
                 name: title,
-                homeTeam: homeTeam,
-                awayTeam: awayTeam,
-                homeLogo: (ev.home_logo && !ev.home_logo.includes('8Q8Q4zE')) ? ev.home_logo : ((ev.time1_logo && !ev.time1_logo.includes('8Q8Q4zE')) ? ev.time1_logo : ''),
-                awayLogo: (ev.away_logo && !ev.away_logo.includes('8Q8Q4zE')) ? ev.away_logo : ((ev.time2_logo && !ev.time2_logo.includes('8Q8Q4zE')) ? ev.time2_logo : ''),
-                matchTime: ev.time || ev.hora || ev.horario || 'AO VIVO',
-                league: ev.category || ev.campeonato || ev.torneio || 'Futebol Ao Vivo',
+                homeTeam,
+                awayTeam,
+                homeLogo: ev.teams?.home?.logo || ev.poster || '',
+                awayLogo: ev.teams?.away?.logo || '',
+                matchTime,
+                league: ev.competition || ev.category || 'Futebol',
                 categoryKey: 'JOGOS',
                 categoryLabel: 'Jogos de Hoje',
                 isLiveMatch: true,
-                isLiveNow: true,
-                fallbacks: fallbacks
+                isLiveNow: false,
+                fallbacks
               });
             });
           }
         } catch (err) {
-          console.log('BRFLIX Live Events API status:', err.message);
+          console.log('api.reidoscanais.st/sports upcoming:', err.message);
         }
       }
 
-      // 3. Grade de contingÃªncia para os grandes jogos de hoje
+      // 3. Grade de contingencia (API offline ou DNS bloqueado)
       if (events.length === 0) {
         const topMatches = [
           {
@@ -2887,39 +2889,38 @@
             homeLogo: '',
             awayLogo: '',
             matchTime: 'AO VIVO',
-            league: 'BrasileirÃ£o SÃ©rie A',
+            league: 'Brasileirao Serie A',
             categoryKey: 'JOGOS',
             categoryLabel: 'Jogos de Hoje',
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere 1', url: 'https://rdcanais.net/premiere', isEmbed: true },
-              { name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true },
-              { name: 'CazÃ©TV HD', url: 'https://www.youtube-nocookie.com/embed/live_stream?channel=UCjE8gVqE5lM_x3Z_t_9y0YQ', isEmbed: true }
+              { name: 'Premiere', url: 'https://rdcanais.net/premiere', isEmbed: true },
+              { name: 'SporTV', url: 'https://rdcanais.net/sportv', isEmbed: true },
+              { name: 'CazéTV', url: 'https://www.youtube-nocookie.com/embed/live_stream?channel=UCjE8gVqE5lM_x3Z_t_9y0YQ', isEmbed: true }
             ]
           },
           {
             id: 'match_br_2',
-            name: 'Corinthians x SÃ£o Paulo',
+            name: 'Corinthians x Sao Paulo',
             homeTeam: 'Corinthians',
-            awayTeam: 'SÃ£o Paulo',
+            awayTeam: 'Sao Paulo',
             homeLogo: '',
             awayLogo: '',
             matchTime: 'AO VIVO',
-            league: 'BrasileirÃ£o SÃ©rie A',
+            league: 'Brasileirao Serie A',
             categoryKey: 'JOGOS',
             categoryLabel: 'Jogos de Hoje',
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
               { name: 'Premiere 2', url: 'https://rdcanais.net/premiere2', isEmbed: true },
-              { name: 'SporTV 2', url: 'https://rdcanais.net/sportv2', isEmbed: true },
-              { name: 'CazÃ©TV HD (0 Delay)', url: 'https://www.youtube-nocookie.com/embed/live_stream?channel=UCjE8gVqE5lM_x3Z_t_9y0YQ', isEmbed: true }
+              { name: 'SporTV 2', url: 'https://rdcanais.net/sportv2', isEmbed: true }
             ]
           },
           {
             id: 'match_br_3',
-            name: 'Real Madrid x Barcelona (El ClÃ¡sico)',
+            name: 'Real Madrid x Barcelona',
             homeTeam: 'Real Madrid',
             awayTeam: 'Barcelona',
             homeLogo: '',
@@ -2931,9 +2932,8 @@
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true },
-              { name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true },
-              { name: 'Space HD', url: 'https://rdcanais.net/space', isEmbed: true }
+              { name: 'ESPN', url: 'https://rdcanais.net/espn', isEmbed: true },
+              { name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true }
             ]
           }
         ];
@@ -2946,8 +2946,8 @@
     async function fetchLiveChannelsFromApi() {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1000);
-        const res = await fetch('https://reidosembeds.online/api/channels', {
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch('https://api.reidoscanais.st/channels', {
           signal: controller.signal,
           headers: { 'Accept': 'application/json' }
         });
@@ -2961,10 +2961,24 @@
             fullLiveCache.forEach(item => {
               if (item.channelSlug && map.has(item.channelSlug)) {
                 const fresh = map.get(item.channelSlug);
-                item.nowTitle = fresh.now_playing_title || fresh.now || item.nowTitle;
-                item.nowProgress = Number(fresh.now_playing_progress || fresh.prog) || item.nowProgress;
-                if (Array.isArray(fresh.now_playing_next_programmes)) {
-                  item.nextProgrammes = fresh.now_playing_next_programmes.map(p => ({ t: p.title || p.t, s: p.start_time || p.s }));
+                // EPG — formato oficial: epg.current / epg.next
+                if (fresh.epg && fresh.epg.current) {
+                  item.nowTitle = fresh.epg.current.title || item.nowTitle;
+                  if (fresh.epg.current.start_time && fresh.epg.current.end_time) {
+                    const elapsed = Date.now() / 1000 - fresh.epg.current.start_time;
+                    const duration = fresh.epg.current.end_time - fresh.epg.current.start_time;
+                    item.nowProgress = duration > 0 ? Math.round((elapsed / duration) * 100) : 0;
+                  }
+                  if (fresh.epg.next) {
+                    item.nextProgrammes = [{ t: fresh.epg.next.title, s: fresh.epg.next.start_time }];
+                  }
+                }
+                // Embeds — atualiza fallbacks se necessário
+                if (Array.isArray(fresh.embeds) && fresh.embeds.length > 0 && item.fallbacks) {
+                  const apiEmbeds = fresh.embeds
+                    .filter(e => e.embed_url)
+                    .map(e => ({ name: e.provider || e.quality || 'HD', url: e.embed_url, isEmbed: true }));
+                  if (apiEmbeds.length > 0) item.fallbacks = apiEmbeds;
                 }
                 updated = true;
               }
@@ -2978,7 +2992,6 @@
         // Silencioso se offline ou bloqueado por DNS
       }
     }
-
     async function fetchXtreamLiveStreams() {
       try {
         const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_live_streams`);
