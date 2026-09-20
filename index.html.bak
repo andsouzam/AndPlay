@@ -2672,29 +2672,6 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
   border: 3px solid #ffc107 !important;
   box-shadow: none !important;
 }
-.tv-floating-back-btn {
-  position: fixed;
-  top: 18px;
-  left: 24px;
-  z-index: 1800;
-  background: rgba(10, 14, 26, 0.92);
-  color: #ffc107;
-  border: 1.5px solid rgba(255, 193, 7, 0.6);
-  padding: 8px 18px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  pointer-events: auto;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.8);
-  transition: transform 0.2s, background 0.2s;
-}
-.tv-floating-back-btn:focus, .tv-floating-back-btn:hover {
-  background: #ffc107;
-  color: #000;
-  transform: scale(1.06);
-  outline: none;
-}
 </style>
 </head>
 <body>
@@ -2786,8 +2763,6 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
     <!-- TELA 2: Tela Cheia de TV com OSD (Zapping Mode) -->
     <!-- TELA 2: Tela Cheia de TV com Overlay Estilo TV a Cabo (Zapping Mode) -->
     <div id="tvFullscreenView" class="tv-fullscreen-view" style="display: none;">
-      <!-- Botão Voltar Físico/Visual no topo esquerdo -->
-      <button id="tvFloatingBackBtn" class="tv-floating-back-btn tv-focusable" tabindex="0">⬅ VOLTAR À CENTRAL</button>
       <!-- Indicador Rápido de Zapping no Canto Superior Direito -->
       <div id="tvTopChannelBadge" class="tv-top-channel-badge hidden">
         <span class="tv-top-ch-num" id="tvTopChNum">CH 001</span>
@@ -7836,7 +7811,7 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
   let tvCurrentMode = 'central'; // 'central' | 'fullscreen' | 'vod'
   let tvOsdTimer = null;
   let tvVodList = [];
-  let tvDrawerTimer = null;`n  let tvVodMode = 'movies';
+  let tvVodMode = 'movies';
 
   // Elementos DOM da TV
   const tvApp = document.getElementById('tvCableApp');
@@ -7999,12 +7974,6 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
       const baseUrl = fallback.url;
       const embedUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'autoplay=1';
       tvEmbed.src = 'about:blank';
-            tvEmbed.onerror = function() {
-        console.warn('[AndPlay TV] Servidor 1 inacessível, alternando automaticamente...');
-        if (ch.fallbacks && ch.fallbacks[1]) {
-          tvEmbed.src = ch.fallbacks[1].url + (ch.fallbacks[1].url.includes('?') ? '&' : '?') + 'autoplay=1';
-        }
-      };
       requestAnimationFrame(() => { tvEmbed.src = embedUrl; });
     } else {
       tvEmbed.style.display = 'none';
@@ -8663,21 +8632,7 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
     }
   }
 
-      const floatBack = document.getElementById('tvFloatingBackBtn');
-    if (floatBack && !floatBack._wired) {
-      floatBack._wired = true;
-      floatBack.addEventListener('click', (e) => {
-        e.stopPropagation();
-        window.handleAndroidBack();
-      });
-      floatBack.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          window.handleAndroidBack();
-        }
-      });
-    }
-    function triggerTvOsd(duration = 5000) {
+  function triggerTvOsd(duration = 5000) {
     if (tvOsdTimer) clearTimeout(tvOsdTimer);
     const topBadge = document.getElementById('tvTopChannelBadge');
     if (tvOsd) tvOsd.classList.remove('hidden');
@@ -8924,10 +8879,6 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
       if (tvOsdTimer) { clearTimeout(tvOsdTimer); tvOsdTimer = null; }
 
       tvDrawer.classList.remove('closed');
-      if (tvDrawerTimer) clearTimeout(tvDrawerTimer);
-      tvDrawerTimer = setTimeout(() => {
-        if (!tvDrawer.classList.contains('closed')) tvDrawer.classList.add('closed');
-      }, 8000);
 
       if (tvPlayingType === 'vod' && tvPlayingSeriesMeta) {
         // Modo Série em reprodução: renderiza gaveta de episódios/temporadas
@@ -9143,7 +9094,7 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
         </div>
         ${isCur ? '<span style="font-size:9px; font-weight:800; background:#00e676; color:#000; padding:2px 6px; border-radius:4px;">NO AR</span>' : ''}
       `;
-      item.addEventListener('click', () => { if(tvDrawerTimer) clearTimeout(tvDrawerTimer);
+      item.addEventListener('click', () => {
         tvTuneChannel(realIdx, true);
         tvDrawer.classList.add('closed');
       });
@@ -13157,29 +13108,6 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
   border: 3px solid #ffc107 !important;
   box-shadow: none !important;
 }
-.tv-floating-back-btn {
-  position: fixed;
-  top: 18px;
-  left: 24px;
-  z-index: 1800;
-  background: rgba(10, 14, 26, 0.92);
-  color: #ffc107;
-  border: 1.5px solid rgba(255, 193, 7, 0.6);
-  padding: 8px 18px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 800;
-  cursor: pointer;
-  pointer-events: auto;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.8);
-  transition: transform 0.2s, background 0.2s;
-}
-.tv-floating-back-btn:focus, .tv-floating-back-btn:hover {
-  background: #ffc107;
-  color: #000;
-  transform: scale(1.06);
-  outline: none;
-}
 </style>
 </head>
 <body>
@@ -13271,8 +13199,6 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
     <!-- TELA 2: Tela Cheia de TV com OSD (Zapping Mode) -->
     <!-- TELA 2: Tela Cheia de TV com Overlay Estilo TV a Cabo (Zapping Mode) -->
     <div id="tvFullscreenView" class="tv-fullscreen-view" style="display: none;">
-      <!-- Botão Voltar Físico/Visual no topo esquerdo -->
-      <button id="tvFloatingBackBtn" class="tv-floating-back-btn tv-focusable" tabindex="0">⬅ VOLTAR À CENTRAL</button>
       <!-- Indicador Rápido de Zapping no Canto Superior Direito -->
       <div id="tvTopChannelBadge" class="tv-top-channel-badge hidden">
         <span class="tv-top-ch-num" id="tvTopChNum">CH 001</span>
@@ -18321,7 +18247,7 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
   let tvCurrentMode = 'central'; // 'central' | 'fullscreen' | 'vod'
   let tvOsdTimer = null;
   let tvVodList = [];
-  let tvDrawerTimer = null;`n  let tvVodMode = 'movies';
+  let tvVodMode = 'movies';
 
   // Elementos DOM da TV
   const tvApp = document.getElementById('tvCableApp');
@@ -18484,12 +18410,6 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
       const baseUrl = fallback.url;
       const embedUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'autoplay=1';
       tvEmbed.src = 'about:blank';
-            tvEmbed.onerror = function() {
-        console.warn('[AndPlay TV] Servidor 1 inacessível, alternando automaticamente...');
-        if (ch.fallbacks && ch.fallbacks[1]) {
-          tvEmbed.src = ch.fallbacks[1].url + (ch.fallbacks[1].url.includes('?') ? '&' : '?') + 'autoplay=1';
-        }
-      };
       requestAnimationFrame(() => { tvEmbed.src = embedUrl; });
     } else {
       tvEmbed.style.display = 'none';
@@ -19148,21 +19068,7 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
     }
   }
 
-      const floatBack = document.getElementById('tvFloatingBackBtn');
-    if (floatBack && !floatBack._wired) {
-      floatBack._wired = true;
-      floatBack.addEventListener('click', (e) => {
-        e.stopPropagation();
-        window.handleAndroidBack();
-      });
-      floatBack.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          window.handleAndroidBack();
-        }
-      });
-    }
-    function triggerTvOsd(duration = 5000) {
+  function triggerTvOsd(duration = 5000) {
     if (tvOsdTimer) clearTimeout(tvOsdTimer);
     const topBadge = document.getElementById('tvTopChannelBadge');
     if (tvOsd) tvOsd.classList.remove('hidden');
@@ -19409,10 +19315,6 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
       if (tvOsdTimer) { clearTimeout(tvOsdTimer); tvOsdTimer = null; }
 
       tvDrawer.classList.remove('closed');
-      if (tvDrawerTimer) clearTimeout(tvDrawerTimer);
-      tvDrawerTimer = setTimeout(() => {
-        if (!tvDrawer.classList.contains('closed')) tvDrawer.classList.add('closed');
-      }, 8000);
 
       if (tvPlayingType === 'vod' && tvPlayingSeriesMeta) {
         // Modo Série em reprodução: renderiza gaveta de episódios/temporadas
@@ -19628,7 +19530,7 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
         </div>
         ${isCur ? '<span style="font-size:9px; font-weight:800; background:#00e676; color:#000; padding:2px 6px; border-radius:4px;">NO AR</span>' : ''}
       `;
-      item.addEventListener('click', () => { if(tvDrawerTimer) clearTimeout(tvDrawerTimer);
+      item.addEventListener('click', () => {
         tvTuneChannel(realIdx, true);
         tvDrawer.classList.add('closed');
       });
