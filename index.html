@@ -450,7 +450,7 @@
 
     .match-vs-container {
       position: absolute;
-      inset: 0;
+      top:0;left:0;right:0;bottom:0;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -1418,7 +1418,7 @@
 
     #tvCableApp {
       position: fixed;
-      inset: 0;
+      top:0;left:0;right:0;bottom:0;
       width: 100vw;
       height: 100vh;
       background: #070709;
@@ -1468,7 +1468,7 @@
 
     .tv-player-box.fullscreen {
       position: fixed;
-      inset: 0;
+      top:0;left:0;right:0;bottom:0;
       width: 100vw;
       height: 100vh;
       border-radius: 0;
@@ -1880,7 +1880,7 @@
     /* TELA 2: Tela Cheia de TV com Overlay Estilo TV a Cabo (Infobar / EPG) */
     .tv-fullscreen-view {
       position: fixed;
-      inset: 0;
+      top:0;left:0;right:0;bottom:0;
       width: 100vw;
       height: 100vh;
       background: transparent !important;
@@ -2487,7 +2487,7 @@
     /* TELA 3: Seção VOD */
     .tv-vod-view {
       position: fixed;
-      inset: 0;
+      top:0;left:0;right:0;bottom:0;
       width: 100vw;
       height: 100vh;
       background: #070709;
@@ -2897,7 +2897,7 @@
     <!-- Reprodutor de Vídeo Unificado para TV (Muda entre PiP e Tela Cheia sem reiniciar o vídeo) -->
     <div id="tvPlayerBox" class="tv-player-box pip">
       <video id="tvVideoPlayer" playsinline preload="auto" autoplay></video>
-      <div id="tvIframeShield" style="position:absolute;inset:0;z-index:90;background:transparent;cursor:default;">
+      <div id="tvIframeShield" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:90;background:transparent;cursor:default;">
       </div>
       <iframe id="tvEmbedPlayer" allowfullscreen="true"
         allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *; clipboard-write *; accelerometer *; gyroscope *"
@@ -2906,7 +2906,7 @@
       <div id="tvChannelWatermark" class="tv-watermark"></div>
       <!-- Overlay invisível que captura o foco do teclado impedindo o iframe de roubar os eventos keydown -->
       <div id="tvKeyCapture" tabindex="0"
-        style="display:none;position:absolute;inset:0;z-index:1400;background:transparent;outline:none;cursor:none;pointer-events:none;"
+        style="display:none;position:absolute;top:0;left:0;right:0;bottom:0;z-index:1400;background:transparent;outline:none;cursor:none;pointer-events:none;"
         aria-label="Foco do controle remoto"></div>
     </div>
 
@@ -3246,7 +3246,7 @@
               ⚡ Transmissão em Tempo Real</div>
             <!-- Overlay de Erro e Tratamento de Streams Indisponíveis (503/404) -->
             <div id="videoErrorOverlay"
-              style="display: none; position: absolute; inset: 0; background: rgba(15, 15, 15, 0.96); z-index: 50; flex-direction: column; align-items: center; justify-content: center; padding: 25px 20px; text-align: center;">
+              style="display: none; position: absolute; top:0;left:0;right:0;bottom:0; background: rgba(15, 15, 15, 0.96); z-index: 50; flex-direction: column; align-items: center; justify-content: center; padding: 25px 20px; text-align: center;">
               <div style="font-size: 46px; margin-bottom: 12px;">⚠️</div>
               <h3 style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px;" id="videoErrorTitle">
                 Conteúdo Temporariamente Indisponível</h3>
