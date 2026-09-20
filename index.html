@@ -87,8 +87,8 @@
       flex-direction: column;
     }
 
-    /* Header */
-    header {
+    /* Header (Apenas na interface Web padrão) */
+    body:not(.tv-mode) > header {
       background: linear-gradient(180deg, rgba(0,0,0,0.96) 0%, rgba(18,18,18,0.98) 100%);
       padding: 14px 30px;
       position: sticky;
@@ -1119,7 +1119,7 @@
        RESPONSIVIDADE MOBILE (SMARTPHONES E TABLETS)
        ========================================== */
     @media (max-width: 768px) {
-      header {
+      body:not(.tv-mode) > header {
         padding: 12px 16px;
         flex-direction: column;
         align-items: stretch;
@@ -1333,7 +1333,7 @@
         grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
         gap: 16px;
       }
-      header {
+      body:not(.tv-mode) > header {
         padding: 12px 20px;
       }
       main {
@@ -1399,15 +1399,13 @@ body.tv-mode > #videoModal {
   justify-content: center;
 }
 .tv-player-box.pip {
-  top: 86px;
-  left: 36px;
-  width: 540px;
-  height: 304px;
-  border-radius: 16px;
+  position: fixed;
+  border-radius: 14px 14px 0 0;
   z-index: 1050;
   box-shadow: 0 10px 35px rgba(0,0,0,0.85);
-  border: 2.5px solid rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.1);
   pointer-events: none;
+  transition: none;
 }
 .tv-player-box.fullscreen {
   position: fixed;
@@ -1480,11 +1478,22 @@ body.tv-mode > #videoModal {
   background: radial-gradient(circle at 15% 15%, #161626 0%, #070709 75%);
 }
 
-.tv-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
+.tv-header,
+header.tv-header {
+  position: static !important;
+  top: auto !important;
+  background: transparent !important;
+  border: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+  padding: 0 0 24px 0 !important;
+  margin-bottom: 0 !important;
+  z-index: 10 !important;
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
 }
 
 .tv-brand {
@@ -1542,7 +1551,7 @@ body.tv-mode > #videoModal {
 /* Hero Row */
 .tv-hero-row {
   display: grid;
-  grid-template-columns: 540px 1fr;
+  grid-template-columns: minmax(320px, 540px) 1fr;
   gap: 24px;
   margin-bottom: 30px;
   min-height: 304px;
@@ -6856,6 +6865,16 @@ body.tv-mode > #videoModal {
       tvTuneChannel(tvCurrentIdx, false);
     }
 
+    // Registra listener de rolagem e redimensionamento para sincronizar o PiP perfeitamente
+    if (tvCentral && !tvCentral._hasScrollSync) {
+      tvCentral._hasScrollSync = true;
+      tvCentral.addEventListener('scroll', syncTvPlayerBoxPosition, { passive: true });
+      window.addEventListener('resize', syncTvPlayerBoxPosition, { passive: true });
+    }
+
+    setTimeout(syncTvPlayerBoxPosition, 80);
+    setTimeout(syncTvPlayerBoxPosition, 300);
+
     // Foca no PiP ao iniciar
     setTimeout(() => {
       const pipCard = document.getElementById('tvPipCard');
@@ -6939,6 +6958,29 @@ body.tv-mode > #videoModal {
     }, 3800);
   }
 
+  // Sincroniza dinamicamente a posição e dimensões do PiP com o frame dentro da Central (acompanha a rolagem da página)
+  function syncTvPlayerBoxPosition() {
+    if (tvCurrentMode !== 'central') return;
+    const placeholder = document.getElementById('tvPipPlaceholder');
+    const playerBox = document.getElementById('tvPlayerBox');
+    if (!placeholder || !playerBox) return;
+
+    const rect = placeholder.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      playerBox.style.top = `${rect.top}px`;
+      playerBox.style.left = `${rect.left}px`;
+      playerBox.style.width = `${rect.width}px`;
+      playerBox.style.height = `${rect.height}px`;
+
+      // Se o frame PiP rolou para fora da área visível (ao rolar os trilhos para baixo), oculta o vídeo para não sobrepor nada
+      if (rect.bottom < 40 || rect.top > window.innerHeight - 40) {
+        playerBox.style.display = 'none';
+      } else {
+        playerBox.style.display = 'flex';
+      }
+    }
+  }
+
   // Alternar entre Telas (Central x Tela Cheia x VOD)
   function setTvViewMode(mode) {
     tvCurrentMode = mode;
@@ -6947,13 +6989,20 @@ body.tv-mode > #videoModal {
       tvVod.style.display = 'none';
       tvFullscreen.style.display = 'flex';
       tvPlayerBox.className = 'tv-player-box fullscreen';
+      tvPlayerBox.style.top = '';
+      tvPlayerBox.style.left = '';
+      tvPlayerBox.style.width = '';
+      tvPlayerBox.style.height = '';
+      tvPlayerBox.style.display = 'flex';
       triggerTvOsd();
     } else if (mode === 'central') {
       tvFullscreen.style.display = 'none';
       tvVod.style.display = 'none';
       tvCentral.style.display = 'flex';
       tvPlayerBox.className = 'tv-player-box pip';
+      tvPlayerBox.style.display = 'flex';
       tvDrawer.classList.add('closed');
+      syncTvPlayerBoxPosition();
       const pip = document.getElementById('tvPipCard');
       if (pip) pip.focus();
     } else if (mode === 'vod') {
@@ -6961,6 +7010,7 @@ body.tv-mode > #videoModal {
       tvFullscreen.style.display = 'none';
       tvVod.style.display = 'flex';
       tvPlayerBox.className = 'tv-player-box pip';
+      tvPlayerBox.style.display = 'none';
       const backBtn = document.getElementById('tvVodBack');
       if (backBtn) backBtn.focus();
     }
@@ -7665,6 +7715,7 @@ body.tv-mode > #videoModal {
     if (window.initTvCableBox) {
       await window.initTvCableBox();
     }
+    setTimeout(syncTvPlayerBoxPosition, 100);
   };
 
   window.exitTvMode = function() {
