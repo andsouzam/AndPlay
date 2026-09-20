@@ -2107,6 +2107,8 @@ header.tv-header {
       <iframe id="tvEmbedPlayer" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="no-referrer-when-downgrade"></iframe>
       <div id="tvLiveBadge" class="tv-player-live-badge"><span class="tv-pulse"></span> NO AR</div>
       <div id="tvChannelWatermark" class="tv-watermark">AndPlay TV</div>
+      <!-- Overlay invisível que captura o foco do teclado impedindo o iframe de roubar os eventos keydown -->
+      <div id="tvKeyCapture" tabindex="0" style="display:none;position:absolute;inset:0;z-index:1400;background:transparent;outline:none;cursor:none;pointer-events:all;" aria-label="Foco do controle remoto"></div>
     </div>
 
     <!-- TELA 1: Central de TV por Assinatura (Hub Screen) -->
@@ -6880,6 +6882,21 @@ header.tv-header {
       const pipCard = document.getElementById('tvPipCard');
       if (pipCard) pipCard.focus();
     }, 200);
+
+    // Recupera o foco do teclado quando o iframe o rouba (cross-origin iframes capturam eventos keydown)
+    // Roda a cada 400ms e, se o modo for fullscreen, força o foco de volta ao overlay #tvKeyCapture
+    if (!window._tvFocusKeepAlive) {
+      window._tvFocusKeepAlive = setInterval(() => {
+        if (tvCurrentMode !== 'fullscreen') return;
+        const kc = document.getElementById('tvKeyCapture');
+        if (!kc) return;
+        const ae = document.activeElement;
+        // Se o foco não está no overlay, rouba de volta
+        if (ae !== kc) {
+          kc.focus({ preventScroll: true });
+        }
+      }, 400);
+    }
   };
 
   // Sintonizar Canal
@@ -6897,15 +6914,24 @@ header.tv-header {
       tvVideo.style.display = 'none';
       tvVideo.pause();
       tvEmbed.style.display = 'block';
-      if (tvEmbed.src !== fallback.url) {
-        tvEmbed.src = fallback.url;
-      }
+      // Adiciona ?autoplay=1 para solicitar autoplay ao player do embed
+      const baseUrl = fallback.url;
+      const embedUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'autoplay=1';
+      // Sempre força reload limpando src antes (garante troca de canal e reautoplay)
+      tvEmbed.src = 'about:blank';
+      requestAnimationFrame(() => { tvEmbed.src = embedUrl; });
     } else {
       tvEmbed.style.display = 'none';
       tvEmbed.src = 'about:blank';
       tvVideo.style.display = 'block';
       tvVideo.src = fallback.url;
       tvVideo.play().catch(() => {});
+    }
+
+    // Mantém o foco no overlay de teclado após a troca de canal em fullscreen
+    if (tvCurrentMode === 'fullscreen') {
+      const kc = document.getElementById('tvKeyCapture');
+      if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 100);
     }
 
     // Atualiza textos do PiP
@@ -6984,6 +7010,7 @@ header.tv-header {
   // Alternar entre Telas (Central x Tela Cheia x VOD)
   function setTvViewMode(mode) {
     tvCurrentMode = mode;
+    const tvKc = document.getElementById('tvKeyCapture');
     if (mode === 'fullscreen') {
       tvCentral.style.display = 'none';
       tvVod.style.display = 'none';
@@ -6994,6 +7021,12 @@ header.tv-header {
       tvPlayerBox.style.width = '';
       tvPlayerBox.style.height = '';
       tvPlayerBox.style.display = 'flex';
+      // Ativa overlay de captura de teclado (impede iframe de roubar foco)
+      if (tvKc) {
+        tvKc.style.display = 'block';
+        tvKc.style.pointerEvents = 'all';
+        setTimeout(() => { tvKc.focus({ preventScroll: true }); }, 150);
+      }
       triggerTvOsd();
     } else if (mode === 'central') {
       tvFullscreen.style.display = 'none';
@@ -7001,6 +7034,8 @@ header.tv-header {
       tvCentral.style.display = 'flex';
       tvPlayerBox.className = 'tv-player-box pip';
       tvPlayerBox.style.display = 'flex';
+      // Desativa overlay — na central o foco vai para o PiP card
+      if (tvKc) { tvKc.style.display = 'none'; tvKc.style.pointerEvents = 'none'; }
       tvDrawer.classList.add('closed');
       syncTvPlayerBoxPosition();
       const pip = document.getElementById('tvPipCard');
@@ -7011,6 +7046,7 @@ header.tv-header {
       tvVod.style.display = 'flex';
       tvPlayerBox.className = 'tv-player-box pip';
       tvPlayerBox.style.display = 'none';
+      if (tvKc) { tvKc.style.display = 'none'; tvKc.style.pointerEvents = 'none'; }
       const backBtn = document.getElementById('tvVodBack');
       if (backBtn) backBtn.focus();
     }
