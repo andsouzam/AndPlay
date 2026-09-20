@@ -7750,19 +7750,6 @@ header.tv-header {
     }
   }
 
-    // Atualiza textos do PiP
-    const pipName = document.getElementById('tvPipName');
-    const pipEpg = document.getElementById('tvPipEpg');
-    if (pipName) pipName.textContent = `${String(tvCurrentIdx + 1).padStart(3, '0')} - ${ch.name}`;
-    if (pipEpg) pipEpg.textContent = ch.nowTitle ? `🔴 No Ar: ${ch.nowTitle}` : (ch.categoryLabel || 'Transmissão Ao Vivo HD');
-
-    // Atualiza OSD (confirmado)
-    updateTvOsd(ch, tvCurrentIdx, false);
-    if (showOsdBanner && tvCurrentMode === 'fullscreen') {
-      triggerTvOsd();
-    }
-  }
-
   // Zapping de Canais com Debounce de 3 segundos
   // Mostra as informações do canal na hora, mas só carrega o vídeo se o usuário parar por 3s ou teclar Enter.
   // Pode ser cancelado com Esc/Backspace, revertendo ao canal atual sem trocar o vídeo.
@@ -8070,8 +8057,6 @@ header.tv-header {
         }
       }
     }
-  }
-
   }
 
   function triggerTvOsd(duration = 5000) {
@@ -8485,51 +8470,50 @@ header.tv-header {
     const catsEl      = document.getElementById('tvDrawerCats');
     const listEl      = document.getElementById('tvDrawerChannels');
 
-    if (drawerTitle) drawerTitle.textContent = `📺 ${meta.seriesItem.name || 'Série'}`;
-    if (drawerHint)  drawerHint.textContent  = '◀▶ Temporada • ▲▼ Episódio • OK Assistir';
+    if (drawerTitle) drawerTitle.textContent = '[TV] ' + (meta.seriesItem.name || 'Serie');
+    if (drawerHint)  drawerHint.textContent  = 'Temp: Esq/Dir  |  Episodio: Cima/Baixo  |  OK: Assistir';
 
     // Garante que os episódios estejam carregados
     let episodesBySeason = meta.episodesBySeason;
     if (!episodesBySeason) {
-      if (listEl) listEl.innerHTML = '<div style="color:#ffc107;font-size:13px;padding:20px;text-align:center;">Carregando episódios...</div>';
+      if (listEl) listEl.innerHTML = '<div style="color:#ffc107;font-size:13px;padding:20px;text-align:center;">Carregando episodios...</div>';
       try {
-        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series_info&series_id=${meta.seriesId}`);
+        const res = await fetch(CONFIG.server + '/player_api.php?username=' + CONFIG.user + '&password=' + CONFIG.pass + '&action=get_series_info&series_id=' + meta.seriesId);
         const data = await res.json();
         episodesBySeason = data.episodes || {};
-        // Cacheia no seriesItem para reutilização
         meta.seriesItem._cachedEpisodes = episodesBySeason;
         meta.episodesBySeason = episodesBySeason;
-        tvPlayingSeriesMeta.episodesBySeason = episodesBySeason;
+        if (tvPlayingSeriesMeta) tvPlayingSeriesMeta.episodesBySeason = episodesBySeason;
       } catch (err) {
-        if (listEl) listEl.innerHTML = `<div style="color:#e50914;padding:20px;">Erro ao carregar: ${err.message}</div>`;
+        if (listEl) listEl.innerHTML = '<div style="color:#e50914;padding:20px;">Erro ao carregar episodios.</div>';
         return;
       }
     }
 
-    const seasons = Object.keys(episodesBySeason).sort((a, b) => Number(a) - Number(b));
+    const seasons = Object.keys(episodesBySeason).sort(function(a, b) { return Number(a) - Number(b); });
     if (seasons.length === 0) {
-      if (listEl) listEl.innerHTML = '<div style="color:#888;padding:20px;text-align:center;">Nenhum episódio encontrado.</div>';
+      if (listEl) listEl.innerHTML = '<div style="color:#888;padding:20px;text-align:center;">Nenhum episodio encontrado.</div>';
       return;
     }
 
     let currentSeason = meta.seasonNum || seasons[0];
-    if (!seasons.includes(currentSeason)) currentSeason = seasons[0];
+    if (seasons.indexOf(currentSeason) === -1) currentSeason = seasons[0];
 
     // Renderiza pills de temporada
     if (catsEl) {
       catsEl.style.display = 'flex';
       catsEl.innerHTML = '';
-      seasons.forEach((sNum) => {
+      seasons.forEach(function(sNum) {
         const pill = document.createElement('button');
-        pill.className = `tv-epg-cat-pill tv-focusable${sNum === currentSeason ? ' active' : ''}`;
+        pill.className = 'tv-epg-cat-pill tv-focusable' + (sNum === currentSeason ? ' active' : '');
         pill.dataset.season = sNum;
-        pill.textContent = `T${sNum}`;
-        pill.addEventListener('click', () => {
-          catsEl.querySelectorAll('.tv-epg-cat-pill').forEach(p => p.classList.remove('active'));
+        pill.textContent = 'T' + sNum;
+        pill.addEventListener('click', function() {
+          catsEl.querySelectorAll('.tv-epg-cat-pill').forEach(function(p) { p.classList.remove('active'); });
           pill.classList.add('active');
           currentSeason = sNum;
           renderEpisodeList(sNum);
-          setTimeout(() => {
+          setTimeout(function() {
             const first = listEl.querySelector('.tv-drawer-item');
             if (first) { first.focus(); first.scrollIntoView({ block: 'nearest' }); }
           }, 50);
@@ -8542,29 +8526,31 @@ header.tv-header {
       if (!listEl) return;
       listEl.innerHTML = '';
       const eps = episodesBySeason[sNum] || [];
-      eps.forEach((ep) => {
+      eps.forEach(function(ep) {
         const item = document.createElement('div');
         const isPlaying = (sNum === meta.seasonNum && ep.episode_num === meta.ep.episode_num);
-        item.className = `tv-drawer-item tv-focusable${isPlaying ? ' active-channel' : ''}`;
+        item.className = 'tv-drawer-item tv-focusable' + (isPlaying ? ' active-channel' : '');
         item.tabIndex = 0;
-        const epTitle = ep.title || `Episódio ${ep.episode_num}`;
-        const durSec  = ep.info?.duration_secs || 0;
-        const durMin  = durSec > 0 ? `${Math.round(durSec / 60)} min` : (ep.info?.duration || '');
-        item.innerHTML = `
-          <span style="font-size:11px;font-weight:900;color:#ffc107;min-width:30px;">E${String(ep.episode_num).padStart(2,'0')}</span>
-          <div style="flex:1;overflow:hidden;">
-            <div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${epTitle}</div>
-            ${durMin ? `<div style="font-size:10px;color:#aaa;">⏱ ${durMin}</div>` : ''}
-          </div>
-          ${isPlaying ? '<span style="font-size:9px;font-weight:900;background:#00e676;color:#000;padding:2px 7px;border-radius:4px;white-space:nowrap;">ASSISTINDO</span>' : ''}
-        `;
-        const play = () => {
-          // Salva os episodesBySeason antes de trocar (para não precisar buscar de novo)
-          const updatedSeriesItem = { ...meta.seriesItem, _cachedEpisodes: episodesBySeason };
-          tvPlaySeriesEpisode(updatedSeriesItem, ep, sNum);
-        };
-        item.addEventListener('click', play);
-        item.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); play(); } });
+        const epTitle = ep.title || ('Episodio ' + ep.episode_num);
+        const durSec  = (ep.info && ep.info.duration_secs) ? Number(ep.info.duration_secs) : 0;
+        const durMin  = durSec > 0 ? (Math.round(durSec / 60) + ' min') : ((ep.info && ep.info.duration) ? ep.info.duration : '');
+        const epNum   = String(ep.episode_num).padStart(2, '0');
+        const durHTML = durMin ? ('<div style="font-size:10px;color:#aaa;">' + durMin + '</div>') : '';
+        const playBadge = isPlaying ? '<span style="font-size:9px;font-weight:900;background:#00e676;color:#000;padding:2px 7px;border-radius:4px;white-space:nowrap;">ASSISTINDO</span>' : '';
+        item.innerHTML =
+          '<span style="font-size:11px;font-weight:900;color:#ffc107;min-width:30px;">E' + epNum + '</span>' +
+          '<div style="flex:1;overflow:hidden;">' +
+            '<div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + epTitle + '</div>' +
+            durHTML +
+          '</div>' +
+          playBadge;
+        item.addEventListener('click', function() {
+          const updated = Object.assign({}, meta.seriesItem, { _cachedEpisodes: episodesBySeason });
+          tvPlaySeriesEpisode(updated, ep, sNum);
+        });
+        item.addEventListener('keydown', function(ev) {
+          if (ev.key === 'Enter') { ev.preventDefault(); const updated = Object.assign({}, meta.seriesItem, { _cachedEpisodes: episodesBySeason }); tvPlaySeriesEpisode(updated, ep, sNum); }
+        });
         listEl.appendChild(item);
       });
     }
