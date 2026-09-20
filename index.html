@@ -2662,6 +2662,15 @@ body.tv-mode .tv-top-channel-badge {
   backdrop-filter: none !important;
   background: rgba(6, 10, 20, 0.97) !important;
 }
+body.tv-mode * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
+  transform: scale(1.02) !important;
+  border: 3px solid #ffc107 !important;
+  box-shadow: none !important;
+}
 </style>
 </head>
 <body>
@@ -2670,7 +2679,7 @@ body.tv-mode .tv-top-channel-badge {
     <!-- Reprodutor de Vídeo Unificado para TV (Muda entre PiP e Tela Cheia sem reiniciar o vídeo) -->
     <div id="tvPlayerBox" class="tv-player-box pip">
       <video id="tvVideoPlayer" playsinline preload="auto" autoplay></video>
-      <iframe id="tvEmbedPlayer" allowfullscreen="true" allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *; clipboard-write *; accelerometer *; gyroscope *" referrerpolicy="no-referrer"></iframe>
+      <div id="tvIframeShield" style="position:absolute;inset:0;z-index:90;background:transparent;cursor:default;"></div>`n      <iframe id="tvEmbedPlayer" allowfullscreen="true" allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *; clipboard-write *; accelerometer *; gyroscope *" referrerpolicy="no-referrer"></iframe>
       <div id="tvLiveBadge" class="tv-player-live-badge"><span class="tv-pulse"></span> NO AR</div>
       <div id="tvChannelWatermark" class="tv-watermark"></div>
       <!-- Overlay invisível que captura o foco do teclado impedindo o iframe de roubar os eventos keydown -->
@@ -3914,7 +3923,7 @@ body.tv-mode .tv-top-channel-badge {
       }
 
       if (isTvMode && window.initTvCableBox) {
-        loadMovieCategories().then(loadFullMovies).catch(() => {});
+        // VOD em segundo plano desativado no boot para fluidez máxima no projetor
         window.initTvCableBox();
         return;
       }
@@ -7863,7 +7872,7 @@ body.tv-mode .tv-top-channel-badge {
     // Registra listener de rolagem e redimensionamento para sincronizar o PiP perfeitamente
     if (tvCentral && !tvCentral._hasScrollSync) {
       tvCentral._hasScrollSync = true;
-      tvCentral.addEventListener('scroll', syncTvPlayerBoxPosition, { passive: true });
+      // Scroll listener desativado para 60 FPS
       window.addEventListener('resize', syncTvPlayerBoxPosition, { passive: true });
     }
 
@@ -8703,6 +8712,11 @@ body.tv-mode .tv-top-channel-badge {
   // Alternar entre Telas (Central x Tela Cheia x VOD)
   function setTvViewMode(mode) {
     tvCurrentMode = mode;
+    try {
+      if (mode === 'fullscreen' || mode === 'vod') {
+        window.history.pushState({ tvMode: mode }, '');
+      }
+    } catch(e) {}
     const tvKc = document.getElementById('tvKeyCapture');
     if (mode === 'fullscreen') {
       tvCentral.style.display = 'none';
@@ -8826,7 +8840,27 @@ body.tv-mode .tv-top-channel-badge {
     return false;
   };
 
+    // Suporte a popstate do Android WebView (webView.goBack())
+  window.addEventListener('popstate', function() {
+    window.handleAndroidBack();
+  });
+
   window.onBackPressed = window.handleAndroidBack;
+  
+  // Captura do botão Voltar em qualquer nível (window, document, keydown e keyup)
+  const captureAndroidBack = function(e) {
+    const code = e.keyCode || e.which;
+    const isBack = (code === 4 || code === 27 || code === 111 || code === 8 || e.key === 'Back' || e.key === 'Escape' || e.key === 'GoBack' || e.key === 'BrowserBack');
+    if (isBack) {
+      if (window.handleAndroidBack()) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+  };
+  window.addEventListener('keydown', captureAndroidBack, true);
+  document.addEventListener('keydown', captureAndroidBack, true);
+  window.addEventListener('keyup', captureAndroidBack, true);
   document.addEventListener('backbutton', function(e) {
     if (window.handleAndroidBack()) {
       if (e) { e.preventDefault(); e.stopPropagation(); }
