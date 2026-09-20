@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 
 <head>
@@ -2872,7 +2872,13 @@
       cursor: pointer;
       pointer-events: auto;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.8);
-      transition: transform 0.2s, background 0.2s;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s, opacity 0.3s ease;
+    }
+
+    .tv-floating-back-btn.hidden {
+      transform: translateY(-45px);
+      opacity: 0;
+      pointer-events: none;
     }
 
     .tv-floating-back-btn:focus,
@@ -2980,7 +2986,7 @@
     <!-- TELA 2: Tela Cheia de TV com Overlay Estilo TV a Cabo (Zapping Mode) -->
     <div id="tvFullscreenView" class="tv-fullscreen-view" style="display: none;">
       <!-- Botão Voltar Físico/Visual no topo esquerdo -->
-      <button id="tvFloatingBackBtn" class="tv-floating-back-btn tv-focusable" tabindex="0">⬅ VOLTAR À CENTRAL</button>
+      <button id="tvFloatingBackBtn" class="tv-floating-back-btn tv-focusable hidden" tabindex="0">⬅ VOLTAR À CENTRAL</button>
       <!-- Indicador Rápido de Zapping no Canto Superior Direito -->
       <div id="tvTopChannelBadge" class="tv-top-channel-badge hidden">
         <span class="tv-top-ch-num" id="tvTopChNum">CH 001</span>
@@ -4478,12 +4484,25 @@
     }
 
     // ==========================================
+    // HELPER CENTRALIZADO DE API XTREAM
+    // Unifica as chamadas repetidas a player_api.php num único lugar,
+    // facilitando manutenção, tratamento de erro e futuras melhorias (retry, cache, cancelamento).
+    // ==========================================
+    async function xtreamApi(action, extraParams = '') {
+      const url = `${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=${action}${extraParams}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Falha na API Xtream (${action}): HTTP ${res.status}`);
+      }
+      return res.json();
+    }
+
+    // ==========================================
     // CATEGORIAS
     // ==========================================
     async function loadMovieCategories() {
       try {
-        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_vod_categories`);
-        movieCategories = await res.json();
+        movieCategories = await xtreamApi('get_vod_categories');
         populateCategoriesSelect(movieCategories, 'Filmes');
       } catch (err) {
         console.error('Erro ao carregar categorias de filmes:', err);
@@ -4492,8 +4511,7 @@
 
     async function loadSeriesCategories() {
       try {
-        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series_categories`);
-        seriesCategories = await res.json();
+        seriesCategories = await xtreamApi('get_series_categories');
         populateCategoriesSelect(seriesCategories, 'Séries');
       } catch (err) {
         console.error('Erro ao carregar categorias de séries:', err);
@@ -5186,9 +5204,7 @@
 
     async function fetchXtreamLiveStreams() {
       try {
-        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_live_streams`);
-        if (!res.ok) return [];
-        const raw = await res.json();
+        const raw = await xtreamApi('get_live_streams');
         if (!Array.isArray(raw) || raw.length === 0) return [];
 
         return raw.map(s => ({
@@ -5270,8 +5286,7 @@
           showLoading('Carregando catálogo de filmes e recuperando capas 4K...');
         }
         try {
-          const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_vod_streams`);
-          const rawMovies = await res.json();
+          const rawMovies = await xtreamApi('get_vod_streams');
           const rawList = Array.isArray(rawMovies) ? rawMovies : [];
 
           // Ocultar itens pertencentes à categoria DEMO
@@ -5376,8 +5391,7 @@
           showLoading('Carregando catálogo de séries completas...');
         }
         try {
-          const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series`);
-          const rawSeries = await res.json();
+          const rawSeries = await xtreamApi('get_series');
           const rawList = Array.isArray(rawSeries) ? rawSeries : [];
 
           // Ocultar itens pertencentes à categoria DEMO
@@ -5537,16 +5551,16 @@
             let posterVisualHtml = '';
             if (item.poster && (!homeLogo || !awayLogo)) {
               posterVisualHtml = `
-                <img src="${item.poster}" alt="${escapeHtml(title)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'">
+                <img src="${escapeHtml(item.poster)}" alt="${escapeHtml(title)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'" loading="lazy">
                 <span class="match-time-pill" style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); white-space: nowrap;">${escapeHtml(item.matchTime || 'AO VIVO')}</span>
               `;
             } else {
               posterVisualHtml = `
                 <div class="match-vs-container">
                   <div class="match-teams-row">
-                    ${homeLogo ? `<img class="match-team-logo" src="${homeLogo}" alt="${escapeHtml(item.homeTeam || '')}" onerror="this.style.opacity='0.3'">` : `<span class="match-team-logo" style="display:flex;align-items:center;justify-content:center;width:52px;height:52px;font-size:32px;background:#333;border-radius:50%">⚽</span>`}
+                    ${homeLogo ? `<img class="match-team-logo" src="${escapeHtml(homeLogo)}" alt="${escapeHtml(item.homeTeam || '')}" onerror="this.style.opacity='0.3'" loading="lazy">` : `<span class="match-team-logo" style="display:flex;align-items:center;justify-content:center;width:52px;height:52px;font-size:32px;background:#333;border-radius:50%">⚽</span>`}
                     <span class="match-vs-tag">VS</span>
-                    ${awayLogo ? `<img class="match-team-logo" src="${awayLogo}" alt="${escapeHtml(item.awayTeam || '')}" onerror="this.style.opacity='0.3'">` : `<span class="match-team-logo" style="display:flex;align-items:center;justify-content:center;width:52px;height:52px;font-size:32px;background:#333;border-radius:50%">⚽</span>`}
+                    ${awayLogo ? `<img class="match-team-logo" src="${escapeHtml(awayLogo)}" alt="${escapeHtml(item.awayTeam || '')}" onerror="this.style.opacity='0.3'" loading="lazy">` : `<span class="match-team-logo" style="display:flex;align-items:center;justify-content:center;width:52px;height:52px;font-size:32px;background:#333;border-radius:50%">⚽</span>`}
                   </div>
                   <span class="match-time-pill">${escapeHtml(item.matchTime || 'AO VIVO')}</span>
                 </div>
@@ -5572,7 +5586,7 @@
             const logoUrl = (rawLogo && !rawLogo.includes('reidosembeds.online')) ? rawLogo : '';
             card.innerHTML = `
               <div class="poster-wrap" style="background: radial-gradient(circle, #252525 0%, #121212 100%); display: flex; align-items: center; justify-content: center; padding: 18px;">
-                ${logoUrl ? `<img src="${logoUrl}" alt="${escapeHtml(title)}" style="max-width: 85%; max-height: 85px; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.8));" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">` : ''}
+                ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(title)}" style="max-width: 85%; max-height: 85px; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.8));" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" loading="lazy">` : ''}
                 <div class="poster-fallback" style="${logoUrl ? 'display:none;' : 'display:flex;'}">📺<br>${escapeHtml(title)}</div>
                 <div class="badge-channel">${item.badge || 'AO VIVO'}</div>
               </div>
@@ -6443,8 +6457,7 @@
       elements.videoErrorActions.innerHTML = '';
 
       try {
-        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series_info&series_id=${targetVersion.seriesId}`);
-        const data = await res.json();
+        const data = await xtreamApi('get_series_info', `&series_id=${targetVersion.seriesId}`);
 
         currentSeriesData = data;
         currentActiveSeriesVersion = targetVersion;
@@ -7025,10 +7038,7 @@
     async function enrichMovieMetadataAsync(streamId, expectedTitle) {
       if (!streamId) return;
       try {
-        const url = `${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_vod_info&vod_id=${streamId}`;
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await xtreamApi('get_vod_info', `&vod_id=${streamId}`);
         const info = data?.info;
         if (!info) return;
 
@@ -7934,23 +7944,29 @@
       });
     }
 
+    let _seriesVersionLoadToken = 0;
     async function loadSeriesVersion(versionObj, preferredSeason = null) {
+      // Se o usuário trocar de versão (dublado/legendado) de novo antes desta responder,
+      // a resposta mais antiga é ignorada para não sobrescrever a tela com a versão errada
+      const myVersionToken = ++_seriesVersionLoadToken;
       currentActiveSeriesVersion = versionObj;
       const versions = currentSeriesGroup?.versions || [versionObj];
       renderSeriesVersionButtons(versions, currentActiveSeriesVersion);
 
-      elements.episodesList.innerHTML = `<div style="text-align:center; color:#aaa; padding:40px;"><div class="spinner" style="margin: 0 auto 15px;"></div>Carregando episódios (${versionObj.versionInfo.label})...</div>`;
+      elements.episodesList.innerHTML = `<div style="text-align:center; color:#aaa; padding:40px;"><div class="spinner" style="margin: 0 auto 15px;"></div>Carregando episódios (${escapeHtml(versionObj.versionInfo.label)})...</div>`;
       elements.seasonSelect.innerHTML = '<option>Carregando...</option>';
 
       try {
-        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series_info&series_id=${versionObj.seriesId}`);
-        currentSeriesData = await res.json();
+        const data = await xtreamApi('get_series_info', `&series_id=${versionObj.seriesId}`);
+        if (myVersionToken !== _seriesVersionLoadToken) return;
+        currentSeriesData = data;
 
         const episodesBySeason = currentSeriesData.episodes || {};
         const seasons = Object.keys(episodesBySeason).sort((a, b) => Number(a) - Number(b));
 
         elements.seasonSelect.innerHTML = '';
         if (seasons.length === 0) {
+          if (myVersionToken !== _seriesVersionLoadToken) return;
           elements.episodesList.innerHTML = '<div style="text-align:center; color:#888; padding:30px;">Nenhum episódio cadastrado nesta versão.</div>';
           return;
         }
@@ -7967,7 +7983,8 @@
         elements.seasonSelect.value = targetSeason;
         renderSeasonEpisodes(targetSeason);
       } catch (err) {
-        elements.episodesList.innerHTML = `<div style="color:#e50914; padding:20px; text-align:center;">Erro ao carregar episódios: ${err.message}</div>`;
+        if (myVersionToken !== _seriesVersionLoadToken) return;
+        elements.episodesList.innerHTML = `<div style="color:#e50914; padding:20px; text-align:center;">Erro ao carregar episódios: ${escapeHtml(err.message)}</div>`;
       }
     }
 
@@ -8001,7 +8018,7 @@
 
         epCard.innerHTML = `
           <div class="episode-card-main">
-            ${thumb ? `<img class="episode-thumb" src="${thumb}" alt="Episódio" onerror="this.style.display='none'">` : ''}
+            ${thumb ? `<img class="episode-thumb" src="${escapeHtml(thumb)}" alt="Episódio" onerror="this.style.display='none'" loading="lazy">` : ''}
             <div class="episode-info">
               <div class="episode-title">
                 <span>Episódio ${ep.episode_num}: ${escapeHtml(epTitle)}</span>
@@ -8095,6 +8112,7 @@
       let tvCurrentIdx = 0;
       let tvCurrentMode = 'central'; // 'central' | 'fullscreen' | 'vod'
       let tvOsdTimer = null;
+      let tvDrawerAutoCloseTimer = null;
       let tvVodList = [];
       let tvVodMode = 'movies';
 
@@ -8156,6 +8174,18 @@
           tvTuneChannel(tvCurrentIdx, false);
         }
 
+        // Dispara o carregamento do catálogo de filmes em segundo plano assim que possível.
+        // Antes, nada disparava esse carregamento no boot direto em modo TV (arquivo local),
+        // então o trilho de filmes só aparecia se o usuário abrisse a aba Filmes manualmente.
+        // Um pequeno atraso evita competir com a sintonia do primeiro canal.
+        if (!fullMoviesCache && typeof loadMovieCategories === 'function' && typeof loadFullMovies === 'function') {
+          setTimeout(() => {
+            if (fullMoviesCache) return; // outro fluxo (ex: enterTvMode) já carregou nesse meio-tempo
+            const catStep = (movieCategories && movieCategories.length > 0) ? Promise.resolve() : loadMovieCategories();
+            catStep.then(() => loadFullMovies()).catch(() => { });
+          }, 1200);
+        }
+
         // Registra listener de rolagem e redimensionamento para sincronizar o PiP perfeitamente
         if (tvCentral && !tvCentral._hasScrollSync) {
           tvCentral._hasScrollSync = true;
@@ -8172,14 +8202,17 @@
           if (pipCard) pipCard.focus();
         }, 200);
 
-        // Recupera o foco do teclado quando o iframe o rouba (cross-origin iframes capturam eventos keydown)
-        // Roda a cada 400ms e, se o modo for fullscreen, força o foco de volta ao overlay #tvKeyCapture
+        // Recupera o foco do teclado quando o iframe o rouba (cross-origin iframes capturam eventos keydown
+        // sem disparar um evento de foco detectável no documento pai, por isso o polling continua necessário aqui).
+        // Roda a cada 400ms e, se o modo for fullscreen, força o foco de volta ao overlay #tvKeyCapture.
+        // Elemento cacheado fora do loop para evitar um getElementById a cada 400ms pelo resto da sessão.
         if (!window._tvFocusKeepAlive) {
+          const kcCached = document.getElementById('tvKeyCapture');
           window._tvFocusKeepAlive = setInterval(() => {
             if (tvCurrentMode !== 'fullscreen') return;
             // Não roubar o foco enquanto a gaveta EPG estiver aberta (ela precisa do foco para navegação)
             if (tvDrawer && !tvDrawer.classList.contains('closed')) return;
-            const kc = document.getElementById('tvKeyCapture');
+            const kc = kcCached || document.getElementById('tvKeyCapture');
             if (!kc) return;
             const ae = document.activeElement;
             // Se o foco não está no overlay, rouba de volta
@@ -8212,6 +8245,10 @@
           const onUserActivity = () => {
             if (tvCurrentMode === 'fullscreen') {
               triggerTvOsd(5000);
+              // Também reinicia a contagem de inatividade da gaveta EPG, se estiver aberta
+              if (tvDrawer && !tvDrawer.classList.contains('closed')) {
+                triggerTvDrawerAutoClose(8000);
+              }
             }
           };
           window.addEventListener('mousemove', onUserActivity, { passive: true });
@@ -8244,9 +8281,25 @@
       }
 
       // Carrega efetivamente a transmissão no reprodutor unificado (iframe embed ou tag de vídeo)
-      function tvLoadStream(ch) {
+      // fallbackIdx permite tentar automaticamente o próximo servidor em ch.fallbacks quando o atual falha
+      function tvLoadStream(ch, fallbackIdx = 0) {
         if (!ch) return;
-        const fallback = ch.fallbacks && ch.fallbacks[0] ? ch.fallbacks[0] : { url: 'https://rdcanais.net/' + (ch.channelSlug || ch.id), isEmbed: true };
+        const hasExplicitFallbacks = ch.fallbacks && ch.fallbacks.length > 0;
+        const fallback = hasExplicitFallbacks
+          ? ch.fallbacks[fallbackIdx]
+          : (fallbackIdx === 0 ? { url: 'https://rdcanais.net/' + (ch.channelSlug || ch.id), isEmbed: true } : null);
+
+        // Todos os servidores/fallbacks foram tentados e falharam
+        if (!fallback) {
+          console.warn('[AndPlay TV] Nenhum servidor disponível para o canal:', ch.name);
+          const osdProgStatus = document.getElementById('tvOsdProgStatus');
+          if (osdProgStatus) {
+            osdProgStatus.textContent = '⚠ Sinal indisponível no momento. Tente novamente em instantes.';
+            osdProgStatus.style.color = '#ff5252';
+          }
+          triggerTvOsd(6000);
+          return;
+        }
 
         if (fallback.isEmbed) {
           if (window._tvActiveHls) {
@@ -8255,15 +8308,14 @@
           }
           tvVideo.style.display = 'none';
           tvVideo.pause();
+          tvVideo.onerror = null;
           tvEmbed.style.display = 'block';
           const baseUrl = fallback.url;
           const embedUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'autoplay=1';
           tvEmbed.src = 'about:blank';
           tvEmbed.onerror = function () {
-            console.warn('[AndPlay TV] Servidor 1 inacessível, alternando automaticamente...');
-            if (ch.fallbacks && ch.fallbacks[1]) {
-              tvEmbed.src = ch.fallbacks[1].url + (ch.fallbacks[1].url.includes('?') ? '&' : '?') + 'autoplay=1';
-            }
+            console.warn(`[AndPlay TV] Servidor ${fallbackIdx + 1} inacessível, alternando automaticamente...`);
+            tvLoadStream(ch, fallbackIdx + 1);
           };
           requestAnimationFrame(() => { tvEmbed.src = embedUrl; });
         } else {
@@ -8277,11 +8329,22 @@
               window._tvActiveHls.destroy();
               window._tvActiveHls = null;
             }
+            tvVideo.onerror = null;
             window._tvActiveHls = new Hls({ enableWorker: true });
             window._tvActiveHls.loadSource(fallback.url);
             window._tvActiveHls.attachMedia(tvVideo);
             window._tvActiveHls.on(Hls.Events.MANIFEST_PARSED, () => {
               tvVideo.play().catch(() => { });
+            });
+            window._tvActiveHls.on(Hls.Events.ERROR, (event, data) => {
+              if (data.fatal) {
+                console.warn(`[AndPlay TV] Erro fatal de HLS no servidor ${fallbackIdx + 1}:`, data.type, '- alternando automaticamente...');
+                if (window._tvActiveHls) {
+                  try { window._tvActiveHls.destroy(); } catch (e) { }
+                  window._tvActiveHls = null;
+                }
+                tvLoadStream(ch, fallbackIdx + 1);
+              }
             });
           } else {
             if (window._tvActiveHls) {
@@ -8291,6 +8354,11 @@
             tvVideo.autoplay = true;
             tvVideo.src = fallback.url;
             tvVideo.load();
+            // Único handler (atribuição direta evita empilhar listeners a cada troca de canal)
+            tvVideo.onerror = function () {
+              console.warn(`[AndPlay TV] Erro ao carregar servidor ${fallbackIdx + 1}, alternando automaticamente...`);
+              tvLoadStream(ch, fallbackIdx + 1);
+            };
 
             const tryPlay = () => {
               const p = tvVideo.play();
@@ -8422,6 +8490,7 @@
         tvLoadStream(eventChannel);
         updateTvOsd(eventChannel, 0, false);
         setTvViewMode('fullscreen');
+        triggerTvOsd();
       }
 
       // Reproduzir Filme VOD no Player de TV
@@ -8492,13 +8561,18 @@
         // Fecha gaveta se estava aberta (mudança de episódio dentro da gaveta)
         if (tvDrawer && !tvDrawer.classList.contains('closed')) {
           tvDrawer.classList.add('closed');
+          clearTvDrawerAutoClose();
           const kc = document.getElementById('tvKeyCapture');
           if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 80);
         }
       }
 
       // Carregar e Exibir Episódios da Série no Modo TV
+      let _tvSeriesDetailToken = 0;
       async function openTvSeriesDetail(seriesItem) {
+        // Token de requisição: se o usuário abrir outra série antes desta responder,
+        // a resposta desta chamada mais antiga é descartada (evita sobrescrever a tela com dados errados)
+        const myDetailToken = ++_tvSeriesDetailToken;
         tvVodMode = 'series_episodes';
         tvCurrentSeriesItem = seriesItem;
         if (tvVod) tvVod.scrollTo({ top: 0, behavior: 'smooth' });
@@ -8527,8 +8601,9 @@
 
         const seriesId = seriesItem.series_id || seriesItem.id;
         try {
-          const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series_info&series_id=${seriesId}`);
-          const data = await res.json();
+          const data = await xtreamApi('get_series_info', `&series_id=${seriesId}`);
+          // Se outra série já foi aberta enquanto esta resposta estava a caminho, descarta o resultado desatualizado
+          if (myDetailToken !== _tvSeriesDetailToken) return;
           const episodesBySeason = data.episodes || {};
           const seasons = Object.keys(episodesBySeason).sort((a, b) => Number(a) - Number(b));
 
@@ -8568,10 +8643,10 @@
               const thumb = ep.info?.movie_image || seriesItem.cover || seriesItem.poster || '';
 
               epCard.innerHTML = `
-            ${thumb ? `<img class="tv-ep-thumb" src="${thumb}" alt="" onerror="this.style.display='none'">` : ''}
+            ${thumb ? `<img class="tv-ep-thumb" src="${escapeHtml(thumb)}" alt="" onerror="this.style.display='none'" loading="lazy">` : ''}
             <div class="tv-ep-body">
               <div class="tv-ep-num">TEMPORADA ${seasonNum} • EPISÓDIO ${ep.episode_num}</div>
-              <div class="tv-ep-title">${epTitle}</div>
+              <div class="tv-ep-title">${escapeHtml(epTitle)}</div>
               <div class="tv-ep-meta-row">
                 ${duration ? `<span class="tv-ep-duration">⏱ ${duration}</span>` : '<span></span>'}
                 <span class="tv-ep-cta">▶ Assistir</span>
@@ -8622,7 +8697,8 @@
           container.appendChild(episodesContainer);
           renderTvSeason(currentSeason);
         } catch (e) {
-          container.innerHTML = `<div style="color:#e50914; padding:30px; text-align:center;">Erro ao carregar episódios: ${e.message}</div>`;
+          if (myDetailToken !== _tvSeriesDetailToken) return;
+          container.innerHTML = `<div style="color:#e50914; padding:30px; text-align:center;">Erro ao carregar episódios: ${escapeHtml(e.message)}</div>`;
         }
       }
 
@@ -8940,13 +9016,33 @@
       function triggerTvOsd(duration = 5000) {
         if (tvOsdTimer) clearTimeout(tvOsdTimer);
         const topBadge = document.getElementById('tvTopChannelBadge');
+        const floatBackBtn = document.getElementById('tvFloatingBackBtn');
         if (tvOsd) tvOsd.classList.remove('hidden');
         if (topBadge) topBadge.classList.remove('hidden');
+        if (floatBackBtn) floatBackBtn.classList.remove('hidden');
 
         tvOsdTimer = setTimeout(() => {
           if (tvOsd) tvOsd.classList.add('hidden');
           if (topBadge) topBadge.classList.add('hidden');
+          if (floatBackBtn) floatBackBtn.classList.add('hidden');
         }, duration);
+      }
+
+      // Fecha automaticamente a gaveta/overlay do Guia EPG após um período de inatividade
+      // (mesmo comportamento de auto-ocultação do overlay de informações/OSD)
+      function triggerTvDrawerAutoClose(duration = 8000) {
+        if (tvDrawerAutoCloseTimer) clearTimeout(tvDrawerAutoCloseTimer);
+        tvDrawerAutoCloseTimer = setTimeout(() => {
+          if (tvCurrentMode === 'fullscreen' && tvDrawer && !tvDrawer.classList.contains('closed')) {
+            tvDrawer.classList.add('closed');
+            const kc = document.getElementById('tvKeyCapture');
+            if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 50);
+          }
+          tvDrawerAutoCloseTimer = null;
+        }, duration);
+      }
+      function clearTvDrawerAutoClose() {
+        if (tvDrawerAutoCloseTimer) { clearTimeout(tvDrawerAutoCloseTimer); tvDrawerAutoCloseTimer = null; }
       }
 
       // Sincroniza dinamicamente a posição e dimensões do PiP com o frame dentro da Central (acompanha a rolagem da página)
@@ -8994,7 +9090,10 @@
         if (tvOsd) tvOsd.classList.add('hidden');
         const topBadge = document.getElementById('tvTopChannelBadge');
         if (topBadge) topBadge.classList.add('hidden');
+        const floatBackBtn2 = document.getElementById('tvFloatingBackBtn');
+        if (floatBackBtn2) floatBackBtn2.classList.add('hidden');
         if (tvOsdTimer) { clearTimeout(tvOsdTimer); tvOsdTimer = null; }
+        clearTvDrawerAutoClose();
 
         // 3. Limpa hero VOD (evita que poster/título da série apareçam na seção de filmes)
         const heroTitle = document.getElementById('tvVodPreviewTitle');
@@ -9116,6 +9215,7 @@
         if (tvCurrentMode === 'fullscreen') {
           if (tvDrawer && !tvDrawer.classList.contains('closed')) {
             tvDrawer.classList.add('closed');
+            if (typeof clearTvDrawerAutoClose === 'function') clearTvDrawerAutoClose();
             return true;
           }
           if (typeof tvZapDebounceTimer !== 'undefined' && tvZapDebounceTimer) {
@@ -9181,6 +9281,8 @@
           if (tvOsd) tvOsd.classList.add('hidden');
           const topBadge = document.getElementById('tvTopChannelBadge');
           if (topBadge) topBadge.classList.add('hidden');
+          const floatBackBtn3 = document.getElementById('tvFloatingBackBtn');
+          if (floatBackBtn3) floatBackBtn3.classList.add('hidden');
           if (tvOsdTimer) { clearTimeout(tvOsdTimer); tvOsdTimer = null; }
 
           tvDrawer.classList.remove('closed');
@@ -9212,8 +9314,12 @@
               target.scrollIntoView({ block: 'center', behavior: 'smooth' });
             }
           }, 80);
+
+          // Inicia contagem de 8s de inatividade para fechar a gaveta automaticamente
+          if (tvCurrentMode === 'fullscreen') triggerTvDrawerAutoClose(8000);
         } else {
           tvDrawer.classList.add('closed');
+          clearTvDrawerAutoClose();
           // Devolve o foco ao overlay de captura de teclado
           const kc = document.getElementById('tvKeyCapture');
           if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 50);
@@ -9238,8 +9344,8 @@
           const realIdx = tvChannels.indexOf(ch);
           card.innerHTML = `
         <div class="num">CH ${String(realIdx + 1).padStart(3, '0')}</div>
-        <img src="${ch.logo || ''}" alt="${ch.name}" onerror="this.style.opacity='0.3'">
-        <div class="name">${ch.name}</div>
+        <img src="${escapeHtml(ch.logo || '')}" alt="${escapeHtml(ch.name)}" onerror="this.style.opacity='0.3'" loading="lazy">
+        <div class="name">${escapeHtml(ch.name)}</div>
       `;
           card.addEventListener('click', () => {
             tvTuneChannel(realIdx, true);
@@ -9315,8 +9421,8 @@
           card.tabIndex = 0;
           const poster = m.poster || m.stream_icon || '';
           card.innerHTML = `
-        <img src="${poster}" alt="${m.name}" onerror="this.style.opacity='0.2'">
-        <div class="name">${m.name}</div>
+        <img src="${escapeHtml(poster)}" alt="${escapeHtml(m.name)}" onerror="this.style.opacity='0.2'" loading="lazy">
+        <div class="name">${escapeHtml(m.name)}</div>
       `;
           card.addEventListener('click', () => tvPlayMovie(m));
           card.addEventListener('keydown', (e) => {
@@ -9392,21 +9498,23 @@
           item.tabIndex = 0;
           item.innerHTML = `
         <span style="font-size:12px; font-weight:800; color:#ffc107; min-width:32px;">${String(realIdx + 1).padStart(3, '0')}</span>
-        <img src="${ch.logo || ''}" alt="" style="width:36px; height:24px; object-fit:contain;">
+        <img src="${escapeHtml(ch.logo || '')}" alt="" style="width:36px; height:24px; object-fit:contain;" loading="lazy">
         <div style="flex:1; overflow:hidden;">
-          <div style="font-size:13px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${ch.name}</div>
-          <div style="font-size:10px; color:#ffc107; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${curTitle}</div>
+          <div style="font-size:13px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(ch.name)}</div>
+          <div style="font-size:10px; color:#ffc107; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(curTitle)}</div>
         </div>
         ${isCur ? '<span style="font-size:9px; font-weight:800; background:#00e676; color:#000; padding:2px 6px; border-radius:4px;">NO AR</span>' : ''}
       `;
           item.addEventListener('click', () => {
             tvTuneChannel(realIdx, true);
             tvDrawer.classList.add('closed');
+            clearTvDrawerAutoClose();
           });
           item.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
               tvTuneChannel(realIdx, true);
               tvDrawer.classList.add('closed');
+              clearTvDrawerAutoClose();
             }
           });
           listEl.appendChild(item);
@@ -9430,8 +9538,7 @@
         if (!episodesBySeason) {
           if (listEl) listEl.innerHTML = '<div style="color:#ffc107;font-size:13px;padding:20px;text-align:center;">Carregando episodios...</div>';
           try {
-            const res = await fetch(CONFIG.server + '/player_api.php?username=' + CONFIG.user + '&password=' + CONFIG.pass + '&action=get_series_info&series_id=' + meta.seriesId);
-            const data = await res.json();
+            const data = await xtreamApi('get_series_info', '&series_id=' + meta.seriesId);
             episodesBySeason = data.episodes || {};
             meta.seriesItem._cachedEpisodes = episodesBySeason;
             meta.episodesBySeason = episodesBySeason;
@@ -9492,7 +9599,7 @@
             item.innerHTML =
               '<span style="font-size:11px;font-weight:900;color:#ffc107;min-width:30px;">E' + epNum + '</span>' +
               '<div style="flex:1;overflow:hidden;">' +
-              '<div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + epTitle + '</div>' +
+              '<div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escapeHtml(epTitle) + '</div>' +
               durHTML +
               '</div>' +
               playBadge;
@@ -9842,6 +9949,7 @@
               // Prioridade 1: fechar gaveta de episódios/canais se aberta
               if (tvDrawer && !tvDrawer.classList.contains('closed')) {
                 tvDrawer.classList.add('closed');
+                clearTvDrawerAutoClose();
                 const kc = document.getElementById('tvKeyCapture');
                 if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 50);
                 return;
@@ -9864,6 +9972,7 @@
             // Modo TV ao vivo: prioridade 1 = fechar gaveta EPG se aberta
             if (tvDrawer && !tvDrawer.classList.contains('closed')) {
               tvDrawer.classList.add('closed');
+              clearTvDrawerAutoClose();
               const kc = document.getElementById('tvKeyCapture');
               if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 50);
               return;
@@ -9963,6 +10072,9 @@
 
           // 3. Canais de TV Ao Vivo (com EPG lateral e Zapping)
           if (tvDrawer && !tvDrawer.classList.contains('closed')) {
+            // Qualquer atividade dentro da gaveta reinicia a contagem de 8s de inatividade
+            triggerTvDrawerAutoClose(8000);
+
             const items = Array.from(tvDrawer.querySelectorAll('.tv-drawer-item'));
             const focused = document.activeElement;
             const curIdx = items.indexOf(focused);
@@ -10045,6 +10157,9 @@
               tvOsd.classList.add('hidden');
               const topBadge = document.getElementById('tvTopChannelBadge');
               if (topBadge) topBadge.classList.add('hidden');
+              const floatBackBtn4 = document.getElementById('tvFloatingBackBtn');
+              if (floatBackBtn4) floatBackBtn4.classList.add('hidden');
+              if (tvOsdTimer) { clearTimeout(tvOsdTimer); tvOsdTimer = null; }
             } else {
               triggerTvOsd(7000);
             }
