@@ -1466,6 +1466,11 @@ body.tv-mode > #videoModal {
   letter-spacing: 1px;
   text-transform: uppercase;
 }
+/* No modo tela cheia, esconde o badge fixo de ao vivo e o logo da tela, exibindo apenas com o overlay */
+.tv-player-box.fullscreen .tv-player-live-badge,
+.tv-player-box.fullscreen .tv-watermark {
+  display: none !important;
+}
 
 /* TELA 1: Central de TV por Assinatura */
 .tv-central-screen {
@@ -2204,16 +2209,17 @@ header.tv-header {
   background: rgba(9, 9, 14, 0.96);
   backdrop-filter: blur(24px);
   border-right: 1px solid rgba(255, 255, 255, 0.1);
-  z-index: 1400;
+  z-index: 2500 !important;
+  pointer-events: auto !important;
   display: flex;
   flex-direction: column;
   padding: 24px;
-  box-shadow: 25px 0 60px rgba(0,0,0,0.9);
+  box-shadow: 25px 0 60px rgba(0,0,0,0.95);
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .tv-epg-drawer.closed {
   transform: translateX(-100%);
-  pointer-events: none;
+  pointer-events: none !important;
 }
 .tv-drawer-header {
   margin-bottom: 14px;
@@ -2423,11 +2429,11 @@ header.tv-header {
     <!-- Reprodutor de Vídeo Unificado para TV (Muda entre PiP e Tela Cheia sem reiniciar o vídeo) -->
     <div id="tvPlayerBox" class="tv-player-box pip">
       <video id="tvVideoPlayer" playsinline preload="auto"></video>
-      <iframe id="tvEmbedPlayer" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="no-referrer-when-downgrade"></iframe>
+      <iframe id="tvEmbedPlayer" allowfullscreen="true" allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *; clipboard-write *; accelerometer *; gyroscope *" referrerpolicy="no-referrer"></iframe>
       <div id="tvLiveBadge" class="tv-player-live-badge"><span class="tv-pulse"></span> NO AR</div>
       <div id="tvChannelWatermark" class="tv-watermark">AndPlay TV</div>
       <!-- Overlay invisível que captura o foco do teclado impedindo o iframe de roubar os eventos keydown -->
-      <div id="tvKeyCapture" tabindex="0" style="display:none;position:absolute;inset:0;z-index:1400;background:transparent;outline:none;cursor:none;pointer-events:all;" aria-label="Foco do controle remoto"></div>
+      <div id="tvKeyCapture" tabindex="0" style="display:none;position:absolute;inset:0;z-index:1400;background:transparent;outline:none;cursor:none;pointer-events:none;" aria-label="Foco do controle remoto"></div>
     </div>
 
     <!-- TELA 1: Central de TV por Assinatura (Hub Screen) -->
@@ -2598,6 +2604,7 @@ header.tv-header {
                 <button class="tv-osd-btn-pill" id="tvOsdBtnPrev" title="Canal Anterior (▲)">▲ CANAL -</button>
                 <button class="tv-osd-btn-pill" id="tvOsdBtnNext" title="Próximo Canal (▼)">▼ CANAL +</button>
                 <button class="tv-osd-btn-pill tv-btn-back" id="tvOsdBtnCentral" title="Voltar à Central (Backspace)">⬅ CENTRAL</button>
+                <button class="tv-osd-btn-pill tv-btn-cancel-zap" id="tvOsdBtnCancelZap" title="Cancelar troca de canal (ESC)" style="display:none;background:rgba(239,68,68,0.85);color:#fff;border-color:rgba(239,68,68,0.6);">✕ CANCELAR ZAP</button>
               </div>
             </div>
           </div>
@@ -4019,8 +4026,10 @@ header.tv-header {
       const rdSlug = cleanSlug
         .replace(/^telecine-/, 'telecine')
         .replace(/^hbo-/, 'hbo');
+      const primaryUrl = raw.embed || ('https://v2.rdembed.sbs/' + rdSlug);
       const fallbacks = [
-        { name: 'HD', url: 'https://rdcanais.net/' + rdSlug, isEmbed: true }
+        { name: 'HD', url: primaryUrl, isEmbed: true },
+        { name: 'Alternativo', url: 'https://rdcanais.net/' + rdSlug, isEmbed: true }
       ];
 
       if (KNOWN_NATIVE_STREAMS[raw.id]) {
@@ -7272,6 +7281,8 @@ header.tv-header {
     if (!window._tvFocusKeepAlive) {
       window._tvFocusKeepAlive = setInterval(() => {
         if (tvCurrentMode !== 'fullscreen') return;
+        // Não roubar o foco enquanto a gaveta EPG estiver aberta (ela precisa do foco para navegação)
+        if (tvDrawer && !tvDrawer.classList.contains('closed')) return;
         const kc = document.getElementById('tvKeyCapture');
         if (!kc) return;
         const ae = document.activeElement;
@@ -7297,9 +7308,10 @@ header.tv-header {
   };
 
   // ============================================================
-  // MOTOR DE SINTONIZAÇÃO E ZAPPING COM DEBOUNCER DE 1 SEGUNDO
+  // MOTOR DE SINTONIZAÇÃO E ZAPPING COM DEBOUNCER DE 3 SEGUNDOS
   // Permite ao usuário navegar rapidamente pelos canais vendo o OSD
   // sem disparar recargas pesadas de vídeo a cada clique.
+  // O zapping pode ser CANCELADO via Esc/Backspace revertendo ao canal atual.
   // ============================================================
   let tvZapDebounceTimer = null;
   let tvPendingIdx = 0;
@@ -7388,8 +7400,9 @@ header.tv-header {
     }
   }
 
-  // Zapping de Canais com Debounce de 1 segundo
-  // Mostra as informações do canal na hora, mas só carrega o vídeo se o usuário parar por 1s ou teclar Enter
+  // Zapping de Canais com Debounce de 3 segundos
+  // Mostra as informações do canal na hora, mas só carrega o vídeo se o usuário parar por 3s ou teclar Enter.
+  // Pode ser cancelado com Esc/Backspace, revertendo ao canal atual sem trocar o vídeo.
   function tvZap(delta) {
     if (!tvChannels || tvChannels.length === 0) return;
 
@@ -7411,12 +7424,35 @@ header.tv-header {
     if (pipEpg) pipEpg.textContent = pendingCh.nowTitle ? `🔴 No Ar: ${pendingCh.nowTitle}` : (pendingCh.categoryLabel || 'Transmissão Ao Vivo HD');
 
     updateTvOsd(pendingCh, tvPendingIdx, true);
-    triggerTvOsd(5000);
+    triggerTvOsd(6000);
 
-    // Debounce de 1 segundo (1000ms): confirma apenas quando o usuário parar de navegar
+    // Debounce de 3 segundos (3000ms): confirma apenas quando o usuário parar de navegar
     tvZapDebounceTimer = setTimeout(() => {
       tvCommitPendingChannel();
-    }, 1000);
+    }, 3000);
+  }
+
+  // Cancela o zapping pendente: reverte o OSD e o PiP ao canal atual SEM trocar o vídeo
+  function tvCancelPendingZap() {
+    if (!tvZapDebounceTimer) return; // Nada pendente, ignora
+    clearTimeout(tvZapDebounceTimer);
+    tvZapDebounceTimer = null;
+
+    // Reverte pendingIdx ao canal atual
+    tvPendingIdx = tvCurrentIdx;
+    const ch = tvChannels[tvCurrentIdx];
+    if (!ch) return;
+
+    // Restaura PiP ao canal atual
+    const pipName = document.getElementById('tvPipName');
+    const pipEpg = document.getElementById('tvPipEpg');
+    if (pipName) pipName.textContent = `${String(tvCurrentIdx + 1).padStart(3, '0')} - ${ch.name}`;
+    if (pipEpg) pipEpg.textContent = ch.nowTitle ? `🔴 No Ar: ${ch.nowTitle}` : (ch.categoryLabel || 'Transmissão Ao Vivo HD');
+
+    // Atualiza OSD mostrando o canal atual confirmado (não-pendente)
+    updateTvOsd(ch, tvCurrentIdx, false);
+    // Mantém o OSD visível por 3s para o usuário ver o canal atual
+    triggerTvOsd(3000);
   }
 
   // OSD Banner - Estilo TV a Cabo / Receptor Moderno
@@ -7429,6 +7465,7 @@ header.tv-header {
     const btnPrev = document.getElementById('tvOsdBtnPrev');
     const btnNext = document.getElementById('tvOsdBtnNext');
     const btnCentral = document.getElementById('tvOsdBtnCentral');
+    const btnCancelZap = document.getElementById('tvOsdBtnCancelZap');
 
     if (btnGuide) btnGuide.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -7446,10 +7483,18 @@ header.tv-header {
       e.stopPropagation();
       setTvViewMode('central');
     });
+    if (btnCancelZap) btnCancelZap.addEventListener('click', (e) => {
+      e.stopPropagation();
+      tvCancelPendingZap();
+    });
   }
 
   function updateTvOsd(ch, idx, isPending = false) {
     const formattedNum = String(idx + 1).padStart(3, '0');
+
+    // Mostra/oculta botão de cancelar zap conforme estado de zapping pendente
+    const btnCancelZap = document.getElementById('tvOsdBtnCancelZap');
+    if (btnCancelZap) btnCancelZap.style.display = isPending ? 'inline-flex' : 'none';
 
     // 1. Indicador Rápido de Zapping no Topo
     const topNum = document.getElementById('tvTopChNum');
@@ -7459,7 +7504,7 @@ header.tv-header {
     if (topName) topName.textContent = ch.name;
     if (topLive) {
       if (isPending) {
-        topLive.innerHTML = '<span class="tv-pulse" style="background:#ffc107;"></span> SINTONIZANDO (1s)';
+        topLive.innerHTML = '<span class="tv-pulse" style="background:#ffc107;"></span> SINTONIZANDO (3s)';
         topLive.style.background = 'rgba(255, 193, 7, 0.25)';
         topLive.style.color = '#ffc107';
         topLive.style.borderColor = 'rgba(255, 193, 7, 0.5)';
@@ -7488,7 +7533,7 @@ header.tv-header {
     if (osdCategory) osdCategory.textContent = ch.categoryLabel || 'TV Ao Vivo';
     if (osdLive) {
       if (isPending) {
-        osdLive.innerHTML = '⏳ SINTONIZANDO (1s) • OK';
+        osdLive.innerHTML = '⏳ SINTONIZANDO (3s) • OK=Confirmar • ESC=Cancelar';
         osdLive.style.background = 'rgba(255, 152, 0, 0.9)';
         osdLive.style.color = '#000';
       } else {
@@ -7559,7 +7604,7 @@ header.tv-header {
     if (osdProgFill) osdProgFill.style.width = `${progress}%`;
     if (osdProgStatus) {
       if (isPending) {
-        osdProgStatus.textContent = `Aguardando confirmação (1s)...`;
+        osdProgStatus.textContent = `Aguardando 3s... (OK confirma • ESC cancela)`;
         osdProgStatus.style.color = '#ffc107';
       } else {
         osdProgStatus.textContent = `Em andamento (${progress}%)`;
@@ -7717,12 +7762,30 @@ header.tv-header {
   // Drawer EPG
   function toggleTvDrawer() {
     if (tvDrawer.classList.contains('closed')) {
+      // Esconde o OSD banner para não sobrepor a gaveta EPG
+      if (tvOsd) tvOsd.classList.add('hidden');
+      const topBadge = document.getElementById('tvTopChannelBadge');
+      if (topBadge) topBadge.classList.add('hidden');
+      if (tvOsdTimer) { clearTimeout(tvOsdTimer); tvOsdTimer = null; }
+
       tvDrawer.classList.remove('closed');
       renderTvDrawerList('ALL');
-      const firstItem = tvDrawer.querySelector('.tv-drawer-item');
-      if (firstItem) firstItem.focus();
+
+      // Foca no item do canal atual (se existir) ou no primeiro item
+      setTimeout(() => {
+        const activeItem = tvDrawer.querySelector('.tv-drawer-item.active-channel');
+        const firstItem = tvDrawer.querySelector('.tv-drawer-item');
+        const target = activeItem || firstItem;
+        if (target) {
+          target.focus();
+          target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+      }, 80);
     } else {
       tvDrawer.classList.add('closed');
+      // Devolve o foco ao overlay de captura de teclado
+      const kc = document.getElementById('tvKeyCapture');
+      if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 50);
     }
   }
 
@@ -8085,12 +8148,19 @@ header.tv-header {
       return;
     }
 
-    // ---- Backspace = Voltar (como Escape / botão Back do Android) ----
+    // ---- Backspace = Cancelar Zap Pendente ou Voltar ----
     if (key === 'Backspace') {
       e.preventDefault();
       if (tvCurrentMode === 'fullscreen') {
+        // Prioridade 1: Fechar gaveta EPG se estiver aberta
         if (!tvDrawer.classList.contains('closed')) {
           tvDrawer.classList.add('closed');
+          const kc = document.getElementById('tvKeyCapture');
+          if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 50);
+        // Prioridade 2: Cancelar zap pendente (sem sair da tela)
+        } else if (tvZapDebounceTimer) {
+          tvCancelPendingZap();
+        // Prioridade 3: Voltar à central
         } else {
           setTvViewMode('central');
         }
@@ -8188,7 +8258,12 @@ header.tv-header {
       }
       if (key === 'Escape' || key === 'Back' || e.keyCode === 4) {
         e.preventDefault();
-        window.handleAndroidBack();
+        // Se há zap pendente, cancela primeiro (sem sair da tela)
+        if (tvZapDebounceTimer) {
+          tvCancelPendingZap();
+        } else {
+          window.handleAndroidBack();
+        }
         return;
       }
     }
