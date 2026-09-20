@@ -2524,7 +2524,7 @@ header.tv-header {
       <div id="tvTopChannelBadge" class="tv-top-channel-badge hidden">
         <span class="tv-top-ch-num" id="tvTopChNum">CH 001</span>
         <span class="tv-top-ch-name" id="tvTopChName">GLOBO HD</span>
-        <span class="tv-top-ch-live"><span class="tv-pulse"></span> NO AR</span>
+        <span class="tv-top-ch-live" id="tvTopChLive"><span class="tv-pulse"></span> NO AR</span>
       </div>
 
       <!-- Overlay Principal Inferior - Infobar de TV a Cabo -->
@@ -2544,7 +2544,7 @@ header.tv-header {
                 <h3 class="tv-osd-name" id="tvOsdName">TV Globo HD</h3>
               </div>
               <div class="tv-osd-badges-row">
-                <span class="tv-osd-badge-live"><span class="tv-pulse"></span> NO AR</span>
+                <span class="tv-osd-badge-live" id="tvOsdLiveBadge"><span class="tv-pulse"></span> NO AR</span>
                 <span class="tv-osd-badge-cat" id="tvOsdCategory">Abertos</span>
                 <span class="tv-osd-badge-tech">1080p FHD</span>
                 <span class="tv-osd-badge-tech">DOLBY 5.1</span>
@@ -7296,16 +7296,17 @@ header.tv-header {
     }
   };
 
-  // Sintonizar Canal
-  function tvTuneChannel(idx, showOsdBanner = true) {
-    if (!tvChannels || tvChannels.length === 0) return;
-    tvCurrentIdx = (idx + tvChannels.length) % tvChannels.length;
-    const ch = tvChannels[tvCurrentIdx];
+  // ============================================================
+  // MOTOR DE SINTONIZAÇÃO E ZAPPING COM DEBOUNCER DE 1 SEGUNDO
+  // Permite ao usuário navegar rapidamente pelos canais vendo o OSD
+  // sem disparar recargas pesadas de vídeo a cada clique.
+  // ============================================================
+  let tvZapDebounceTimer = null;
+  let tvPendingIdx = 0;
+
+  // Carrega efetivamente a transmissão do canal no reprodutor (iframe ou tag de vídeo)
+  function tvLoadStream(ch) {
     if (!ch) return;
-
-    try { localStorage.setItem('andplay_last_tv_ch', tvCurrentIdx); } catch (e) {}
-
-    // Atualiza stream
     const fallback = ch.fallbacks && ch.fallbacks[0] ? ch.fallbacks[0] : { url: 'https://rdcanais.net/' + ch.channelSlug, isEmbed: true };
     if (fallback.isEmbed) {
       tvVideo.style.display = 'none';
@@ -7314,7 +7315,7 @@ header.tv-header {
       // Adiciona ?autoplay=1 para solicitar autoplay ao player do embed
       const baseUrl = fallback.url;
       const embedUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'autoplay=1';
-      // Sempre força reload limpando src antes (garante troca de canal e reautoplay)
+      // Força reload limpando src antes (garante troca de canal e reautoplay)
       tvEmbed.src = 'about:blank';
       requestAnimationFrame(() => { tvEmbed.src = embedUrl; });
     } else {
@@ -7330,6 +7331,49 @@ header.tv-header {
       const kc = document.getElementById('tvKeyCapture');
       if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 100);
     }
+  }
+
+  // Confirma a sintonização do canal pendente (chamado após 1s de inatividade ou ao teclar Enter)
+  function tvCommitPendingChannel() {
+    if (tvZapDebounceTimer) {
+      clearTimeout(tvZapDebounceTimer);
+      tvZapDebounceTimer = null;
+    }
+    tvCurrentIdx = tvPendingIdx;
+    const ch = tvChannels[tvCurrentIdx];
+    if (!ch) return;
+
+    try { localStorage.setItem('andplay_last_tv_ch', tvCurrentIdx); } catch (e) {}
+
+    // Efetiva o carregamento do player de vídeo
+    tvLoadStream(ch);
+
+    // Atualiza PiP com o canal confirmado
+    const pipName = document.getElementById('tvPipName');
+    const pipEpg = document.getElementById('tvPipEpg');
+    if (pipName) pipName.textContent = `${String(tvCurrentIdx + 1).padStart(3, '0')} - ${ch.name}`;
+    if (pipEpg) pipEpg.textContent = ch.nowTitle ? `🔴 No Ar: ${ch.nowTitle}` : (ch.categoryLabel || 'Transmissão Ao Vivo HD');
+
+    // Atualiza OSD como confirmado (isPending = false)
+    updateTvOsd(ch, tvCurrentIdx, false);
+  }
+
+  // Sintonizar Canal Imediatamente (sem debounce - usado em cliques de cards/grade e inicialização)
+  function tvTuneChannel(idx, showOsdBanner = true) {
+    if (!tvChannels || tvChannels.length === 0) return;
+    if (tvZapDebounceTimer) {
+      clearTimeout(tvZapDebounceTimer);
+      tvZapDebounceTimer = null;
+    }
+    tvCurrentIdx = (idx + tvChannels.length) % tvChannels.length;
+    tvPendingIdx = tvCurrentIdx;
+    const ch = tvChannels[tvCurrentIdx];
+    if (!ch) return;
+
+    try { localStorage.setItem('andplay_last_tv_ch', tvCurrentIdx); } catch (e) {}
+
+    // Carrega stream imediatamente
+    tvLoadStream(ch);
 
     // Atualiza textos do PiP
     const pipName = document.getElementById('tvPipName');
@@ -7337,16 +7381,42 @@ header.tv-header {
     if (pipName) pipName.textContent = `${String(tvCurrentIdx + 1).padStart(3, '0')} - ${ch.name}`;
     if (pipEpg) pipEpg.textContent = ch.nowTitle ? `🔴 No Ar: ${ch.nowTitle}` : (ch.categoryLabel || 'Transmissão Ao Vivo HD');
 
-    // Atualiza OSD
-    updateTvOsd(ch, tvCurrentIdx);
+    // Atualiza OSD (confirmado)
+    updateTvOsd(ch, tvCurrentIdx, false);
     if (showOsdBanner && tvCurrentMode === 'fullscreen') {
       triggerTvOsd();
     }
   }
 
-  // Zapping de Canais (Cima / Baixo)
+  // Zapping de Canais com Debounce de 1 segundo
+  // Mostra as informações do canal na hora, mas só carrega o vídeo se o usuário parar por 1s ou teclar Enter
   function tvZap(delta) {
-    tvTuneChannel(tvCurrentIdx + delta, true);
+    if (!tvChannels || tvChannels.length === 0) return;
+
+    // Se já havia um timer rolando, continua navegando a partir do pendingIdx
+    if (tvZapDebounceTimer) {
+      clearTimeout(tvZapDebounceTimer);
+    } else {
+      tvPendingIdx = tvCurrentIdx;
+    }
+
+    tvPendingIdx = (tvPendingIdx + delta + tvChannels.length) % tvChannels.length;
+    const pendingCh = tvChannels[tvPendingIdx];
+    if (!pendingCh) return;
+
+    // Atualiza PiP e OSD INSTANTANEAMENTE com os dados do canal pendente (isPending = true)
+    const pipName = document.getElementById('tvPipName');
+    const pipEpg = document.getElementById('tvPipEpg');
+    if (pipName) pipName.textContent = `${String(tvPendingIdx + 1).padStart(3, '0')} - ${pendingCh.name} (Sintonizando...)`;
+    if (pipEpg) pipEpg.textContent = pendingCh.nowTitle ? `🔴 No Ar: ${pendingCh.nowTitle}` : (pendingCh.categoryLabel || 'Transmissão Ao Vivo HD');
+
+    updateTvOsd(pendingCh, tvPendingIdx, true);
+    triggerTvOsd(5000);
+
+    // Debounce de 1 segundo (1000ms): confirma apenas quando o usuário parar de navegar
+    tvZapDebounceTimer = setTimeout(() => {
+      tvCommitPendingChannel();
+    }, 1000);
   }
 
   // OSD Banner - Estilo TV a Cabo / Receptor Moderno
@@ -7378,14 +7448,28 @@ header.tv-header {
     });
   }
 
-  function updateTvOsd(ch, idx) {
+  function updateTvOsd(ch, idx, isPending = false) {
     const formattedNum = String(idx + 1).padStart(3, '0');
 
     // 1. Indicador Rápido de Zapping no Topo
     const topNum = document.getElementById('tvTopChNum');
     const topName = document.getElementById('tvTopChName');
+    const topLive = document.getElementById('tvTopChLive');
     if (topNum) topNum.textContent = `CH ${formattedNum}`;
     if (topName) topName.textContent = ch.name;
+    if (topLive) {
+      if (isPending) {
+        topLive.innerHTML = '<span class="tv-pulse" style="background:#ffc107;"></span> SINTONIZANDO (1s)';
+        topLive.style.background = 'rgba(255, 193, 7, 0.25)';
+        topLive.style.color = '#ffc107';
+        topLive.style.borderColor = 'rgba(255, 193, 7, 0.5)';
+      } else {
+        topLive.innerHTML = '<span class="tv-pulse"></span> NO AR';
+        topLive.style.background = 'rgba(229, 9, 20, 0.25)';
+        topLive.style.color = '#ff4d4d';
+        topLive.style.borderColor = 'rgba(229, 9, 20, 0.5)';
+      }
+    }
 
     // 2. Coluna 1: Canal
     const osdNum = document.getElementById('tvOsdNum');
@@ -7393,6 +7477,7 @@ header.tv-header {
     const osdName = document.getElementById('tvOsdName');
     const osdCategory = document.getElementById('tvOsdCategory');
     const osdRating = document.getElementById('tvOsdRating');
+    const osdLive = document.getElementById('tvOsdLiveBadge');
 
     if (osdNum) osdNum.textContent = formattedNum;
     if (osdLogo) {
@@ -7401,6 +7486,17 @@ header.tv-header {
     }
     if (osdName) osdName.textContent = ch.name;
     if (osdCategory) osdCategory.textContent = ch.categoryLabel || 'TV Ao Vivo';
+    if (osdLive) {
+      if (isPending) {
+        osdLive.innerHTML = '⏳ SINTONIZANDO (1s) • OK';
+        osdLive.style.background = 'rgba(255, 152, 0, 0.9)';
+        osdLive.style.color = '#000';
+      } else {
+        osdLive.innerHTML = '<span class="tv-pulse"></span> NO AR';
+        osdLive.style.background = '#e50914';
+        osdLive.style.color = '#fff';
+      }
+    }
 
     // Classificação indicativa inteligente
     if (osdRating) {
@@ -7461,8 +7557,22 @@ header.tv-header {
     const remainingMinutes = Math.max(5, blockEndMinutes - curMinutes);
 
     if (osdProgFill) osdProgFill.style.width = `${progress}%`;
-    if (osdProgStatus) osdProgStatus.textContent = `Em andamento (${progress}%)`;
-    if (osdProgRemaining) osdProgRemaining.textContent = `Restam ~${remainingMinutes} min`;
+    if (osdProgStatus) {
+      if (isPending) {
+        osdProgStatus.textContent = `Aguardando confirmação (1s)...`;
+        osdProgStatus.style.color = '#ffc107';
+      } else {
+        osdProgStatus.textContent = `Em andamento (${progress}%)`;
+        osdProgStatus.style.color = '#9ca3af';
+      }
+    }
+    if (osdProgRemaining) {
+      if (isPending) {
+        osdProgRemaining.textContent = `Pressione OK para sintonizar agora`;
+      } else {
+        osdProgRemaining.textContent = `Restam ~${remainingMinutes} min`;
+      }
+    }
 
     // Sinopse
     if (osdSynopsis) {
@@ -7482,7 +7592,6 @@ header.tv-header {
       }
     }
 
-    wireTvOsdButtons();
   }
 
   function triggerTvOsd(duration = 5000) {
@@ -8053,6 +8162,12 @@ header.tv-header {
       }
       if (key === 'Enter' || key === ' ') {
         e.preventDefault();
+        // Se o usuário está folheando canais (debouncer ativo), confirma a sintonização imediatamente ao apertar Enter
+        if (tvZapDebounceTimer) {
+          clearTimeout(tvZapDebounceTimer);
+          tvCommitPendingChannel();
+          return;
+        }
         if (tvOsd && tvOsd.classList.contains('hidden')) {
           triggerTvOsd(6000);
         } else {
