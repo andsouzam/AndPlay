@@ -4026,10 +4026,11 @@ header.tv-header {
       const rdSlug = cleanSlug
         .replace(/^telecine-/, 'telecine')
         .replace(/^hbo-/, 'hbo');
-      const primaryUrl = raw.embed || ('https://v2.rdembed.sbs/' + rdSlug);
+      // RDCanais é o player primário: mais leve, troca de canal mais rápida
+      // rdembed.sbs fica como fallback caso rdcanais esteja instável
       const fallbacks = [
-        { name: 'HD', url: primaryUrl, isEmbed: true },
-        { name: 'Alternativo', url: 'https://rdcanais.net/' + rdSlug, isEmbed: true }
+        { name: 'HD', url: 'https://rdcanais.net/' + rdSlug, isEmbed: true },
+        { name: 'Alternativo', url: raw.embed || ('https://v2.rdembed.sbs/' + rdSlug), isEmbed: true }
       ];
 
       if (KNOWN_NATIVE_STREAMS[raw.id]) {
