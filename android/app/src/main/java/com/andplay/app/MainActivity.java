@@ -23,8 +23,8 @@ import android.app.Activity;
 
 public class MainActivity extends Activity {
 
-    private static final String REMOTE_URL = "https://andsouzam.github.io/AndPlay/";
-    private static final String LOCAL_URL = "file:///android_asset/index.html";
+    private static final String REMOTE_URL = "https://andsouzam.github.io/AndPlay/?mode=tv";
+    private static final String LOCAL_URL = "file:///android_asset/index.html?mode=tv";
 
     private WebView webView;
     private FrameLayout customViewContainer;
@@ -45,7 +45,7 @@ public class MainActivity extends Activity {
 
         // Layout raiz contendo WebView e container de vídeo em tela cheia
         FrameLayout rootLayout = new FrameLayout(this);
-        rootLayout.setBackgroundColor(0xFF121212);
+        rootLayout.setBackgroundColor(0xFF0A0A0C);
 
         webView = new WebView(this);
         webView.setLayoutParams(new FrameLayout.LayoutParams(
@@ -70,7 +70,7 @@ public class MainActivity extends Activity {
         // Configura clientes para tratamento de navegação e vídeo fullscreen
         setupWebViewClients();
 
-        // Inicia carregando a versão remota (atualizada automaticamente) ou local
+        // Inicia carregando a versão local empacotada (instantânea para TV e Projetores)
         loadApplication();
     }
 
@@ -86,6 +86,7 @@ public class MainActivity extends Activity {
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setUserAgentString(settings.getUserAgentString() + " AndPlayTV/2.0 (SmartTV/Projector; CableBox)");
 
         // Bloqueia abertura de popups e novas janelas de anúncios
         settings.setSupportMultipleWindows(false);
@@ -106,7 +107,6 @@ public class MainActivity extends Activity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                // Se a URL remota falhar (ex: sem internet), faz fallback automático para a versão local em assets
                 if (!isFallbackLoaded && request.isForMainFrame()) {
                     isFallbackLoaded = true;
                     view.loadUrl(LOCAL_URL);
@@ -115,19 +115,21 @@ public class MainActivity extends Activity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                // Iframes: sempre permitir (gerenciados pelo sandbox HTML)
+                // Iframes: sempre permitir
                 if (!request.isForMainFrame()) {
                     return false;
                 }
-                // Frame principal: só permite URLs conhecidas do app
+                // Frame principal: permite navegação interna
                 String url = request.getUrl().toString();
                 if (url.startsWith("file://")
                         || url.contains("andsouzam.github.io")
+                        || url.contains("rdcanais.net")
+                        || url.contains("esportesembed.net")
+                        || url.contains("bolodechocolate.fit")
                         || url.contains("v2.rdembed.sbs")
                         || url.contains("about:blank")) {
-                    return false; // Permite navegação interna
+                    return false;
                 }
-                // Bloqueia qualquer redirect externo inesperado (ex: reidosembeds.online)
                 android.util.Log.w("AndPlay", "Bloqueado redirect externo: " + url);
                 return true;
             }
@@ -136,7 +138,7 @@ public class MainActivity extends Activity {
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
-                return false; // Bloqueia terminantemente novas janelas / popups
+                return false;
             }
 
             @Override
@@ -168,12 +170,9 @@ public class MainActivity extends Activity {
     }
 
     private void loadApplication() {
-        if (isNetworkAvailable()) {
-            webView.loadUrl(REMOTE_URL);
-        } else {
-            isFallbackLoaded = true;
-            webView.loadUrl(LOCAL_URL);
-        }
+        // Carrega 100% local a interface de TV a Cabo para inicialização imediata
+        isFallbackLoaded = true;
+        webView.loadUrl(LOCAL_URL);
     }
 
     private boolean isNetworkAvailable() {
@@ -212,10 +211,32 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        int action = event.getAction();
+
+        if (action == KeyEvent.ACTION_DOWN) {
+            // Teclas de controle de TV por Assinatura / Projetor
+            if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
+                webView.evaluateJavascript("if(window.onTvRemoteKey) window.onTvRemoteKey('CHANNEL_UP');", null);
+                return true;
+            } else if (keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
+                webView.evaluateJavascript("if(window.onTvRemoteKey) window.onTvRemoteKey('CHANNEL_DOWN');", null);
+                return true;
+            } else if (keyCode == KeyEvent.KEYCODE_MENU) {
+                webView.evaluateJavascript("if(window.onTvRemoteKey) window.onTvRemoteKey('MENU');", null);
+                return true;
+            } else if (keyCode == KeyEvent.KEYCODE_INFO || keyCode == KeyEvent.KEYCODE_GUIDE) {
+                webView.evaluateJavascript("if(window.onTvRemoteKey) window.onTvRemoteKey('GUIDE');", null);
+                return true;
+            } else if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY || keyCode == KeyEvent.KEYCODE_MEDIA_PAUSE) {
+                webView.evaluateJavascript("if(window.onTvRemoteKey) window.onTvRemoteKey('PLAY_PAUSE');", null);
+                return true;
+            }
+        }
+
         // Intercepta botão Voltar do controle remoto da TV / Projetor
-        if (event.getKeyCode() == KeyEvent.KEYCODE_BACK && event.getAction() == KeyEvent.ACTION_UP) {
+        if (keyCode == KeyEvent.KEYCODE_BACK && action == KeyEvent.ACTION_UP) {
             if (customView != null) {
-                // Sai do modo tela cheia nativo
                 WebChromeClient client = (WebChromeClient) webView.getWebChromeClient();
                 if (client != null) {
                     client.onHideCustomView();
@@ -223,7 +244,6 @@ public class MainActivity extends Activity {
                 }
             }
 
-            // Executa manipulador JavaScript de fechar modais se algum estiver aberto
             webView.evaluateJavascript(
                 "if (window.handleAndroidBack && window.handleAndroidBack()) { 'HANDLED'; } else { 'UNHANDLED'; }",
                 value -> {

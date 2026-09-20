@@ -1340,9 +1340,911 @@
         padding: 20px;
       }
     }
-  </style>
+  
+/* ========================================================================= */
+/* ANDPLAY TV - CABLE BOX & RECEPTOR DE TV POR ASSINATURA (10-FOOT UI)      */
+/* ========================================================================= */
+body.tv-mode {
+  overflow: hidden !important;
+  user-select: none !important;
+  background: #070709 !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+}
+
+body.tv-mode > header,
+body.tv-mode > .status-bar,
+body.tv-mode > main,
+body.tv-mode > #videoModal {
+  display: none !important;
+}
+
+#tvCableApp {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #070709;
+  color: #fff;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Foco D-Pad / Controle Remoto */
+.tv-focusable {
+  outline: none !important;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+  border: 2px solid transparent;
+}
+.tv-focusable:focus, .tv-focusable.focused {
+  transform: scale(1.05) !important;
+  border-color: #ffc107 !important;
+  box-shadow: 0 0 25px rgba(255, 193, 7, 0.55), 0 8px 30px rgba(0,0,0,0.9) !important;
+  z-index: 20;
+}
+
+/* Reprodutor de Vídeo Unificado */
+.tv-player-box {
+  position: absolute;
+  overflow: hidden;
+  background: #000;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tv-player-box.pip {
+  top: 86px;
+  left: 36px;
+  width: 540px;
+  height: 304px;
+  border-radius: 16px;
+  z-index: 1050;
+  box-shadow: 0 10px 35px rgba(0,0,0,0.85);
+  border: 2.5px solid rgba(255, 255, 255, 0.1);
+  pointer-events: none;
+}
+.tv-player-box.fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+  z-index: 1250;
+  border: none;
+  box-shadow: none;
+  pointer-events: auto;
+}
+
+.tv-player-box video,
+.tv-player-box iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  object-fit: contain;
+  background: #000;
+}
+
+.tv-player-live-badge {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  background: rgba(229, 9, 20, 0.9);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 5;
+  letter-spacing: 0.5px;
+}
+.tv-pulse {
+  width: 6px;
+  height: 6px;
+  background: #fff;
+  border-radius: 50%;
+  animation: tvPulse 1.2s infinite ease-in-out;
+}
+@keyframes tvPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.7); }
+}
+
+.tv-watermark {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.4);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* TELA 1: Central de TV por Assinatura */
+.tv-central-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 36px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: radial-gradient(circle at 15% 15%, #161626 0%, #070709 75%);
+}
+
+.tv-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.tv-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.tv-logo-icon {
+  font-size: 32px;
+}
+.tv-logo-text {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  margin: 0;
+  background: linear-gradient(90deg, #ffc107, #00e676);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.tv-logo-sub {
+  font-size: 10px;
+  font-weight: 700;
+  color: #777;
+  letter-spacing: 1.5px;
+  display: block;
+}
+.tv-status-pill {
+  background: rgba(0, 230, 118, 0.15);
+  color: #00e676;
+  border: 1px solid rgba(0, 230, 118, 0.35);
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.tv-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.tv-clock {
+  font-size: 26px;
+  font-weight: 800;
+  color: #fff;
+  font-family: monospace;
+}
+.tv-date {
+  font-size: 13px;
+  color: #888;
+  font-weight: 600;
+}
+
+/* Hero Row */
+.tv-hero-row {
+  display: grid;
+  grid-template-columns: 540px 1fr;
+  gap: 24px;
+  margin-bottom: 30px;
+  min-height: 304px;
+}
+
+.tv-pip-frame {
+  position: relative;
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 2px solid rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  cursor: pointer;
+}
+.tv-pip-placeholder {
+  width: 100%;
+  height: 236px;
+}
+.tv-pip-footer {
+  background: rgba(15, 15, 22, 0.95);
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding: 12px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 1060;
+}
+.tv-pip-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+}
+.tv-pip-epg {
+  font-size: 12px;
+  color: #ffc107;
+  font-weight: 600;
+  margin-top: 2px;
+}
+.tv-pip-cta {
+  background: #ffc107;
+  color: #000;
+  padding: 7px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+/* Grade de Menu */
+.tv-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 14px;
+}
+.tv-menu-item {
+  background: rgba(255, 255, 255, 0.04);
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  cursor: pointer;
+}
+.tv-menu-item:focus, .tv-menu-item.focused {
+  background: rgba(255, 193, 7, 0.16) !important;
+  border-color: #ffc107 !important;
+  box-shadow: 0 0 22px rgba(255, 193, 7, 0.5) !important;
+}
+.tv-menu-icon {
+  font-size: 28px;
+  margin-bottom: 6px;
+}
+.tv-menu-label {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+}
+.tv-menu-sub {
+  font-size: 11px;
+  color: #888;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* Trilhos */
+.tv-rail-block {
+  margin-bottom: 26px;
+}
+.tv-rail-heading {
+  font-size: 16px;
+  font-weight: 800;
+  color: #bbb;
+  margin: 0 0 12px 0;
+  letter-spacing: 0.5px;
+}
+.tv-rail-scroller {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 6px 4px 14px 4px;
+  scrollbar-width: none;
+}
+.tv-rail-scroller::-webkit-scrollbar {
+  display: none;
+}
+
+.tv-channel-card {
+  min-width: 144px;
+  max-width: 144px;
+  background: #12121c;
+  border: 2px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tv-channel-card:focus, .tv-channel-card.focused {
+  border-color: #ffc107 !important;
+  background: rgba(255, 193, 7, 0.14) !important;
+}
+.tv-channel-card .num {
+  font-size: 10px;
+  color: #ffc107;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+.tv-channel-card img {
+  width: 58px;
+  height: 42px;
+  object-fit: contain;
+  margin-bottom: 8px;
+}
+.tv-channel-card .name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.tv-match-card {
+  min-width: 230px;
+  max-width: 230px;
+  background: #12121c;
+  border: 2px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+  padding: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tv-match-card:focus, .tv-match-card.focused {
+  border-color: #00e676 !important;
+  background: rgba(0, 230, 118, 0.14) !important;
+}
+
+.tv-vod-card {
+  min-width: 130px;
+  max-width: 130px;
+  background: #12121c;
+  border: 2px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tv-vod-card:focus, .tv-vod-card.focused {
+  border-color: #ffc107 !important;
+  transform: scale(1.08) !important;
+}
+.tv-vod-card img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  display: block;
+}
+.tv-vod-card .name {
+  padding: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* TELA 2: Tela Cheia de TV com OSD */
+.tv-fullscreen-view {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  z-index: 1200;
+}
+
+.tv-osd-banner {
+  position: fixed;
+  bottom: 32px;
+  left: 6%;
+  right: 6%;
+  background: rgba(10, 10, 16, 0.94);
+  backdrop-filter: blur(20px);
+  border: 1.5px solid rgba(255, 193, 7, 0.45);
+  border-radius: 18px;
+  padding: 16px 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  z-index: 1350;
+  box-shadow: 0 12px 45px rgba(0,0,0,0.95);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.tv-osd-banner.hidden {
+  opacity: 0;
+  transform: translateY(40px);
+  pointer-events: none;
+}
+
+.tv-osd-ch-num {
+  font-size: 32px;
+  font-weight: 900;
+  color: #ffc107;
+  font-family: monospace;
+  background: rgba(255, 193, 7, 0.12);
+  padding: 4px 14px;
+  border-radius: 10px;
+}
+.tv-osd-logo {
+  width: 68px;
+  height: 48px;
+  object-fit: contain;
+}
+.tv-osd-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+.tv-osd-top-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tv-osd-name {
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+}
+.tv-osd-badge {
+  background: #e50914;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.tv-osd-quality {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.4);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.tv-osd-prog-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tv-osd-now {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffc107;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tv-osd-bar {
+  width: 160px;
+  height: 4px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.tv-osd-bar-fill {
+  height: 100%;
+  background: #ff5252;
+}
+.tv-osd-next {
+  font-size: 12px;
+  color: #aaa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tv-osd-controls-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: right;
+  font-size: 11px;
+  color: #888;
+  flex-shrink: 0;
+}
+.tv-osd-controls-hint strong {
+  color: #ffc107;
+}
+
+/* Gaveta Lateral EPG */
+.tv-epg-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 440px;
+  background: rgba(9, 9, 14, 0.96);
+  backdrop-filter: blur(24px);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 1400;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  box-shadow: 25px 0 60px rgba(0,0,0,0.9);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tv-epg-drawer.closed {
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+.tv-drawer-header {
+  margin-bottom: 14px;
+}
+.tv-drawer-title {
+  font-size: 20px;
+  font-weight: 900;
+  color: #ffc107;
+}
+.tv-drawer-hint {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+.tv-drawer-categories {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  scrollbar-width: none;
+}
+.tv-drawer-categories::-webkit-scrollbar {
+  display: none;
+}
+.tv-epg-cat-pill {
+  padding: 6px 14px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.06);
+  color: #bbb;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.tv-epg-cat-pill:focus, .tv-epg-cat-pill.active {
+  background: #ffc107 !important;
+  color: #000 !important;
+}
+
+.tv-drawer-channel-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tv-drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+  cursor: pointer;
+}
+.tv-drawer-item:focus, .tv-drawer-item.focused {
+  background: rgba(255, 193, 7, 0.16) !important;
+  border-color: #ffc107 !important;
+}
+.tv-drawer-item.active-channel {
+  border-left: 4px solid #00e676;
+}
+
+/* TELA 3: Seção VOD */
+.tv-vod-view {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #070709;
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 36px;
+  overflow-y: auto;
+}
+.tv-vod-top-bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+.tv-vod-back-btn {
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.tv-vod-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffc107;
+}
+.tv-vod-search-hint {
+  font-size: 12px;
+  color: #888;
+  margin-left: auto;
+}
+
+.tv-vod-hero-preview {
+  display: flex;
+  gap: 24px;
+  background: #111118;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+  min-height: 180px;
+}
+.tv-vod-hero-info {
+  flex: 1;
+}
+.tv-vod-hero-title {
+  font-size: 24px;
+  font-weight: 900;
+  color: #fff;
+  margin: 0 0 6px 0;
+}
+.tv-vod-hero-meta {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.tv-meta-badge {
+  background: rgba(255,255,255,0.08);
+  color: #ffc107;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.tv-vod-hero-plot {
+  font-size: 13px;
+  color: #bbb;
+  line-height: 1.5;
+  max-width: 750px;
+  margin: 0 0 14px 0;
+}
+.tv-vod-hero-btn {
+  background: #00e676;
+  color: #000;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.tv-vod-hero-poster {
+  width: 120px;
+  height: 175px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.tv-vod-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+  gap: 16px;
+}
+.tv-vod-poster-card {
+  background: #13131c;
+  border: 2px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+}
+.tv-vod-poster-card:focus, .tv-vod-poster-card.focused {
+  border-color: #ffc107 !important;
+  transform: scale(1.08) !important;
+}
+.tv-vod-poster-card img {
+  width: 100%;
+  height: 190px;
+  object-fit: cover;
+  display: block;
+}
+.tv-vod-card-info {
+  padding: 8px;
+}
+.tv-vod-card-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tv-vod-card-year {
+  font-size: 10px;
+  color: #888;
+  margin-top: 2px;
+}
+
+</style>
 </head>
 <body>
+  <!-- ==================== ANDPLAY TV / RECEPTOR CABLE BOX ==================== -->
+  <div id="tvCableApp" class="tv-cable-app" style="display: none;">
+    <!-- Reprodutor de Vídeo Unificado para TV (Muda entre PiP e Tela Cheia sem reiniciar o vídeo) -->
+    <div id="tvPlayerBox" class="tv-player-box pip">
+      <video id="tvVideoPlayer" playsinline preload="auto"></video>
+      <iframe id="tvEmbedPlayer" allowfullscreen="true" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" referrerpolicy="no-referrer-when-downgrade"></iframe>
+      <div id="tvLiveBadge" class="tv-player-live-badge"><span class="tv-pulse"></span> NO AR</div>
+      <div id="tvChannelWatermark" class="tv-watermark">AndPlay TV</div>
+    </div>
+
+    <!-- TELA 1: Central de TV por Assinatura (Hub Screen) -->
+    <div id="tvCentralScreen" class="tv-central-screen">
+      <!-- Topo: Marca, Relógio e Data -->
+      <header class="tv-header">
+        <div class="tv-brand">
+          <div class="tv-logo-icon">📺</div>
+          <div class="tv-brand-titles">
+            <h1 class="tv-logo-text">AndPlay TV</h1>
+            <span class="tv-logo-sub">RECEPTOR DE TV POR ASSINATURA</span>
+          </div>
+          <span class="tv-status-pill">🟢 SINAL ATIVO</span>
+        </div>
+        <div class="tv-header-right">
+          <div class="tv-clock" id="tvClock">--:--</div>
+          <div class="tv-date" id="tvDate">Hoje</div>
+        </div>
+      </header>
+
+      <!-- Hero Row: Espaço do PiP + Acesso Rápido -->
+      <div class="tv-hero-row">
+        <!-- Moldura que abriga o PiP quando na Central -->
+        <div class="tv-pip-frame tv-focusable" tabindex="0" id="tvPipCard">
+          <div class="tv-pip-placeholder" id="tvPipPlaceholder"></div>
+          <div class="tv-pip-footer">
+            <div class="tv-pip-info">
+              <div class="tv-pip-name" id="tvPipName">Carregando Canal...</div>
+              <div class="tv-pip-epg" id="tvPipEpg">Programação ao Vivo</div>
+            </div>
+            <div class="tv-pip-cta">▶ TELA CHEIA (OK)</div>
+          </div>
+        </div>
+
+        <!-- Grade de Ações da Central -->
+        <div class="tv-menu-grid">
+          <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavLive">
+            <div class="tv-menu-icon">📺</div>
+            <div class="tv-menu-label">TV Ao Vivo</div>
+            <div class="tv-menu-sub">Zapping de Canais</div>
+          </div>
+          <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavSports">
+            <div class="tv-menu-icon">⚽</div>
+            <div class="tv-menu-label">Jogos de Hoje</div>
+            <div class="tv-menu-sub">Partidas & Campeonatos</div>
+          </div>
+          <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavMovies">
+            <div class="tv-menu-icon">🎬</div>
+            <div class="tv-menu-label">Filmes VOD</div>
+            <div class="tv-menu-sub">Cinema em Casa</div>
+          </div>
+          <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavSeries">
+            <div class="tv-menu-icon">🧸</div>
+            <div class="tv-menu-label">Séries VOD</div>
+            <div class="tv-menu-sub">Temporadas & Episódios</div>
+          </div>
+          <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavEpg">
+            <div class="tv-menu-icon">📋</div>
+            <div class="tv-menu-label">Guia EPG</div>
+            <div class="tv-menu-sub">Grade Completa</div>
+          </div>
+          <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavSync">
+            <div class="tv-menu-icon">⚡</div>
+            <div class="tv-menu-label">Sincronizar</div>
+            <div class="tv-menu-sub">Atualizar Sinais</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trilho 1: Canais em Destaque (Zapping Rápido) -->
+      <section class="tv-rail-block">
+        <h2 class="tv-rail-heading">📺 CANAIS EM DESTAQUE</h2>
+        <div class="tv-rail-scroller" id="tvChannelsRail"></div>
+      </section>
+
+      <!-- Trilho 2: Jogos de Hoje -->
+      <section class="tv-rail-block">
+        <h2 class="tv-rail-heading">⚽ JOGOS & TRANSMISSÕES DO DIA</h2>
+        <div class="tv-rail-scroller" id="tvSportsRail"></div>
+      </section>
+
+      <!-- Trilho 3: Destaques de Cinema -->
+      <section class="tv-rail-block">
+        <h2 class="tv-rail-heading">🎬 FILMES & LANÇAMENTOS</h2>
+        <div class="tv-rail-scroller" id="tvMoviesRail"></div>
+      </section>
+    </div>
+
+    <!-- TELA 2: Tela Cheia de TV com OSD (Zapping Mode) -->
+    <div id="tvFullscreenView" class="tv-fullscreen-view" style="display: none;">
+      <!-- OSD Banner Flutuante (Mini-EPG) -->
+      <div id="tvOsdBanner" class="tv-osd-banner hidden">
+        <div class="tv-osd-ch-num" id="tvOsdNum">001</div>
+        <img class="tv-osd-logo" id="tvOsdLogo" src="" alt="Canal">
+        <div class="tv-osd-meta">
+          <div class="tv-osd-top-row">
+            <span class="tv-osd-name" id="tvOsdName">TV Globo HD</span>
+            <span class="tv-osd-badge" id="tvOsdCategory">Abertos</span>
+            <span class="tv-osd-quality">1080p HD</span>
+          </div>
+          <div class="tv-osd-prog-row">
+            <span class="tv-osd-now" id="tvOsdNow">Programação Ao Vivo</span>
+            <div class="tv-osd-bar"><div class="tv-osd-bar-fill" id="tvOsdProgFill" style="width: 50%;"></div></div>
+          </div>
+          <div class="tv-osd-next" id="tvOsdNext">Próxima atração: Carregando...</div>
+        </div>
+        <div class="tv-osd-controls-hint">
+          <span><strong>▲ / ▼</strong> Zapping Canais</span>
+          <span><strong>OK</strong> Guia EPG</span>
+          <span><strong>Voltar</strong> Central</span>
+        </div>
+      </div>
+
+      <!-- Gaveta Lateral de Canais (Quick Channel Guide) -->
+      <aside id="tvEpgDrawer" class="tv-epg-drawer closed">
+        <div class="tv-drawer-header">
+          <div class="tv-drawer-title">📋 GUIA DE CANAIS</div>
+          <div class="tv-drawer-hint">OK para sintonizar • Voltar fecha</div>
+        </div>
+        <div class="tv-drawer-categories" id="tvDrawerCats"></div>
+        <div class="tv-drawer-channel-list" id="tvDrawerChannels"></div>
+      </aside>
+    </div>
+
+    <!-- TELA 3: Seção VOD (Filmes e Séries 10-Foot UI) -->
+    <div id="tvVodView" class="tv-vod-view" style="display: none;">
+      <div class="tv-vod-top-bar">
+        <button class="tv-vod-back-btn tv-focusable" tabindex="0" id="tvVodBack">← VOLTAR À CENTRAL</button>
+        <div class="tv-vod-title" id="tvVodSectionTitle">🎬 Filmes Sob Demanda</div>
+        <div class="tv-vod-search-hint">Navegue com o controle remoto</div>
+      </div>
+      <!-- Painel de Destaque Superior com Detalhes do Filme Focado -->
+      <div class="tv-vod-hero-preview" id="tvVodHeroPreview">
+        <div class="tv-vod-hero-info">
+          <h2 class="tv-vod-hero-title" id="tvVodPreviewTitle">Selecione um título</h2>
+          <div class="tv-vod-hero-meta" id="tvVodPreviewMeta"></div>
+          <p class="tv-vod-hero-plot" id="tvVodPreviewPlot">Navegue pelos títulos para ver sinopse e detalhes.</p>
+          <button class="tv-vod-hero-btn tv-focusable" tabindex="0" id="tvVodHeroWatchBtn" style="display: none;">▶ ASSISTIR (OK)</button>
+        </div>
+        <img class="tv-vod-hero-poster" id="tvVodPreviewPoster" src="" alt="">
+      </div>
+      <!-- Grade de Trilhos VOD -->
+      <div class="tv-vod-scroller-content" id="tvVodRailsContainer"></div>
+    </div>
+  </div>
+
+
 
   <header>
     <div class="header-left">
@@ -2358,6 +3260,16 @@
 
       initSidebarState();
 
+      // Se estiver em modo TV (Android App / Smart TV / Projetor / ?mode=tv)
+      const isTvParam = window.location.search.includes('mode=tv');
+      const isTvAgent = navigator.userAgent.includes('AndPlayTV') || navigator.userAgent.includes('SmartTV');
+      const isTvMode = isTvParam || isTvAgent || window.isAndroidTvApp;
+
+      if (isTvMode && window.initTvCableBox) {
+        loadMovieCategories().then(loadFullMovies).catch(() => {});
+        window.initTvCableBox();
+        return;
+      }
       // Iniciar com filmes
       await loadMovieCategories();
       await loadFullMovies();
@@ -5846,6 +6758,622 @@
     function escapeHtml(str) {
       return (str || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
+
+
+<!-- SCRIPT TV CABO CONTROLLER -->
+<script>
+(function() {
+  // Verificação do modo TV
+  const isTvParam = window.location.search.includes('mode=tv');
+  const isTvAgent = navigator.userAgent.includes('AndPlayTV') || navigator.userAgent.includes('SmartTV');
+  const isTvMode = isTvParam || isTvAgent || window.isAndroidTvApp;
+
+  if (!isTvMode) return; // Se não for TV, roda o modo web normal
+
+  console.log('[AndPlay TV] Iniciando modo TV a Cabo / Receptor Smart TV');
+  document.body.classList.add('tv-mode');
+
+  // Variáveis de Estado do Receptor TV
+  let tvChannels = [];
+  let tvCurrentIdx = 0;
+  let tvCurrentMode = 'central'; // 'central' | 'fullscreen' | 'vod'
+  let tvOsdTimer = null;
+  let tvVodList = [];
+  let tvVodMode = 'movies';
+
+  // Elementos DOM da TV
+  const tvApp = document.getElementById('tvCableApp');
+  const tvCentral = document.getElementById('tvCentralScreen');
+  const tvFullscreen = document.getElementById('tvFullscreenView');
+  const tvVod = document.getElementById('tvVodView');
+  const tvPlayerBox = document.getElementById('tvPlayerBox');
+  const tvVideo = document.getElementById('tvVideoPlayer');
+  const tvEmbed = document.getElementById('tvEmbedPlayer');
+  const tvOsd = document.getElementById('tvOsdBanner');
+  const tvDrawer = document.getElementById('tvEpgDrawer');
+
+  // Relógio
+  function updateTvClock() {
+    const clockEl = document.getElementById('tvClock');
+    const dateEl = document.getElementById('tvDate');
+    if (!clockEl) return;
+    const now = new Date();
+    clockEl.textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    if (dateEl) {
+      dateEl.textContent = now.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
+    }
+  }
+  setInterval(updateTvClock, 1000);
+  updateTvClock();
+
+  // Inicializa canais e eventos
+  window.initTvCableBox = async function() {
+    tvApp.style.display = 'flex';
+
+    // Carrega canais da base global
+    if (typeof ALL_REI_CHANNELS !== 'undefined' && Array.isArray(ALL_REI_CHANNELS)) {
+      tvChannels = ALL_REI_CHANNELS.map(buildChannelItem);
+    } else if (typeof LIVE_CHANNELS !== 'undefined' && Array.isArray(LIVE_CHANNELS)) {
+      tvChannels = LIVE_CHANNELS;
+    }
+
+    // Carrega último canal assistido
+    try {
+      const saved = localStorage.getItem('andplay_last_tv_ch');
+      if (saved !== null && !isNaN(parseInt(saved))) {
+        tvCurrentIdx = Math.max(0, Math.min(tvChannels.length - 1, parseInt(saved)));
+      }
+    } catch (e) {}
+
+    // Popula trilhos da Central
+    renderTvFeaturedChannels();
+    loadTvSportsRail();
+    loadTvMoviesRail();
+    setupTvDrawerCategories();
+
+    // Sintoniza primeiro canal no PiP
+    if (tvChannels.length > 0) {
+      tvTuneChannel(tvCurrentIdx, false);
+    }
+
+    // Foca no PiP ao iniciar
+    setTimeout(() => {
+      const pipCard = document.getElementById('tvPipCard');
+      if (pipCard) pipCard.focus();
+    }, 200);
+  };
+
+  // Sintonizar Canal
+  function tvTuneChannel(idx, showOsdBanner = true) {
+    if (!tvChannels || tvChannels.length === 0) return;
+    tvCurrentIdx = (idx + tvChannels.length) % tvChannels.length;
+    const ch = tvChannels[tvCurrentIdx];
+    if (!ch) return;
+
+    try { localStorage.setItem('andplay_last_tv_ch', tvCurrentIdx); } catch (e) {}
+
+    // Atualiza stream
+    const fallback = ch.fallbacks && ch.fallbacks[0] ? ch.fallbacks[0] : { url: 'https://rdcanais.net/' + ch.channelSlug, isEmbed: true };
+    if (fallback.isEmbed) {
+      tvVideo.style.display = 'none';
+      tvVideo.pause();
+      tvEmbed.style.display = 'block';
+      if (tvEmbed.src !== fallback.url) {
+        tvEmbed.src = fallback.url;
+      }
+    } else {
+      tvEmbed.style.display = 'none';
+      tvEmbed.src = 'about:blank';
+      tvVideo.style.display = 'block';
+      tvVideo.src = fallback.url;
+      tvVideo.play().catch(() => {});
+    }
+
+    // Atualiza textos do PiP
+    const pipName = document.getElementById('tvPipName');
+    const pipEpg = document.getElementById('tvPipEpg');
+    if (pipName) pipName.textContent = `${String(tvCurrentIdx + 1).padStart(3, '0')} - ${ch.name}`;
+    if (pipEpg) pipEpg.textContent = ch.nowTitle ? `🔴 No Ar: ${ch.nowTitle}` : (ch.categoryLabel || 'Transmissão Ao Vivo HD');
+
+    // Atualiza OSD
+    updateTvOsd(ch, tvCurrentIdx);
+    if (showOsdBanner && tvCurrentMode === 'fullscreen') {
+      triggerTvOsd();
+    }
+  }
+
+  // Zapping de Canais (Cima / Baixo)
+  function tvZap(delta) {
+    tvTuneChannel(tvCurrentIdx + delta, true);
+  }
+
+  // OSD Banner
+  function updateTvOsd(ch, idx) {
+    const osdNum = document.getElementById('tvOsdNum');
+    const osdLogo = document.getElementById('tvOsdLogo');
+    const osdName = document.getElementById('tvOsdName');
+    const osdCategory = document.getElementById('tvOsdCategory');
+    const osdNow = document.getElementById('tvOsdNow');
+    const osdProgFill = document.getElementById('tvOsdProgFill');
+    const osdNext = document.getElementById('tvOsdNext');
+
+    if (osdNum) osdNum.textContent = String(idx + 1).padStart(3, '0');
+    if (osdLogo) {
+      osdLogo.src = ch.logo || '';
+      osdLogo.style.display = ch.logo ? 'block' : 'none';
+    }
+    if (osdName) osdName.textContent = ch.name;
+    if (osdCategory) osdCategory.textContent = ch.categoryLabel || 'TV Ao Vivo';
+    if (osdNow) osdNow.textContent = ch.nowTitle || 'Programação Ao Vivo HD';
+    if (osdProgFill) osdProgFill.style.width = `${Math.max(15, ch.nowProgress || 45)}%`;
+    if (osdNext) {
+      osdNext.textContent = (ch.nextProgrammes && ch.nextProgrammes[0]) ? `A seguir: ${ch.nextProgrammes[0].t}` : 'A seguir: Programação Normal';
+    }
+  }
+
+  function triggerTvOsd() {
+    if (tvOsdTimer) clearTimeout(tvOsdTimer);
+    tvOsd.classList.remove('hidden');
+    tvOsdTimer = setTimeout(() => {
+      tvOsd.classList.add('hidden');
+    }, 3800);
+  }
+
+  // Alternar entre Telas (Central x Tela Cheia x VOD)
+  function setTvViewMode(mode) {
+    tvCurrentMode = mode;
+    if (mode === 'fullscreen') {
+      tvCentral.style.display = 'none';
+      tvVod.style.display = 'none';
+      tvFullscreen.style.display = 'flex';
+      tvPlayerBox.className = 'tv-player-box fullscreen';
+      triggerTvOsd();
+    } else if (mode === 'central') {
+      tvFullscreen.style.display = 'none';
+      tvVod.style.display = 'none';
+      tvCentral.style.display = 'flex';
+      tvPlayerBox.className = 'tv-player-box pip';
+      tvDrawer.classList.add('closed');
+      const pip = document.getElementById('tvPipCard');
+      if (pip) pip.focus();
+    } else if (mode === 'vod') {
+      tvCentral.style.display = 'none';
+      tvFullscreen.style.display = 'none';
+      tvVod.style.display = 'flex';
+      tvPlayerBox.className = 'tv-player-box pip';
+      const backBtn = document.getElementById('tvVodBack');
+      if (backBtn) backBtn.focus();
+    }
+  }
+
+  // Teclas do Controle Remoto
+  window.onTvRemoteKey = function(key) {
+    console.log('[AndPlay TV Remote]', key);
+    if (tvCurrentMode === 'fullscreen') {
+      if (key === 'CHANNEL_UP') { tvZap(-1); return; }
+      if (key === 'CHANNEL_DOWN') { tvZap(1); return; }
+      if (key === 'MENU' || key === 'BACK') { setTvViewMode('central'); return; }
+      if (key === 'GUIDE' || key === 'INFO') { toggleTvDrawer(); return; }
+    } else if (tvCurrentMode === 'central') {
+      if (key === 'MENU') {
+        // Na central, Menu pode recarregar ou focar no PiP
+        const pip = document.getElementById('tvPipCard');
+        if (pip) pip.focus();
+        return;
+      }
+    } else if (tvCurrentMode === 'vod') {
+      if (key === 'BACK' || key === 'MENU') {
+        setTvViewMode('central');
+        return;
+      }
+    }
+  };
+
+  // Botão Voltar do Android
+  window.handleAndroidBack = function() {
+    if (tvCurrentMode === 'fullscreen') {
+      if (!tvDrawer.classList.contains('closed')) {
+        tvDrawer.classList.add('closed');
+        return true;
+      }
+      setTvViewMode('central');
+      return true;
+    }
+    if (tvCurrentMode === 'vod') {
+      setTvViewMode('central');
+      return true;
+    }
+    return false; // Na Central, deixa sair do app
+  };
+
+  // Drawer EPG
+  function toggleTvDrawer() {
+    if (tvDrawer.classList.contains('closed')) {
+      tvDrawer.classList.remove('closed');
+      renderTvDrawerList('ALL');
+      const firstItem = tvDrawer.querySelector('.tv-drawer-item');
+      if (firstItem) firstItem.focus();
+    } else {
+      tvDrawer.classList.add('closed');
+    }
+  }
+
+  // Renderiza Trilho de Canais na Central
+  function renderTvFeaturedChannels() {
+    const rail = document.getElementById('tvChannelsRail');
+    if (!rail || !tvChannels) return;
+    rail.innerHTML = '';
+
+    // Seleciona os principais 30 canais em destaque
+    const featuredSlugs = ['globo', 'sbt', 'record', 'band', 'sportv', 'sportv2', 'sportv3', 'premiere', 'premiere2', 'espn', 'espn2', 'espn4', 'tnt', 'space', 'telecine-premium', 'telecine-action', 'telecine-pipoca', 'hbo', 'hbo2', 'warner', 'cazetv', 'cnn-brasil', 'globonews', 'discovery-kids', 'cartoon-network'];
+    const list = tvChannels.filter(c => featuredSlugs.some(s => c.channelSlug.toLowerCase().includes(s))).concat(tvChannels.slice(0, 15));
+    const uniqueList = Array.from(new Set(list.map(c => c.id))).map(id => list.find(c => c.id === id));
+
+    uniqueList.forEach((ch, idx) => {
+      const card = document.createElement('div');
+      card.className = 'tv-channel-card tv-focusable';
+      card.tabIndex = 0;
+      const realIdx = tvChannels.indexOf(ch);
+      card.innerHTML = `
+        <div class="num">CH ${String(realIdx + 1).padStart(3, '0')}</div>
+        <img src="${ch.logo || ''}" alt="${ch.name}" onerror="this.style.opacity='0.3'">
+        <div class="name">${ch.name}</div>
+      `;
+      card.addEventListener('click', () => {
+        tvTuneChannel(realIdx, true);
+        setTvViewMode('fullscreen');
+      });
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          tvTuneChannel(realIdx, true);
+          setTvViewMode('fullscreen');
+        }
+      });
+      rail.appendChild(card);
+    });
+  }
+
+  // Renderiza Trilho de Jogos
+  async function loadTvSportsRail() {
+    const rail = document.getElementById('tvSportsRail');
+    if (!rail) return;
+    rail.innerHTML = '<div style="color:#888; font-size:13px; padding:10px;">Carregando partidas de hoje...</div>';
+
+    let sports = [];
+    if (typeof fetchLiveSportsEvents === 'function') {
+      try { sports = await fetchLiveSportsEvents(); } catch (e) {}
+    }
+
+    rail.innerHTML = '';
+    if (!sports || sports.length === 0) {
+      rail.innerHTML = '<div style="color:#666; font-size:13px; padding:10px;">Nenhuma partida agendada no momento.</div>';
+      return;
+    }
+
+    sports.forEach(ev => {
+      const card = document.createElement('div');
+      card.className = 'tv-match-card tv-focusable';
+      card.tabIndex = 0;
+      const isNow = ev.isLiveNow;
+      card.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <span style="font-size:10px; font-weight:800; color:${isNow ? '#e50914' : '#ffc107'}; background:rgba(255,255,255,0.06); padding:2px 8px; border-radius:10px;">${isNow ? '🔴 AO VIVO' : '⏰ ' + ev.matchTime}</span>
+          <span style="font-size:10px; color:#aaa; font-weight:600;">${ev.league || 'Futebol'}</span>
+        </div>
+        <div style="font-size:14px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:6px;">${ev.name}</div>
+        <div style="font-size:11px; color:#ffc107; font-weight:600;">▶ Sintonizar Transmissão</div>
+      `;
+      card.addEventListener('click', () => {
+        openLivePlayer(ev, 0);
+      });
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') openLivePlayer(ev, 0);
+      });
+      rail.appendChild(card);
+    });
+  }
+
+  // Renderiza Trilho de Filmes
+  function loadTvMoviesRail() {
+    const rail = document.getElementById('tvMoviesRail');
+    if (!rail) return;
+    const movies = (typeof fullMoviesCache !== 'undefined' && Array.isArray(fullMoviesCache)) ? fullMoviesCache.slice(0, 20) : [];
+    if (movies.length === 0) {
+      setTimeout(loadTvMoviesRail, 1500);
+      return;
+    }
+
+    rail.innerHTML = '';
+    movies.forEach(m => {
+      const card = document.createElement('div');
+      card.className = 'tv-vod-card tv-focusable';
+      card.tabIndex = 0;
+      const poster = m.poster || m.stream_icon || '';
+      card.innerHTML = `
+        <img src="${poster}" alt="${m.name}" onerror="this.style.opacity='0.2'">
+        <div class="name">${m.name}</div>
+      `;
+      card.addEventListener('click', () => onMovieCardClick(m));
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') onMovieCardClick(m);
+      });
+      rail.appendChild(card);
+    });
+  }
+
+  // Guia Lateral de Categorias
+  function setupTvDrawerCategories() {
+    const catContainer = document.getElementById('tvDrawerCats');
+    if (!catContainer) return;
+    const cats = [
+      { id: 'ALL', name: 'Todos' },
+      { id: 'sports', name: 'Esportes' },
+      { id: 'open_tv', name: 'Abertos' },
+      { id: 'movies', name: 'Filmes 24H' },
+      { id: 'kids', name: 'Infantil' },
+      { id: 'news', name: 'Notícias' }
+    ];
+    catContainer.innerHTML = '';
+    cats.forEach((c, idx) => {
+      const btn = document.createElement('button');
+      btn.className = `tv-epg-cat-pill tv-focusable ${idx === 0 ? 'active' : ''}`;
+      btn.textContent = c.name;
+      btn.addEventListener('click', () => {
+        catContainer.querySelectorAll('.tv-epg-cat-pill').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        renderTvDrawerList(c.id);
+      });
+      catContainer.appendChild(btn);
+    });
+  }
+
+  function renderTvDrawerList(catId) {
+    const listEl = document.getElementById('tvDrawerChannels');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    const filtered = (catId === 'ALL') ? tvChannels : tvChannels.filter(c => c.categoryKey === catId);
+
+    filtered.forEach(ch => {
+      const item = document.createElement('div');
+      const realIdx = tvChannels.indexOf(ch);
+      const isCur = (realIdx === tvCurrentIdx);
+      item.className = `tv-drawer-item tv-focusable ${isCur ? 'active-channel' : ''}`;
+      item.tabIndex = 0;
+      item.innerHTML = `
+        <span style="font-size:12px; font-weight:800; color:#ffc107; min-width:32px;">${String(realIdx + 1).padStart(3, '0')}</span>
+        <img src="${ch.logo || ''}" alt="" style="width:36px; height:24px; object-fit:contain;">
+        <div style="flex:1; overflow:hidden;">
+          <div style="font-size:13px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${ch.name}</div>
+          <div style="font-size:10px; color:#ffc107; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${ch.nowTitle || 'Ao Vivo'}</div>
+        </div>
+        ${isCur ? '<span style="font-size:9px; font-weight:800; background:#00e676; color:#000; padding:2px 6px; border-radius:4px;">NO AR</span>' : ''}
+      `;
+      item.addEventListener('click', () => {
+        tvTuneChannel(realIdx, true);
+        tvDrawer.classList.add('closed');
+      });
+      item.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          tvTuneChannel(realIdx, true);
+          tvDrawer.classList.add('closed');
+        }
+      });
+      listEl.appendChild(item);
+    });
+  }
+
+  // Navegação da Central (Ações Rápidas)
+  document.addEventListener('DOMContentLoaded', () => {
+    // Clique no PiP -> Tela Cheia
+    const pipCard = document.getElementById('tvPipCard');
+    if (pipCard) {
+      pipCard.addEventListener('click', () => setTvViewMode('fullscreen'));
+      pipCard.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') setTvViewMode('fullscreen');
+      });
+    }
+
+    // Botões de Ação da Central
+    const btnLive = document.getElementById('tvNavLive');
+    if (btnLive) {
+      btnLive.addEventListener('click', () => setTvViewMode('fullscreen'));
+      btnLive.addEventListener('keydown', (e) => { if (e.key === 'Enter') setTvViewMode('fullscreen'); });
+    }
+
+    const btnSports = document.getElementById('tvNavSports');
+    if (btnSports) {
+      btnSports.addEventListener('click', () => {
+        const rail = document.getElementById('tvSportsRail');
+        if (rail) {
+          const first = rail.querySelector('.tv-match-card');
+          if (first) first.focus();
+        }
+      });
+      btnSports.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const rail = document.getElementById('tvSportsRail');
+          if (rail) { const first = rail.querySelector('.tv-match-card'); if (first) first.focus(); }
+        }
+      });
+    }
+
+    const btnMovies = document.getElementById('tvNavMovies');
+    if (btnMovies) {
+      btnMovies.addEventListener('click', () => openTvVodExplorer('movies'));
+      btnMovies.addEventListener('keydown', (e) => { if (e.key === 'Enter') openTvVodExplorer('movies'); });
+    }
+
+    const btnSeries = document.getElementById('tvNavSeries');
+    if (btnSeries) {
+      btnSeries.addEventListener('click', () => openTvVodExplorer('series'));
+      btnSeries.addEventListener('keydown', (e) => { if (e.key === 'Enter') openTvVodExplorer('series'); });
+    }
+
+    const btnEpg = document.getElementById('tvNavEpg');
+    if (btnEpg) {
+      btnEpg.addEventListener('click', () => {
+        setTvViewMode('fullscreen');
+        toggleTvDrawer();
+      });
+      btnEpg.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          setTvViewMode('fullscreen');
+          toggleTvDrawer();
+        }
+      });
+    }
+
+    const btnSync = document.getElementById('tvNavSync');
+    if (btnSync) {
+      btnSync.addEventListener('click', () => {
+        if (typeof fetchLiveChannelsFromApi === 'function') fetchLiveChannelsFromApi();
+        loadTvSportsRail();
+        tvTuneChannel(tvCurrentIdx, true);
+      });
+      btnSync.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          if (typeof fetchLiveChannelsFromApi === 'function') fetchLiveChannelsFromApi();
+          loadTvSportsRail();
+          tvTuneChannel(tvCurrentIdx, true);
+        }
+      });
+    }
+
+    const vodBackBtn = document.getElementById('tvVodBack');
+    if (vodBackBtn) {
+      vodBackBtn.addEventListener('click', () => setTvViewMode('central'));
+      vodBackBtn.addEventListener('keydown', (e) => { if (e.key === 'Enter') setTvViewMode('central'); });
+    }
+  });
+
+  // VOD Explorer
+  function openTvVodExplorer(type) {
+    tvVodMode = type;
+    const titleEl = document.getElementById('tvVodSectionTitle');
+    if (titleEl) titleEl.textContent = (type === 'movies') ? '🎬 Filmes Sob Demanda (Cinema)' : '📺 Séries Sob Demanda';
+    setTvViewMode('vod');
+
+    const container = document.getElementById('tvVodRailsContainer');
+    if (!container) return;
+    container.innerHTML = '<div style="color:#aaa; font-size:16px; padding:30px; text-align:center;">Carregando catálogo para TV...</div>';
+
+    const items = (type === 'movies') ? (fullMoviesCache || []) : (fullSeriesCache || []);
+    if (items.length === 0) {
+      if (type === 'movies' && typeof loadFullMovies === 'function') loadFullMovies().then(() => openTvVodExplorer('movies'));
+      if (type === 'series' && typeof loadFullSeries === 'function') loadFullSeries().then(() => openTvVodExplorer('series'));
+      return;
+    }
+
+    // Renderiza grade VOD estilo Smart TV
+    container.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.className = 'tv-vod-grid';
+
+    items.slice(0, 60).forEach((item, i) => {
+      const card = document.createElement('div');
+      card.className = 'tv-vod-poster-card tv-focusable';
+      card.tabIndex = 0;
+      const poster = item.poster || item.stream_icon || item.cover || '';
+      card.innerHTML = `
+        <img src="${poster}" alt="${item.name}" loading="lazy" onerror="this.style.opacity='0.2'">
+        <div class="tv-vod-card-info">
+          <div class="tv-vod-card-name">${item.name}</div>
+          <div class="tv-vod-card-year">${item.year || ''} ★ ${item.rating || '7.5'}</div>
+        </div>
+      `;
+
+      // Atualiza painel superior quando em foco
+      card.addEventListener('focus', () => updateTvVodPreview(item));
+
+      card.addEventListener('click', () => {
+        if (type === 'movies') onMovieCardClick(item);
+        else openSeriesModal(item);
+      });
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          if (type === 'movies') onMovieCardClick(item);
+          else openSeriesModal(item);
+        }
+      });
+
+      grid.appendChild(card);
+    });
+
+    container.appendChild(grid);
+    if (items[0]) updateTvVodPreview(items[0]);
+  }
+
+  function updateTvVodPreview(item) {
+    const title = document.getElementById('tvVodPreviewTitle');
+    const meta = document.getElementById('tvVodPreviewMeta');
+    const plot = document.getElementById('tvVodPreviewPlot');
+    const poster = document.getElementById('tvVodPreviewPoster');
+    const watchBtn = document.getElementById('tvVodHeroWatchBtn');
+
+    if (title) title.textContent = item.name || item.title || '';
+    if (meta) {
+      const badges = [
+        item.year ? `Ano: ${item.year}` : '',
+        item.rating ? `★ ${Number(item.rating).toFixed(1)}` : '',
+        item.genre || ''
+      ].filter(Boolean);
+      meta.innerHTML = badges.map(b => `<span class="tv-meta-badge">${b}</span>`).join(' ');
+    }
+    if (plot) plot.textContent = item.plot || 'Sinopse não disponível para este título.';
+    if (poster) {
+      poster.src = item.poster || item.stream_icon || item.cover || '';
+      poster.style.display = poster.src ? 'block' : 'none';
+    }
+    if (watchBtn) {
+      watchBtn.style.display = 'inline-block';
+      watchBtn.onclick = () => {
+        if (tvVodMode === 'movies') onMovieCardClick(item);
+        else openSeriesModal(item);
+      };
+    }
+  }
+
+  // Tratamento de Teclas do Navegador (Setas do teclado / controle remoto)
+  window.addEventListener('keydown', (e) => {
+    if (!isTvMode) return;
+    const key = e.key;
+
+    // Se estiver em tela cheia assistindo TV
+    if (tvCurrentMode === 'fullscreen') {
+      if (key === 'ArrowUp' || key === 'ChannelUp') {
+        e.preventDefault();
+        tvZap(-1);
+        return;
+      }
+      if (key === 'ArrowDown' || key === 'ChannelDown') {
+        e.preventDefault();
+        tvZap(1);
+        return;
+      }
+      if (key === 'Enter') {
+        e.preventDefault();
+        toggleTvDrawer();
+        return;
+      }
+      if (key === 'Escape' || key === 'Back' || e.keyCode === 4) {
+        e.preventDefault();
+        window.handleAndroidBack();
+        return;
+      }
+    }
+
+    // Se estiver no VOD
+    if (tvCurrentMode === 'vod') {
+      if (key === 'Escape' || key === 'Back' || e.keyCode === 4) {
+        e.preventDefault();
+        setTvViewMode('central');
+        return;
+      }
+    }
+  });
+
+})();
+</script>
 
     init().catch(err => {
       console.error('Initialization error:', err);
