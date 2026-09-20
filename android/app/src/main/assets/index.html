@@ -7909,13 +7909,34 @@ header.tv-header {
       const btn = document.createElement('button');
       btn.className = `tv-epg-cat-pill tv-focusable ${idx === 0 ? 'active' : ''}`;
       btn.textContent = c.name;
+      btn.dataset.catId = c.id; // guarda o id para leitura via setas
       btn.addEventListener('click', () => {
         catContainer.querySelectorAll('.tv-epg-cat-pill').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
         renderTvDrawerList(c.id);
+        // Foca no primeiro item após trocar grupo via clique
+        setTimeout(() => {
+          const first = document.querySelector('#tvEpgDrawer .tv-drawer-item');
+          if (first) { first.focus(); first.scrollIntoView({ block: 'nearest' }); }
+        }, 50);
       });
       catContainer.appendChild(btn);
     });
+  }
+
+  // Alterna o grupo de categorias da gaveta EPG com seta ← (delta=-1) ou → (delta=+1)
+  function tvSwitchDrawerCategory(delta) {
+    const catContainer = document.getElementById('tvDrawerCats');
+    if (!catContainer) return;
+    const pills = Array.from(catContainer.querySelectorAll('.tv-epg-cat-pill'));
+    if (!pills.length) return;
+    const activeIdx = pills.findIndex(p => p.classList.contains('active'));
+    const nextIdx = (activeIdx + delta + pills.length) % pills.length;
+    // Simula clique na pill alvo (aciona renderTvDrawerList + animação de foco)
+    pills[nextIdx].click();
+    // Anima a pill para dar feedback visual ao usuário
+    pills[nextIdx].style.transform = 'scale(1.12)';
+    setTimeout(() => { pills[nextIdx].style.transform = ''; }, 200);
   }
 
   function renderTvDrawerList(catId) {
@@ -8175,7 +8196,7 @@ header.tv-header {
     // TELA CHEIA (zapping + drawer EPG)
     // ====================================================
     if (tvCurrentMode === 'fullscreen') {
-      // Drawer EPG aberta: navegação dentro da lista de canais
+      // Drawer EPG aberta: navegação dentro da lista de canais e entre grupos
       if (!tvDrawer.classList.contains('closed')) {
         const items = Array.from(tvDrawer.querySelectorAll('.tv-drawer-item'));
         const focused = document.activeElement;
@@ -8183,22 +8204,41 @@ header.tv-header {
 
         if (key === 'ArrowDown') {
           e.preventDefault();
-          if (curIdx < items.length - 1) items[curIdx + 1].focus();
+          if (curIdx < items.length - 1) {
+            items[curIdx + 1].focus();
+            items[curIdx + 1].scrollIntoView({ block: 'nearest' });
+          }
           return;
         }
         if (key === 'ArrowUp') {
           e.preventDefault();
-          if (curIdx > 0) items[curIdx - 1].focus();
-          else {
-            // Vai para as pills de categoria
+          if (curIdx > 0) {
+            items[curIdx - 1].focus();
+            items[curIdx - 1].scrollIntoView({ block: 'nearest' });
+          } else {
+            // No topo da lista: vai para as pills de categoria
             const cats = Array.from(tvDrawer.querySelectorAll('.tv-epg-cat-pill'));
             if (cats.length) cats[0].focus();
           }
           return;
         }
-        if (key === 'ArrowLeft' || key === 'Escape' || key === 'Back' || e.keyCode === 4 || key === 'Backspace') {
+        // ← Seta Esquerda: grupo anterior (com wrap)
+        if (key === 'ArrowLeft') {
+          e.preventDefault();
+          tvSwitchDrawerCategory(-1);
+          return;
+        }
+        // → Seta Direita: próximo grupo (com wrap)
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          tvSwitchDrawerCategory(1);
+          return;
+        }
+        if (key === 'Escape' || key === 'Back' || e.keyCode === 4) {
           e.preventDefault();
           tvDrawer.classList.add('closed');
+          const kc = document.getElementById('tvKeyCapture');
+          if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 50);
           return;
         }
         if (key === 'Enter') {
