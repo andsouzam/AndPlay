@@ -2650,6 +2650,18 @@ header.tv-header {
   border-radius: 4px;
 }
 
+body.tv-mode .tv-osd-inner {
+  backdrop-filter: none !important;
+  background: rgba(8, 13, 26, 0.97) !important;
+}
+body.tv-mode .tv-epg-drawer {
+  backdrop-filter: none !important;
+  background: rgba(10, 10, 16, 0.98) !important;
+}
+body.tv-mode .tv-top-channel-badge {
+  backdrop-filter: none !important;
+  background: rgba(6, 10, 20, 0.97) !important;
+}
 </style>
 </head>
 <body>
@@ -4639,7 +4651,7 @@ header.tv-header {
 
     async function fetchLiveSportsEvents() {
       const events = [];
-      const API = 'https://api.reidoscanais.app';
+      const API = 'https://api.reidoscanais.st';
 
       // 1. Busca todos os eventos esportivos da API oficial (ao vivo + jogos de hoje)
       try {
@@ -4722,7 +4734,7 @@ header.tv-header {
           });
         }
       } catch (err) {
-        console.log('api.reidoscanais.app/sports:', err.message);
+        console.log('api.reidoscanais.st/sports:', err.message);
       }
 
       // Ordena: partidas ao vivo no topo, seguidas pelas de hoje
@@ -4841,7 +4853,7 @@ header.tv-header {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch('https://api.reidoscanais.app/channels', {
+        const res = await fetch('https://api.reidoscanais.st/channels', {
           signal: controller.signal,
           headers: { 'Accept': 'application/json' }
         });
@@ -8753,21 +8765,7 @@ header.tv-header {
         }
       }
       if (key === 'MENU' || key === 'BACK') {
-        if (tvPlayingType === 'vod') {
-          if (tvVideo) {
-            tvVideo.pause();
-            tvVideo.src = '';
-          }
-          setTvViewMode(tvPreviousMode || 'vod');
-          if (tvPreviousMode === 'central') tvTuneChannel(tvCurrentIdx, false);
-          return;
-        }
-        if (tvPlayingType === 'event') {
-          setTvViewMode('central');
-          tvTuneChannel(tvCurrentIdx, false);
-          return;
-        }
-        setTvViewMode('central');
+        window.handleAndroidBack();
         return;
       }
       if (key === 'GUIDE' || key === 'INFO') { toggleTvDrawer(); return; }
@@ -8779,35 +8777,39 @@ header.tv-header {
       }
     } else if (tvCurrentMode === 'vod') {
       if (key === 'BACK' || key === 'MENU') {
-        if (tvVodMode === 'series_episodes') {
-          openTvVodExplorer('series');
-        } else {
-          setTvViewMode('central');
-        }
+        window.handleAndroidBack();
         return;
       }
     }
   };
 
-  // Botão Voltar do Android
+  // Botão Voltar Unificado (Android APK, Smart TV e Web)
   window.handleAndroidBack = function() {
+    if (typeof elements !== 'undefined') {
+      if (elements.videoModal && elements.videoModal.style.display === 'flex') { closePlayer(); return true; }
+      if (elements.seriesModal && elements.seriesModal.style.display === 'flex') { closeSeriesModal(); return true; }
+      if (elements.movieVersionModal && elements.movieVersionModal.style.display === 'flex') { closeMovieVersionModal(); return true; }
+      if (elements.imdbSearchModal && elements.imdbSearchModal.style.display === 'flex') { closeImdbSearchModal(); return true; }
+    }
+
     if (tvCurrentMode === 'fullscreen') {
+      if (tvDrawer && !tvDrawer.classList.contains('closed')) {
+        tvDrawer.classList.add('closed');
+        return true;
+      }
+      if (typeof tvZapDebounceTimer !== 'undefined' && tvZapDebounceTimer) {
+        if (typeof tvCancelPendingZap === 'function') tvCancelPendingZap();
+        return true;
+      }
       if (tvPlayingType === 'vod') {
-        if (tvVideo) {
-          tvVideo.pause();
-          tvVideo.src = '';
-        }
+        if (tvVideo) { try { tvVideo.pause(); tvVideo.src = ''; } catch(e){} }
         setTvViewMode(tvPreviousMode || 'vod');
-        if (tvPreviousMode === 'central') tvTuneChannel(tvCurrentIdx, false);
+        if (tvPreviousMode === 'central' && typeof tvTuneChannel === 'function') tvTuneChannel(tvCurrentIdx, false);
         return true;
       }
       if (tvPlayingType === 'event') {
         setTvViewMode('central');
-        tvTuneChannel(tvCurrentIdx, false);
-        return true;
-      }
-      if (!tvDrawer.classList.contains('closed')) {
-        tvDrawer.classList.add('closed');
+        if (typeof tvTuneChannel === 'function') tvTuneChannel(tvCurrentIdx, false);
         return true;
       }
       setTvViewMode('central');
@@ -8821,8 +8823,15 @@ header.tv-header {
       setTvViewMode('central');
       return true;
     }
-    return false; // Na Central, deixa sair do app
+    return false;
   };
+
+  window.onBackPressed = window.handleAndroidBack;
+  document.addEventListener('backbutton', function(e) {
+    if (window.handleAndroidBack()) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+    }
+  }, false);
 
   // Drawer EPG
   function toggleTvDrawer() {
@@ -9483,7 +9492,8 @@ header.tv-header {
     }
 
     // ---- Backspace / Escape / Botão Voltar ----
-    if (key === 'Backspace' || key === 'Escape' || key === 'Back' || e.keyCode === 4) {
+    const isBackKey = (key === 'Backspace' || key === 'Escape' || key === 'Back' || key === 'GoBack' || key === 'BrowserBack' || e.keyCode === 4 || e.keyCode === 27 || e.keyCode === 111 || e.keyCode === 8);
+    if (isBackKey) {
       e.preventDefault();
       if (tvCurrentMode === 'fullscreen') {
         // Se estava assistindo filme ou série VOD
