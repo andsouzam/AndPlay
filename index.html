@@ -1380,6 +1380,7 @@ body.tv-mode > #videoModal {
   outline: none !important;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
   border: 2px solid transparent;
+  scroll-margin: 32px 28px;
 }
 .tv-focusable:focus, .tv-focusable.focused {
   transform: scale(1.05) !important;
@@ -1481,6 +1482,9 @@ body.tv-mode > #videoModal {
   overflow-y: auto;
   overflow-x: hidden;
   background: radial-gradient(circle at 15% 15%, #161626 0%, #070709 75%);
+  scroll-behavior: smooth;
+  scroll-padding-top: 28px;
+  scroll-padding-bottom: 90px;
 }
 
 .tv-header,
@@ -1662,6 +1666,9 @@ header.tv-header {
   overflow-x: auto;
   padding: 6px 4px 14px 4px;
   scrollbar-width: none;
+  scroll-behavior: smooth;
+  scroll-padding-left: 28px;
+  scroll-padding-right: 60px;
 }
 .tv-rail-scroller::-webkit-scrollbar {
   display: none;
@@ -1680,6 +1687,7 @@ header.tv-header {
   text-align: center;
   cursor: pointer;
   flex-shrink: 0;
+  scroll-margin: 24px 36px;
 }
 .tv-channel-card:focus, .tv-channel-card.focused {
   border-color: #ffc107 !important;
@@ -1716,6 +1724,7 @@ header.tv-header {
   padding: 14px;
   cursor: pointer;
   flex-shrink: 0;
+  scroll-margin: 24px 36px;
 }
 .tv-match-card:focus, .tv-match-card.focused {
   border-color: #00e676 !important;
@@ -1731,6 +1740,7 @@ header.tv-header {
   overflow: hidden;
   cursor: pointer;
   flex-shrink: 0;
+  scroll-margin: 24px 36px;
 }
 .tv-vod-card:focus, .tv-vod-card.focused {
   border-color: #ffc107 !important;
@@ -2312,6 +2322,9 @@ header.tv-header {
   flex-direction: column;
   padding: 24px 36px;
   overflow-y: auto;
+  scroll-behavior: smooth;
+  scroll-padding-top: 28px;
+  scroll-padding-bottom: 90px;
 }
 .tv-vod-top-bar {
   display: flex;
@@ -2407,6 +2420,7 @@ header.tv-header {
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
+  scroll-margin: 24px 28px;
 }
 .tv-vod-poster-card:focus, .tv-vod-poster-card.focused {
   border-color: #ffc107 !important;
@@ -2480,6 +2494,7 @@ header.tv-header {
   flex-direction: column;
   gap: 6px;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  scroll-margin: 24px 28px;
 }
 .tv-vod-ep-card:focus, .tv-vod-ep-card.focused {
   border-color: #ffc107 !important;
@@ -2516,7 +2531,7 @@ header.tv-header {
       <video id="tvVideoPlayer" playsinline preload="auto" autoplay></video>
       <iframe id="tvEmbedPlayer" allowfullscreen="true" allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *; clipboard-write *; accelerometer *; gyroscope *" referrerpolicy="no-referrer"></iframe>
       <div id="tvLiveBadge" class="tv-player-live-badge"><span class="tv-pulse"></span> NO AR</div>
-      <div id="tvChannelWatermark" class="tv-watermark">AndPlay TV</div>
+      <div id="tvChannelWatermark" class="tv-watermark"></div>
       <!-- Overlay invisível que captura o foco do teclado impedindo o iframe de roubar os eventos keydown -->
       <div id="tvKeyCapture" tabindex="0" style="display:none;position:absolute;inset:0;z-index:1400;background:transparent;outline:none;cursor:none;pointer-events:none;" aria-label="Foco do controle remoto"></div>
     </div>
@@ -2527,14 +2542,9 @@ header.tv-header {
       <header class="tv-header">
         <div class="tv-brand">
           <div class="tv-logo-icon">📺</div>
-          <div class="tv-brand-titles">
-            <h1 class="tv-logo-text">AndPlay TV</h1>
-            <span class="tv-logo-sub">RECEPTOR DE TV POR ASSINATURA</span>
-          </div>
           <span class="tv-status-pill">🟢 SINAL ATIVO</span>
         </div>
         <div class="tv-header-right">
-          <button id="btnExitTvMode" style="background: rgba(255,255,255,0.07); border: 1.5px solid rgba(255,255,255,0.2); color: #aaa; font-size: 12px; font-weight: 700; padding: 6px 14px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;" title="Voltar para a interface Web">💻 Modo Web</button>
           <div class="tv-clock" id="tvClock">--:--</div>
           <div class="tv-date" id="tvDate">Hoje</div>
         </div>
@@ -8011,6 +8021,7 @@ header.tv-header {
   async function openTvSeriesDetail(seriesItem) {
     tvVodMode = 'series_episodes';
     tvCurrentSeriesItem = seriesItem;
+    if (tvVod) tvVod.scrollTo({ top: 0, behavior: 'smooth' });
     const titleEl = document.getElementById('tvVodSectionTitle');
     if (titleEl) titleEl.textContent = `📺 ${seriesItem.name || 'Série'} • Temporadas & Episódios`;
 
@@ -8465,6 +8476,7 @@ header.tv-header {
       tvCentral.style.display = 'flex';
       tvPlayerBox.className = 'tv-player-box pip';
       tvPlayerBox.style.display = 'flex';
+      if (tvCentral) tvCentral.scrollTo({ top: 0 });
       // Desativa overlay — na central o foco vai para o PiP card
       if (tvKc) { tvKc.style.display = 'none'; tvKc.style.pointerEvents = 'none'; }
       tvDrawer.classList.add('closed');
@@ -8477,6 +8489,7 @@ header.tv-header {
       tvVod.style.display = 'flex';
       tvPlayerBox.className = 'tv-player-box pip';
       tvPlayerBox.style.display = 'none';
+      if (tvVod) tvVod.scrollTo({ top: 0 });
       if (tvKc) { tvKc.style.display = 'none'; tvKc.style.pointerEvents = 'none'; }
       const backBtn = document.getElementById('tvVodBack');
       if (backBtn) backBtn.focus();
@@ -9365,17 +9378,47 @@ header.tv-header {
       const spIdx = spCards.indexOf(focused);
       const mvIdx = mvCards.indexOf(focused);
 
+      const scrollCentralToTop = () => {
+        if (!tvCentral) return;
+        tvCentral.scrollTo({ top: 0, behavior: 'smooth' });
+        setTimeout(syncTvPlayerBoxPosition, 60);
+        setTimeout(syncTvPlayerBoxPosition, 160);
+        setTimeout(syncTvPlayerBoxPosition, 320);
+        setTimeout(syncTvPlayerBoxPosition, 500);
+      };
+
+      const scrollCardIntoView = (el, block = 'center', inline = 'center') => {
+        if (!el) return;
+        el.scrollIntoView({ block, inline, behavior: 'smooth' });
+        setTimeout(syncTvPlayerBoxPosition, 60);
+        setTimeout(syncTvPlayerBoxPosition, 160);
+        setTimeout(syncTvPlayerBoxPosition, 320);
+      };
+
       // 1. Zona PiP
       if (focused === pip || (pip && pip.contains(focused))) {
         if (key === 'ArrowRight') {
           e.preventDefault();
-          if (menuItems.length) menuItems[0].focus();
+          if (menuItems.length) {
+            menuItems[0].focus();
+            scrollCentralToTop();
+          }
           return;
         }
         if (key === 'ArrowDown') {
           e.preventDefault();
-          if (chCards.length) { chCards[0].focus(); chCards[0].scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' }); }
-          else if (spCards.length) { spCards[0].focus(); }
+          if (chCards.length) {
+            chCards[0].focus();
+            scrollCardIntoView(chCards[0], 'center', 'nearest');
+          } else if (spCards.length) {
+            spCards[0].focus();
+            scrollCardIntoView(spCards[0], 'center', 'nearest');
+          }
+          return;
+        }
+        if (key === 'ArrowUp' || key === 'ArrowLeft') {
+          e.preventDefault();
+          scrollCentralToTop();
           return;
         }
         if (key === 'Enter') {
@@ -9395,6 +9438,7 @@ header.tv-header {
           e.preventDefault();
           if (col < MENU_COLS - 1 && menuIdx + 1 < menuItems.length) {
             menuItems[menuIdx + 1].focus();
+            scrollCentralToTop();
           }
           return;
         }
@@ -9402,8 +9446,10 @@ header.tv-header {
           e.preventDefault();
           if (col > 0) {
             menuItems[menuIdx - 1].focus();
+            scrollCentralToTop();
           } else if (pip) {
             pip.focus();
+            scrollCentralToTop();
           }
           return;
         }
@@ -9412,14 +9458,16 @@ header.tv-header {
           if (row === 0 && menuIdx + MENU_COLS < menuItems.length) {
             // Desce para a 2ª linha da grid de menu
             menuItems[menuIdx + MENU_COLS].focus();
+            scrollCentralToTop();
           } else {
             // Sai do menu e desce para o trilho de canais
             if (chCards.length) {
               const targetCh = Math.min(col, chCards.length - 1);
               chCards[targetCh].focus();
-              chCards[targetCh].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+              scrollCardIntoView(chCards[targetCh], 'center', 'nearest');
             } else if (spCards.length) {
               spCards[0].focus();
+              scrollCardIntoView(spCards[0], 'center', 'nearest');
             }
           }
           return;
@@ -9429,8 +9477,12 @@ header.tv-header {
           if (row > 0) {
             // Sobe para a 1ª linha da grid de menu
             menuItems[menuIdx - MENU_COLS].focus();
+            scrollCentralToTop();
           } else if (pip) {
             pip.focus();
+            scrollCentralToTop();
+          } else {
+            scrollCentralToTop();
           }
           return;
         }
@@ -9448,7 +9500,7 @@ header.tv-header {
           e.preventDefault();
           if (chIdx + 1 < chCards.length) {
             chCards[chIdx + 1].focus();
-            chCards[chIdx + 1].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+            scrollCardIntoView(chCards[chIdx + 1], 'nearest', 'center');
           }
           return;
         }
@@ -9456,15 +9508,18 @@ header.tv-header {
           e.preventDefault();
           if (chIdx > 0) {
             chCards[chIdx - 1].focus();
-            chCards[chIdx - 1].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+            scrollCardIntoView(chCards[chIdx - 1], 'nearest', 'center');
           }
           return;
         }
         if (key === 'ArrowUp') {
           e.preventDefault();
-          // Sobe para a segunda linha do menu grid
+          // Sobe para os blocos superiores (PiP ou Menu) e puxa o scroll todo para cima
           const targetMenu = menuItems[Math.min(chIdx, 2) + 3] || menuItems[0] || pip;
-          if (targetMenu) targetMenu.focus();
+          if (targetMenu) {
+            targetMenu.focus();
+            scrollCentralToTop();
+          }
           return;
         }
         if (key === 'ArrowDown') {
@@ -9473,11 +9528,11 @@ header.tv-header {
           if (spCards.length) {
             const targetSp = Math.min(chIdx, spCards.length - 1);
             spCards[targetSp].focus();
-            spCards[targetSp].scrollIntoView({ inline: 'nearest', block: 'center', behavior: 'smooth' });
+            scrollCardIntoView(spCards[targetSp], 'center', 'nearest');
           } else if (mvCards.length) {
             const targetMv = Math.min(chIdx, mvCards.length - 1);
             mvCards[targetMv].focus();
-            mvCards[targetMv].scrollIntoView({ inline: 'nearest', block: 'center', behavior: 'smooth' });
+            scrollCardIntoView(mvCards[targetMv], 'center', 'nearest');
           }
           return;
         }
@@ -9495,7 +9550,7 @@ header.tv-header {
           e.preventDefault();
           if (spIdx + 1 < spCards.length) {
             spCards[spIdx + 1].focus();
-            spCards[spIdx + 1].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+            scrollCardIntoView(spCards[spIdx + 1], 'nearest', 'center');
           }
           return;
         }
@@ -9503,7 +9558,7 @@ header.tv-header {
           e.preventDefault();
           if (spIdx > 0) {
             spCards[spIdx - 1].focus();
-            spCards[spIdx - 1].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+            scrollCardIntoView(spCards[spIdx - 1], 'nearest', 'center');
           }
           return;
         }
@@ -9513,7 +9568,9 @@ header.tv-header {
           if (chCards.length) {
             const targetCh = Math.min(spIdx, chCards.length - 1);
             chCards[targetCh].focus();
-            chCards[targetCh].scrollIntoView({ inline: 'nearest', block: 'center', behavior: 'smooth' });
+            scrollCardIntoView(chCards[targetCh], 'center', 'nearest');
+          } else {
+            scrollCentralToTop();
           }
           return;
         }
@@ -9523,7 +9580,7 @@ header.tv-header {
           if (mvCards.length) {
             const targetMv = Math.min(spIdx, mvCards.length - 1);
             mvCards[targetMv].focus();
-            mvCards[targetMv].scrollIntoView({ inline: 'nearest', block: 'center', behavior: 'smooth' });
+            scrollCardIntoView(mvCards[targetMv], 'center', 'nearest');
           }
           return;
         }
@@ -9541,7 +9598,7 @@ header.tv-header {
           e.preventDefault();
           if (mvIdx + 1 < mvCards.length) {
             mvCards[mvIdx + 1].focus();
-            mvCards[mvIdx + 1].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+            scrollCardIntoView(mvCards[mvIdx + 1], 'nearest', 'center');
           }
           return;
         }
@@ -9549,7 +9606,7 @@ header.tv-header {
           e.preventDefault();
           if (mvIdx > 0) {
             mvCards[mvIdx - 1].focus();
-            mvCards[mvIdx - 1].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+            scrollCardIntoView(mvCards[mvIdx - 1], 'nearest', 'center');
           }
           return;
         }
@@ -9559,11 +9616,13 @@ header.tv-header {
           if (spCards.length) {
             const targetSp = Math.min(mvIdx, spCards.length - 1);
             spCards[targetSp].focus();
-            spCards[targetSp].scrollIntoView({ inline: 'nearest', block: 'center', behavior: 'smooth' });
+            scrollCardIntoView(spCards[targetSp], 'center', 'nearest');
           } else if (chCards.length) {
             const targetCh = Math.min(mvIdx, chCards.length - 1);
             chCards[targetCh].focus();
-            chCards[targetCh].scrollIntoView({ inline: 'nearest', block: 'center', behavior: 'smooth' });
+            scrollCardIntoView(chCards[targetCh], 'center', 'nearest');
+          } else {
+            scrollCentralToTop();
           }
           return;
         }
@@ -9575,10 +9634,13 @@ header.tv-header {
         return;
       }
 
-      // Fallback: qualquer seta posiciona foco no PiP
+      // Fallback: qualquer seta posiciona foco no PiP e puxa para o topo
       if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight') {
         e.preventDefault();
-        if (pip) pip.focus();
+        if (pip) {
+          pip.focus();
+          scrollCentralToTop();
+        }
         return;
       }
     }
@@ -9591,6 +9653,15 @@ header.tv-header {
       const backBtn = document.getElementById('tvVodBack');
       const watchBtn = document.getElementById('tvVodHeroWatchBtn');
 
+      const scrollVodToTop = () => {
+        if (tvVod) tvVod.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+
+      const scrollVodCard = (el, block = 'nearest') => {
+        if (!el) return;
+        el.scrollIntoView({ block, inline: 'nearest', behavior: 'smooth' });
+      };
+
       // 1. Modo Episódios de Séries
       if (tvVodMode === 'series_episodes') {
         const seasonBtns = Array.from(document.querySelectorAll('#tvSeriesSeasonsBar .tv-series-season-btn'));
@@ -9599,10 +9670,14 @@ header.tv-header {
         const epIdx = epCards.indexOf(focused);
 
         if (focused === backBtn) {
+          scrollVodToTop();
           if (key === 'ArrowDown' || key === 'ArrowRight') {
             e.preventDefault();
             if (seasonBtns.length) seasonBtns[0].focus();
-            else if (epCards.length) epCards[0].focus();
+            else if (epCards.length) {
+              epCards[0].focus();
+              scrollVodCard(epCards[0], 'nearest');
+            }
             return;
           }
           if (key === 'Enter') {
@@ -9621,18 +9696,28 @@ header.tv-header {
           }
           if (key === 'ArrowLeft') {
             e.preventDefault();
-            if (sIdx > 0) seasonBtns[sIdx - 1].focus();
-            else if (backBtn) backBtn.focus();
+            if (sIdx > 0) {
+              seasonBtns[sIdx - 1].focus();
+            } else if (backBtn) {
+              backBtn.focus();
+              scrollVodToTop();
+            }
             return;
           }
           if (key === 'ArrowDown') {
             e.preventDefault();
-            if (epCards.length) epCards[0].focus();
+            if (epCards.length) {
+              epCards[0].focus();
+              scrollVodCard(epCards[0], 'nearest');
+            }
             return;
           }
           if (key === 'ArrowUp') {
             e.preventDefault();
-            if (backBtn) backBtn.focus();
+            if (backBtn) {
+              backBtn.focus();
+              scrollVodToTop();
+            }
             return;
           }
           if (key === 'Enter') {
@@ -9655,7 +9740,7 @@ header.tv-header {
             e.preventDefault();
             if (epIdx + 1 < epCards.length) {
               epCards[epIdx + 1].focus();
-              epCards[epIdx + 1].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+              scrollVodCard(epCards[epIdx + 1], 'nearest');
             }
             return;
           }
@@ -9663,11 +9748,13 @@ header.tv-header {
             e.preventDefault();
             if (epIdx > 0) {
               epCards[epIdx - 1].focus();
-              epCards[epIdx - 1].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+              scrollVodCard(epCards[epIdx - 1], 'nearest');
             } else if (seasonBtns.length) {
               seasonBtns[0].focus();
+              scrollVodToTop();
             } else if (backBtn) {
               backBtn.focus();
+              scrollVodToTop();
             }
             return;
           }
@@ -9675,7 +9762,7 @@ header.tv-header {
             e.preventDefault();
             if (epIdx + cols < epCards.length) {
               epCards[epIdx + cols].focus();
-              epCards[epIdx + cols].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+              scrollVodCard(epCards[epIdx + cols], 'nearest');
             }
             return;
           }
@@ -9683,12 +9770,14 @@ header.tv-header {
             e.preventDefault();
             if (epIdx - cols >= 0) {
               epCards[epIdx - cols].focus();
-              epCards[epIdx - cols].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+              scrollVodCard(epCards[epIdx - cols], 'nearest');
             } else if (seasonBtns.length) {
               const activeS = seasonBtns.find(b => b.classList.contains('active')) || seasonBtns[0];
               activeS.focus();
+              scrollVodToTop();
             } else if (backBtn) {
               backBtn.focus();
+              scrollVodToTop();
             }
             return;
           }
@@ -9703,8 +9792,13 @@ header.tv-header {
         // Fallback no modo episódios
         if (key === 'ArrowDown' || key === 'ArrowRight' || key === 'ArrowLeft' || key === 'ArrowUp') {
           e.preventDefault();
-          if (epCards.length) epCards[0].focus();
-          else if (backBtn) backBtn.focus();
+          if (epCards.length) {
+            epCards[0].focus();
+            scrollVodCard(epCards[0], 'nearest');
+          } else if (backBtn) {
+            backBtn.focus();
+            scrollVodToTop();
+          }
           return;
         }
       }
@@ -9714,15 +9808,22 @@ header.tv-header {
       const vodIdx = vodCards.indexOf(focused);
 
       if (focused === backBtn) {
+        scrollVodToTop();
         if (key === 'ArrowRight') {
           e.preventDefault();
           if (watchBtn && watchBtn.style.display !== 'none') watchBtn.focus();
-          else if (vodCards.length) vodCards[0].focus();
+          else if (vodCards.length) {
+            vodCards[0].focus();
+            scrollVodCard(vodCards[0], 'nearest');
+          }
           return;
         }
         if (key === 'ArrowDown') {
           e.preventDefault();
-          if (vodCards.length) vodCards[0].focus();
+          if (vodCards.length) {
+            vodCards[0].focus();
+            scrollVodCard(vodCards[0], 'nearest');
+          }
           return;
         }
         if (key === 'Enter') {
@@ -9734,14 +9835,21 @@ header.tv-header {
       }
 
       if (focused === watchBtn) {
+        scrollVodToTop();
         if (key === 'ArrowLeft') {
           e.preventDefault();
-          if (backBtn) backBtn.focus();
+          if (backBtn) {
+            backBtn.focus();
+            scrollVodToTop();
+          }
           return;
         }
         if (key === 'ArrowDown') {
           e.preventDefault();
-          if (vodCards.length) vodCards[0].focus();
+          if (vodCards.length) {
+            vodCards[0].focus();
+            scrollVodCard(vodCards[0], 'nearest');
+          }
           return;
         }
         if (key === 'Enter') {
@@ -9764,7 +9872,7 @@ header.tv-header {
           e.preventDefault();
           if (vodIdx + 1 < vodCards.length) {
             vodCards[vodIdx + 1].focus();
-            vodCards[vodIdx + 1].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            scrollVodCard(vodCards[vodIdx + 1], 'nearest');
           }
           return;
         }
@@ -9772,10 +9880,15 @@ header.tv-header {
           e.preventDefault();
           if (vodIdx > 0) {
             vodCards[vodIdx - 1].focus();
-            vodCards[vodIdx - 1].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            scrollVodCard(vodCards[vodIdx - 1], 'nearest');
           } else {
-            if (watchBtn && watchBtn.style.display !== 'none') watchBtn.focus();
-            else if (backBtn) backBtn.focus();
+            if (watchBtn && watchBtn.style.display !== 'none') {
+              watchBtn.focus();
+              scrollVodToTop();
+            } else if (backBtn) {
+              backBtn.focus();
+              scrollVodToTop();
+            }
           }
           return;
         }
@@ -9783,7 +9896,7 @@ header.tv-header {
           e.preventDefault();
           if (vodIdx + cols < vodCards.length) {
             vodCards[vodIdx + cols].focus();
-            vodCards[vodIdx + cols].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            scrollVodCard(vodCards[vodIdx + cols], 'nearest');
           }
           return;
         }
@@ -9791,10 +9904,15 @@ header.tv-header {
           e.preventDefault();
           if (vodIdx - cols >= 0) {
             vodCards[vodIdx - cols].focus();
-            vodCards[vodIdx - cols].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            scrollVodCard(vodCards[vodIdx - cols], 'nearest');
           } else {
-            if (watchBtn && watchBtn.style.display !== 'none') watchBtn.focus();
-            else if (backBtn) backBtn.focus();
+            if (watchBtn && watchBtn.style.display !== 'none') {
+              watchBtn.focus();
+              scrollVodToTop();
+            } else if (backBtn) {
+              backBtn.focus();
+              scrollVodToTop();
+            }
           }
           return;
         }
@@ -9809,8 +9927,13 @@ header.tv-header {
       // Fallback VOD: posiciona foco no primeiro card
       if (key === 'ArrowDown' || key === 'ArrowRight' || key === 'ArrowLeft' || key === 'ArrowUp') {
         e.preventDefault();
-        if (vodCards.length) vodCards[0].focus();
-        else if (backBtn) backBtn.focus();
+        if (vodCards.length) {
+          vodCards[0].focus();
+          scrollVodCard(vodCards[0], 'nearest');
+        } else if (backBtn) {
+          backBtn.focus();
+          scrollVodToTop();
+        }
         return;
       }
     }
