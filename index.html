@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
@@ -4484,8 +4484,9 @@ header.tv-header {
           { s: "00:00", e: "24:00", t: (ch.name || 'Canal') + " - Maratona 24 Horas", syn: "Transmissão contínua e sem intervalos comerciais de " + (ch.name || 'conteúdo') + ", 24 horas por dia em alta definição digital." }
         ];
       }
-      // 13. GRADE GENÉRICA INTELIGENTE (Baseada na Categoria e Horário)
+      // 13. GRADE GENÉRICA (Retorna null para usar os dados reais do catalogo)
       else {
+        return null;
         if (cat.includes('esporte') || cat.includes('sport')) {
           grid = [
             { s: "00:00", e: "06:00", t: "Giro Esportivo da Madrugada", syn: "Compactos e análises das competições esportivas do Brasil e do mundo." },
@@ -4585,7 +4586,7 @@ header.tv-header {
       }
 
       const liveEpg = getChannelLiveSchedule(raw);
-      const nowTitle = liveEpg ? liveEpg.nowTitle : (raw.now || '');
+      const nowTitle = (liveEpg && liveEpg.nowTitle) ? liveEpg.nowTitle : (raw.now || 'Programação Ao Vivo');
       const nowProgress = liveEpg ? liveEpg.progress : (Number(raw.prog) || 0);
       const synopsis = liveEpg ? liveEpg.synopsis : '';
       const nextProgrammes = liveEpg && liveEpg.nextTitle ? [{ t: liveEpg.nextTitle, s: liveEpg.nextStart }] : (Array.isArray(raw.next) ? raw.next : []);
@@ -4638,7 +4639,7 @@ header.tv-header {
 
     async function fetchLiveSportsEvents() {
       const events = [];
-      const API = 'https://api.reidoscanais.st';
+      const API = 'https://api.reidoscanais.app';
 
       // 1. Busca todos os eventos esportivos da API oficial (ao vivo + jogos de hoje)
       try {
@@ -4721,7 +4722,7 @@ header.tv-header {
           });
         }
       } catch (err) {
-        console.log('api.reidoscanais.st/sports:', err.message);
+        console.log('api.reidoscanais.app/sports:', err.message);
       }
 
       // Ordena: partidas ao vivo no topo, seguidas pelas de hoje
@@ -4840,7 +4841,7 @@ header.tv-header {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch('https://api.reidoscanais.st/channels', {
+        const res = await fetch('https://api.reidoscanais.app/channels', {
           signal: controller.signal,
           headers: { 'Accept': 'application/json' }
         });
