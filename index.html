@@ -7876,6 +7876,7 @@ header.tv-header {
 
     tvPlayingType = 'channel';
     tvPreviousMode = 'central';
+    tvPlayingSeriesMeta = null;
     tvLoadStream(ch);
 
     const pipName = document.getElementById('tvPipName');
@@ -8364,6 +8365,10 @@ header.tv-header {
       const durStr = dur > 0 ? formatTvSeconds(dur) : '--:--';
       const pct = dur > 0 ? Math.round((cur / dur) * 100) : 0;
 
+      // Adapta o rótulo "NO AR AGORA" para VOD
+      const tagNow = tvOsd ? tvOsd.querySelector('.tv-osd-tag-now') : null;
+      if (tagNow) tagNow.textContent = tvPlayingSeriesMeta ? '🎞 EPISÓDIO' : '🎬 ASSISTINDO';
+
       if (osdNow) osdNow.textContent = ch.nowTitle || ch.name;
       if (osdTimeRange) osdTimeRange.textContent = `${curStr} • ${durStr}`;
       if (osdProgFill) osdProgFill.style.width = `${pct}%`;
@@ -8377,6 +8382,9 @@ header.tv-header {
       if (osdSynopsis) osdSynopsis.textContent = ch.synopsis || 'Vídeo sob demanda em alta definição.';
       if (osdNext) osdNext.textContent = '◀ Seta Esquerda (-10s) • Seta Direita (+10s) ▶ • OK Pausa/Play';
     } else {
+      // Restaura o rótulo padrão ao vivo
+      const tagNow = tvOsd ? tvOsd.querySelector('.tv-osd-tag-now') : null;
+      if (tagNow) tagNow.textContent = '🔴 NO AR AGORA';
       // Guia EPG Dinâmico em Tempo Real para Canais e Eventos
       const epg = (typeof getChannelLiveSchedule === 'function') ? getChannelLiveSchedule(ch, new Date()) : null;
 
@@ -8449,6 +8457,50 @@ header.tv-header {
     }
   }
 
+  // ============================================================
+  // Limpa todo estado persistente de overlay ao trocar de modo
+  // Evita que gaveta de séries apareça no EPG de TV e vice-versa
+  // ============================================================
+  function resetTvOverlayState() {
+    // 1. Fecha gaveta lateral e limpa seu conteúdo residual
+    if (tvDrawer) {
+      tvDrawer.classList.add('closed');
+      const drawerTitle = tvDrawer.querySelector('.tv-drawer-title');
+      const drawerHint  = tvDrawer.querySelector('.tv-drawer-hint');
+      const catsEl      = document.getElementById('tvDrawerCats');
+      const listEl      = document.getElementById('tvDrawerChannels');
+      if (drawerTitle) drawerTitle.textContent = '📋 GUIA DE CANAIS';
+      if (drawerHint)  drawerHint.textContent  = 'OK para sintonizar • Voltar fecha';
+      if (catsEl)      catsEl.innerHTML = '';
+      if (listEl)      listEl.innerHTML = '';
+    }
+
+    // 2. Esconde e congela o OSD
+    if (tvOsd) tvOsd.classList.add('hidden');
+    const topBadge = document.getElementById('tvTopChannelBadge');
+    if (topBadge) topBadge.classList.add('hidden');
+    if (tvOsdTimer) { clearTimeout(tvOsdTimer); tvOsdTimer = null; }
+
+    // 3. Limpa hero VOD (evita que poster/título da série apareçam na seção de filmes)
+    const heroTitle  = document.getElementById('tvVodPreviewTitle');
+    const heroMeta   = document.getElementById('tvVodPreviewMeta');
+    const heroPlot   = document.getElementById('tvVodPreviewPlot');
+    const heroPoster = document.getElementById('tvVodPreviewPoster');
+    const heroBtn    = document.getElementById('tvVodHeroWatchBtn');
+    if (heroTitle)  heroTitle.textContent  = 'Selecione um título';
+    if (heroMeta)   heroMeta.innerHTML     = '';
+    if (heroPlot)   heroPlot.textContent   = 'Navegue pelos títulos para ver sinopse e detalhes.';
+    if (heroPoster) { heroPoster.src = ''; heroPoster.style.display = 'none'; }
+    if (heroBtn)    heroBtn.style.display  = 'none';
+
+    // 4. Limpa container VOD (evita cartas stale de outra categoria)
+    const vodContainer = document.getElementById('tvVodRailsContainer');
+    if (vodContainer) vodContainer.innerHTML = '';
+
+    // 5. Re-registra categorias do drawer para canais (apaga as pills de temporadas de série)
+    setupTvDrawerCategories();
+  }
+
   // Alternar entre Telas (Central x Tela Cheia x VOD)
   function setTvViewMode(mode) {
     tvCurrentMode = mode;
@@ -8471,6 +8523,7 @@ header.tv-header {
       }
       triggerTvOsd();
     } else if (mode === 'central') {
+      resetTvOverlayState();
       tvFullscreen.style.display = 'none';
       tvVod.style.display = 'none';
       tvCentral.style.display = 'flex';
@@ -8479,11 +8532,11 @@ header.tv-header {
       if (tvCentral) tvCentral.scrollTo({ top: 0 });
       // Desativa overlay — na central o foco vai para o PiP card
       if (tvKc) { tvKc.style.display = 'none'; tvKc.style.pointerEvents = 'none'; }
-      tvDrawer.classList.add('closed');
       syncTvPlayerBoxPosition();
       const pip = document.getElementById('tvPipCard');
       if (pip) pip.focus();
     } else if (mode === 'vod') {
+      resetTvOverlayState();
       tvCentral.style.display = 'none';
       tvFullscreen.style.display = 'none';
       tvVod.style.display = 'flex';
@@ -8596,14 +8649,17 @@ header.tv-header {
       tvDrawer.classList.remove('closed');
 
       if (tvPlayingType === 'vod' && tvPlayingSeriesMeta) {
-        // Modo Série: renderiza gaveta de episódios/temporadas
+        // Modo Série em reprodução: renderiza gaveta de episódios/temporadas
         renderTvSeriesDrawer(tvPlayingSeriesMeta);
       } else {
-        // Modo Canal: renderiza guia de canais
+        // Modo Canal ou Filme sem meta de série: garante guia de canais limpo
         const drawerTitle = tvDrawer.querySelector('.tv-drawer-title');
         const drawerHint = tvDrawer.querySelector('.tv-drawer-hint');
         if (drawerTitle) drawerTitle.textContent = '📋 GUIA DE CANAIS';
         if (drawerHint) drawerHint.textContent = 'OK para sintonizar • Voltar fecha';
+        // Garante que as pills de temporadas de série foram apagadas
+        // e que as categorias de canal foram recriadas limpas
+        setupTvDrawerCategories();
         const catsEl = document.getElementById('tvDrawerCats');
         if (catsEl) catsEl.style.display = '';
         renderTvDrawerList('ALL');
@@ -9017,7 +9073,12 @@ header.tv-header {
 
   // VOD Explorer
   function openTvVodExplorer(type) {
+    // Limpa meta de série ao trocar de categoria — impede que a gaveta abra episódios ao invés do guia
     tvVodMode = type;
+    tvPlayingSeriesMeta = null;
+    tvCurrentSeriesItem = null;
+    // Ao entrar no explorador, ainda não está reproduzindo; mantém o tipo anterior
+    // mas só derruba 'vod' se for genuinamente canal/evento ainda ativo no player
     const titleEl = document.getElementById('tvVodSectionTitle');
     if (titleEl) titleEl.textContent = (type === 'movies') ? '🎬 Filmes Sob Demanda (Cinema)' : '📺 Séries Sob Demanda';
     setTvViewMode('vod');
