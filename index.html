@@ -1023,44 +1023,55 @@
     }
 
     .season-bar {
-      padding: 14px 22px;
-      background: #181818;
-      border-bottom: 1px solid #282828;
+      padding: 12px 22px;
+      background: #18181a;
+      border-bottom: 1px solid #282830;
       display: flex;
       align-items: center;
-      gap: 15px;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
     }
 
     .episodes-list {
-      padding: 20px 22px;
+      padding: 18px 22px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
       gap: 12px;
-      max-height: 45vh;
+      max-height: 52vh;
     }
 
     .episode-card {
       display: flex;
-      align-items: center;
-      gap: 18px;
-      background: #202020;
-      border: 1px solid #2e2e2e;
-      border-radius: 8px;
-      padding: 12px 16px;
+      flex-direction: column;
+      gap: 10px;
+      background: #1e1e24;
+      border: 1px solid #2e2e38;
+      border-radius: 10px;
+      padding: 14px 18px;
       transition: all 0.2s ease;
-      cursor: pointer;
     }
 
     .episode-card:hover {
-      background: #2b2b2b;
-      border-color: var(--primary);
-      transform: translateX(4px);
+      background: #25252e;
+      border-color: #ffc107;
+      transform: translateY(-1px);
+    }
+
+    .episode-card-main {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      width: 100%;
     }
 
     .episode-thumb {
-      width: 110px;
-      height: 64px;
+      width: 120px;
+      height: 72px;
       object-fit: cover;
       border-radius: 6px;
       background: #111;
@@ -1069,30 +1080,40 @@
 
     .episode-info {
       flex: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       gap: 4px;
-      overflow: hidden;
     }
 
     .episode-title {
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
       color: #fff;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
     }
 
     .episode-plot {
       font-size: 12px;
-      color: #999;
-      white-space: nowrap;
+      color: #aaa;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
       overflow: hidden;
-      text-overflow: ellipsis;
     }
 
     .episode-actions {
       display: flex;
       gap: 10px;
-      flex-shrink: 0;
+      align-items: center;
+      justify-content: flex-end;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      width: 100%;
     }
 
     /* Spinner */
@@ -1306,10 +1327,12 @@
       }
 
       .episode-card {
+        padding: 12px;
+      }
+
+      .episode-card-main {
         flex-direction: column;
         align-items: stretch;
-        gap: 10px;
-        padding: 10px 12px;
       }
 
       .episode-thumb {
@@ -2449,6 +2472,69 @@ header.tv-header {
   margin-top: 2px;
 }
 
+/* Seletor e Barra de Categorias no modo TV */
+.tv-vod-cat-select {
+  background: #181824;
+  color: #ffc107;
+  border: 1.5px solid rgba(255, 193, 7, 0.4);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+  max-width: 250px;
+}
+.tv-vod-cat-select:focus {
+  border-color: #ffc107;
+  box-shadow: 0 0 14px rgba(255, 193, 7, 0.5);
+}
+.tv-vod-category-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 16px 0;
+  margin-bottom: 12px;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+  scroll-padding-left: 20px;
+}
+.tv-vod-category-bar::-webkit-scrollbar {
+  display: none;
+}
+.tv-vod-cat-pill {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  color: #ccc;
+  border-radius: 20px;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+  scroll-margin: 16px 24px;
+  outline: none;
+}
+.tv-vod-cat-pill:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+.tv-vod-cat-pill.active {
+  background: #ffc107 !important;
+  color: #000 !important;
+  border-color: #ffc107 !important;
+  box-shadow: 0 0 14px rgba(255, 193, 7, 0.4);
+}
+.tv-vod-cat-pill:focus, .tv-vod-cat-pill.focused {
+  border-color: #ffc107 !important;
+  background: rgba(255, 193, 7, 0.25) !important;
+  color: #fff !important;
+  transform: scale(1.05);
+  box-shadow: 0 0 16px rgba(255, 193, 7, 0.5) !important;
+}
+
 /* Séries no modo TV: Barra de Temporadas e Grade de Episódios */
 .tv-series-seasons-bar {
   display: flex;
@@ -2457,6 +2543,8 @@ header.tv-header {
   overflow-x: auto;
   padding-bottom: 6px;
   scrollbar-width: none;
+  scroll-behavior: smooth;
+  scroll-padding-left: 20px;
 }
 .tv-series-seasons-bar::-webkit-scrollbar {
   display: none;
@@ -2464,43 +2552,59 @@ header.tv-header {
 .tv-series-season-btn {
   padding: 8px 18px;
   border-radius: 20px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.08);
   color: #ccc;
   font-size: 13px;
   font-weight: 700;
-  border: 1.5px solid transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s ease;
+  scroll-margin: 20px 24px;
+  outline: none;
 }
 .tv-series-season-btn.active, .tv-series-season-btn:focus {
   background: #ffc107 !important;
   color: #000 !important;
   border-color: #ffc107 !important;
-  transform: scale(1.05);
+  box-shadow: 0 0 16px rgba(255, 193, 7, 0.4);
+  transform: scale(1.04);
 }
 .tv-series-episodes-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
 }
 .tv-vod-ep-card {
   background: #141420;
-  border: 2px solid rgba(255, 255, 255, 0.07);
+  border: 2px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
-  padding: 14px 16px;
+  overflow: hidden;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 6px;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   scroll-margin: 24px 28px;
+  outline: none;
 }
 .tv-vod-ep-card:focus, .tv-vod-ep-card.focused {
   border-color: #ffc107 !important;
-  background: rgba(255, 193, 7, 0.16) !important;
-  transform: scale(1.04) !important;
-  box-shadow: 0 0 20px rgba(255, 193, 7, 0.45) !important;
+  background: rgba(255, 193, 7, 0.12) !important;
+  transform: scale(1.03) !important;
+  box-shadow: 0 0 24px rgba(255, 193, 7, 0.4) !important;
+}
+.tv-ep-thumb {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  background: #0d0d14;
+  display: block;
+}
+.tv-ep-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .tv-ep-num {
   font-size: 11px;
@@ -2512,13 +2616,26 @@ header.tv-header {
   font-size: 14px;
   font-weight: 700;
   color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.3;
 }
-.tv-ep-meta {
+.tv-ep-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+.tv-ep-duration {
   font-size: 11px;
   color: #888;
+  font-weight: 600;
+}
+.tv-ep-cta {
+  font-size: 11px;
+  font-weight: 800;
+  color: #000;
+  background: #00e676;
+  padding: 3px 10px;
+  border-radius: 4px;
 }
 
 </style>
@@ -2722,6 +2839,9 @@ header.tv-header {
       <div class="tv-vod-top-bar">
         <button class="tv-vod-back-btn tv-focusable" tabindex="0" id="tvVodBack">← VOLTAR À CENTRAL</button>
         <div class="tv-vod-title" id="tvVodSectionTitle">🎬 Filmes Sob Demanda</div>
+        <select id="tvVodCatSelect" class="tv-vod-cat-select tv-focusable" tabindex="0" title="Filtrar Categoria" style="display:none;">
+          <option value="ALL">🌟 Todas as Categorias</option>
+        </select>
         <div class="tv-vod-search-hint">Navegue com o controle remoto</div>
       </div>
       <!-- Painel de Destaque Superior com Detalhes do Filme Focado -->
@@ -3043,6 +3163,8 @@ header.tv-header {
     let moviePosterMap = new Map(); // Mapa inteligente para recuperar imagens 4K
     let movieCategories = [];
     let seriesCategories = [];
+    let _loadingMoviesPromise = null;
+    let _loadingSeriesPromise = null;
 
     let currentMediaList = [];
     let currentFilteredList = [];
@@ -3658,10 +3780,10 @@ header.tv-header {
     // ==========================================
     async function init() {
       // Navegação por Abas
-      elements.tabMoviesBtn.addEventListener('click', () => switchMode('movies'));
-      elements.tabSeriesBtn.addEventListener('click', () => switchMode('series'));
+      elements.tabMoviesBtn.addEventListener('click', () => switchMode('movies', true));
+      elements.tabSeriesBtn.addEventListener('click', () => switchMode('series', true));
       if (elements.tabLiveBtn) {
-        elements.tabLiveBtn.addEventListener('click', () => switchMode('live'));
+        elements.tabLiveBtn.addEventListener('click', () => switchMode('live', true));
       }
 
       // Eventos
@@ -3984,8 +4106,8 @@ header.tv-header {
     // ==========================================
     // CONTROLE DE ABAS (FILMES / SÉRIES / AO VIVO)
     // ==========================================
-    async function switchMode(mode) {
-      if (currentMode === mode) return;
+    async function switchMode(mode, forceReload = false) {
+      if (currentMode === mode && !forceReload) return;
       currentMode = mode;
 
       elements.tabMoviesBtn.classList.toggle('active', mode === 'movies');
@@ -3994,9 +4116,17 @@ header.tv-header {
         elements.tabLiveBtn.classList.toggle('active', mode === 'live');
       }
 
+      if (forceReload) {
+        elements.searchInput.value = '';
+      }
+
       if (mode === 'movies') {
         elements.searchInput.placeholder = 'Pesquisar filme (ex: Harry Potter, Carros)...';
-        populateCategoriesSelect(movieCategories, 'Filmes');
+        if (movieCategories.length === 0) {
+          await loadMovieCategories();
+        } else {
+          populateCategoriesSelect(movieCategories, 'Filmes');
+        }
         if (fullMoviesCache) {
           currentMediaList = fullMoviesCache;
           elements.categorySelect.value = 'ALL';
@@ -4817,133 +4947,161 @@ header.tv-header {
     // CARREGAMENTO DE DADOS (FILMES / SÉRIES)
     // ==========================================
     async function loadFullMovies() {
-      showLoading('Carregando catálogo de filmes e recuperando capas 4K...');
-      try {
-        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_vod_streams`);
-        const rawMovies = await res.json();
-
-        // Ocultar itens pertencentes à categoria DEMO
-        const demoCatIds = new Set(movieCategories.filter(c => c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
-        const validMovies = rawMovies.filter(m => !demoCatIds.has(String(m.category_id)) && (!m.name || m.name.toLowerCase().trim() !== 'demo'));
-
-        // Ordenar por data de adição (mais recentes primeiro)
-        validMovies.sort((a, b) => {
-          const timeA = Number(a.added || a.last_modified || 0);
-          const timeB = Number(b.added || b.last_modified || 0);
-          if (timeB !== timeA) return timeB - timeA;
-          return Number(b.stream_id || 0) - Number(a.stream_id || 0);
-        });
-
-        // Limpeza preventiva de vínculos antigos e conflitantes no navegador do usuário
-        try {
-          const badKeys = ['andplay_match_movie_time'];
-          badKeys.forEach(k => {
-            const v = localStorage.getItem(k);
-            if (v && v.includes('tt2194499')) localStorage.removeItem(k);
-          });
-          [6071584, 6071588, 6071596, 6072337].forEach(sid => {
-            const n = localStorage.getItem(`andplay_name_override_${sid}`);
-            if (n && n.toLowerCase().includes('about time')) {
-              localStorage.removeItem(`andplay_name_override_${sid}`);
-              localStorage.removeItem(`andplay_poster_override_${sid}`);
-            }
-          });
-        } catch (e) {}
-
-        // Aplica correções automáticas de metadados e customizações salvas pelo usuário
-        validMovies.forEach(m => {
-          const override = KNOWN_STREAM_CORRECTIONS[m.stream_id];
-          if (override) {
-            // Limpa overrides do usuário em conflito com a correção oficial
-            try {
-              localStorage.removeItem(`andplay_poster_override_${m.stream_id}`);
-              localStorage.removeItem(`andplay_name_override_${m.stream_id}`);
-            } catch (e) {}
-
-            if (override.name) m.name = override.name;
-            if (override.year) m.year = override.year;
-            if (override.originalName) m.originalName = override.originalName;
-            if (override.poster) {
-              m.stream_icon = override.poster;
-              m.poster = override.poster;
-            }
-          } else {
-            const userPoster = localStorage.getItem(`andplay_poster_override_${m.stream_id}`);
-            if (userPoster) {
-              m.stream_icon = userPoster;
-              m.poster = userPoster;
-            }
-            const userName = localStorage.getItem(`andplay_name_override_${m.stream_id}`);
-            if (userName) {
-              m.name = userName;
-            }
-          }
-        });
-
-        // Construir índice de posters limpos para cobrir filmes 4K sem capa (respeitando ano quando presente)
-        moviePosterMap.clear();
-        validMovies.forEach(m => {
-          if (m.stream_icon && m.stream_icon.startsWith('http')) {
-            const raw = m.name || m.title || '';
-            const clean = cleanTitleKey(raw);
-            const yMatch = raw.match(/\((19\d\d|20\d\d)\)/);
-            const y = yMatch ? yMatch[1] : (m.year ? String(m.year).trim() : '');
-            const keyWithYear = y ? `${clean}_${y}` : clean;
-            if (!moviePosterMap.has(keyWithYear)) {
-              moviePosterMap.set(keyWithYear, m.stream_icon);
-            }
-            if (!moviePosterMap.has(clean)) {
-              moviePosterMap.set(clean, m.stream_icon);
-            }
-          }
-        });
-
-        // Unificar versões duplicadas (Dublado, Legendado e 4K) em cards únicos inteligentes
-        fullMoviesCache = groupMoviesByTitle(validMovies);
-
+      if (fullMoviesCache && fullMoviesCache.length > 0) {
         currentMediaList = fullMoviesCache;
-        elements.categorySelect.value = 'ALL';
-        elements.resetCategoryBtn.style.display = 'none';
-        elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
-        applyFilterAndRender('');
-      } catch (err) {
-        elements.loading.innerHTML = `<p style="color:#e50914;">Erro ao carregar filmes: ${err.message}</p>`;
-      } finally {
-        hideLoading();
+        if (currentMode === 'movies') applyFilterAndRender('');
+        return fullMoviesCache;
       }
+      if (_loadingMoviesPromise) return _loadingMoviesPromise;
+
+      _loadingMoviesPromise = (async () => {
+        showLoading('Carregando catálogo de filmes e recuperando capas 4K...');
+        try {
+          const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_vod_streams`);
+          const rawMovies = await res.json();
+
+          // Ocultar itens pertencentes à categoria DEMO
+          const demoCatIds = new Set(movieCategories.filter(c => c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
+          const validMovies = rawMovies.filter(m => !demoCatIds.has(String(m.category_id)) && (!m.name || m.name.toLowerCase().trim() !== 'demo'));
+
+          // Ordenar por data de adição (mais recentes primeiro)
+          validMovies.sort((a, b) => {
+            const timeA = Number(a.added || a.last_modified || 0);
+            const timeB = Number(b.added || b.last_modified || 0);
+            if (timeB !== timeA) return timeB - timeA;
+            return Number(b.stream_id || 0) - Number(a.stream_id || 0);
+          });
+
+          // Limpeza preventiva de vínculos antigos e conflitantes no navegador do usuário
+          try {
+            const badKeys = ['andplay_match_movie_time'];
+            badKeys.forEach(k => {
+              const v = localStorage.getItem(k);
+              if (v && v.includes('tt2194499')) localStorage.removeItem(k);
+            });
+            [6071584, 6071588, 6071596, 6072337].forEach(sid => {
+              const n = localStorage.getItem(`andplay_name_override_${sid}`);
+              if (n && n.toLowerCase().includes('about time')) {
+                localStorage.removeItem(`andplay_name_override_${sid}`);
+                localStorage.removeItem(`andplay_poster_override_${sid}`);
+              }
+            });
+          } catch (e) {}
+
+          // Aplica correções automáticas de metadados e customizações salvas pelo usuário
+          validMovies.forEach(m => {
+            const override = KNOWN_STREAM_CORRECTIONS[m.stream_id];
+            if (override) {
+              // Limpa overrides do usuário em conflito com a correção oficial
+              try {
+                localStorage.removeItem(`andplay_poster_override_${m.stream_id}`);
+                localStorage.removeItem(`andplay_name_override_${m.stream_id}`);
+              } catch (e) {}
+
+              if (override.name) m.name = override.name;
+              if (override.year) m.year = override.year;
+              if (override.originalName) m.originalName = override.originalName;
+              if (override.poster) {
+                m.stream_icon = override.poster;
+                m.poster = override.poster;
+              }
+            } else {
+              const userPoster = localStorage.getItem(`andplay_poster_override_${m.stream_id}`);
+              if (userPoster) {
+                m.stream_icon = userPoster;
+                m.poster = userPoster;
+              }
+              const userName = localStorage.getItem(`andplay_name_override_${m.stream_id}`);
+              if (userName) {
+                m.name = userName;
+              }
+            }
+          });
+
+          // Construir índice de posters limpos para cobrir filmes 4K sem capa (respeitando ano quando presente)
+          moviePosterMap.clear();
+          validMovies.forEach(m => {
+            if (m.stream_icon && m.stream_icon.startsWith('http')) {
+              const raw = m.name || m.title || '';
+              const clean = cleanTitleKey(raw);
+              const yMatch = raw.match(/\((19\d\d|20\d\d)\)/);
+              const y = yMatch ? yMatch[1] : (m.year ? String(m.year).trim() : '');
+              const keyWithYear = y ? `${clean}_${y}` : clean;
+              if (!moviePosterMap.has(keyWithYear)) {
+                moviePosterMap.set(keyWithYear, m.stream_icon);
+              }
+              if (!moviePosterMap.has(clean)) {
+                moviePosterMap.set(clean, m.stream_icon);
+              }
+            }
+          });
+
+          // Unificar versões duplicadas (Dublado, Legendado e 4K) em cards únicos inteligentes
+          fullMoviesCache = groupMoviesByTitle(validMovies);
+
+          currentMediaList = fullMoviesCache;
+          elements.categorySelect.value = 'ALL';
+          elements.resetCategoryBtn.style.display = 'none';
+          elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
+          if (currentMode === 'movies') applyFilterAndRender('');
+          return fullMoviesCache;
+        } catch (err) {
+          elements.loading.innerHTML = `<p style="color:#e50914;">Erro ao carregar filmes: ${err.message}</p>`;
+          throw err;
+        } finally {
+          hideLoading();
+          _loadingMoviesPromise = null;
+        }
+      })();
+
+      return _loadingMoviesPromise;
     }
 
     async function loadFullSeries() {
-      showLoading('Carregando catálogo de séries completas...');
-      try {
-        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series`);
-        const rawSeries = await res.json();
-
-        // Ocultar itens pertencentes à categoria DEMO
-        const demoCatIds = new Set(seriesCategories.filter(c => c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
-        const validSeries = rawSeries.filter(s => !demoCatIds.has(String(s.category_id)) && (!s.name || s.name.toLowerCase().trim() !== 'demo'));
-
-        // Ordenar por data de adição / atualização (mais recentes primeiro)
-        validSeries.sort((a, b) => {
-          const timeA = Number(a.last_modified || a.added || 0);
-          const timeB = Number(b.last_modified || b.added || 0);
-          if (timeB !== timeA) return timeB - timeA;
-          return Number(b.series_id || 0) - Number(a.series_id || 0);
-        });
-
-        // Unificar versões duplicadas (Dublado, Legendado e Lançamento) em cards únicos
-        fullSeriesCache = groupSeriesByTitle(validSeries);
-
+      if (fullSeriesCache && fullSeriesCache.length > 0) {
         currentMediaList = fullSeriesCache;
-        elements.categorySelect.value = 'ALL';
-        elements.resetCategoryBtn.style.display = 'none';
-        elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
-        applyFilterAndRender('');
-      } catch (err) {
-        elements.loading.innerHTML = `<p style="color:#e50914;">Erro ao carregar séries: ${err.message}</p>`;
-      } finally {
-        hideLoading();
+        if (currentMode === 'series') applyFilterAndRender('');
+        return fullSeriesCache;
       }
+      if (_loadingSeriesPromise) return _loadingSeriesPromise;
+
+      _loadingSeriesPromise = (async () => {
+        showLoading('Carregando catálogo de séries completas...');
+        try {
+          const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series`);
+          const rawSeries = await res.json();
+
+          // Ocultar itens pertencentes à categoria DEMO
+          const demoCatIds = new Set(seriesCategories.filter(c => c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
+          const validSeries = rawSeries.filter(s => !demoCatIds.has(String(s.category_id)) && (!s.name || s.name.toLowerCase().trim() !== 'demo'));
+
+          // Ordenar por data de adição / atualização (mais recentes primeiro)
+          validSeries.sort((a, b) => {
+            const timeA = Number(a.last_modified || a.added || 0);
+            const timeB = Number(b.last_modified || b.added || 0);
+            if (timeB !== timeA) return timeB - timeA;
+            return Number(b.series_id || 0) - Number(a.series_id || 0);
+          });
+
+          // Unificar versões duplicadas (Dublado, Legendado e Lançamento) em cards únicos
+          fullSeriesCache = groupSeriesByTitle(validSeries);
+
+          currentMediaList = fullSeriesCache;
+          elements.categorySelect.value = 'ALL';
+          elements.resetCategoryBtn.style.display = 'none';
+          elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
+          if (currentMode === 'series') applyFilterAndRender('');
+          return fullSeriesCache;
+        } catch (err) {
+          elements.loading.innerHTML = `<p style="color:#e50914;">Erro ao carregar séries: ${err.message}</p>`;
+          throw err;
+        } finally {
+          hideLoading();
+          _loadingSeriesPromise = null;
+        }
+      })();
+
+      return _loadingSeriesPromise;
     }
 
     function selectAllMedia() {
@@ -7532,15 +7690,20 @@ header.tv-header {
         const watchBtnClass = isBroken ? 'btn btn-secondary' : 'btn btn-primary';
 
         epCard.innerHTML = `
-          ${thumb ? `<img class="episode-thumb" src="${thumb}" alt="Episódio" onerror="this.style.display='none'">` : ''}
-          <div class="episode-info">
-            <div class="episode-title">Episódio ${ep.episode_num}: ${escapeHtml(epTitle)} ${brokenBadge}</div>
-            <div style="font-size: 11px; color: #888;">${duration ? `Duração: ${duration}` : ''}</div>
-            <div class="episode-plot">${escapeHtml(plot)}</div>
+          <div class="episode-card-main">
+            ${thumb ? `<img class="episode-thumb" src="${thumb}" alt="Episódio" onerror="this.style.display='none'">` : ''}
+            <div class="episode-info">
+              <div class="episode-title">
+                <span>Episódio ${ep.episode_num}: ${escapeHtml(epTitle)}</span>
+                ${brokenBadge}
+              </div>
+              <div style="font-size: 11px; color: #888;">${duration ? '⏱ Duração: ' + duration : ''}</div>
+              <div class="episode-plot">${escapeHtml(plot)}</div>
+            </div>
           </div>
           <div class="episode-actions">
-            <button class="${watchBtnClass}" style="padding: 6px 12px; font-size: 12px;">${watchBtnText}</button>
-            <a class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" href="${epUrl}" target="_blank" download>📥 Baixar</a>
+            <button class="${watchBtnClass}" style="padding: 7px 18px; font-size: 12px; font-weight: 700;">${watchBtnText}</button>
+            <a class="btn btn-secondary" style="padding: 7px 16px; font-size: 12px;" href="${epUrl}" target="_blank" download>📥 Baixar</a>
           </div>
         `;
 
@@ -8023,14 +8186,28 @@ header.tv-header {
     tvVodMode = 'series_episodes';
     tvCurrentSeriesItem = seriesItem;
     if (tvVod) tvVod.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Atualiza botão voltar para indicar que volta para as séries
+    const backBtn = document.getElementById('tvVodBack');
+    if (backBtn) backBtn.textContent = '← VOLTAR ÀS SÉRIES';
+
     const titleEl = document.getElementById('tvVodSectionTitle');
     if (titleEl) titleEl.textContent = `📺 ${seriesItem.name || 'Série'} • Temporadas & Episódios`;
 
+    // Atualiza preview com dados da série
     updateTvVodPreview(seriesItem);
+
+    // Oculta o botão genérico de "Assistir" da série para não sobrepor ou confundir o usuário
+    const heroWatchBtn = document.getElementById('tvVodHeroWatchBtn');
+    if (heroWatchBtn) heroWatchBtn.style.display = 'none';
+
+    // Oculta seletor de categorias na tela de episódios
+    const catSelect = document.getElementById('tvVodCatSelect');
+    if (catSelect) catSelect.style.display = 'none';
 
     const container = document.getElementById('tvVodRailsContainer');
     if (!container) return;
-    container.innerHTML = '<div style="color:#ffc107; font-size:16px; font-weight:700; padding:40px; text-align:center;">Carregando temporadas e episódios...</div>';
+    container.innerHTML = '<div style="color:#ffc107; font-size:16px; font-weight:700; padding:40px; text-align:center;"><div class="spinner" style="margin: 0 auto 15px;"></div>Carregando temporadas e episódios...</div>';
 
     const seriesId = seriesItem.series_id || seriesItem.id;
     try {
@@ -8072,10 +8249,18 @@ header.tv-header {
           epCard.tabIndex = 0;
           const epTitle = ep.title || `Episódio ${ep.episode_num}`;
           const duration = ep.info?.duration || ep.info?.duration_secs ? `${Math.round((ep.info?.duration_secs || 0)/60) || ep.info?.duration} min` : '';
+          const thumb = ep.info?.movie_image || seriesItem.cover || seriesItem.poster || '';
+
           epCard.innerHTML = `
-            <div class="tv-ep-num">TEMPORADA ${seasonNum} • EPISÓDIO ${ep.episode_num}</div>
-            <div class="tv-ep-title">${epTitle}</div>
-            <div class="tv-ep-meta">${duration ? '⏱ ' + duration : ''}</div>
+            ${thumb ? `<img class="tv-ep-thumb" src="${thumb}" alt="" onerror="this.style.display='none'">` : ''}
+            <div class="tv-ep-body">
+              <div class="tv-ep-num">TEMPORADA ${seasonNum} • EPISÓDIO ${ep.episode_num}</div>
+              <div class="tv-ep-title">${epTitle}</div>
+              <div class="tv-ep-meta-row">
+                ${duration ? `<span class="tv-ep-duration">⏱ ${duration}</span>` : '<span></span>'}
+                <span class="tv-ep-cta">▶ Assistir</span>
+              </div>
+            </div>
           `;
 
           epCard.addEventListener('focus', () => {
@@ -9071,35 +9256,129 @@ header.tv-header {
     }
   });
 
-  // VOD Explorer
-  function openTvVodExplorer(type) {
-    // Limpa meta de série ao trocar de categoria — impede que a gaveta abra episódios ao invés do guia
+  // VOD Explorer (Filmes & Séries com Filtro por Categoria)
+  let _tvVodCurrentCat = 'ALL';
+
+  async function openTvVodExplorer(type, targetCatId = 'ALL') {
     tvVodMode = type;
     tvPlayingSeriesMeta = null;
     tvCurrentSeriesItem = null;
-    // Ao entrar no explorador, ainda não está reproduzindo; mantém o tipo anterior
-    // mas só derruba 'vod' se for genuinamente canal/evento ainda ativo no player
+    _tvVodCurrentCat = targetCatId;
+
+    const backBtn = document.getElementById('tvVodBack');
+    if (backBtn) backBtn.textContent = '← VOLTAR À CENTRAL';
+
     const titleEl = document.getElementById('tvVodSectionTitle');
     if (titleEl) titleEl.textContent = (type === 'movies') ? '🎬 Filmes Sob Demanda (Cinema)' : '📺 Séries Sob Demanda';
     setTvViewMode('vod');
 
     const container = document.getElementById('tvVodRailsContainer');
     if (!container) return;
-    container.innerHTML = '<div style="color:#aaa; font-size:16px; padding:30px; text-align:center;">Carregando catálogo para TV...</div>';
+    container.innerHTML = '<div style="color:#ffc107; font-size:16px; font-weight:700; padding:40px; text-align:center;"><div class="spinner" style="margin: 0 auto 15px;"></div>Carregando catálogo para TV...</div>';
 
-    const items = (type === 'movies') ? (fullMoviesCache || []) : (fullSeriesCache || []);
-    if (items.length === 0) {
-      if (type === 'movies' && typeof loadFullMovies === 'function') loadFullMovies().then(() => openTvVodExplorer('movies'));
-      if (type === 'series' && typeof loadFullSeries === 'function') loadFullSeries().then(() => openTvVodExplorer('series'));
+    let allItems = (type === 'movies') ? fullMoviesCache : fullSeriesCache;
+    if (!allItems || allItems.length === 0) {
+      try {
+        if (type === 'movies') {
+          if (!movieCategories || movieCategories.length === 0) await loadMovieCategories();
+          allItems = await loadFullMovies();
+        } else {
+          if (!seriesCategories || seriesCategories.length === 0) await loadSeriesCategories();
+          allItems = await loadFullSeries();
+        }
+      } catch (err) {
+        container.innerHTML = `<div style="color:#e50914; padding:30px; text-align:center;">Erro ao carregar catálogo: ${err.message}<br><button class="tv-vod-back-btn tv-focusable" style="margin-top:14px;" onclick="openTvVodExplorer('${type}')">Tentar Novamente</button></div>`;
+        return;
+      }
+    }
+
+    if (!allItems || allItems.length === 0) {
+      container.innerHTML = '<div style="color:#888; font-size:15px; padding:30px; text-align:center;">Nenhum título encontrado no catálogo.</div>';
       return;
     }
 
-    // Renderiza grade VOD estilo Smart TV
+    renderTvVodContent(type, allItems, _tvVodCurrentCat);
+  }
+
+  function renderTvVodContent(type, allItems, activeCatId) {
+    const container = document.getElementById('tvVodRailsContainer');
+    if (!container) return;
     container.innerHTML = '';
+
+    const categories = (type === 'movies') ? (movieCategories || []) : (seriesCategories || []);
+    const validCategories = categories.filter(c => !c.category_name.toLowerCase().includes('demo'));
+
+    // 1. Barra de Categorias Horizontal (Pills para Controle Remoto e Toque)
+    const catBar = document.createElement('div');
+    catBar.className = 'tv-vod-category-bar';
+    catBar.id = 'tvVodCategoryBar';
+
+    const allPill = document.createElement('button');
+    allPill.className = `tv-vod-cat-pill tv-focusable ${activeCatId === 'ALL' ? 'active' : ''}`;
+    allPill.dataset.catId = 'ALL';
+    allPill.tabIndex = 0;
+    allPill.textContent = '🌟 Todas as Categorias';
+    allPill.addEventListener('click', () => {
+      _tvVodCurrentCat = 'ALL';
+      renderTvVodContent(type, allItems, 'ALL');
+    });
+    catBar.appendChild(allPill);
+
+    validCategories.forEach(cat => {
+      const cId = String(cat.category_id);
+      const pill = document.createElement('button');
+      pill.className = `tv-vod-cat-pill tv-focusable ${activeCatId === cId ? 'active' : ''}`;
+      pill.dataset.catId = cId;
+      pill.tabIndex = 0;
+      pill.textContent = cat.category_name.replace('⚡', '').trim();
+      pill.addEventListener('click', () => {
+        _tvVodCurrentCat = cId;
+        renderTvVodContent(type, allItems, cId);
+      });
+      catBar.appendChild(pill);
+    });
+
+    container.appendChild(catBar);
+
+    // Atualiza seletor dropdown na barra superior
+    const catSelect = document.getElementById('tvVodCatSelect');
+    if (catSelect) {
+      catSelect.style.display = 'inline-block';
+      catSelect.innerHTML = '<option value="ALL">🌟 Todas as Categorias</option>';
+      validCategories.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = String(cat.category_id);
+        opt.textContent = cat.category_name.replace('⚡', '').trim();
+        catSelect.appendChild(opt);
+      });
+      catSelect.value = activeCatId;
+      catSelect.onchange = (e) => {
+        _tvVodCurrentCat = e.target.value;
+        renderTvVodContent(type, allItems, e.target.value);
+      };
+    }
+
+    // 2. Filtra itens pela categoria selecionada
+    const filtered = (activeCatId === 'ALL') ? allItems : allItems.filter(item => {
+      if (Array.isArray(item.category_ids)) {
+        return item.category_ids.some(cid => String(cid) === activeCatId);
+      }
+      return String(item.category_id) === activeCatId;
+    });
+
+    if (filtered.length === 0) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.style.cssText = 'color:#888; font-size:15px; padding:40px; text-align:center;';
+      emptyDiv.textContent = 'Nenhum título encontrado nesta categoria.';
+      container.appendChild(emptyDiv);
+      return;
+    }
+
+    // 3. Renderiza Grade de Posters VOD
     const grid = document.createElement('div');
     grid.className = 'tv-vod-grid';
 
-    items.slice(0, 60).forEach((item, i) => {
+    filtered.slice(0, 80).forEach((item, i) => {
       const card = document.createElement('div');
       card.className = 'tv-vod-poster-card tv-focusable';
       card.tabIndex = 0;
@@ -9112,7 +9391,6 @@ header.tv-header {
         </div>
       `;
 
-      // Atualiza painel superior quando em foco
       card.addEventListener('focus', () => updateTvVodPreview(item));
 
       card.addEventListener('click', () => {
@@ -9131,16 +9409,20 @@ header.tv-header {
     });
 
     container.appendChild(grid);
-    if (items[0]) updateTvVodPreview(items[0]);
+    if (filtered[0]) updateTvVodPreview(filtered[0]);
 
-    // Foca automaticamente no primeiro poster do catálogo para a navegação D-Pad responder na hora
+    // Foca na pill ativa ou no primeiro card
     setTimeout(() => {
+      const activePill = catBar.querySelector('.tv-vod-cat-pill.active');
+      if (activePill && activeCatId !== 'ALL') {
+        activePill.scrollIntoView({ inline: 'center', behavior: 'smooth' });
+      }
       const firstCard = container.querySelector('.tv-vod-poster-card');
       if (firstCard) {
         firstCard.focus();
         firstCard.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       }
-    }, 120);
+    }, 100);
   }
 
   function updateTvVodPreview(item) {
@@ -9165,13 +9447,19 @@ header.tv-header {
       poster.style.display = poster.src ? 'block' : 'none';
     }
     if (watchBtn) {
-      watchBtn.style.display = 'inline-block';
-      watchBtn.onclick = () => {
-        if (tvVodMode === 'movies') tvPlayMovie(item);
-        else if (tvVodMode === 'series') openTvSeriesDetail(item);
-      };
+      if (tvVodMode === 'series_episodes') {
+        watchBtn.style.display = 'none';
+      } else {
+        watchBtn.style.display = 'inline-block';
+        watchBtn.textContent = (tvVodMode === 'series') ? '▶ VER EPISÓDIOS (OK)' : '▶ ASSISTIR (OK)';
+        watchBtn.onclick = () => {
+          if (tvVodMode === 'movies') tvPlayMovie(item);
+          else if (tvVodMode === 'series') openTvSeriesDetail(item);
+        };
+      }
     }
   }
+
 
   // ============================================================
   // CONTROLE REMOTO / TECLADO COMPLETO (Setas, Enter, Backspace, Ctrl)
@@ -9866,13 +10154,16 @@ header.tv-header {
 
       // 2. Modo Catálogo Geral (Filmes ou Séries)
       const vodCards = Array.from(document.querySelectorAll('#tvVodRailsContainer .tv-vod-poster-card'));
+      const catPills = Array.from(document.querySelectorAll('#tvVodRailsContainer .tv-vod-cat-pill'));
       const vodIdx = vodCards.indexOf(focused);
+      const catIdx = catPills.indexOf(focused);
 
       if (focused === backBtn) {
         scrollVodToTop();
         if (key === 'ArrowRight') {
           e.preventDefault();
           if (watchBtn && watchBtn.style.display !== 'none') watchBtn.focus();
+          else if (catPills.length) catPills[0].focus();
           else if (vodCards.length) {
             vodCards[0].focus();
             scrollVodCard(vodCards[0], 'nearest');
@@ -9881,7 +10172,8 @@ header.tv-header {
         }
         if (key === 'ArrowDown') {
           e.preventDefault();
-          if (vodCards.length) {
+          if (catPills.length) catPills[0].focus();
+          else if (vodCards.length) {
             vodCards[0].focus();
             scrollVodCard(vodCards[0], 'nearest');
           }
@@ -9907,9 +10199,57 @@ header.tv-header {
         }
         if (key === 'ArrowDown') {
           e.preventDefault();
+          if (catPills.length) catPills[0].focus();
+          else if (vodCards.length) {
+            vodCards[0].focus();
+            scrollVodCard(vodCards[0], 'nearest');
+          }
+          return;
+        }
+        if (key === 'Enter') {
+          e.preventDefault();
+          focused.click();
+          return;
+        }
+        return;
+      }
+
+      if (catIdx !== -1) {
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          if (catIdx + 1 < catPills.length) {
+            catPills[catIdx + 1].focus();
+            catPills[catIdx + 1].scrollIntoView({ inline: 'center', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (key === 'ArrowLeft') {
+          e.preventDefault();
+          if (catIdx > 0) {
+            catPills[catIdx - 1].focus();
+            catPills[catIdx - 1].scrollIntoView({ inline: 'center', behavior: 'smooth' });
+          } else if (backBtn) {
+            backBtn.focus();
+            scrollVodToTop();
+          }
+          return;
+        }
+        if (key === 'ArrowDown') {
+          e.preventDefault();
           if (vodCards.length) {
             vodCards[0].focus();
             scrollVodCard(vodCards[0], 'nearest');
+          }
+          return;
+        }
+        if (key === 'ArrowUp') {
+          e.preventDefault();
+          if (watchBtn && watchBtn.style.display !== 'none') {
+            watchBtn.focus();
+            scrollVodToTop();
+          } else if (backBtn) {
+            backBtn.focus();
+            scrollVodToTop();
           }
           return;
         }
@@ -9943,7 +10283,11 @@ header.tv-header {
             vodCards[vodIdx - 1].focus();
             scrollVodCard(vodCards[vodIdx - 1], 'nearest');
           } else {
-            if (watchBtn && watchBtn.style.display !== 'none') {
+            const activePill = catPills.find(p => p.classList.contains('active')) || catPills[0];
+            if (activePill) {
+              activePill.focus();
+              scrollVodToTop();
+            } else if (watchBtn && watchBtn.style.display !== 'none') {
               watchBtn.focus();
               scrollVodToTop();
             } else if (backBtn) {
@@ -9967,7 +10311,11 @@ header.tv-header {
             vodCards[vodIdx - cols].focus();
             scrollVodCard(vodCards[vodIdx - cols], 'nearest');
           } else {
-            if (watchBtn && watchBtn.style.display !== 'none') {
+            const activePill = catPills.find(p => p.classList.contains('active')) || catPills[0];
+            if (activePill) {
+              activePill.focus();
+              scrollVodToTop();
+            } else if (watchBtn && watchBtn.style.display !== 'none') {
               watchBtn.focus();
               scrollVodToTop();
             } else if (backBtn) {
