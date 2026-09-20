@@ -2421,6 +2421,77 @@ header.tv-header {
   margin-top: 2px;
 }
 
+/* Séries no modo TV: Barra de Temporadas e Grade de Episódios */
+.tv-series-seasons-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: none;
+}
+.tv-series-seasons-bar::-webkit-scrollbar {
+  display: none;
+}
+.tv-series-season-btn {
+  padding: 8px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #ccc;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+.tv-series-season-btn.active, .tv-series-season-btn:focus {
+  background: #ffc107 !important;
+  color: #000 !important;
+  border-color: #ffc107 !important;
+  transform: scale(1.05);
+}
+.tv-series-episodes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+.tv-vod-ep-card {
+  background: #141420;
+  border: 2px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.tv-vod-ep-card:focus, .tv-vod-ep-card.focused {
+  border-color: #ffc107 !important;
+  background: rgba(255, 193, 7, 0.16) !important;
+  transform: scale(1.04) !important;
+  box-shadow: 0 0 20px rgba(255, 193, 7, 0.45) !important;
+}
+.tv-ep-num {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffc107;
+  letter-spacing: 0.5px;
+}
+.tv-ep-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tv-ep-meta {
+  font-size: 11px;
+  color: #888;
+}
+
 </style>
 </head>
 <body>
@@ -7309,34 +7380,95 @@ header.tv-header {
   };
 
   // ============================================================
-  // MOTOR DE SINTONIZAÇÃO E ZAPPING COM DEBOUNCER DE 3 SEGUNDOS
-  // Permite ao usuário navegar rapidamente pelos canais vendo o OSD
-  // sem disparar recargas pesadas de vídeo a cada clique.
-  // O zapping pode ser CANCELADO via Esc/Backspace revertendo ao canal atual.
+  // MOTOR DE REPRODUÇÃO E ZAPPING UNIFICADO PARA MODO TV
+  // Suporta Canais Ao Vivo (com zapping e debouncer de 3s),
+  // Eventos Esportivos Ao Vivo, Filmes VOD e Séries VOD com Episódios
   // ============================================================
   let tvZapDebounceTimer = null;
   let tvPendingIdx = 0;
+  let tvPlayingType = 'channel'; // 'channel' | 'event' | 'vod'
+  let tvPreviousMode = 'central'; // 'central' | 'vod'
+  let tvCurrentSeriesItem = null;
+  let tvCurrentSeason = '1';
 
-  // Carrega efetivamente a transmissão do canal no reprodutor (iframe ou tag de vídeo)
+  // Helper para formatação de segundos (ex: 01:25:30)
+  function formatTvSeconds(sec) {
+    if (isNaN(sec) || sec === null || sec < 0) return '00:00';
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  // Carrega efetivamente a transmissão no reprodutor unificado (iframe embed ou tag de vídeo)
   function tvLoadStream(ch) {
     if (!ch) return;
-    const fallback = ch.fallbacks && ch.fallbacks[0] ? ch.fallbacks[0] : { url: 'https://rdcanais.net/' + ch.channelSlug, isEmbed: true };
+    const fallback = ch.fallbacks && ch.fallbacks[0] ? ch.fallbacks[0] : { url: 'https://rdcanais.net/' + (ch.channelSlug || ch.id), isEmbed: true };
+    
     if (fallback.isEmbed) {
+      if (window._tvActiveHls) {
+        window._tvActiveHls.destroy();
+        window._tvActiveHls = null;
+      }
       tvVideo.style.display = 'none';
       tvVideo.pause();
       tvEmbed.style.display = 'block';
-      // Adiciona ?autoplay=1 para solicitar autoplay ao player do embed
       const baseUrl = fallback.url;
       const embedUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'autoplay=1';
-      // Força reload limpando src antes (garante troca de canal e reautoplay)
       tvEmbed.src = 'about:blank';
       requestAnimationFrame(() => { tvEmbed.src = embedUrl; });
     } else {
       tvEmbed.style.display = 'none';
       tvEmbed.src = 'about:blank';
       tvVideo.style.display = 'block';
-      tvVideo.src = fallback.url;
-      tvVideo.play().catch(() => {});
+
+      // Suporte a HLS .m3u8 nativo via Hls.js ou HTML5 Video
+      if (fallback.url.includes('.m3u8') && typeof Hls !== 'undefined' && Hls.isSupported()) {
+        if (window._tvActiveHls) {
+          window._tvActiveHls.destroy();
+          window._tvActiveHls = null;
+        }
+        window._tvActiveHls = new Hls({ enableWorker: true });
+        window._tvActiveHls.loadSource(fallback.url);
+        window._tvActiveHls.attachMedia(tvVideo);
+        window._tvActiveHls.on(Hls.Events.MANIFEST_PARSED, () => {
+          tvVideo.play().catch(() => {});
+        });
+      } else {
+        if (window._tvActiveHls) {
+          window._tvActiveHls.destroy();
+          window._tvActiveHls = null;
+        }
+        tvVideo.src = fallback.url;
+        tvVideo.play().catch(() => {});
+      }
+    }
+
+    // Listener de progresso para filmes e séries VOD
+    if (tvVideo && !tvVideo._hasTvTimeUpdate) {
+      tvVideo._hasTvTimeUpdate = true;
+      tvVideo.addEventListener('timeupdate', () => {
+        if (tvPlayingType !== 'vod' || !tvVideo.duration) return;
+        const cur = tvVideo.currentTime;
+        const dur = tvVideo.duration;
+        const pct = Math.round((cur / dur) * 100);
+        const curStr = formatTvSeconds(cur);
+        const durStr = formatTvSeconds(dur);
+
+        const fill = document.getElementById('tvOsdProgFill');
+        const status = document.getElementById('tvOsdProgStatus');
+        const remaining = document.getElementById('tvOsdProgRemaining');
+        const timeRange = document.getElementById('tvOsdTimeRange');
+
+        if (fill) fill.style.width = `${pct}%`;
+        if (status) {
+          status.textContent = tvVideo.paused ? `⏸ Pausado (${curStr} / ${durStr})` : `▶ Reproduzindo (${curStr} / ${durStr})`;
+          status.style.color = tvVideo.paused ? '#ffc107' : '#00e676';
+        }
+        if (remaining) remaining.textContent = `Restam ~${Math.max(0, Math.round((dur - cur) / 60))} min`;
+        if (timeRange) timeRange.textContent = `${curStr} • ${durStr}`;
+      });
     }
 
     // Mantém o foco no overlay de teclado após a troca de canal em fullscreen
@@ -7346,7 +7478,7 @@ header.tv-header {
     }
   }
 
-  // Confirma a sintonização do canal pendente (chamado após 1s de inatividade ou ao teclar Enter)
+  // Confirma a sintonização do canal pendente (chamado após 3s de inatividade ou ao teclar Enter)
   function tvCommitPendingChannel() {
     if (tvZapDebounceTimer) {
       clearTimeout(tvZapDebounceTimer);
@@ -7358,26 +7490,27 @@ header.tv-header {
 
     try { localStorage.setItem('andplay_last_tv_ch', tvCurrentIdx); } catch (e) {}
 
-    // Efetiva o carregamento do player de vídeo
+    tvPlayingType = 'channel';
+    tvPreviousMode = 'central';
     tvLoadStream(ch);
 
-    // Atualiza PiP com o canal confirmado
     const pipName = document.getElementById('tvPipName');
     const pipEpg = document.getElementById('tvPipEpg');
     if (pipName) pipName.textContent = `${String(tvCurrentIdx + 1).padStart(3, '0')} - ${ch.name}`;
     if (pipEpg) pipEpg.textContent = ch.nowTitle ? `🔴 No Ar: ${ch.nowTitle}` : (ch.categoryLabel || 'Transmissão Ao Vivo HD');
 
-    // Atualiza OSD como confirmado (isPending = false)
     updateTvOsd(ch, tvCurrentIdx, false);
   }
 
-  // Sintonizar Canal Imediatamente (sem debounce - usado em cliques de cards/grade e inicialização)
+  // Sintonizar Canal Imediatamente (sem debounce)
   function tvTuneChannel(idx, showOsdBanner = true) {
     if (!tvChannels || tvChannels.length === 0) return;
     if (tvZapDebounceTimer) {
       clearTimeout(tvZapDebounceTimer);
       tvZapDebounceTimer = null;
     }
+    tvPlayingType = 'channel';
+    tvPreviousMode = 'central';
     tvCurrentIdx = (idx + tvChannels.length) % tvChannels.length;
     tvPendingIdx = tvCurrentIdx;
     const ch = tvChannels[tvCurrentIdx];
@@ -7385,8 +7518,206 @@ header.tv-header {
 
     try { localStorage.setItem('andplay_last_tv_ch', tvCurrentIdx); } catch (e) {}
 
-    // Carrega stream imediatamente
     tvLoadStream(ch);
+
+    const pipName = document.getElementById('tvPipName');
+    const pipEpg = document.getElementById('tvPipEpg');
+    if (pipName) pipName.textContent = `${String(tvCurrentIdx + 1).padStart(3, '0')} - ${ch.name}`;
+    if (pipEpg) pipEpg.textContent = ch.nowTitle ? `🔴 No Ar: ${ch.nowTitle}` : (ch.categoryLabel || 'Transmissão Ao Vivo HD');
+
+    updateTvOsd(ch, tvCurrentIdx, false);
+    if (showOsdBanner && tvCurrentMode === 'fullscreen') {
+      triggerTvOsd();
+    }
+  }
+
+  // Reproduzir Evento Esportivo Ao Vivo no Player de TV
+  function tvPlayLiveEvent(ev) {
+    if (!ev) return;
+    const fallbacks = (ev.fallbacks && ev.fallbacks.length) ? ev.fallbacks : [
+      { name: 'Transmissão HD', url: ev.embedUrl || ev.hlsUrl || '', isEmbed: !ev.hlsUrl }
+    ];
+    const eventChannel = {
+      id: ev.id,
+      name: ev.name,
+      categoryLabel: ev.league || 'Jogos de Hoje',
+      logo: ev.homeLogo || ev.poster || '',
+      nowTitle: `${ev.matchTime ? '⏰ ' + ev.matchTime + ' • ' : ''}${ev.name}`,
+      synopsis: `${ev.league || 'Futebol'} - ${ev.name}. Partida transmitida ao vivo em alta definição com cobertura em tempo real.`,
+      fallbacks: fallbacks
+    };
+
+    tvPlayingType = 'event';
+    tvPreviousMode = 'central';
+    tvLoadStream(eventChannel);
+    updateTvOsd(eventChannel, 0, false);
+    setTvViewMode('fullscreen');
+  }
+
+  // Reproduzir Filme VOD no Player de TV
+  function tvPlayMovie(movie) {
+    if (!movie) return;
+    const versions = movie.versions || [{
+      item: movie,
+      versionInfo: (typeof detectMovieVersion === 'function') ? detectMovieVersion(movie) : { label: 'Principal' },
+      streamId: movie.stream_id,
+      ext: movie.container_extension || 'mp4'
+    }];
+    const selectedVersion = (versions.find(v => v.versionInfo && v.versionInfo.type === 'dublado')) || versions[0];
+    const streamId = selectedVersion.streamId || movie.stream_id;
+    if (!streamId) return;
+    const ext = selectedVersion.ext || movie.container_extension || 'mp4';
+    const videoUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${streamId}.${ext}`;
+    const title = movie.name || movie.title || 'Filme';
+
+    const pseudoCh = {
+      id: `movie_${streamId}`,
+      name: title,
+      categoryLabel: movie.genre || 'Filmes VOD',
+      logo: movie.poster || movie.stream_icon || '',
+      nowTitle: title,
+      synopsis: movie.plot || `${movie.year ? 'Ano: ' + movie.year + ' • ' : ''}${movie.rating ? '★ ' + movie.rating + ' • ' : ''}Filme sob demanda em alta definição digital.`,
+      fallbacks: [{ name: 'HD', url: videoUrl, isEmbed: false }]
+    };
+
+    tvPlayingType = 'vod';
+    tvPreviousMode = (tvCurrentMode === 'vod') ? 'vod' : 'central';
+    tvLoadStream(pseudoCh);
+    updateTvOsd(pseudoCh, 0, false);
+    setTvViewMode('fullscreen');
+  }
+
+  // Reproduzir Episódio de Série VOD no Player de TV
+  function tvPlaySeriesEpisode(seriesItem, ep, seasonNum) {
+    if (!seriesItem || !ep) return;
+    const ext = ep.container_extension || 'mp4';
+    const videoUrl = `${CONFIG.server}/series/${CONFIG.user}/${CONFIG.pass}/${ep.id}.${ext}`;
+    const sName = seriesItem.name || seriesItem.title || 'Série';
+    const epTitle = ep.title || `Episódio ${ep.episode_num}`;
+    const fullTitle = `${sName} • T${seasonNum}:E${ep.episode_num}`;
+
+    const pseudoCh = {
+      id: `series_${ep.id}`,
+      name: fullTitle,
+      categoryLabel: seriesItem.genre || 'Séries VOD',
+      logo: ep.info?.movie_image || seriesItem.poster || seriesItem.cover || '',
+      nowTitle: `${fullTitle} - ${epTitle}`,
+      synopsis: ep.info?.plot || seriesItem.plot || `Temporada ${seasonNum}, Episódio ${ep.episode_num} da série ${sName}.`,
+      fallbacks: [{ name: 'HD', url: videoUrl, isEmbed: false }]
+    };
+
+    tvPlayingType = 'vod';
+    tvPreviousMode = 'vod';
+    tvLoadStream(pseudoCh);
+    updateTvOsd(pseudoCh, 0, false);
+    setTvViewMode('fullscreen');
+  }
+
+  // Carregar e Exibir Episódios da Série no Modo TV
+  async function openTvSeriesDetail(seriesItem) {
+    tvVodMode = 'series_episodes';
+    tvCurrentSeriesItem = seriesItem;
+    const titleEl = document.getElementById('tvVodSectionTitle');
+    if (titleEl) titleEl.textContent = `📺 ${seriesItem.name || 'Série'} • Temporadas & Episódios`;
+
+    updateTvVodPreview(seriesItem);
+
+    const container = document.getElementById('tvVodRailsContainer');
+    if (!container) return;
+    container.innerHTML = '<div style="color:#ffc107; font-size:16px; font-weight:700; padding:40px; text-align:center;">Carregando temporadas e episódios...</div>';
+
+    const seriesId = seriesItem.series_id || seriesItem.id;
+    try {
+      const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series_info&series_id=${seriesId}`);
+      const data = await res.json();
+      const episodesBySeason = data.episodes || {};
+      const seasons = Object.keys(episodesBySeason).sort((a, b) => Number(a) - Number(b));
+
+      if (seasons.length === 0) {
+        container.innerHTML = '<div style="color:#888; font-size:15px; padding:30px; text-align:center;">Nenhum episódio cadastrado para esta série.</div>';
+        return;
+      }
+
+      container.innerHTML = '';
+
+      // Barra de seleção de temporadas
+      const seasonsBar = document.createElement('div');
+      seasonsBar.className = 'tv-series-seasons-bar';
+      seasonsBar.id = 'tvSeriesSeasonsBar';
+
+      let currentSeason = seasons[0];
+      tvCurrentSeason = currentSeason;
+
+      const episodesContainer = document.createElement('div');
+      episodesContainer.className = 'tv-series-episodes-grid';
+      episodesContainer.id = 'tvSeriesEpisodesGrid';
+
+      function renderTvSeason(seasonNum) {
+        tvCurrentSeason = seasonNum;
+        seasonsBar.querySelectorAll('.tv-series-season-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.season === String(seasonNum));
+        });
+
+        episodesContainer.innerHTML = '';
+        const eps = episodesBySeason[seasonNum] || [];
+        eps.forEach(ep => {
+          const epCard = document.createElement('div');
+          epCard.className = 'tv-vod-ep-card tv-focusable';
+          epCard.tabIndex = 0;
+          const epTitle = ep.title || `Episódio ${ep.episode_num}`;
+          const duration = ep.info?.duration || ep.info?.duration_secs ? `${Math.round((ep.info?.duration_secs || 0)/60) || ep.info?.duration} min` : '';
+          epCard.innerHTML = `
+            <div class="tv-ep-num">TEMPORADA ${seasonNum} • EPISÓDIO ${ep.episode_num}</div>
+            <div class="tv-ep-title">${epTitle}</div>
+            <div class="tv-ep-meta">${duration ? '⏱ ' + duration : ''}</div>
+          `;
+
+          epCard.addEventListener('focus', () => {
+            const plotEl = document.getElementById('tvVodPreviewPlot');
+            if (plotEl) plotEl.textContent = ep.info?.plot || seriesItem.plot || 'Sem sinopse disponível.';
+            const titleEl2 = document.getElementById('tvVodPreviewTitle');
+            if (titleEl2) titleEl2.textContent = `${seriesItem.name} - T${seasonNum}:E${ep.episode_num} "${epTitle}"`;
+          });
+
+          epCard.addEventListener('click', () => {
+            tvPlaySeriesEpisode(seriesItem, ep, seasonNum);
+          });
+          epCard.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              tvPlaySeriesEpisode(seriesItem, ep, seasonNum);
+            }
+          });
+
+          episodesContainer.appendChild(epCard);
+        });
+
+        setTimeout(() => {
+          const firstEp = episodesContainer.querySelector('.tv-vod-ep-card');
+          if (firstEp) firstEp.focus();
+        }, 80);
+      }
+
+      seasons.forEach((sNum, sIdx) => {
+        const sBtn = document.createElement('button');
+        sBtn.className = `tv-series-season-btn tv-focusable ${sIdx === 0 ? 'active' : ''}`;
+        sBtn.dataset.season = String(sNum);
+        sBtn.tabIndex = 0;
+        sBtn.textContent = `Temporada ${sNum} (${(episodesBySeason[sNum] || []).length} ep)`;
+        sBtn.addEventListener('click', () => renderTvSeason(sNum));
+        sBtn.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') renderTvSeason(sNum);
+        });
+        seasonsBar.appendChild(sBtn);
+      });
+
+      container.appendChild(seasonsBar);
+      container.appendChild(episodesContainer);
+      renderTvSeason(currentSeason);
+    } catch (e) {
+      container.innerHTML = `<div style="color:#e50914; padding:30px; text-align:center;">Erro ao carregar episódios: ${e.message}</div>`;
+    }
+  }
 
     // Atualiza textos do PiP
     const pipName = document.getElementById('tvPipName');
@@ -7474,15 +7805,35 @@ header.tv-header {
     });
     if (btnPrev) btnPrev.addEventListener('click', (e) => {
       e.stopPropagation();
-      tvZap(-1);
+      if (tvPlayingType === 'vod' && tvVideo) {
+        tvVideo.currentTime = Math.max(0, tvVideo.currentTime - 10);
+        triggerTvOsd(3500);
+      } else {
+        tvZap(-1);
+      }
     });
     if (btnNext) btnNext.addEventListener('click', (e) => {
       e.stopPropagation();
-      tvZap(1);
+      if (tvPlayingType === 'vod' && tvVideo) {
+        tvVideo.currentTime = Math.min(tvVideo.duration || 999999, tvVideo.currentTime + 10);
+        triggerTvOsd(3500);
+      } else {
+        tvZap(1);
+      }
     });
     if (btnCentral) btnCentral.addEventListener('click', (e) => {
       e.stopPropagation();
-      setTvViewMode('central');
+      if (tvPlayingType === 'vod') {
+        tvVideo.pause();
+        tvVideo.src = '';
+        setTvViewMode(tvPreviousMode || 'vod');
+        if (tvPreviousMode === 'central') tvTuneChannel(tvCurrentIdx, false);
+      } else if (tvPlayingType === 'event') {
+        setTvViewMode('central');
+        tvTuneChannel(tvCurrentIdx, false);
+      } else {
+        setTvViewMode('central');
+      }
     });
     if (btnCancelZap) btnCancelZap.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -7493,15 +7844,37 @@ header.tv-header {
   function updateTvOsd(ch, idx, isPending = false) {
     const formattedNum = String(idx + 1).padStart(3, '0');
 
-    // Mostra/oculta botão de cancelar zap conforme estado de zapping pendente
+    // Botões de ação rápida no OSD adaptados ao tipo de reprodução
+    const btnGuide = document.getElementById('tvOsdBtnGuide');
+    const btnPrev = document.getElementById('tvOsdBtnPrev');
+    const btnNext = document.getElementById('tvOsdBtnNext');
+    const btnCentral = document.getElementById('tvOsdBtnCentral');
     const btnCancelZap = document.getElementById('tvOsdBtnCancelZap');
+
     if (btnCancelZap) btnCancelZap.style.display = isPending ? 'inline-flex' : 'none';
+
+    if (tvPlayingType === 'vod') {
+      if (btnGuide) btnGuide.style.display = 'none';
+      if (btnPrev) { btnPrev.style.display = 'inline-flex'; btnPrev.textContent = '⏪ -10s'; }
+      if (btnNext) { btnNext.style.display = 'inline-flex'; btnNext.textContent = '⏩ +10s'; }
+      if (btnCentral) btnCentral.textContent = '⬅ VOLTAR';
+    } else if (tvPlayingType === 'event') {
+      if (btnGuide) btnGuide.style.display = 'none';
+      if (btnPrev) btnPrev.style.display = 'none';
+      if (btnNext) btnNext.style.display = 'none';
+      if (btnCentral) btnCentral.textContent = '⬅ CENTRAL';
+    } else {
+      if (btnGuide) btnGuide.style.display = 'inline-flex';
+      if (btnPrev) { btnPrev.style.display = 'inline-flex'; btnPrev.textContent = '▲ CANAL -'; }
+      if (btnNext) { btnNext.style.display = 'inline-flex'; btnNext.textContent = '▼ CANAL +'; }
+      if (btnCentral) btnCentral.textContent = '⬅ CENTRAL';
+    }
 
     // 1. Indicador Rápido de Zapping no Topo
     const topNum = document.getElementById('tvTopChNum');
     const topName = document.getElementById('tvTopChName');
     const topLive = document.getElementById('tvTopChLive');
-    if (topNum) topNum.textContent = `CH ${formattedNum}`;
+    if (topNum) topNum.textContent = (tvPlayingType === 'vod') ? 'CINEMA' : (tvPlayingType === 'event' ? 'JOGO' : `CH ${formattedNum}`);
     if (topName) topName.textContent = ch.name;
     if (topLive) {
       if (isPending) {
@@ -7509,6 +7882,11 @@ header.tv-header {
         topLive.style.background = 'rgba(255, 193, 7, 0.25)';
         topLive.style.color = '#ffc107';
         topLive.style.borderColor = 'rgba(255, 193, 7, 0.5)';
+      } else if (tvPlayingType === 'vod') {
+        topLive.innerHTML = '<span class="tv-pulse" style="background:#00e676;"></span> VOD HD';
+        topLive.style.background = 'rgba(0, 230, 118, 0.25)';
+        topLive.style.color = '#00e676';
+        topLive.style.borderColor = 'rgba(0, 230, 118, 0.5)';
       } else {
         topLive.innerHTML = '<span class="tv-pulse"></span> NO AR';
         topLive.style.background = 'rgba(229, 9, 20, 0.25)';
@@ -7517,7 +7895,7 @@ header.tv-header {
       }
     }
 
-    // 2. Coluna 1: Canal
+    // 2. Coluna 1: Canal / Mídia
     const osdNum = document.getElementById('tvOsdNum');
     const osdLogo = document.getElementById('tvOsdLogo');
     const osdName = document.getElementById('tvOsdName');
@@ -7525,17 +7903,21 @@ header.tv-header {
     const osdRating = document.getElementById('tvOsdRating');
     const osdLive = document.getElementById('tvOsdLiveBadge');
 
-    if (osdNum) osdNum.textContent = formattedNum;
+    if (osdNum) osdNum.textContent = (tvPlayingType === 'vod') ? '🎬' : (tvPlayingType === 'event' ? '⚽' : formattedNum);
     if (osdLogo) {
       osdLogo.src = ch.logo || '';
       osdLogo.style.display = ch.logo ? 'block' : 'none';
     }
     if (osdName) osdName.textContent = ch.name;
-    if (osdCategory) osdCategory.textContent = ch.categoryLabel || 'TV Ao Vivo';
+    if (osdCategory) osdCategory.textContent = ch.categoryLabel || (tvPlayingType === 'vod' ? 'Catálogo VOD' : 'TV Ao Vivo');
     if (osdLive) {
       if (isPending) {
         osdLive.innerHTML = '⏳ SINTONIZANDO (3s) • OK=Confirmar • ESC=Cancelar';
         osdLive.style.background = 'rgba(255, 152, 0, 0.9)';
+        osdLive.style.color = '#000';
+      } else if (tvPlayingType === 'vod') {
+        osdLive.innerHTML = '<span class="tv-pulse" style="background:#00e676;"></span> VOD HD';
+        osdLive.style.background = '#00e676';
         osdLive.style.color = '#000';
       } else {
         osdLive.innerHTML = '<span class="tv-pulse"></span> NO AR';
@@ -7562,7 +7944,7 @@ header.tv-header {
       }
     }
 
-    // 3. Coluna 2: Guia de Programação EPG
+    // 3. Coluna 2: Guia de Programação EPG / Progresso VOD
     const osdNow = document.getElementById('tvOsdNow');
     const osdTimeRange = document.getElementById('tvOsdTimeRange');
     const osdProgFill = document.getElementById('tvOsdProgFill');
@@ -7571,72 +7953,85 @@ header.tv-header {
     const osdSynopsis = document.getElementById('tvOsdSynopsis');
     const osdNext = document.getElementById('tvOsdNext');
 
-    // Título do programa em exibição
-    let nowTitle = ch.nowTitle;
-    if (!nowTitle || nowTitle.trim() === '') {
-      const cat = (ch.categoryLabel || '').toLowerCase();
-      if (cat.includes('esporte') || cat.includes('futebol')) nowTitle = 'Transmissão Esportiva Ao Vivo HD';
-      else if (cat.includes('filme') || cat.includes('cinema')) nowTitle = 'Sessão Especial de Cinema HD';
-      else if (cat.includes('notícia') || cat.includes('jornal')) nowTitle = 'Jornalismo em Tempo Real 24h';
-      else if (cat.includes('infantil')) nowTitle = 'Desenhos e Séries Animadas';
-      else nowTitle = 'Programação Ao Vivo HD';
-    }
-    if (osdNow) osdNow.textContent = nowTitle;
+    if (tvPlayingType === 'vod') {
+      const cur = (tvVideo && tvVideo.currentTime) ? tvVideo.currentTime : 0;
+      const dur = (tvVideo && tvVideo.duration) ? tvVideo.duration : 0;
+      const curStr = formatTvSeconds(cur);
+      const durStr = dur > 0 ? formatTvSeconds(dur) : '--:--';
+      const pct = dur > 0 ? Math.round((cur / dur) * 100) : 0;
 
-    // Cálculo dinâmico de horários realistas (blocos de programação)
-    const now = new Date();
-    const curMinutes = now.getHours() * 60 + now.getMinutes();
-    const blockMinutes = 60;
-    const blockStartMinutes = Math.floor(curMinutes / blockMinutes) * blockMinutes;
-    const blockEndMinutes = blockStartMinutes + blockMinutes;
+      if (osdNow) osdNow.textContent = ch.nowTitle || ch.name;
+      if (osdTimeRange) osdTimeRange.textContent = `${curStr} • ${durStr}`;
+      if (osdProgFill) osdProgFill.style.width = `${pct}%`;
+      if (osdProgStatus) {
+        osdProgStatus.textContent = (tvVideo && tvVideo.paused) ? `⏸ Pausado (${curStr} / ${durStr})` : `▶ Reproduzindo (${curStr} / ${durStr})`;
+        osdProgStatus.style.color = (tvVideo && tvVideo.paused) ? '#ffc107' : '#00e676';
+      }
+      if (osdProgRemaining) {
+        osdProgRemaining.textContent = dur > 0 ? `Restam ~${Math.max(0, Math.round((dur - cur) / 60))} min` : 'Cinema Digital HD';
+      }
+      if (osdSynopsis) osdSynopsis.textContent = ch.synopsis || 'Vídeo sob demanda em alta definição.';
+      if (osdNext) osdNext.textContent = '◀ Seta Esquerda (-10s) • Seta Direita (+10s) ▶ • OK Pausa/Play';
+    } else {
+      // Título do programa em exibição para Canais / Eventos
+      let nowTitle = ch.nowTitle;
+      if (!nowTitle || nowTitle.trim() === '') {
+        const cat = (ch.categoryLabel || '').toLowerCase();
+        if (cat.includes('esporte') || cat.includes('futebol')) nowTitle = 'Transmissão Esportiva Ao Vivo HD';
+        else if (cat.includes('filme') || cat.includes('cinema')) nowTitle = 'Sessão Especial de Cinema HD';
+        else if (cat.includes('notícia') || cat.includes('jornal')) nowTitle = 'Jornalismo em Tempo Real 24h';
+        else if (cat.includes('infantil')) nowTitle = 'Desenhos e Séries Animadas';
+        else nowTitle = 'Programação Ao Vivo HD';
+      }
+      if (osdNow) osdNow.textContent = nowTitle;
 
-    const startH = String(Math.floor(blockStartMinutes / 60) % 24).padStart(2, '0');
-    const startM = String(blockStartMinutes % 60).padStart(2, '0');
-    const endH = String(Math.floor(blockEndMinutes / 60) % 24).padStart(2, '0');
-    const endM = String(blockEndMinutes % 60).padStart(2, '0');
+      // Horários realistas (blocos de 60 minutos)
+      const now = new Date();
+      const curMinutes = now.getHours() * 60 + now.getMinutes();
+      const blockMinutes = 60;
+      const blockStartMinutes = Math.floor(curMinutes / blockMinutes) * blockMinutes;
+      const blockEndMinutes = blockStartMinutes + blockMinutes;
 
-    if (osdTimeRange) osdTimeRange.textContent = `${startH}:${startM} • ${endH}:${endM}`;
+      const startH = String(Math.floor(blockStartMinutes / 60) % 24).padStart(2, '0');
+      const startM = String(blockStartMinutes % 60).padStart(2, '0');
+      const endH = String(Math.floor(blockEndMinutes / 60) % 24).padStart(2, '0');
+      const endM = String(blockEndMinutes % 60).padStart(2, '0');
 
-    // Progresso e tempo restante
-    const elapsed = curMinutes - blockStartMinutes;
-    const progress = Math.max(15, Math.min(92, Math.round((elapsed / blockMinutes) * 100)));
-    const remainingMinutes = Math.max(5, blockEndMinutes - curMinutes);
+      if (osdTimeRange) osdTimeRange.textContent = `${startH}:${startM} • ${endH}:${endM}`;
 
-    if (osdProgFill) osdProgFill.style.width = `${progress}%`;
-    if (osdProgStatus) {
-      if (isPending) {
-        osdProgStatus.textContent = `Aguardando 3s... (OK confirma • ESC cancela)`;
-        osdProgStatus.style.color = '#ffc107';
-      } else {
-        osdProgStatus.textContent = `Em andamento (${progress}%)`;
-        osdProgStatus.style.color = '#9ca3af';
+      const elapsed = curMinutes - blockStartMinutes;
+      const progress = Math.max(15, Math.min(92, Math.round((elapsed / blockMinutes) * 100)));
+      const remainingMinutes = Math.max(5, blockEndMinutes - curMinutes);
+
+      if (osdProgFill) osdProgFill.style.width = `${progress}%`;
+      if (osdProgStatus) {
+        if (isPending) {
+          osdProgStatus.textContent = `Aguardando 3s... (OK confirma • ESC cancela)`;
+          osdProgStatus.style.color = '#ffc107';
+        } else {
+          osdProgStatus.textContent = `Em andamento (${progress}%)`;
+          osdProgStatus.style.color = '#9ca3af';
+        }
+      }
+      if (osdProgRemaining) {
+        if (isPending) {
+          osdProgRemaining.textContent = `Pressione OK para sintonizar agora`;
+        } else {
+          osdProgRemaining.textContent = `Restam ~${remainingMinutes} min`;
+        }
+      }
+      if (osdSynopsis) {
+        osdSynopsis.textContent = ch.synopsis || `Assista à transmissão digital oficial de ${ch.name} em alta resolução 1080p, com som estéreo Dolby e sinal contínuo.`;
+      }
+      if (osdNext) {
+        if (ch.nextProgrammes && ch.nextProgrammes.length > 0 && ch.nextProgrammes[0].t) {
+          osdNext.textContent = `${endH}:${endM} • ${ch.nextProgrammes[0].t}`;
+        } else {
+          osdNext.textContent = `${endH}:${endM} • Continuação da Grade Normal de ${ch.name}`;
+        }
       }
     }
-    if (osdProgRemaining) {
-      if (isPending) {
-        osdProgRemaining.textContent = `Pressione OK para sintonizar agora`;
-      } else {
-        osdProgRemaining.textContent = `Restam ~${remainingMinutes} min`;
-      }
-    }
-
-    // Sinopse
-    if (osdSynopsis) {
-      if (ch.synopsis) {
-        osdSynopsis.textContent = ch.synopsis;
-      } else {
-        osdSynopsis.textContent = `Assista à transmissão digital oficial de ${ch.name} em alta resolução 1080p, com som estéreo Dolby e sinal contínuo sem interrupções.`;
-      }
-    }
-
-    // Próximo programa
-    if (osdNext) {
-      if (ch.nextProgrammes && ch.nextProgrammes.length > 0 && ch.nextProgrammes[0].t) {
-        osdNext.textContent = `${endH}:${endM} • ${ch.nextProgrammes[0].t}`;
-      } else {
-        osdNext.textContent = `${endH}:${endM} • Continuação da Grade Normal de ${ch.name}`;
-      }
-    }
+  }
 
   }
 
@@ -7720,24 +8115,54 @@ header.tv-header {
     }
   }
 
-  // Teclas do Controle Remoto
+  // Teclas do Controle Remoto (Hardware Android TV / Box)
   window.onTvRemoteKey = function(key) {
     console.log('[AndPlay TV Remote]', key);
     if (tvCurrentMode === 'fullscreen') {
-      if (key === 'CHANNEL_UP') { tvZap(-1); return; }
-      if (key === 'CHANNEL_DOWN') { tvZap(1); return; }
-      if (key === 'MENU' || key === 'BACK') { setTvViewMode('central'); return; }
+      if (tvPlayingType === 'channel') {
+        if (key === 'CHANNEL_UP') { tvZap(-1); return; }
+        if (key === 'CHANNEL_DOWN') { tvZap(1); return; }
+      }
+      if (key === 'PLAY_PAUSE') {
+        if (tvPlayingType === 'vod' && tvVideo) {
+          if (tvVideo.paused) tvVideo.play();
+          else tvVideo.pause();
+          triggerTvOsd(3000);
+          return;
+        }
+      }
+      if (key === 'MENU' || key === 'BACK') {
+        if (tvPlayingType === 'vod') {
+          if (tvVideo) {
+            tvVideo.pause();
+            tvVideo.src = '';
+          }
+          setTvViewMode(tvPreviousMode || 'vod');
+          if (tvPreviousMode === 'central') tvTuneChannel(tvCurrentIdx, false);
+          return;
+        }
+        if (tvPlayingType === 'event') {
+          setTvViewMode('central');
+          tvTuneChannel(tvCurrentIdx, false);
+          return;
+        }
+        setTvViewMode('central');
+        return;
+      }
       if (key === 'GUIDE' || key === 'INFO') { toggleTvDrawer(); return; }
     } else if (tvCurrentMode === 'central') {
       if (key === 'MENU') {
-        // Na central, Menu pode recarregar ou focar no PiP
         const pip = document.getElementById('tvPipCard');
         if (pip) pip.focus();
         return;
       }
     } else if (tvCurrentMode === 'vod') {
       if (key === 'BACK' || key === 'MENU') {
-        setTvViewMode('central');
+        if (tvVodMode === 'series_episodes') {
+          openTvVodExplorer('series');
+        } else {
+          setTvViewMode('central');
+        }
         return;
       }
     }
@@ -7746,6 +8171,20 @@ header.tv-header {
   // Botão Voltar do Android
   window.handleAndroidBack = function() {
     if (tvCurrentMode === 'fullscreen') {
+      if (tvPlayingType === 'vod') {
+        if (tvVideo) {
+          tvVideo.pause();
+          tvVideo.src = '';
+        }
+        setTvViewMode(tvPreviousMode || 'vod');
+        if (tvPreviousMode === 'central') tvTuneChannel(tvCurrentIdx, false);
+        return true;
+      }
+      if (tvPlayingType === 'event') {
+        setTvViewMode('central');
+        tvTuneChannel(tvCurrentIdx, false);
+        return true;
+      }
       if (!tvDrawer.classList.contains('closed')) {
         tvDrawer.classList.add('closed');
         return true;
@@ -7754,6 +8193,10 @@ header.tv-header {
       return true;
     }
     if (tvCurrentMode === 'vod') {
+      if (tvVodMode === 'series_episodes') {
+        openTvVodExplorer('series');
+        return true;
+      }
       setTvViewMode('central');
       return true;
     }
@@ -7856,10 +8299,13 @@ header.tv-header {
         <div style="font-size:11px; color:#ffc107; font-weight:600;">▶ Sintonizar Transmissão</div>
       `;
       card.addEventListener('click', () => {
-        openLivePlayer(ev, 0);
+        tvPlayLiveEvent(ev);
       });
       card.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') openLivePlayer(ev, 0);
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          tvPlayLiveEvent(ev);
+        }
       });
       rail.appendChild(card);
     });
@@ -7885,9 +8331,12 @@ header.tv-header {
         <img src="${poster}" alt="${m.name}" onerror="this.style.opacity='0.2'">
         <div class="name">${m.name}</div>
       `;
-      card.addEventListener('click', () => onMovieCardClick(m));
+      card.addEventListener('click', () => tvPlayMovie(m));
       card.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') onMovieCardClick(m);
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          tvPlayMovie(m);
+        }
       });
       rail.appendChild(card);
     });
@@ -8054,8 +8503,22 @@ header.tv-header {
 
     const vodBackBtn = document.getElementById('tvVodBack');
     if (vodBackBtn) {
-      vodBackBtn.addEventListener('click', () => setTvViewMode('central'));
-      vodBackBtn.addEventListener('keydown', (e) => { if (e.key === 'Enter') setTvViewMode('central'); });
+      vodBackBtn.addEventListener('click', () => {
+        if (tvVodMode === 'series_episodes') {
+          openTvVodExplorer('series');
+        } else {
+          setTvViewMode('central');
+        }
+      });
+      vodBackBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          if (tvVodMode === 'series_episodes') {
+            openTvVodExplorer('series');
+          } else {
+            setTvViewMode('central');
+          }
+        }
+      });
     }
   });
 
@@ -8099,13 +8562,14 @@ header.tv-header {
       card.addEventListener('focus', () => updateTvVodPreview(item));
 
       card.addEventListener('click', () => {
-        if (type === 'movies') onMovieCardClick(item);
-        else openSeriesModal(item);
+        if (type === 'movies') tvPlayMovie(item);
+        else openTvSeriesDetail(item);
       });
       card.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-          if (type === 'movies') onMovieCardClick(item);
-          else openSeriesModal(item);
+          e.preventDefault();
+          if (type === 'movies') tvPlayMovie(item);
+          else openTvSeriesDetail(item);
         }
       });
 
@@ -8114,6 +8578,15 @@ header.tv-header {
 
     container.appendChild(grid);
     if (items[0]) updateTvVodPreview(items[0]);
+
+    // Foca automaticamente no primeiro poster do catálogo para a navegação D-Pad responder na hora
+    setTimeout(() => {
+      const firstCard = container.querySelector('.tv-vod-poster-card');
+      if (firstCard) {
+        firstCard.focus();
+        firstCard.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    }, 120);
   }
 
   function updateTvVodPreview(item) {
@@ -8140,8 +8613,8 @@ header.tv-header {
     if (watchBtn) {
       watchBtn.style.display = 'inline-block';
       watchBtn.onclick = () => {
-        if (tvVodMode === 'movies') onMovieCardClick(item);
-        else openSeriesModal(item);
+        if (tvVodMode === 'movies') tvPlayMovie(item);
+        else if (tvVodMode === 'series') openTvSeriesDetail(item);
       };
     }
   }
@@ -8170,35 +8643,109 @@ header.tv-header {
       return;
     }
 
-    // ---- Backspace = Cancelar Zap Pendente ou Voltar ----
-    if (key === 'Backspace') {
+    // ---- Backspace / Escape / Botão Voltar ----
+    if (key === 'Backspace' || key === 'Escape' || key === 'Back' || e.keyCode === 4) {
       e.preventDefault();
       if (tvCurrentMode === 'fullscreen') {
-        // Prioridade 1: Fechar gaveta EPG se estiver aberta
-        if (!tvDrawer.classList.contains('closed')) {
+        // Se estava assistindo filme ou série VOD
+        if (tvPlayingType === 'vod') {
+          if (tvVideo) {
+            tvVideo.pause();
+            tvVideo.src = '';
+          }
+          setTvViewMode(tvPreviousMode || 'vod');
+          if (tvPreviousMode === 'central') tvTuneChannel(tvCurrentIdx, false);
+          return;
+        }
+        // Se estava assistindo evento esportivo
+        if (tvPlayingType === 'event') {
+          setTvViewMode('central');
+          tvTuneChannel(tvCurrentIdx, false);
+          return;
+        }
+        // Modo TV ao vivo: prioridade 1 = fechar gaveta EPG se aberta
+        if (tvDrawer && !tvDrawer.classList.contains('closed')) {
           tvDrawer.classList.add('closed');
           const kc = document.getElementById('tvKeyCapture');
           if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 50);
-        // Prioridade 2: Cancelar zap pendente (sem sair da tela)
-        } else if (tvZapDebounceTimer) {
+          return;
+        }
+        // Prioridade 2: cancelar zap pendente (sem sair da tela)
+        if (tvZapDebounceTimer) {
           tvCancelPendingZap();
-        // Prioridade 3: Voltar à central
+          return;
+        }
+        // Prioridade 3: voltar à central
+        setTvViewMode('central');
+        return;
+      } else if (tvCurrentMode === 'vod') {
+        // Se estiver dentro da grade de episódios de uma série, volta para a lista de séries
+        if (tvVodMode === 'series_episodes') {
+          openTvVodExplorer('series');
         } else {
           setTvViewMode('central');
         }
-      } else if (tvCurrentMode === 'vod') {
-        setTvViewMode('central');
+        return;
       }
-      // Na central, Backspace não faz nada (evita navegação do browser)
       return;
     }
 
     // ====================================================
-    // TELA CHEIA (zapping + drawer EPG)
+    // TELA CHEIA (Player Unificado: TV / Eventos / VOD)
     // ====================================================
     if (tvCurrentMode === 'fullscreen') {
-      // Drawer EPG aberta: navegação dentro da lista de canais e entre grupos
-      if (!tvDrawer.classList.contains('closed')) {
+      // 1. Reprodução de Filmes / Séries (VOD): controle de reprodução nativo
+      if (tvPlayingType === 'vod') {
+        if (key === ' ' || key === 'Enter') {
+          e.preventDefault();
+          if (tvVideo) {
+            if (tvVideo.paused) tvVideo.play();
+            else tvVideo.pause();
+            triggerTvOsd(3000);
+          }
+          return;
+        }
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          if (tvVideo) {
+            tvVideo.currentTime = Math.min(tvVideo.duration || 999999, tvVideo.currentTime + 10);
+            triggerTvOsd(3000);
+          }
+          return;
+        }
+        if (key === 'ArrowLeft') {
+          e.preventDefault();
+          if (tvVideo) {
+            tvVideo.currentTime = Math.max(0, tvVideo.currentTime - 10);
+            triggerTvOsd(3000);
+          }
+          return;
+        }
+        if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'i' || key === 'I' || key === 'Info' || key === 'Guide') {
+          e.preventDefault();
+          triggerTvOsd(5000);
+          return;
+        }
+        return;
+      }
+
+      // 2. Transmissão de Evento Esportivo
+      if (tvPlayingType === 'event') {
+        if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'i' || key === 'I' || key === 'Info' || key === 'Guide') {
+          e.preventDefault();
+          triggerTvOsd(5000);
+          return;
+        }
+        if (key === 'Enter' || key === ' ') {
+          e.preventDefault();
+          triggerTvOsd(5000);
+          return;
+        }
+        return;
+      }
+
+      // 3. Canais de TV Ao Vivo (com EPG lateral e Zapping)
+      if (tvDrawer && !tvDrawer.classList.contains('closed')) {
         const items = Array.from(tvDrawer.querySelectorAll('.tv-drawer-item'));
         const focused = document.activeElement;
         const curIdx = items.indexOf(focused);
@@ -8217,29 +8764,19 @@ header.tv-header {
             items[curIdx - 1].focus();
             items[curIdx - 1].scrollIntoView({ block: 'nearest' });
           } else {
-            // No topo da lista: vai para as pills de categoria
             const cats = Array.from(tvDrawer.querySelectorAll('.tv-epg-cat-pill'));
             if (cats.length) cats[0].focus();
           }
           return;
         }
-        // ← Seta Esquerda: grupo anterior (com wrap)
         if (key === 'ArrowLeft') {
           e.preventDefault();
           tvSwitchDrawerCategory(-1);
           return;
         }
-        // → Seta Direita: próximo grupo (com wrap)
         if (key === 'ArrowRight') {
           e.preventDefault();
           tvSwitchDrawerCategory(1);
-          return;
-        }
-        if (key === 'Escape' || key === 'Back' || e.keyCode === 4) {
-          e.preventDefault();
-          tvDrawer.classList.add('closed');
-          const kc = document.getElementById('tvKeyCapture');
-          if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 50);
           return;
         }
         if (key === 'Enter') {
@@ -8247,10 +8784,10 @@ header.tv-header {
           if (focused && focused.classList.contains('tv-drawer-item')) focused.click();
           return;
         }
-        return; // consume outras teclas enquanto drawer está aberta
+        return;
       }
 
-      // Drawer fechada: zapping e controles da tela cheia
+      // Drawer fechada: zapping clássico de TV a Cabo
       if (key === 'ArrowUp' || key === 'ChannelUp') {
         e.preventDefault();
         tvZap(-1);
@@ -8263,17 +8800,16 @@ header.tv-header {
       }
       if (key === 'ArrowLeft') {
         e.preventDefault();
-        tvZap(-1); // canal anterior
+        tvZap(-1);
         return;
       }
       if (key === 'ArrowRight') {
         e.preventDefault();
-        tvZap(1); // próximo canal
+        tvZap(1);
         return;
       }
       if (key === 'Enter' || key === ' ') {
         e.preventDefault();
-        // Se o usuário está folheando canais (debouncer ativo), confirma a sintonização imediatamente ao apertar Enter
         if (tvZapDebounceTimer) {
           clearTimeout(tvZapDebounceTimer);
           tvCommitPendingChannel();
@@ -8282,7 +8818,7 @@ header.tv-header {
         if (tvOsd && tvOsd.classList.contains('hidden')) {
           triggerTvOsd(6000);
         } else {
-          toggleTvDrawer(); // abre guia EPG
+          toggleTvDrawer();
         }
         return;
       }
@@ -8297,169 +8833,97 @@ header.tv-header {
         }
         return;
       }
-      if (key === 'Escape' || key === 'Back' || e.keyCode === 4) {
-        e.preventDefault();
-        // Se há zap pendente, cancela primeiro (sem sair da tela)
-        if (tvZapDebounceTimer) {
-          tvCancelPendingZap();
-        } else {
-          window.handleAndroidBack();
-        }
-        return;
-      }
     }
 
     // ====================================================
-    // CENTRAL (hub principal - navegação D-Pad no menu)
+    // CENTRAL (Hub Principal - Navegação D-Pad em Grid 2D)
+    // Zonas: [pip] | [menu-grid 2×3] → [rail canais] → [rail esportes] → [rail filmes]
     // ====================================================
     if (tvCurrentMode === 'central') {
       const focused = document.activeElement;
 
-      // IDs dos itens focáveis na Central, em ordem de navegação lógica:
-      // Linha 1: PiP | Menu grid (tvNavLive, tvNavSports, tvNavMovies, tvNavSeries, tvNavEpg, tvNavSync)
-      // Linha 2: Canal cards do rail
-      const menuOrder = ['tvPipCard', 'tvNavLive', 'tvNavSports', 'tvNavMovies', 'tvNavSeries', 'tvNavEpg', 'tvNavSync'];
-      const menuItems = menuOrder.map(id => document.getElementById(id)).filter(Boolean);
+      const getCards = (railId, selector) => Array.from(document.querySelectorAll(`#${railId} ${selector}`));
+
+      const pip = document.getElementById('tvPipCard');
+      const menuIds = ['tvNavLive', 'tvNavSports', 'tvNavMovies', 'tvNavSeries', 'tvNavEpg', 'tvNavSync'];
+      const menuItems = menuIds.map(id => document.getElementById(id)).filter(Boolean);
       const menuIdx = menuItems.indexOf(focused);
+      const MENU_COLS = 3;
 
+      const chCards = getCards('tvChannelsRail', '.tv-channel-card');
+      const spCards = getCards('tvSportsRail', '.tv-match-card');
+      const mvCards = getCards('tvMoviesRail', '.tv-vod-card');
+
+      const chIdx = chCards.indexOf(focused);
+      const spIdx = spCards.indexOf(focused);
+      const mvIdx = mvCards.indexOf(focused);
+
+      // 1. Zona PiP
+      if (focused === pip || (pip && pip.contains(focused))) {
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          if (menuItems.length) menuItems[0].focus();
+          return;
+        }
+        if (key === 'ArrowDown') {
+          e.preventDefault();
+          if (chCards.length) { chCards[0].focus(); chCards[0].scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' }); }
+          else if (spCards.length) { spCards[0].focus(); }
+          return;
+        }
+        if (key === 'Enter') {
+          e.preventDefault();
+          setTvViewMode('fullscreen');
+          return;
+        }
+        return;
+      }
+
+      // 2. Zona Menu Grid (2 linhas × 3 colunas)
       if (menuIdx !== -1) {
+        const row = Math.floor(menuIdx / MENU_COLS);
+        const col = menuIdx % MENU_COLS;
+
         if (key === 'ArrowRight') {
           e.preventDefault();
-          if (menuIdx + 1 < menuItems.length) menuItems[menuIdx + 1].focus();
-          return;
-        }
-        if (key === 'ArrowLeft') {
-          e.preventDefault();
-          if (menuIdx > 0) menuItems[menuIdx - 1].focus();
-          return;
-        }
-        if (key === 'ArrowDown') {
-          e.preventDefault();
-          // Desce para o rail de canais
-          const rail = document.getElementById('tvChannelsRail');
-          if (rail) {
-            const first = rail.querySelector('.tv-channel-card');
-            if (first) { first.focus(); return; }
+          if (col < MENU_COLS - 1 && menuIdx + 1 < menuItems.length) {
+            menuItems[menuIdx + 1].focus();
           }
-          // Desce para o rail de esportes
-          const sRail = document.getElementById('tvSportsRail');
-          if (sRail) { const first = sRail.querySelector('.tv-match-card'); if (first) { first.focus(); return; } }
-          return;
-        }
-        if (key === 'ArrowUp') {
-          e.preventDefault();
-          // já está no topo da central, foca no PiP
-          const pip = document.getElementById('tvPipCard');
-          if (pip) pip.focus();
-          return;
-        }
-        if (key === 'Enter') {
-          // deixa o click normal do elemento acontecer
-          return;
-        }
-        return;
-      }
-
-      // Navegação dentro dos rails horizontais da Central
-      const allRailCards = Array.from(document.querySelectorAll(
-        '#tvChannelsRail .tv-channel-card, #tvSportsRail .tv-match-card, #tvMoviesRail .tv-vod-card'
-      ));
-      const railIdx = allRailCards.indexOf(focused);
-
-      if (railIdx !== -1) {
-        if (key === 'ArrowRight') {
-          e.preventDefault();
-          if (railIdx + 1 < allRailCards.length) allRailCards[railIdx + 1].focus();
           return;
         }
         if (key === 'ArrowLeft') {
           e.preventDefault();
-          if (railIdx > 0) allRailCards[railIdx - 1].focus();
-          return;
-        }
-        if (key === 'ArrowUp') {
-          e.preventDefault();
-          // Sobe para o menu grid
-          const pip = document.getElementById('tvPipCard');
-          if (pip) pip.focus();
-          return;
-        }
-        if (key === 'ArrowDown') {
-          e.preventDefault();
-          // Tenta descer para próximo rail
-          const railCards = allRailCards;
-          if (railIdx + 1 < railCards.length) railCards[railIdx + 1].focus();
-          return;
-        }
-        if (key === 'Enter') {
-          // deixa o click normal acontecer
-          return;
-        }
-        return;
-      }
-
-      // Fallback: qualquer seta → foca no PiP
-      if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight') {
-        e.preventDefault();
-        const pip = document.getElementById('tvPipCard');
-        if (pip) pip.focus();
-        return;
-      }
-    }
-
-    // ====================================================
-    // VOD (grade de filmes / séries)
-    // ====================================================
-    if (tvCurrentMode === 'vod') {
-      const focused = document.activeElement;
-
-      if (key === 'Escape' || key === 'Back' || e.keyCode === 4) {
-        e.preventDefault();
-        setTvViewMode('central');
-        return;
-      }
-
-      // Navegação na grade VOD
-      const vodCards = Array.from(document.querySelectorAll('#tvVodRailsContainer .tv-vod-poster-card'));
-      const vodIdx = vodCards.indexOf(focused);
-
-      if (vodIdx !== -1) {
-        // Calcula quantas colunas tem a grade
-        const grid = document.querySelector('#tvVodRailsContainer .tv-vod-grid');
-        let cols = 5;
-        if (grid) {
-          const gridW = grid.clientWidth;
-          const cardW = (vodCards[0] && vodCards[0].offsetWidth) || 140;
-          cols = Math.max(1, Math.round(gridW / (cardW + 16)));
-        }
-
-        if (key === 'ArrowRight') {
-          e.preventDefault();
-          if (vodIdx + 1 < vodCards.length) vodCards[vodIdx + 1].focus();
-          return;
-        }
-        if (key === 'ArrowLeft') {
-          e.preventDefault();
-          if (vodIdx > 0) vodCards[vodIdx - 1].focus();
-          else {
-            // Vai para o botão Voltar
-            const back = document.getElementById('tvVodBack');
-            if (back) back.focus();
+          if (col > 0) {
+            menuItems[menuIdx - 1].focus();
+          } else if (pip) {
+            pip.focus();
           }
           return;
         }
         if (key === 'ArrowDown') {
           e.preventDefault();
-          if (vodIdx + cols < vodCards.length) vodCards[vodIdx + cols].focus();
+          if (row === 0 && menuIdx + MENU_COLS < menuItems.length) {
+            // Desce para a 2ª linha da grid de menu
+            menuItems[menuIdx + MENU_COLS].focus();
+          } else {
+            // Sai do menu e desce para o trilho de canais
+            if (chCards.length) {
+              const targetCh = Math.min(col, chCards.length - 1);
+              chCards[targetCh].focus();
+              chCards[targetCh].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+            } else if (spCards.length) {
+              spCards[0].focus();
+            }
+          }
           return;
         }
         if (key === 'ArrowUp') {
           e.preventDefault();
-          if (vodIdx - cols >= 0) vodCards[vodIdx - cols].focus();
-          else {
-            // Sobe para o botão Voltar
-            const back = document.getElementById('tvVodBack');
-            if (back) back.focus();
+          if (row > 0) {
+            // Sobe para a 1ª linha da grid de menu
+            menuItems[menuIdx - MENU_COLS].focus();
+          } else if (pip) {
+            pip.focus();
           }
           return;
         }
@@ -8471,10 +8935,285 @@ header.tv-header {
         return;
       }
 
-      // Foco no botão Voltar do VOD
+      // 3. Zona Trilho de Canais
+      if (chIdx !== -1) {
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          if (chIdx + 1 < chCards.length) {
+            chCards[chIdx + 1].focus();
+            chCards[chIdx + 1].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (key === 'ArrowLeft') {
+          e.preventDefault();
+          if (chIdx > 0) {
+            chCards[chIdx - 1].focus();
+            chCards[chIdx - 1].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (key === 'ArrowUp') {
+          e.preventDefault();
+          // Sobe para a segunda linha do menu grid
+          const targetMenu = menuItems[Math.min(chIdx, 2) + 3] || menuItems[0] || pip;
+          if (targetMenu) targetMenu.focus();
+          return;
+        }
+        if (key === 'ArrowDown') {
+          e.preventDefault();
+          // Desce para o trilho de esportes
+          if (spCards.length) {
+            const targetSp = Math.min(chIdx, spCards.length - 1);
+            spCards[targetSp].focus();
+            spCards[targetSp].scrollIntoView({ inline: 'nearest', block: 'center', behavior: 'smooth' });
+          } else if (mvCards.length) {
+            const targetMv = Math.min(chIdx, mvCards.length - 1);
+            mvCards[targetMv].focus();
+            mvCards[targetMv].scrollIntoView({ inline: 'nearest', block: 'center', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (key === 'Enter') {
+          e.preventDefault();
+          focused.click();
+          return;
+        }
+        return;
+      }
+
+      // 4. Zona Trilho de Esportes
+      if (spIdx !== -1) {
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          if (spIdx + 1 < spCards.length) {
+            spCards[spIdx + 1].focus();
+            spCards[spIdx + 1].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (key === 'ArrowLeft') {
+          e.preventDefault();
+          if (spIdx > 0) {
+            spCards[spIdx - 1].focus();
+            spCards[spIdx - 1].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (key === 'ArrowUp') {
+          e.preventDefault();
+          // Sobe para o trilho de canais
+          if (chCards.length) {
+            const targetCh = Math.min(spIdx, chCards.length - 1);
+            chCards[targetCh].focus();
+            chCards[targetCh].scrollIntoView({ inline: 'nearest', block: 'center', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (key === 'ArrowDown') {
+          e.preventDefault();
+          // Desce para o trilho de filmes
+          if (mvCards.length) {
+            const targetMv = Math.min(spIdx, mvCards.length - 1);
+            mvCards[targetMv].focus();
+            mvCards[targetMv].scrollIntoView({ inline: 'nearest', block: 'center', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (key === 'Enter') {
+          e.preventDefault();
+          focused.click();
+          return;
+        }
+        return;
+      }
+
+      // 5. Zona Trilho de Filmes
+      if (mvIdx !== -1) {
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          if (mvIdx + 1 < mvCards.length) {
+            mvCards[mvIdx + 1].focus();
+            mvCards[mvIdx + 1].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (key === 'ArrowLeft') {
+          e.preventDefault();
+          if (mvIdx > 0) {
+            mvCards[mvIdx - 1].focus();
+            mvCards[mvIdx - 1].scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (key === 'ArrowUp') {
+          e.preventDefault();
+          // Sobe para o trilho de esportes
+          if (spCards.length) {
+            const targetSp = Math.min(mvIdx, spCards.length - 1);
+            spCards[targetSp].focus();
+            spCards[targetSp].scrollIntoView({ inline: 'nearest', block: 'center', behavior: 'smooth' });
+          } else if (chCards.length) {
+            const targetCh = Math.min(mvIdx, chCards.length - 1);
+            chCards[targetCh].focus();
+            chCards[targetCh].scrollIntoView({ inline: 'nearest', block: 'center', behavior: 'smooth' });
+          }
+          return;
+        }
+        if (key === 'Enter') {
+          e.preventDefault();
+          focused.click();
+          return;
+        }
+        return;
+      }
+
+      // Fallback: qualquer seta posiciona foco no PiP
+      if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight') {
+        e.preventDefault();
+        if (pip) pip.focus();
+        return;
+      }
+    }
+
+    // ====================================================
+    // VOD (Grade de Filmes / Séries / Episódios)
+    // ====================================================
+    if (tvCurrentMode === 'vod') {
+      const focused = document.activeElement;
       const backBtn = document.getElementById('tvVodBack');
+      const watchBtn = document.getElementById('tvVodHeroWatchBtn');
+
+      // 1. Modo Episódios de Séries
+      if (tvVodMode === 'series_episodes') {
+        const seasonBtns = Array.from(document.querySelectorAll('#tvSeriesSeasonsBar .tv-series-season-btn'));
+        const epCards = Array.from(document.querySelectorAll('#tvSeriesEpisodesGrid .tv-vod-ep-card'));
+        const sIdx = seasonBtns.indexOf(focused);
+        const epIdx = epCards.indexOf(focused);
+
+        if (focused === backBtn) {
+          if (key === 'ArrowDown' || key === 'ArrowRight') {
+            e.preventDefault();
+            if (seasonBtns.length) seasonBtns[0].focus();
+            else if (epCards.length) epCards[0].focus();
+            return;
+          }
+          if (key === 'Enter') {
+            e.preventDefault();
+            openTvVodExplorer('series');
+            return;
+          }
+          return;
+        }
+
+        if (sIdx !== -1) {
+          if (key === 'ArrowRight') {
+            e.preventDefault();
+            if (sIdx + 1 < seasonBtns.length) seasonBtns[sIdx + 1].focus();
+            return;
+          }
+          if (key === 'ArrowLeft') {
+            e.preventDefault();
+            if (sIdx > 0) seasonBtns[sIdx - 1].focus();
+            else if (backBtn) backBtn.focus();
+            return;
+          }
+          if (key === 'ArrowDown') {
+            e.preventDefault();
+            if (epCards.length) epCards[0].focus();
+            return;
+          }
+          if (key === 'ArrowUp') {
+            e.preventDefault();
+            if (backBtn) backBtn.focus();
+            return;
+          }
+          if (key === 'Enter') {
+            e.preventDefault();
+            focused.click();
+            return;
+          }
+          return;
+        }
+
+        if (epIdx !== -1) {
+          let cols = 3;
+          const grid = document.getElementById('tvSeriesEpisodesGrid');
+          if (grid && epCards.length > 0) {
+            const cardW = epCards[0].offsetWidth || 220;
+            cols = Math.max(1, Math.round(grid.clientWidth / (cardW + 14)));
+          }
+
+          if (key === 'ArrowRight') {
+            e.preventDefault();
+            if (epIdx + 1 < epCards.length) {
+              epCards[epIdx + 1].focus();
+              epCards[epIdx + 1].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }
+            return;
+          }
+          if (key === 'ArrowLeft') {
+            e.preventDefault();
+            if (epIdx > 0) {
+              epCards[epIdx - 1].focus();
+              epCards[epIdx - 1].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            } else if (seasonBtns.length) {
+              seasonBtns[0].focus();
+            } else if (backBtn) {
+              backBtn.focus();
+            }
+            return;
+          }
+          if (key === 'ArrowDown') {
+            e.preventDefault();
+            if (epIdx + cols < epCards.length) {
+              epCards[epIdx + cols].focus();
+              epCards[epIdx + cols].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }
+            return;
+          }
+          if (key === 'ArrowUp') {
+            e.preventDefault();
+            if (epIdx - cols >= 0) {
+              epCards[epIdx - cols].focus();
+              epCards[epIdx - cols].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            } else if (seasonBtns.length) {
+              const activeS = seasonBtns.find(b => b.classList.contains('active')) || seasonBtns[0];
+              activeS.focus();
+            } else if (backBtn) {
+              backBtn.focus();
+            }
+            return;
+          }
+          if (key === 'Enter') {
+            e.preventDefault();
+            focused.click();
+            return;
+          }
+          return;
+        }
+
+        // Fallback no modo episódios
+        if (key === 'ArrowDown' || key === 'ArrowRight' || key === 'ArrowLeft' || key === 'ArrowUp') {
+          e.preventDefault();
+          if (epCards.length) epCards[0].focus();
+          else if (backBtn) backBtn.focus();
+          return;
+        }
+      }
+
+      // 2. Modo Catálogo Geral (Filmes ou Séries)
+      const vodCards = Array.from(document.querySelectorAll('#tvVodRailsContainer .tv-vod-poster-card'));
+      const vodIdx = vodCards.indexOf(focused);
+
       if (focused === backBtn) {
-        if (key === 'ArrowDown' || key === 'ArrowRight') {
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          if (watchBtn && watchBtn.style.display !== 'none') watchBtn.focus();
+          else if (vodCards.length) vodCards[0].focus();
+          return;
+        }
+        if (key === 'ArrowDown') {
           e.preventDefault();
           if (vodCards.length) vodCards[0].focus();
           return;
@@ -8484,12 +9223,87 @@ header.tv-header {
           setTvViewMode('central');
           return;
         }
+        return;
       }
 
-      // Fallback: qualquer seta → foca no primeiro card
-      if (key === 'ArrowDown' || key === 'ArrowRight') {
+      if (focused === watchBtn) {
+        if (key === 'ArrowLeft') {
+          e.preventDefault();
+          if (backBtn) backBtn.focus();
+          return;
+        }
+        if (key === 'ArrowDown') {
+          e.preventDefault();
+          if (vodCards.length) vodCards[0].focus();
+          return;
+        }
+        if (key === 'Enter') {
+          e.preventDefault();
+          focused.click();
+          return;
+        }
+        return;
+      }
+
+      if (vodIdx !== -1) {
+        let cols = 5;
+        const grid = document.querySelector('#tvVodRailsContainer .tv-vod-grid');
+        if (grid && vodCards.length > 0) {
+          const cardW = vodCards[0].offsetWidth || 140;
+          cols = Math.max(1, Math.round(grid.clientWidth / (cardW + 16)));
+        }
+
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          if (vodIdx + 1 < vodCards.length) {
+            vodCards[vodIdx + 1].focus();
+            vodCards[vodIdx + 1].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          }
+          return;
+        }
+        if (key === 'ArrowLeft') {
+          e.preventDefault();
+          if (vodIdx > 0) {
+            vodCards[vodIdx - 1].focus();
+            vodCards[vodIdx - 1].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          } else {
+            if (watchBtn && watchBtn.style.display !== 'none') watchBtn.focus();
+            else if (backBtn) backBtn.focus();
+          }
+          return;
+        }
+        if (key === 'ArrowDown') {
+          e.preventDefault();
+          if (vodIdx + cols < vodCards.length) {
+            vodCards[vodIdx + cols].focus();
+            vodCards[vodIdx + cols].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          }
+          return;
+        }
+        if (key === 'ArrowUp') {
+          e.preventDefault();
+          if (vodIdx - cols >= 0) {
+            vodCards[vodIdx - cols].focus();
+            vodCards[vodIdx - cols].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+          } else {
+            if (watchBtn && watchBtn.style.display !== 'none') watchBtn.focus();
+            else if (backBtn) backBtn.focus();
+          }
+          return;
+        }
+        if (key === 'Enter') {
+          e.preventDefault();
+          focused.click();
+          return;
+        }
+        return;
+      }
+
+      // Fallback VOD: posiciona foco no primeiro card
+      if (key === 'ArrowDown' || key === 'ArrowRight' || key === 'ArrowLeft' || key === 'ArrowUp') {
         e.preventDefault();
         if (vodCards.length) vodCards[0].focus();
+        else if (backBtn) backBtn.focus();
         return;
       }
     }
