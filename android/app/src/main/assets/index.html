@@ -2199,40 +2199,43 @@ header.tv-header {
   }
 }
 
-/* Gaveta Lateral EPG */
+/* Gaveta Lateral EPG / Episódios */
 .tv-epg-drawer {
   position: fixed;
   top: 0;
   bottom: 0;
   left: 0;
-  width: 440px;
-  background: rgba(9, 9, 14, 0.96);
-  backdrop-filter: blur(24px);
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  width: 520px;
+  max-width: 88vw;
+  background: rgba(10, 10, 16, 0.97);
+  backdrop-filter: blur(28px);
+  border-right: 1.5px solid rgba(255, 255, 255, 0.12);
   z-index: 2500 !important;
   pointer-events: auto !important;
   display: flex;
   flex-direction: column;
-  padding: 24px;
+  padding: 24px 20px;
   box-shadow: 25px 0 60px rgba(0,0,0,0.95);
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.3s;
 }
 .tv-epg-drawer.closed {
-  transform: translateX(-100%);
+  transform: translateX(-105%) !important;
   pointer-events: none !important;
+  box-shadow: none !important;
+  visibility: hidden !important;
 }
 .tv-drawer-header {
   margin-bottom: 14px;
 }
 .tv-drawer-title {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 900;
   color: #ffc107;
 }
 .tv-drawer-hint {
   font-size: 11px;
   color: #888;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 .tv-drawer-categories {
   display: flex;
@@ -2247,43 +2250,54 @@ header.tv-header {
   display: none;
 }
 .tv-epg-cat-pill {
-  padding: 6px 14px;
-  border-radius: 16px;
+  padding: 7px 16px;
+  border-radius: 20px;
   background: rgba(255,255,255,0.06);
-  color: #bbb;
+  color: #ccc;
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
   cursor: pointer;
-  border: 1px solid transparent;
+  border: 1.5px solid transparent;
+  transition: all 0.2s ease;
 }
 .tv-epg-cat-pill:focus, .tv-epg-cat-pill.active {
   background: #ffc107 !important;
   color: #000 !important;
+  border-color: #ffc107 !important;
+  transform: scale(1.05);
 }
 
 .tv-drawer-channel-list {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  padding: 6px 10px 24px 10px; /* Padding para acomodar o foco scale/glow sem cortes */
 }
 .tv-drawer-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: rgba(255,255,255,0.03);
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 2px solid transparent;
   cursor: pointer;
+  box-sizing: border-box;
+  margin: 0 4px;
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .tv-drawer-item:focus, .tv-drawer-item.focused {
-  background: rgba(255, 193, 7, 0.16) !important;
+  background: rgba(255, 193, 7, 0.2) !important;
   border-color: #ffc107 !important;
+  box-shadow: 0 0 16px rgba(255, 193, 7, 0.45) !important;
+  transform: scale(1.02) !important;
 }
 .tv-drawer-item.active-channel {
-  border-left: 4px solid #00e676;
+  border-left: 5px solid #00e676 !important;
 }
 
 /* TELA 3: Seção VOD */
@@ -7390,6 +7404,7 @@ header.tv-header {
   let tvPreviousMode = 'central'; // 'central' | 'vod'
   let tvCurrentSeriesItem = null;
   let tvCurrentSeason = '1';
+  let tvPlayingSeriesMeta = null; // { seriesItem, ep, seasonNum, seriesId, episodesBySeason }
 
   // Helper para formatação de segundos (ex: 01:25:30)
   function formatTvSeconds(sec) {
@@ -7511,6 +7526,7 @@ header.tv-header {
     }
     tvPlayingType = 'channel';
     tvPreviousMode = 'central';
+    tvPlayingSeriesMeta = null;
     tvCurrentIdx = (idx + tvChannels.length) % tvChannels.length;
     tvPendingIdx = tvCurrentIdx;
     const ch = tvChannels[tvCurrentIdx];
@@ -7549,6 +7565,7 @@ header.tv-header {
 
     tvPlayingType = 'event';
     tvPreviousMode = 'central';
+    tvPlayingSeriesMeta = null;
     tvLoadStream(eventChannel);
     updateTvOsd(eventChannel, 0, false);
     setTvViewMode('fullscreen');
@@ -7582,6 +7599,7 @@ header.tv-header {
 
     tvPlayingType = 'vod';
     tvPreviousMode = (tvCurrentMode === 'vod') ? 'vod' : 'central';
+    tvPlayingSeriesMeta = null;
     tvLoadStream(pseudoCh);
     updateTvOsd(pseudoCh, 0, false);
     setTvViewMode('fullscreen');
@@ -7608,9 +7626,22 @@ header.tv-header {
 
     tvPlayingType = 'vod';
     tvPreviousMode = 'vod';
+    tvPlayingSeriesMeta = {
+      seriesItem: seriesItem,
+      ep: ep,
+      seasonNum: String(seasonNum),
+      seriesId: seriesItem.series_id || seriesItem.id,
+      episodesBySeason: seriesItem._cachedEpisodes || null
+    };
     tvLoadStream(pseudoCh);
     updateTvOsd(pseudoCh, 0, false);
     setTvViewMode('fullscreen');
+    // Fecha gaveta se estava aberta (mudança de episódio dentro da gaveta)
+    if (tvDrawer && !tvDrawer.classList.contains('closed')) {
+      tvDrawer.classList.add('closed');
+      const kc = document.getElementById('tvKeyCapture');
+      if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 80);
+    }
   }
 
   // Carregar e Exibir Episódios da Série no Modo TV
@@ -7854,7 +7885,15 @@ header.tv-header {
     if (btnCancelZap) btnCancelZap.style.display = isPending ? 'inline-flex' : 'none';
 
     if (tvPlayingType === 'vod') {
-      if (btnGuide) btnGuide.style.display = 'none';
+      if (tvPlayingSeriesMeta) {
+        // Série: mostrar botão de episódios no OSD
+        if (btnGuide) {
+          btnGuide.style.display = 'inline-flex';
+          btnGuide.innerHTML = '<span class="tv-key-tag">OK</span> Episódios';
+        }
+      } else {
+        if (btnGuide) btnGuide.style.display = 'none';
+      }
       if (btnPrev) { btnPrev.style.display = 'inline-flex'; btnPrev.textContent = '⏪ -10s'; }
       if (btnNext) { btnNext.style.display = 'inline-flex'; btnNext.textContent = '⏩ +10s'; }
       if (btnCentral) btnCentral.textContent = '⬅ VOLTAR';
@@ -7864,7 +7903,7 @@ header.tv-header {
       if (btnNext) btnNext.style.display = 'none';
       if (btnCentral) btnCentral.textContent = '⬅ CENTRAL';
     } else {
-      if (btnGuide) btnGuide.style.display = 'inline-flex';
+      if (btnGuide) { btnGuide.style.display = 'inline-flex'; btnGuide.innerHTML = '<span class="tv-key-tag">OK</span> Guia EPG'; }
       if (btnPrev) { btnPrev.style.display = 'inline-flex'; btnPrev.textContent = '▲ CANAL -'; }
       if (btnNext) { btnNext.style.display = 'inline-flex'; btnNext.textContent = '▼ CANAL +'; }
       if (btnCentral) btnCentral.textContent = '⬅ CENTRAL';
@@ -8213,9 +8252,22 @@ header.tv-header {
       if (tvOsdTimer) { clearTimeout(tvOsdTimer); tvOsdTimer = null; }
 
       tvDrawer.classList.remove('closed');
-      renderTvDrawerList('ALL');
 
-      // Foca no item do canal atual (se existir) ou no primeiro item
+      if (tvPlayingType === 'vod' && tvPlayingSeriesMeta) {
+        // Modo Série: renderiza gaveta de episódios/temporadas
+        renderTvSeriesDrawer(tvPlayingSeriesMeta);
+      } else {
+        // Modo Canal: renderiza guia de canais
+        const drawerTitle = tvDrawer.querySelector('.tv-drawer-title');
+        const drawerHint = tvDrawer.querySelector('.tv-drawer-hint');
+        if (drawerTitle) drawerTitle.textContent = '📋 GUIA DE CANAIS';
+        if (drawerHint) drawerHint.textContent = 'OK para sintonizar • Voltar fecha';
+        const catsEl = document.getElementById('tvDrawerCats');
+        if (catsEl) catsEl.style.display = '';
+        renderTvDrawerList('ALL');
+      }
+
+      // Foca no item ativo (canal atual ou episódio em reprodução) ou no primeiro item
       setTimeout(() => {
         const activeItem = tvDrawer.querySelector('.tv-drawer-item.active-channel');
         const firstItem = tvDrawer.querySelector('.tv-drawer-item');
@@ -8422,6 +8474,102 @@ header.tv-header {
       });
       listEl.appendChild(item);
     });
+  }
+
+  // Renderiza Gaveta de Episódios/Temporadas para Séries em Tela Cheia
+  async function renderTvSeriesDrawer(meta) {
+    if (!meta) return;
+
+    const drawerTitle = tvDrawer.querySelector('.tv-drawer-title');
+    const drawerHint  = tvDrawer.querySelector('.tv-drawer-hint');
+    const catsEl      = document.getElementById('tvDrawerCats');
+    const listEl      = document.getElementById('tvDrawerChannels');
+
+    if (drawerTitle) drawerTitle.textContent = `📺 ${meta.seriesItem.name || 'Série'}`;
+    if (drawerHint)  drawerHint.textContent  = '◀▶ Temporada • ▲▼ Episódio • OK Assistir';
+
+    // Garante que os episódios estejam carregados
+    let episodesBySeason = meta.episodesBySeason;
+    if (!episodesBySeason) {
+      if (listEl) listEl.innerHTML = '<div style="color:#ffc107;font-size:13px;padding:20px;text-align:center;">Carregando episódios...</div>';
+      try {
+        const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series_info&series_id=${meta.seriesId}`);
+        const data = await res.json();
+        episodesBySeason = data.episodes || {};
+        // Cacheia no seriesItem para reutilização
+        meta.seriesItem._cachedEpisodes = episodesBySeason;
+        meta.episodesBySeason = episodesBySeason;
+        tvPlayingSeriesMeta.episodesBySeason = episodesBySeason;
+      } catch (err) {
+        if (listEl) listEl.innerHTML = `<div style="color:#e50914;padding:20px;">Erro ao carregar: ${err.message}</div>`;
+        return;
+      }
+    }
+
+    const seasons = Object.keys(episodesBySeason).sort((a, b) => Number(a) - Number(b));
+    if (seasons.length === 0) {
+      if (listEl) listEl.innerHTML = '<div style="color:#888;padding:20px;text-align:center;">Nenhum episódio encontrado.</div>';
+      return;
+    }
+
+    let currentSeason = meta.seasonNum || seasons[0];
+    if (!seasons.includes(currentSeason)) currentSeason = seasons[0];
+
+    // Renderiza pills de temporada
+    if (catsEl) {
+      catsEl.style.display = 'flex';
+      catsEl.innerHTML = '';
+      seasons.forEach((sNum) => {
+        const pill = document.createElement('button');
+        pill.className = `tv-epg-cat-pill tv-focusable${sNum === currentSeason ? ' active' : ''}`;
+        pill.dataset.season = sNum;
+        pill.textContent = `T${sNum}`;
+        pill.addEventListener('click', () => {
+          catsEl.querySelectorAll('.tv-epg-cat-pill').forEach(p => p.classList.remove('active'));
+          pill.classList.add('active');
+          currentSeason = sNum;
+          renderEpisodeList(sNum);
+          setTimeout(() => {
+            const first = listEl.querySelector('.tv-drawer-item');
+            if (first) { first.focus(); first.scrollIntoView({ block: 'nearest' }); }
+          }, 50);
+        });
+        catsEl.appendChild(pill);
+      });
+    }
+
+    function renderEpisodeList(sNum) {
+      if (!listEl) return;
+      listEl.innerHTML = '';
+      const eps = episodesBySeason[sNum] || [];
+      eps.forEach((ep) => {
+        const item = document.createElement('div');
+        const isPlaying = (sNum === meta.seasonNum && ep.episode_num === meta.ep.episode_num);
+        item.className = `tv-drawer-item tv-focusable${isPlaying ? ' active-channel' : ''}`;
+        item.tabIndex = 0;
+        const epTitle = ep.title || `Episódio ${ep.episode_num}`;
+        const durSec  = ep.info?.duration_secs || 0;
+        const durMin  = durSec > 0 ? `${Math.round(durSec / 60)} min` : (ep.info?.duration || '');
+        item.innerHTML = `
+          <span style="font-size:11px;font-weight:900;color:#ffc107;min-width:30px;">E${String(ep.episode_num).padStart(2,'0')}</span>
+          <div style="flex:1;overflow:hidden;">
+            <div style="font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${epTitle}</div>
+            ${durMin ? `<div style="font-size:10px;color:#aaa;">⏱ ${durMin}</div>` : ''}
+          </div>
+          ${isPlaying ? '<span style="font-size:9px;font-weight:900;background:#00e676;color:#000;padding:2px 7px;border-radius:4px;white-space:nowrap;">ASSISTINDO</span>' : ''}
+        `;
+        const play = () => {
+          // Salva os episodesBySeason antes de trocar (para não precisar buscar de novo)
+          const updatedSeriesItem = { ...meta.seriesItem, _cachedEpisodes: episodesBySeason };
+          tvPlaySeriesEpisode(updatedSeriesItem, ep, sNum);
+        };
+        item.addEventListener('click', play);
+        item.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); play(); } });
+        listEl.appendChild(item);
+      });
+    }
+
+    renderEpisodeList(currentSeason);
   }
 
   // Navegação da Central (Ações Rápidas)
@@ -8649,6 +8797,14 @@ header.tv-header {
       if (tvCurrentMode === 'fullscreen') {
         // Se estava assistindo filme ou série VOD
         if (tvPlayingType === 'vod') {
+          // Prioridade 1: fechar gaveta de episódios/canais se aberta
+          if (tvDrawer && !tvDrawer.classList.contains('closed')) {
+            tvDrawer.classList.add('closed');
+            const kc = document.getElementById('tvKeyCapture');
+            if (kc) setTimeout(() => kc.focus({ preventScroll: true }), 50);
+            return;
+          }
+          // Prioridade 2: voltar para VOD explorer
           if (tvVideo) {
             tvVideo.pause();
             tvVideo.src = '';
@@ -8696,37 +8852,56 @@ header.tv-header {
     if (tvCurrentMode === 'fullscreen') {
       // 1. Reprodução de Filmes / Séries (VOD): controle de reprodução nativo
       if (tvPlayingType === 'vod') {
-        if (key === ' ' || key === 'Enter') {
-          e.preventDefault();
-          if (tvVideo) {
-            if (tvVideo.paused) tvVideo.play();
-            else tvVideo.pause();
-            triggerTvOsd(3000);
+        // Gaveta de episódios aberta: delega para o bloco de gaveta abaixo
+        if (tvDrawer && !tvDrawer.classList.contains('closed')) {
+          // Deixa cair para o bloco de gaveta aberta
+        } else {
+          // Enter: se OSD oculto → mostra OSD; se OSD visível e série → abre gaveta; senão pausa/play
+          if (key === 'Enter') {
+            e.preventDefault();
+            if (tvOsd && tvOsd.classList.contains('hidden')) {
+              triggerTvOsd(5000);
+            } else if (tvPlayingSeriesMeta) {
+              toggleTvDrawer();
+            } else {
+              if (tvVideo) {
+                if (tvVideo.paused) tvVideo.play(); else tvVideo.pause();
+                triggerTvOsd(3000);
+              }
+            }
+            return;
+          }
+          if (key === ' ') {
+            e.preventDefault();
+            if (tvVideo) {
+              if (tvVideo.paused) tvVideo.play(); else tvVideo.pause();
+              triggerTvOsd(3000);
+            }
+            return;
+          }
+          if (key === 'ArrowRight') {
+            e.preventDefault();
+            if (tvVideo) {
+              tvVideo.currentTime = Math.min(tvVideo.duration || 999999, tvVideo.currentTime + 10);
+              triggerTvOsd(3000);
+            }
+            return;
+          }
+          if (key === 'ArrowLeft') {
+            e.preventDefault();
+            if (tvVideo) {
+              tvVideo.currentTime = Math.max(0, tvVideo.currentTime - 10);
+              triggerTvOsd(3000);
+            }
+            return;
+          }
+          if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'i' || key === 'I' || key === 'Info' || key === 'Guide') {
+            e.preventDefault();
+            triggerTvOsd(5000);
+            return;
           }
           return;
         }
-        if (key === 'ArrowRight') {
-          e.preventDefault();
-          if (tvVideo) {
-            tvVideo.currentTime = Math.min(tvVideo.duration || 999999, tvVideo.currentTime + 10);
-            triggerTvOsd(3000);
-          }
-          return;
-        }
-        if (key === 'ArrowLeft') {
-          e.preventDefault();
-          if (tvVideo) {
-            tvVideo.currentTime = Math.max(0, tvVideo.currentTime - 10);
-            triggerTvOsd(3000);
-          }
-          return;
-        }
-        if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'i' || key === 'I' || key === 'Info' || key === 'Guide') {
-          e.preventDefault();
-          triggerTvOsd(5000);
-          return;
-        }
-        return;
       }
 
       // 2. Transmissão de Evento Esportivo
