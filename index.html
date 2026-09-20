@@ -8892,7 +8892,7 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
     window.handleAndroidBack();
   });
 
-  window.onBackPressed = window.handleAndroidBack;
+  window.onBackPressed = window.handleAndroidBack; document.addEventListener('backbutton', function(e) { if(window.handleAndroidBack()) { e.preventDefault(); e.stopPropagation(); } }, false);
   
   // Captura do botão Voltar em qualquer nível (window, document, keydown e keyup)
   const captureAndroidBack = function(e) {
@@ -19377,7 +19377,7 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
     window.handleAndroidBack();
   });
 
-  window.onBackPressed = window.handleAndroidBack;
+  window.onBackPressed = window.handleAndroidBack; document.addEventListener('backbutton', function(e) { if(window.handleAndroidBack()) { e.preventDefault(); e.stopPropagation(); } }, false);
   
   // Captura do botão Voltar em qualquer nível (window, document, keydown e keyup)
   const captureAndroidBack = function(e) {
