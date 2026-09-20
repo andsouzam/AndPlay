@@ -178,9 +178,15 @@ public class MainActivity extends Activity {
     }
 
     private void loadApplication() {
-        // Carrega 100% local a interface de TV a Cabo para inicialização imediata
-        isFallbackLoaded = true;
-        webView.loadUrl(LOCAL_URL);
+        // Tenta carregar a versão remota (sempre atualizada via GitHub Pages).
+        // Se não houver conexão, cai no arquivo local empacotado no APK.
+        if (isNetworkAvailable()) {
+            isFallbackLoaded = false; // permite fallback para local se o remoto falhar
+            webView.loadUrl(REMOTE_URL);
+        } else {
+            isFallbackLoaded = true;
+            webView.loadUrl(LOCAL_URL);
+        }
     }
 
     private boolean isNetworkAvailable() {
