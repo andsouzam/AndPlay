@@ -2693,10 +2693,15 @@
 
     function buildChannelItem(raw) {
       const catInfo = getCategoryInfo(raw.cat);
-      // Apenas v2.rdembed.sbs resolve DNS — outros domínios estão bloqueados pelo ISP
+      const cleanSlug = raw.id.replace(/^canal\//, '').replace(/\.html$/, '');
+      const rdSlug = cleanSlug
+        .replace(/^telecine-/, 'telecine')
+        .replace(/^hbo-/, 'hbo');
+
       const fallbacks = [
+        { name: 'RDCanais HD', url: 'https://rdcanais.net/' + rdSlug, isEmbed: true },
         { name: 'Rei dos Embeds HD', url: raw.embed || ('https://v2.rdembed.sbs/' + raw.id), isEmbed: true },
-        { name: 'Rei dos Embeds HD 2', url: 'https://v2.rdembed.sbs/' + raw.id, isEmbed: true }
+        { name: 'BRFLIX TV HD', url: 'https://v3.rdse.site/' + cleanSlug, isEmbed: true }
       ];
 
       if (KNOWN_NATIVE_STREAMS[raw.id]) {
@@ -2849,10 +2854,10 @@
 
               if (fallbacks.length === 0) {
                 fallbacks.push(
-                  { name: 'Premiere 1 HD', url: 'https://v2.rdembed.sbs/premiere', isEmbed: true },
-                  { name: 'SporTV HD', url: 'https://v2.rdembed.sbs/sportv', isEmbed: true },
-                  { name: 'CazéTV HD', url: 'https://v2.rdembed.sbs/cazetv', isEmbed: true },
-                  { name: 'ESPN HD', url: 'https://v2.rdembed.sbs/espn', isEmbed: true }
+                  { name: 'Premiere 1 (RDCanais)', url: 'https://rdcanais.net/premiere', isEmbed: true },
+                  { name: 'Premiere 1 (Rei dos Embeds)', url: 'https://v2.rdembed.sbs/premiere', isEmbed: true },
+                  { name: 'SporTV HD (RDCanais)', url: 'https://rdcanais.net/sportv', isEmbed: true },
+                  { name: 'CazéTV HD', url: 'https://v2.rdembed.sbs/cazetv', isEmbed: true }
                 );
               }
 
@@ -2895,8 +2900,9 @@
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere 1 HD', url: 'https://v2.rdembed.sbs/premiere', isEmbed: true },
-              { name: 'SporTV HD', url: 'https://v2.rdembed.sbs/sportv', isEmbed: true },
+              { name: 'Premiere 1 (RDCanais)', url: 'https://rdcanais.net/premiere', isEmbed: true },
+              { name: 'Premiere 1 (Rei dos Embeds)', url: 'https://v2.rdembed.sbs/premiere', isEmbed: true },
+              { name: 'SporTV HD (RDCanais)', url: 'https://rdcanais.net/sportv', isEmbed: true },
               { name: 'CazéTV HD', url: 'https://v2.rdembed.sbs/cazetv', isEmbed: true }
             ]
           },
@@ -2914,9 +2920,10 @@
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere 2 HD', url: 'https://v2.rdembed.sbs/premiere2', isEmbed: true },
+              { name: 'Premiere 2 (RDCanais)', url: 'https://rdcanais.net/premiere2', isEmbed: true },
               { name: 'CazéTV HD (0 Delay)', url: 'https://www.youtube-nocookie.com/embed/live_stream?channel=UCjE8gVqE5lM_x3Z_t_9y0YQ', isEmbed: true },
-              { name: 'SporTV 2 HD', url: 'https://v2.rdembed.sbs/sportv2', isEmbed: true }
+              { name: 'SporTV 2 (RDCanais)', url: 'https://rdcanais.net/sportv2', isEmbed: true },
+              { name: 'Premiere 2 (Rei dos Embeds)', url: 'https://v2.rdembed.sbs/premiere2', isEmbed: true }
             ]
           },
           {
@@ -2933,8 +2940,9 @@
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'ESPN HD', url: 'https://v2.rdembed.sbs/espn', isEmbed: true },
-              { name: 'TNT Sports HD', url: 'https://v2.rdembed.sbs/tnt', isEmbed: true },
+              { name: 'ESPN HD (RDCanais)', url: 'https://rdcanais.net/espn', isEmbed: true },
+              { name: 'TNT Sports (RDCanais)', url: 'https://rdcanais.net/tnt', isEmbed: true },
+              { name: 'ESPN HD (Rei dos Embeds)', url: 'https://v2.rdembed.sbs/espn', isEmbed: true },
               { name: 'Space HD', url: 'https://v2.rdembed.sbs/space', isEmbed: true }
             ]
           }
