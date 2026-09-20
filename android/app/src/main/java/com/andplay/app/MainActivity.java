@@ -24,7 +24,7 @@ import android.app.Activity;
 public class MainActivity extends Activity {
 
     private static final String REMOTE_URL = "https://andsouzam.github.io/AndPlay/?mode=tv";
-    private static final String LOCAL_URL = "file:///android_asset/index.html?mode=tv";
+    private static final String LOCAL_URL = "file:///android_asset/index.html";
 
     private WebView webView;
     private FrameLayout customViewContainer;
@@ -39,9 +39,6 @@ public class MainActivity extends Activity {
 
         // Manter a tela do projetor / TV sempre ligada durante a reprodução
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        // Oculta barras de navegação para experiência imersiva de cinema
-        hideSystemUI();
 
         // Layout raiz contendo WebView e container de vídeo em tela cheia
         FrameLayout rootLayout = new FrameLayout(this);
@@ -63,6 +60,11 @@ public class MainActivity extends Activity {
         rootLayout.addView(customViewContainer);
 
         setContentView(rootLayout);
+
+        // Oculta barras de navegação com segurança após o layout estar anexado
+        try {
+            hideSystemUI();
+        } catch (Exception ignored) {}
 
         // Configurações avançadas do WebView para streaming IPTV e D-Pad
         configureWebSettings();
@@ -111,6 +113,12 @@ public class MainActivity extends Activity {
                     isFallbackLoaded = true;
                     view.loadUrl(LOCAL_URL);
                 }
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                view.evaluateJavascript("window.isAndroidTvApp = true;", null);
             }
 
             @Override

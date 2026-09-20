@@ -3263,7 +3263,7 @@ body.tv-mode > #videoModal {
       // Se estiver em modo TV (Android App / Smart TV / Projetor / ?mode=tv)
       const isTvParam = window.location.search.includes('mode=tv');
       const isTvAgent = navigator.userAgent.includes('AndPlayTV') || navigator.userAgent.includes('SmartTV');
-      const isTvMode = isTvParam || isTvAgent || window.isAndroidTvApp;
+      const isTvMode = isTvParam || isTvAgent || window.isAndroidTvApp || (window.location.protocol === 'file:');
 
       if (isTvMode && window.initTvCableBox) {
         loadMovieCategories().then(loadFullMovies).catch(() => {});
@@ -6766,7 +6766,7 @@ body.tv-mode > #videoModal {
   // Verificação do modo TV
   const isTvParam = window.location.search.includes('mode=tv');
   const isTvAgent = navigator.userAgent.includes('AndPlayTV') || navigator.userAgent.includes('SmartTV');
-  const isTvMode = isTvParam || isTvAgent || window.isAndroidTvApp;
+  const isTvMode = isTvParam || isTvAgent || window.isAndroidTvApp || (window.location.protocol === 'file:');
 
   if (!isTvMode) return; // Se não for TV, roda o modo web normal
 
