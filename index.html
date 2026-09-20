@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
@@ -2650,6 +2650,27 @@ header.tv-header {
   border-radius: 4px;
 }
 
+body.tv-mode .tv-osd-inner {
+  backdrop-filter: none !important;
+  background: rgba(8, 13, 26, 0.97) !important;
+}
+body.tv-mode .tv-epg-drawer {
+  backdrop-filter: none !important;
+  background: rgba(10, 10, 16, 0.98) !important;
+}
+body.tv-mode .tv-top-channel-badge {
+  backdrop-filter: none !important;
+  background: rgba(6, 10, 20, 0.97) !important;
+}
+body.tv-mode * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
+  transform: scale(1.02) !important;
+  border: 3px solid #ffc107 !important;
+  box-shadow: none !important;
+}
 </style>
 </head>
 <body>
@@ -2658,6 +2679,7 @@ header.tv-header {
     <!-- Reprodutor de Vídeo Unificado para TV (Muda entre PiP e Tela Cheia sem reiniciar o vídeo) -->
     <div id="tvPlayerBox" class="tv-player-box pip">
       <video id="tvVideoPlayer" playsinline preload="auto" autoplay></video>
+      <div id="tvIframeShield" style="position:absolute;inset:0;z-index:90;background:transparent;cursor:default;"></div>
       <iframe id="tvEmbedPlayer" allowfullscreen="true" allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *; clipboard-write *; accelerometer *; gyroscope *" referrerpolicy="no-referrer"></iframe>
       <div id="tvLiveBadge" class="tv-player-live-badge"><span class="tv-pulse"></span> NO AR</div>
       <div id="tvChannelWatermark" class="tv-watermark"></div>
@@ -3902,7 +3924,7 @@ header.tv-header {
       }
 
       if (isTvMode && window.initTvCableBox) {
-        loadMovieCategories().then(loadFullMovies).catch(() => {});
+        // VOD em segundo plano desativado no boot para fluidez máxima no projetor
         window.initTvCableBox();
         return;
       }
@@ -4484,8 +4506,9 @@ header.tv-header {
           { s: "00:00", e: "24:00", t: (ch.name || 'Canal') + " - Maratona 24 Horas", syn: "Transmissão contínua e sem intervalos comerciais de " + (ch.name || 'conteúdo') + ", 24 horas por dia em alta definição digital." }
         ];
       }
-      // 13. GRADE GENÉRICA INTELIGENTE (Baseada na Categoria e Horário)
+      // 13. GRADE GENÉRICA (Retorna null para usar os dados reais do catalogo)
       else {
+        return null;
         if (cat.includes('esporte') || cat.includes('sport')) {
           grid = [
             { s: "00:00", e: "06:00", t: "Giro Esportivo da Madrugada", syn: "Compactos e análises das competições esportivas do Brasil e do mundo." },
@@ -4585,7 +4608,7 @@ header.tv-header {
       }
 
       const liveEpg = getChannelLiveSchedule(raw);
-      const nowTitle = liveEpg ? liveEpg.nowTitle : (raw.now || '');
+      const nowTitle = (liveEpg && liveEpg.nowTitle) ? liveEpg.nowTitle : (raw.now || 'Programação Ao Vivo');
       const nowProgress = liveEpg ? liveEpg.progress : (Number(raw.prog) || 0);
       const synopsis = liveEpg ? liveEpg.synopsis : '';
       const nextProgrammes = liveEpg && liveEpg.nextTitle ? [{ t: liveEpg.nextTitle, s: liveEpg.nextStart }] : (Array.isArray(raw.next) ? raw.next : []);
@@ -7850,7 +7873,7 @@ header.tv-header {
     // Registra listener de rolagem e redimensionamento para sincronizar o PiP perfeitamente
     if (tvCentral && !tvCentral._hasScrollSync) {
       tvCentral._hasScrollSync = true;
-      tvCentral.addEventListener('scroll', syncTvPlayerBoxPosition, { passive: true });
+      // Scroll listener desativado para 60 FPS
       window.addEventListener('resize', syncTvPlayerBoxPosition, { passive: true });
     }
 
@@ -8690,6 +8713,11 @@ header.tv-header {
   // Alternar entre Telas (Central x Tela Cheia x VOD)
   function setTvViewMode(mode) {
     tvCurrentMode = mode;
+    try {
+      if (mode === 'fullscreen' || mode === 'vod') {
+        window.history.pushState({ tvMode: mode }, '');
+      }
+    } catch(e) {}
     const tvKc = document.getElementById('tvKeyCapture');
     if (mode === 'fullscreen') {
       tvCentral.style.display = 'none';
@@ -8752,21 +8780,7 @@ header.tv-header {
         }
       }
       if (key === 'MENU' || key === 'BACK') {
-        if (tvPlayingType === 'vod') {
-          if (tvVideo) {
-            tvVideo.pause();
-            tvVideo.src = '';
-          }
-          setTvViewMode(tvPreviousMode || 'vod');
-          if (tvPreviousMode === 'central') tvTuneChannel(tvCurrentIdx, false);
-          return;
-        }
-        if (tvPlayingType === 'event') {
-          setTvViewMode('central');
-          tvTuneChannel(tvCurrentIdx, false);
-          return;
-        }
-        setTvViewMode('central');
+        window.handleAndroidBack();
         return;
       }
       if (key === 'GUIDE' || key === 'INFO') { toggleTvDrawer(); return; }
@@ -8778,35 +8792,39 @@ header.tv-header {
       }
     } else if (tvCurrentMode === 'vod') {
       if (key === 'BACK' || key === 'MENU') {
-        if (tvVodMode === 'series_episodes') {
-          openTvVodExplorer('series');
-        } else {
-          setTvViewMode('central');
-        }
+        window.handleAndroidBack();
         return;
       }
     }
   };
 
-  // Botão Voltar do Android
+  // Botão Voltar Unificado (Android APK, Smart TV e Web)
   window.handleAndroidBack = function() {
+    if (typeof elements !== 'undefined') {
+      if (elements.videoModal && elements.videoModal.style.display === 'flex') { closePlayer(); return true; }
+      if (elements.seriesModal && elements.seriesModal.style.display === 'flex') { closeSeriesModal(); return true; }
+      if (elements.movieVersionModal && elements.movieVersionModal.style.display === 'flex') { closeMovieVersionModal(); return true; }
+      if (elements.imdbSearchModal && elements.imdbSearchModal.style.display === 'flex') { closeImdbSearchModal(); return true; }
+    }
+
     if (tvCurrentMode === 'fullscreen') {
+      if (tvDrawer && !tvDrawer.classList.contains('closed')) {
+        tvDrawer.classList.add('closed');
+        return true;
+      }
+      if (typeof tvZapDebounceTimer !== 'undefined' && tvZapDebounceTimer) {
+        if (typeof tvCancelPendingZap === 'function') tvCancelPendingZap();
+        return true;
+      }
       if (tvPlayingType === 'vod') {
-        if (tvVideo) {
-          tvVideo.pause();
-          tvVideo.src = '';
-        }
+        if (tvVideo) { try { tvVideo.pause(); tvVideo.src = ''; } catch(e){} }
         setTvViewMode(tvPreviousMode || 'vod');
-        if (tvPreviousMode === 'central') tvTuneChannel(tvCurrentIdx, false);
+        if (tvPreviousMode === 'central' && typeof tvTuneChannel === 'function') tvTuneChannel(tvCurrentIdx, false);
         return true;
       }
       if (tvPlayingType === 'event') {
         setTvViewMode('central');
-        tvTuneChannel(tvCurrentIdx, false);
-        return true;
-      }
-      if (!tvDrawer.classList.contains('closed')) {
-        tvDrawer.classList.add('closed');
+        if (typeof tvTuneChannel === 'function') tvTuneChannel(tvCurrentIdx, false);
         return true;
       }
       setTvViewMode('central');
@@ -8820,8 +8838,35 @@ header.tv-header {
       setTvViewMode('central');
       return true;
     }
-    return false; // Na Central, deixa sair do app
+    return false;
   };
+
+    // Suporte a popstate do Android WebView (webView.goBack())
+  window.addEventListener('popstate', function() {
+    window.handleAndroidBack();
+  });
+
+  window.onBackPressed = window.handleAndroidBack;
+  
+  // Captura do botão Voltar em qualquer nível (window, document, keydown e keyup)
+  const captureAndroidBack = function(e) {
+    const code = e.keyCode || e.which;
+    const isBack = (code === 4 || code === 27 || code === 111 || code === 8 || e.key === 'Back' || e.key === 'Escape' || e.key === 'GoBack' || e.key === 'BrowserBack');
+    if (isBack) {
+      if (window.handleAndroidBack()) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+  };
+  window.addEventListener('keydown', captureAndroidBack, true);
+  document.addEventListener('keydown', captureAndroidBack, true);
+  window.addEventListener('keyup', captureAndroidBack, true);
+  document.addEventListener('backbutton', function(e) {
+    if (window.handleAndroidBack()) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+    }
+  }, false);
 
   // Drawer EPG
   function toggleTvDrawer() {
@@ -9482,7 +9527,8 @@ header.tv-header {
     }
 
     // ---- Backspace / Escape / Botão Voltar ----
-    if (key === 'Backspace' || key === 'Escape' || key === 'Back' || e.keyCode === 4) {
+    const isBackKey = (key === 'Backspace' || key === 'Escape' || key === 'Back' || key === 'GoBack' || key === 'BrowserBack' || e.keyCode === 4 || e.keyCode === 27 || e.keyCode === 111 || e.keyCode === 8);
+    if (isBackKey) {
       e.preventDefault();
       if (tvCurrentMode === 'fullscreen') {
         // Se estava assistindo filme ou série VOD
