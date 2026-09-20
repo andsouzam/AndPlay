@@ -1747,132 +1747,451 @@ header.tv-header {
   text-overflow: ellipsis;
 }
 
-/* TELA 2: Tela Cheia de TV com OSD */
+/* TELA 2: Tela Cheia de TV com Overlay Estilo TV a Cabo (Infobar / EPG) */
 .tv-fullscreen-view {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
-  background: #000;
-  z-index: 1200;
+  background: transparent !important;
+  z-index: 1500 !important;
+  pointer-events: none !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
-.tv-osd-banner {
+/* Indicador Rápido de Zapping no Canto Superior */
+.tv-top-channel-badge {
   position: fixed;
-  bottom: 32px;
-  left: 6%;
-  right: 6%;
-  background: rgba(10, 10, 16, 0.94);
-  backdrop-filter: blur(20px);
-  border: 1.5px solid rgba(255, 193, 7, 0.45);
-  border-radius: 18px;
-  padding: 16px 26px;
+  top: 24px;
+  right: 28px;
+  z-index: 1600;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  z-index: 1350;
-  box-shadow: 0 12px 45px rgba(0,0,0,0.95);
-  transition: opacity 0.35s ease, transform 0.35s ease;
+  gap: 12px;
+  background: rgba(6, 10, 20, 0.92);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 193, 7, 0.45);
+  border-radius: 12px;
+  padding: 8px 18px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease;
+}
+.tv-top-channel-badge.hidden {
+  transform: translateY(-25px);
+  opacity: 0;
+}
+.tv-top-ch-num {
+  font-family: 'SF Pro Display', monospace, sans-serif;
+  font-size: 20px;
+  font-weight: 900;
+  color: #ffc107;
+  letter-spacing: 0.5px;
+}
+.tv-top-ch-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffffff;
+  text-transform: uppercase;
+}
+.tv-top-ch-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(229, 9, 20, 0.25);
+  color: #ff4d4d;
+  border: 1px solid rgba(229, 9, 20, 0.5);
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 7px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+/* Overlay Principal Inferior - Infobar de TV a Cabo */
+.tv-osd-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 1600;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(to top, rgba(3, 6, 14, 0.98) 0%, rgba(6, 11, 24, 0.94) 65%, rgba(8, 14, 30, 0.82) 85%, transparent 100%);
+  padding-top: 36px;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+  box-shadow: 0 -15px 50px rgba(0, 0, 0, 0.85);
 }
 .tv-osd-banner.hidden {
+  transform: translateY(105%);
   opacity: 0;
-  transform: translateY(40px);
   pointer-events: none;
 }
 
+.tv-osd-inner {
+  display: grid;
+  grid-template-columns: 340px 1fr 280px;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 36px 24px 36px;
+  border-top: 2px solid rgba(255, 193, 7, 0.55);
+  background: rgba(8, 13, 26, 0.75);
+  backdrop-filter: blur(28px) saturate(180%);
+}
+
+/* Coluna 1: Canal */
+.tv-osd-col-channel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  padding-right: 20px;
+}
+.tv-osd-ch-number-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.18), rgba(255, 152, 0, 0.08));
+  border: 1.5px solid rgba(255, 193, 7, 0.6);
+  border-radius: 12px;
+  min-width: 64px;
+  height: 64px;
+  padding: 4px 8px;
+  box-shadow: 0 4px 15px rgba(255, 193, 7, 0.15);
+}
+.tv-osd-ch-label {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: #ffc107;
+  opacity: 0.85;
+}
 .tv-osd-ch-num {
-  font-size: 32px;
+  font-family: 'SF Pro Display', monospace, sans-serif;
+  font-size: 26px;
   font-weight: 900;
   color: #ffc107;
-  font-family: monospace;
-  background: rgba(255, 193, 7, 0.12);
-  padding: 4px 14px;
+  line-height: 1;
+}
+.tv-osd-logo-wrapper {
+  width: 72px;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
+  padding: 4px;
+  flex-shrink: 0;
 }
 .tv-osd-logo {
-  width: 68px;
-  height: 48px;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
 }
-.tv-osd-meta {
-  flex: 1;
+.tv-osd-channel-meta {
   display: flex;
   flex-direction: column;
   gap: 4px;
   overflow: hidden;
 }
-.tv-osd-top-row {
+.tv-osd-name {
+  font-size: 20px;
+  font-weight: 900;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+  letter-spacing: 0.2px;
+}
+.tv-osd-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tv-osd-badge-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #e50914;
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 900;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+.tv-osd-badge-cat {
+  background: rgba(255, 255, 255, 0.1);
+  color: #d1d5db;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.tv-osd-badge-tech {
+  background: rgba(0, 229, 255, 0.15);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  color: #00e5ff;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.tv-osd-badge-rating {
+  background: #2e7d32;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+
+/* Coluna 2: EPG Guia Central */
+.tv-osd-col-epg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+.tv-osd-prog-header {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-.tv-osd-name {
-  font-size: 22px;
-  font-weight: 900;
-  color: #fff;
-}
-.tv-osd-badge {
-  background: #e50914;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 800;
-  padding: 2px 7px;
-  border-radius: 4px;
-}
-.tv-osd-quality {
+.tv-osd-tag-now {
   background: rgba(255, 193, 7, 0.2);
   color: #ffc107;
-  border: 1px solid rgba(255, 193, 7, 0.4);
+  border: 1px solid rgba(255, 193, 7, 0.5);
   font-size: 10px;
-  font-weight: 800;
-  padding: 1px 6px;
-  border-radius: 4px;
+  font-weight: 900;
+  padding: 2px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
 }
-.tv-osd-prog-row {
+.tv-osd-now {
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+.tv-osd-time-range {
+  font-size: 12px;
+  font-weight: 700;
+  color: #9ca3af;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* Barra de Progresso do Programa */
+.tv-osd-progress-section {
   display: flex;
   align-items: center;
   gap: 12px;
 }
-.tv-osd-now {
-  font-size: 14px;
-  font-weight: 700;
-  color: #ffc107;
-  white-space: nowrap;
+.tv-osd-bar-container {
+  flex: 1;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
   overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tv-osd-bar {
-  width: 160px;
-  height: 4px;
-  background: rgba(255,255,255,0.2);
-  border-radius: 2px;
-  overflow: hidden;
-  flex-shrink: 0;
+  position: relative;
 }
 .tv-osd-bar-fill {
   height: 100%;
-  background: #ff5252;
+  background: linear-gradient(90deg, #ff9800, #ff5252, #e50914);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(229, 9, 20, 0.7);
 }
-.tv-osd-next {
+.tv-osd-progress-labels {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+.tv-osd-prog-remaining {
+  color: #ffc107;
+  font-weight: 600;
+}
+
+/* Sinopse da Atração */
+.tv-osd-synopsis {
   font-size: 12px;
-  color: #aaa;
+  line-height: 1.4;
+  color: #cbd5e1;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Próxima Atração */
+.tv-osd-next-program {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tv-osd-tag-next {
+  color: #00e5ff;
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+.tv-osd-next-title {
+  color: #94a3b8;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.tv-osd-controls-hint {
+/* Coluna 3: Relógio & Teclas / Ações */
+.tv-osd-col-actions {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  text-align: right;
-  font-size: 11px;
-  color: #888;
-  flex-shrink: 0;
+  align-items: flex-end;
+  gap: 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  padding-left: 20px;
 }
-.tv-osd-controls-hint strong {
+.tv-osd-clock-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.tv-osd-clock {
+  font-family: 'SF Pro Display', monospace, sans-serif;
+  font-size: 24px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 1px;
+  line-height: 1.1;
+}
+.tv-osd-date {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9ca3af;
+  text-transform: uppercase;
+}
+.tv-osd-quick-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  width: 100%;
+}
+.tv-osd-btn-action {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.25), rgba(255, 152, 0, 0.15));
+  border: 1px solid rgba(255, 193, 7, 0.6);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.tv-osd-btn-action:hover, .tv-osd-btn-action:focus {
+  background: #ffc107;
+  color: #000;
+  border-color: #ffc107;
+  transform: scale(1.02);
+  outline: none;
+}
+.tv-key-tag {
+  background: rgba(0, 0, 0, 0.5);
   color: #ffc107;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 193, 7, 0.4);
+}
+.tv-osd-btn-action:hover .tv-key-tag {
+  background: #000;
+  color: #fff;
+}
+.tv-osd-zapping-btns {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+.tv-osd-btn-pill {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #d1d5db;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 5px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  text-align: center;
+}
+.tv-osd-btn-pill:hover, .tv-osd-btn-pill:focus {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-color: #ffc107;
+  outline: none;
+}
+.tv-osd-btn-pill.tv-btn-back:hover {
+  background: rgba(229, 9, 20, 0.3);
+  border-color: #e50914;
+}
+
+/* Responsividade do Overlay TV */
+@media (max-width: 1024px) {
+  .tv-osd-inner {
+    grid-template-columns: 280px 1fr 200px;
+    padding: 12px 20px 18px 20px;
+    gap: 16px;
+  }
+  .tv-osd-synopsis {
+    display: none;
+  }
+}
+@media (max-width: 768px) {
+  .tv-osd-inner {
+    grid-template-columns: 1fr;
+    padding: 12px 16px;
+    gap: 10px;
+  }
+  .tv-osd-col-channel {
+    border-right: none;
+    padding-right: 0;
+  }
+  .tv-osd-col-actions {
+    display: none;
+  }
 }
 
 /* Gaveta Lateral EPG */
@@ -2199,27 +2518,89 @@ header.tv-header {
     </div>
 
     <!-- TELA 2: Tela Cheia de TV com OSD (Zapping Mode) -->
+    <!-- TELA 2: Tela Cheia de TV com Overlay Estilo TV a Cabo (Zapping Mode) -->
     <div id="tvFullscreenView" class="tv-fullscreen-view" style="display: none;">
-      <!-- OSD Banner Flutuante (Mini-EPG) -->
+      <!-- Indicador Rápido de Zapping no Canto Superior Direito -->
+      <div id="tvTopChannelBadge" class="tv-top-channel-badge hidden">
+        <span class="tv-top-ch-num" id="tvTopChNum">CH 001</span>
+        <span class="tv-top-ch-name" id="tvTopChName">GLOBO HD</span>
+        <span class="tv-top-ch-live"><span class="tv-pulse"></span> NO AR</span>
+      </div>
+
+      <!-- Overlay Principal Inferior - Infobar de TV a Cabo -->
       <div id="tvOsdBanner" class="tv-osd-banner hidden">
-        <div class="tv-osd-ch-num" id="tvOsdNum">001</div>
-        <img class="tv-osd-logo" id="tvOsdLogo" src="" alt="Canal">
-        <div class="tv-osd-meta">
-          <div class="tv-osd-top-row">
-            <span class="tv-osd-name" id="tvOsdName">TV Globo HD</span>
-            <span class="tv-osd-badge" id="tvOsdCategory">Abertos</span>
-            <span class="tv-osd-quality">1080p HD</span>
+        <div class="tv-osd-inner">
+          <!-- Coluna 1: Identidade do Canal -->
+          <div class="tv-osd-col-channel">
+            <div class="tv-osd-ch-number-box">
+              <span class="tv-osd-ch-label">CANAL</span>
+              <span class="tv-osd-ch-num" id="tvOsdNum">001</span>
+            </div>
+            <div class="tv-osd-logo-wrapper">
+              <img class="tv-osd-logo" id="tvOsdLogo" src="" alt="Canal">
+            </div>
+            <div class="tv-osd-channel-meta">
+              <div class="tv-osd-name-row">
+                <h3 class="tv-osd-name" id="tvOsdName">TV Globo HD</h3>
+              </div>
+              <div class="tv-osd-badges-row">
+                <span class="tv-osd-badge-live"><span class="tv-pulse"></span> NO AR</span>
+                <span class="tv-osd-badge-cat" id="tvOsdCategory">Abertos</span>
+                <span class="tv-osd-badge-tech">1080p FHD</span>
+                <span class="tv-osd-badge-tech">DOLBY 5.1</span>
+                <span class="tv-osd-badge-rating" id="tvOsdRating">L</span>
+              </div>
+            </div>
           </div>
-          <div class="tv-osd-prog-row">
-            <span class="tv-osd-now" id="tvOsdNow">Programação Ao Vivo</span>
-            <div class="tv-osd-bar"><div class="tv-osd-bar-fill" id="tvOsdProgFill" style="width: 50%;"></div></div>
+
+          <!-- Coluna 2: Guia de Programação EPG (No Ar & A Seguir) -->
+          <div class="tv-osd-col-epg">
+            <!-- Programa Atual -->
+            <div class="tv-osd-current-program">
+              <div class="tv-osd-prog-header">
+                <span class="tv-osd-tag-now">🔴 NO AR AGORA</span>
+                <h2 class="tv-osd-now" id="tvOsdNow">Jornal Nacional</h2>
+                <span class="tv-osd-time-range" id="tvOsdTimeRange">20:30 • 21:30</span>
+              </div>
+              <!-- Barra de Progresso do Programa -->
+              <div class="tv-osd-progress-section">
+                <div class="tv-osd-bar-container">
+                  <div class="tv-osd-bar-fill" id="tvOsdProgFill" style="width: 50%;"></div>
+                </div>
+                <div class="tv-osd-progress-labels">
+                  <span class="tv-osd-prog-status" id="tvOsdProgStatus">Em andamento (50%)</span>
+                  <span class="tv-osd-prog-remaining" id="tvOsdProgRemaining">Restam ~30 min</span>
+                </div>
+              </div>
+              <!-- Sinopse / Detalhes -->
+              <p class="tv-osd-synopsis" id="tvOsdSynopsis">Acompanhe a cobertura completa das principais notícias do Brasil e do mundo com reportagens especiais e análises ao vivo.</p>
+            </div>
+
+            <!-- Próximo Programa -->
+            <div class="tv-osd-next-program">
+              <span class="tv-osd-tag-next">⏭ A SEGUIR:</span>
+              <span class="tv-osd-next-title" id="tvOsdNext">Carregando programação...</span>
+            </div>
           </div>
-          <div class="tv-osd-next" id="tvOsdNext">Próxima atração: Carregando...</div>
-        </div>
-        <div class="tv-osd-controls-hint">
-          <span><strong>▲ / ▼</strong> Zapping Canais</span>
-          <span><strong>OK</strong> Guia EPG</span>
-          <span><strong>Voltar</strong> Central</span>
+
+          <!-- Coluna 3: Relógio & Teclas / Ações de TV a Cabo -->
+          <div class="tv-osd-col-actions">
+            <div class="tv-osd-clock-container">
+              <div class="tv-osd-clock" id="tvOsdClock">21:45</div>
+              <div class="tv-osd-date" id="tvOsdDate">SÁB, 20 SET</div>
+            </div>
+            <div class="tv-osd-quick-actions">
+              <button class="tv-osd-btn-action" id="tvOsdBtnGuide" title="Abrir Grade EPG (OK)">
+                <span class="tv-key-tag">OK</span>
+                <span>Guia Completo</span>
+              </button>
+              <div class="tv-osd-zapping-btns">
+                <button class="tv-osd-btn-pill" id="tvOsdBtnPrev" title="Canal Anterior (▲)">▲ CANAL -</button>
+                <button class="tv-osd-btn-pill" id="tvOsdBtnNext" title="Próximo Canal (▼)">▼ CANAL +</button>
+                <button class="tv-osd-btn-pill tv-btn-back" id="tvOsdBtnCentral" title="Voltar à Central (Backspace)">⬅ CENTRAL</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -6827,12 +7208,15 @@ header.tv-header {
   function updateTvClock() {
     const clockEl = document.getElementById('tvClock');
     const dateEl = document.getElementById('tvDate');
-    if (!clockEl) return;
+    const osdClock = document.getElementById('tvOsdClock');
+    const osdDate = document.getElementById('tvOsdDate');
     const now = new Date();
-    clockEl.textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    if (dateEl) {
-      dateEl.textContent = now.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
-    }
+    const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const dateStr = now.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' });
+    if (clockEl) clockEl.textContent = timeStr;
+    if (dateEl) dateEl.textContent = dateStr;
+    if (osdClock) osdClock.textContent = timeStr;
+    if (osdDate) osdDate.textContent = dateStr.toUpperCase();
   }
   setInterval(updateTvClock, 1000);
   updateTvClock();
@@ -6897,6 +7281,19 @@ header.tv-header {
         }
       }, 400);
     }
+
+    // Dispara o Overlay ao interagir com mouse/touch na tela cheia
+    if (!window._tvOsdActivityWired) {
+      window._tvOsdActivityWired = true;
+      const onUserActivity = () => {
+        if (tvCurrentMode === 'fullscreen') {
+          triggerTvOsd(5000);
+        }
+      };
+      window.addEventListener('mousemove', onUserActivity, { passive: true });
+      window.addEventListener('click', onUserActivity, { passive: true });
+      window.addEventListener('touchstart', onUserActivity, { passive: true });
+    }
   };
 
   // Sintonizar Canal
@@ -6952,36 +7349,152 @@ header.tv-header {
     tvTuneChannel(tvCurrentIdx + delta, true);
   }
 
-  // OSD Banner
+  // OSD Banner - Estilo TV a Cabo / Receptor Moderno
+  let _tvOsdButtonsWired = false;
+  function wireTvOsdButtons() {
+    if (_tvOsdButtonsWired) return;
+    _tvOsdButtonsWired = true;
+
+    const btnGuide = document.getElementById('tvOsdBtnGuide');
+    const btnPrev = document.getElementById('tvOsdBtnPrev');
+    const btnNext = document.getElementById('tvOsdBtnNext');
+    const btnCentral = document.getElementById('tvOsdBtnCentral');
+
+    if (btnGuide) btnGuide.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleTvDrawer();
+    });
+    if (btnPrev) btnPrev.addEventListener('click', (e) => {
+      e.stopPropagation();
+      tvZap(-1);
+    });
+    if (btnNext) btnNext.addEventListener('click', (e) => {
+      e.stopPropagation();
+      tvZap(1);
+    });
+    if (btnCentral) btnCentral.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setTvViewMode('central');
+    });
+  }
+
   function updateTvOsd(ch, idx) {
+    const formattedNum = String(idx + 1).padStart(3, '0');
+
+    // 1. Indicador Rápido de Zapping no Topo
+    const topNum = document.getElementById('tvTopChNum');
+    const topName = document.getElementById('tvTopChName');
+    if (topNum) topNum.textContent = `CH ${formattedNum}`;
+    if (topName) topName.textContent = ch.name;
+
+    // 2. Coluna 1: Canal
     const osdNum = document.getElementById('tvOsdNum');
     const osdLogo = document.getElementById('tvOsdLogo');
     const osdName = document.getElementById('tvOsdName');
     const osdCategory = document.getElementById('tvOsdCategory');
-    const osdNow = document.getElementById('tvOsdNow');
-    const osdProgFill = document.getElementById('tvOsdProgFill');
-    const osdNext = document.getElementById('tvOsdNext');
+    const osdRating = document.getElementById('tvOsdRating');
 
-    if (osdNum) osdNum.textContent = String(idx + 1).padStart(3, '0');
+    if (osdNum) osdNum.textContent = formattedNum;
     if (osdLogo) {
       osdLogo.src = ch.logo || '';
       osdLogo.style.display = ch.logo ? 'block' : 'none';
     }
     if (osdName) osdName.textContent = ch.name;
     if (osdCategory) osdCategory.textContent = ch.categoryLabel || 'TV Ao Vivo';
-    if (osdNow) osdNow.textContent = ch.nowTitle || 'Programação Ao Vivo HD';
-    if (osdProgFill) osdProgFill.style.width = `${Math.max(15, ch.nowProgress || 45)}%`;
-    if (osdNext) {
-      osdNext.textContent = (ch.nextProgrammes && ch.nextProgrammes[0]) ? `A seguir: ${ch.nextProgrammes[0].t}` : 'A seguir: Programação Normal';
+
+    // Classificação indicativa inteligente
+    if (osdRating) {
+      const cat = (ch.categoryLabel || '').toLowerCase();
+      if (cat.includes('infantil') || cat.includes('desenho')) {
+        osdRating.textContent = 'L';
+        osdRating.style.background = '#2e7d32';
+      } else if (cat.includes('filme') || cat.includes('série') || cat.includes('terror')) {
+        osdRating.textContent = '14';
+        osdRating.style.background = '#e65100';
+      } else if (cat.includes('esporte') || cat.includes('aberto') || cat.includes('notícia')) {
+        osdRating.textContent = '10';
+        osdRating.style.background = '#0277bd';
+      } else {
+        osdRating.textContent = '12';
+        osdRating.style.background = '#f57f17';
+      }
     }
+
+    // 3. Coluna 2: Guia de Programação EPG
+    const osdNow = document.getElementById('tvOsdNow');
+    const osdTimeRange = document.getElementById('tvOsdTimeRange');
+    const osdProgFill = document.getElementById('tvOsdProgFill');
+    const osdProgStatus = document.getElementById('tvOsdProgStatus');
+    const osdProgRemaining = document.getElementById('tvOsdProgRemaining');
+    const osdSynopsis = document.getElementById('tvOsdSynopsis');
+    const osdNext = document.getElementById('tvOsdNext');
+
+    // Título do programa em exibição
+    let nowTitle = ch.nowTitle;
+    if (!nowTitle || nowTitle.trim() === '') {
+      const cat = (ch.categoryLabel || '').toLowerCase();
+      if (cat.includes('esporte') || cat.includes('futebol')) nowTitle = 'Transmissão Esportiva Ao Vivo HD';
+      else if (cat.includes('filme') || cat.includes('cinema')) nowTitle = 'Sessão Especial de Cinema HD';
+      else if (cat.includes('notícia') || cat.includes('jornal')) nowTitle = 'Jornalismo em Tempo Real 24h';
+      else if (cat.includes('infantil')) nowTitle = 'Desenhos e Séries Animadas';
+      else nowTitle = 'Programação Ao Vivo HD';
+    }
+    if (osdNow) osdNow.textContent = nowTitle;
+
+    // Cálculo dinâmico de horários realistas (blocos de programação)
+    const now = new Date();
+    const curMinutes = now.getHours() * 60 + now.getMinutes();
+    const blockMinutes = 60;
+    const blockStartMinutes = Math.floor(curMinutes / blockMinutes) * blockMinutes;
+    const blockEndMinutes = blockStartMinutes + blockMinutes;
+
+    const startH = String(Math.floor(blockStartMinutes / 60) % 24).padStart(2, '0');
+    const startM = String(blockStartMinutes % 60).padStart(2, '0');
+    const endH = String(Math.floor(blockEndMinutes / 60) % 24).padStart(2, '0');
+    const endM = String(blockEndMinutes % 60).padStart(2, '0');
+
+    if (osdTimeRange) osdTimeRange.textContent = `${startH}:${startM} • ${endH}:${endM}`;
+
+    // Progresso e tempo restante
+    const elapsed = curMinutes - blockStartMinutes;
+    const progress = Math.max(15, Math.min(92, Math.round((elapsed / blockMinutes) * 100)));
+    const remainingMinutes = Math.max(5, blockEndMinutes - curMinutes);
+
+    if (osdProgFill) osdProgFill.style.width = `${progress}%`;
+    if (osdProgStatus) osdProgStatus.textContent = `Em andamento (${progress}%)`;
+    if (osdProgRemaining) osdProgRemaining.textContent = `Restam ~${remainingMinutes} min`;
+
+    // Sinopse
+    if (osdSynopsis) {
+      if (ch.synopsis) {
+        osdSynopsis.textContent = ch.synopsis;
+      } else {
+        osdSynopsis.textContent = `Assista à transmissão digital oficial de ${ch.name} em alta resolução 1080p, com som estéreo Dolby e sinal contínuo sem interrupções.`;
+      }
+    }
+
+    // Próximo programa
+    if (osdNext) {
+      if (ch.nextProgrammes && ch.nextProgrammes.length > 0 && ch.nextProgrammes[0].t) {
+        osdNext.textContent = `${endH}:${endM} • ${ch.nextProgrammes[0].t}`;
+      } else {
+        osdNext.textContent = `${endH}:${endM} • Continuação da Grade Normal de ${ch.name}`;
+      }
+    }
+
+    wireTvOsdButtons();
   }
 
-  function triggerTvOsd() {
+  function triggerTvOsd(duration = 5000) {
     if (tvOsdTimer) clearTimeout(tvOsdTimer);
-    tvOsd.classList.remove('hidden');
+    const topBadge = document.getElementById('tvTopChannelBadge');
+    if (tvOsd) tvOsd.classList.remove('hidden');
+    if (topBadge) topBadge.classList.remove('hidden');
+
     tvOsdTimer = setTimeout(() => {
-      tvOsd.classList.add('hidden');
-    }, 3800);
+      if (tvOsd) tvOsd.classList.add('hidden');
+      if (topBadge) topBadge.classList.add('hidden');
+    }, duration);
   }
 
   // Sincroniza dinamicamente a posição e dimensões do PiP com o frame dentro da Central (acompanha a rolagem da página)
@@ -7538,9 +8051,24 @@ header.tv-header {
         tvZap(1); // próximo canal
         return;
       }
-      if (key === 'Enter') {
+      if (key === 'Enter' || key === ' ') {
         e.preventDefault();
-        toggleTvDrawer(); // abre guia EPG
+        if (tvOsd && tvOsd.classList.contains('hidden')) {
+          triggerTvOsd(6000);
+        } else {
+          toggleTvDrawer(); // abre guia EPG
+        }
+        return;
+      }
+      if (key === 'i' || key === 'I' || key === 'Info' || key === 'Guide') {
+        e.preventDefault();
+        if (tvOsd && !tvOsd.classList.contains('hidden')) {
+          tvOsd.classList.add('hidden');
+          const topBadge = document.getElementById('tvTopChannelBadge');
+          if (topBadge) topBadge.classList.add('hidden');
+        } else {
+          triggerTvOsd(7000);
+        }
         return;
       }
       if (key === 'Escape' || key === 'Back' || e.keyCode === 4) {
