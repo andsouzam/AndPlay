@@ -7353,13 +7353,85 @@ body.tv-mode > #videoModal {
     }
   }
 
-  // Tratamento de Teclas do Navegador (Setas do teclado / controle remoto)
+  // ============================================================
+  // CONTROLE REMOTO / TECLADO COMPLETO (Setas, Enter, Backspace, Ctrl)
+  // Funciona tanto no App Android quanto no navegador web (modo TV)
+  // ============================================================
   window.addEventListener('keydown', (e) => {
     if (!isTvMode) return;
     const key = e.key;
 
-    // Se estiver em tela cheia assistindo TV
+    // ---- Tecla auxiliar: Ctrl = Menu/Guia ----
+    if (key === 'Control') {
+      e.preventDefault();
+      if (tvCurrentMode === 'fullscreen') {
+        toggleTvDrawer();
+      } else if (tvCurrentMode === 'central') {
+        // Ctrl na central: foca no PiP
+        const pip = document.getElementById('tvPipCard');
+        if (pip) pip.focus();
+      } else if (tvCurrentMode === 'vod') {
+        const back = document.getElementById('tvVodBack');
+        if (back) back.focus();
+      }
+      return;
+    }
+
+    // ---- Backspace = Voltar (como Escape / botão Back do Android) ----
+    if (key === 'Backspace') {
+      e.preventDefault();
+      if (tvCurrentMode === 'fullscreen') {
+        if (!tvDrawer.classList.contains('closed')) {
+          tvDrawer.classList.add('closed');
+        } else {
+          setTvViewMode('central');
+        }
+      } else if (tvCurrentMode === 'vod') {
+        setTvViewMode('central');
+      }
+      // Na central, Backspace não faz nada (evita navegação do browser)
+      return;
+    }
+
+    // ====================================================
+    // TELA CHEIA (zapping + drawer EPG)
+    // ====================================================
     if (tvCurrentMode === 'fullscreen') {
+      // Drawer EPG aberta: navegação dentro da lista de canais
+      if (!tvDrawer.classList.contains('closed')) {
+        const items = Array.from(tvDrawer.querySelectorAll('.tv-drawer-item'));
+        const focused = document.activeElement;
+        const curIdx = items.indexOf(focused);
+
+        if (key === 'ArrowDown') {
+          e.preventDefault();
+          if (curIdx < items.length - 1) items[curIdx + 1].focus();
+          return;
+        }
+        if (key === 'ArrowUp') {
+          e.preventDefault();
+          if (curIdx > 0) items[curIdx - 1].focus();
+          else {
+            // Vai para as pills de categoria
+            const cats = Array.from(tvDrawer.querySelectorAll('.tv-epg-cat-pill'));
+            if (cats.length) cats[0].focus();
+          }
+          return;
+        }
+        if (key === 'ArrowLeft' || key === 'Escape' || key === 'Back' || e.keyCode === 4 || key === 'Backspace') {
+          e.preventDefault();
+          tvDrawer.classList.add('closed');
+          return;
+        }
+        if (key === 'Enter') {
+          e.preventDefault();
+          if (focused && focused.classList.contains('tv-drawer-item')) focused.click();
+          return;
+        }
+        return; // consume outras teclas enquanto drawer está aberta
+      }
+
+      // Drawer fechada: zapping e controles da tela cheia
       if (key === 'ArrowUp' || key === 'ChannelUp') {
         e.preventDefault();
         tvZap(-1);
@@ -7370,9 +7442,19 @@ body.tv-mode > #videoModal {
         tvZap(1);
         return;
       }
+      if (key === 'ArrowLeft') {
+        e.preventDefault();
+        tvZap(-1); // canal anterior
+        return;
+      }
+      if (key === 'ArrowRight') {
+        e.preventDefault();
+        tvZap(1); // próximo canal
+        return;
+      }
       if (key === 'Enter') {
         e.preventDefault();
-        toggleTvDrawer();
+        toggleTvDrawer(); // abre guia EPG
         return;
       }
       if (key === 'Escape' || key === 'Back' || e.keyCode === 4) {
@@ -7382,11 +7464,187 @@ body.tv-mode > #videoModal {
       }
     }
 
-    // Se estiver no VOD
+    // ====================================================
+    // CENTRAL (hub principal - navegação D-Pad no menu)
+    // ====================================================
+    if (tvCurrentMode === 'central') {
+      const focused = document.activeElement;
+
+      // IDs dos itens focáveis na Central, em ordem de navegação lógica:
+      // Linha 1: PiP | Menu grid (tvNavLive, tvNavSports, tvNavMovies, tvNavSeries, tvNavEpg, tvNavSync)
+      // Linha 2: Canal cards do rail
+      const menuOrder = ['tvPipCard', 'tvNavLive', 'tvNavSports', 'tvNavMovies', 'tvNavSeries', 'tvNavEpg', 'tvNavSync'];
+      const menuItems = menuOrder.map(id => document.getElementById(id)).filter(Boolean);
+      const menuIdx = menuItems.indexOf(focused);
+
+      if (menuIdx !== -1) {
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          if (menuIdx + 1 < menuItems.length) menuItems[menuIdx + 1].focus();
+          return;
+        }
+        if (key === 'ArrowLeft') {
+          e.preventDefault();
+          if (menuIdx > 0) menuItems[menuIdx - 1].focus();
+          return;
+        }
+        if (key === 'ArrowDown') {
+          e.preventDefault();
+          // Desce para o rail de canais
+          const rail = document.getElementById('tvChannelsRail');
+          if (rail) {
+            const first = rail.querySelector('.tv-channel-card');
+            if (first) { first.focus(); return; }
+          }
+          // Desce para o rail de esportes
+          const sRail = document.getElementById('tvSportsRail');
+          if (sRail) { const first = sRail.querySelector('.tv-match-card'); if (first) { first.focus(); return; } }
+          return;
+        }
+        if (key === 'ArrowUp') {
+          e.preventDefault();
+          // já está no topo da central, foca no PiP
+          const pip = document.getElementById('tvPipCard');
+          if (pip) pip.focus();
+          return;
+        }
+        if (key === 'Enter') {
+          // deixa o click normal do elemento acontecer
+          return;
+        }
+        return;
+      }
+
+      // Navegação dentro dos rails horizontais da Central
+      const allRailCards = Array.from(document.querySelectorAll(
+        '#tvChannelsRail .tv-channel-card, #tvSportsRail .tv-match-card, #tvMoviesRail .tv-vod-card'
+      ));
+      const railIdx = allRailCards.indexOf(focused);
+
+      if (railIdx !== -1) {
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          if (railIdx + 1 < allRailCards.length) allRailCards[railIdx + 1].focus();
+          return;
+        }
+        if (key === 'ArrowLeft') {
+          e.preventDefault();
+          if (railIdx > 0) allRailCards[railIdx - 1].focus();
+          return;
+        }
+        if (key === 'ArrowUp') {
+          e.preventDefault();
+          // Sobe para o menu grid
+          const pip = document.getElementById('tvPipCard');
+          if (pip) pip.focus();
+          return;
+        }
+        if (key === 'ArrowDown') {
+          e.preventDefault();
+          // Tenta descer para próximo rail
+          const railCards = allRailCards;
+          if (railIdx + 1 < railCards.length) railCards[railIdx + 1].focus();
+          return;
+        }
+        if (key === 'Enter') {
+          // deixa o click normal acontecer
+          return;
+        }
+        return;
+      }
+
+      // Fallback: qualquer seta → foca no PiP
+      if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'ArrowLeft' || key === 'ArrowRight') {
+        e.preventDefault();
+        const pip = document.getElementById('tvPipCard');
+        if (pip) pip.focus();
+        return;
+      }
+    }
+
+    // ====================================================
+    // VOD (grade de filmes / séries)
+    // ====================================================
     if (tvCurrentMode === 'vod') {
+      const focused = document.activeElement;
+
       if (key === 'Escape' || key === 'Back' || e.keyCode === 4) {
         e.preventDefault();
         setTvViewMode('central');
+        return;
+      }
+
+      // Navegação na grade VOD
+      const vodCards = Array.from(document.querySelectorAll('#tvVodRailsContainer .tv-vod-poster-card'));
+      const vodIdx = vodCards.indexOf(focused);
+
+      if (vodIdx !== -1) {
+        // Calcula quantas colunas tem a grade
+        const grid = document.querySelector('#tvVodRailsContainer .tv-vod-grid');
+        let cols = 5;
+        if (grid) {
+          const gridW = grid.clientWidth;
+          const cardW = (vodCards[0] && vodCards[0].offsetWidth) || 140;
+          cols = Math.max(1, Math.round(gridW / (cardW + 16)));
+        }
+
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          if (vodIdx + 1 < vodCards.length) vodCards[vodIdx + 1].focus();
+          return;
+        }
+        if (key === 'ArrowLeft') {
+          e.preventDefault();
+          if (vodIdx > 0) vodCards[vodIdx - 1].focus();
+          else {
+            // Vai para o botão Voltar
+            const back = document.getElementById('tvVodBack');
+            if (back) back.focus();
+          }
+          return;
+        }
+        if (key === 'ArrowDown') {
+          e.preventDefault();
+          if (vodIdx + cols < vodCards.length) vodCards[vodIdx + cols].focus();
+          return;
+        }
+        if (key === 'ArrowUp') {
+          e.preventDefault();
+          if (vodIdx - cols >= 0) vodCards[vodIdx - cols].focus();
+          else {
+            // Sobe para o botão Voltar
+            const back = document.getElementById('tvVodBack');
+            if (back) back.focus();
+          }
+          return;
+        }
+        if (key === 'Enter') {
+          e.preventDefault();
+          focused.click();
+          return;
+        }
+        return;
+      }
+
+      // Foco no botão Voltar do VOD
+      const backBtn = document.getElementById('tvVodBack');
+      if (focused === backBtn) {
+        if (key === 'ArrowDown' || key === 'ArrowRight') {
+          e.preventDefault();
+          if (vodCards.length) vodCards[0].focus();
+          return;
+        }
+        if (key === 'Enter') {
+          e.preventDefault();
+          setTvViewMode('central');
+          return;
+        }
+      }
+
+      // Fallback: qualquer seta → foca no primeiro card
+      if (key === 'ArrowDown' || key === 'ArrowRight') {
+        e.preventDefault();
+        if (vodCards.length) vodCards[0].focus();
         return;
       }
     }
