@@ -6760,9 +6760,8 @@ body.tv-mode > #videoModal {
     }
 
 
-<!-- SCRIPT TV CABO CONTROLLER -->
-<script>
-(function() {
+    // ==================== SCRIPT TV CABO CONTROLLER ====================
+    (function() {
   // Verificação do modo TV
   const isTvParam = window.location.search.includes('mode=tv');
   const isTvAgent = navigator.userAgent.includes('AndPlayTV') || navigator.userAgent.includes('SmartTV');
@@ -7373,7 +7372,6 @@ body.tv-mode > #videoModal {
   });
 
 })();
-</script>
 
     init().catch(err => {
       console.error('Initialization error:', err);
