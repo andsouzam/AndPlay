@@ -1637,39 +1637,51 @@ header.tv-header {
 /* Grade de Menu */
 .tv-menu-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   grid-template-rows: repeat(2, 1fr);
   gap: 14px;
+}
+.tv-menu-grid > .tv-menu-item:nth-child(1),
+.tv-menu-grid > .tv-menu-item:nth-child(2),
+.tv-menu-grid > .tv-menu-item:nth-child(3) {
+  grid-column: span 2;
+}
+.tv-menu-grid > .tv-menu-item:nth-child(4),
+.tv-menu-grid > .tv-menu-item:nth-child(5) {
+  grid-column: span 3;
 }
 .tv-menu-item {
   background: rgba(255, 255, 255, 0.04);
   border: 2px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
-  padding: 18px 16px;
+  padding: 18px 14px;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
+  text-align: center;
   cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s ease, border-color 0.2s ease;
 }
 .tv-menu-item:focus, .tv-menu-item.focused {
   background: rgba(255, 193, 7, 0.16) !important;
   border-color: #ffc107 !important;
+  transform: scale(1.04);
   box-shadow: 0 0 22px rgba(255, 193, 7, 0.5) !important;
 }
 .tv-menu-icon {
-  font-size: 28px;
-  margin-bottom: 6px;
+  font-size: 32px;
+  margin-bottom: 8px;
+  line-height: 1;
 }
 .tv-menu-label {
   font-size: 16px;
   font-weight: 800;
   color: #fff;
+  letter-spacing: 0.8px;
 }
 .tv-menu-sub {
-  font-size: 11px;
-  color: #888;
-  font-weight: 600;
-  margin-top: 2px;
+  display: none;
 }
 
 /* Trilhos */
@@ -2685,33 +2697,23 @@ header.tv-header {
         <div class="tv-menu-grid">
           <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavLive">
             <div class="tv-menu-icon">📺</div>
-            <div class="tv-menu-label">TV Ao Vivo</div>
-            <div class="tv-menu-sub">Zapping de Canais</div>
+            <div class="tv-menu-label">TV</div>
           </div>
           <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavSports">
             <div class="tv-menu-icon">⚽</div>
-            <div class="tv-menu-label">Jogos de Hoje</div>
-            <div class="tv-menu-sub">Partidas & Campeonatos</div>
+            <div class="tv-menu-label">JOGOS</div>
           </div>
           <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavMovies">
             <div class="tv-menu-icon">🎬</div>
-            <div class="tv-menu-label">Filmes VOD</div>
-            <div class="tv-menu-sub">Cinema em Casa</div>
+            <div class="tv-menu-label">FILMES</div>
           </div>
           <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavSeries">
-            <div class="tv-menu-icon">🧸</div>
-            <div class="tv-menu-label">Séries VOD</div>
-            <div class="tv-menu-sub">Temporadas & Episódios</div>
+            <div class="tv-menu-icon">🍿</div>
+            <div class="tv-menu-label">SÉRIES</div>
           </div>
           <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavEpg">
             <div class="tv-menu-icon">📋</div>
-            <div class="tv-menu-label">Guia EPG</div>
-            <div class="tv-menu-sub">Grade Completa</div>
-          </div>
-          <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavSync">
-            <div class="tv-menu-icon">⚡</div>
-            <div class="tv-menu-label">Sincronizar</div>
-            <div class="tv-menu-sub">Atualizar Sinais</div>
+            <div class="tv-menu-label">GUIA</div>
           </div>
         </div>
       </div>
@@ -2838,7 +2840,7 @@ header.tv-header {
     <div id="tvVodView" class="tv-vod-view" style="display: none;">
       <div class="tv-vod-top-bar">
         <button class="tv-vod-back-btn tv-focusable" tabindex="0" id="tvVodBack">← VOLTAR À CENTRAL</button>
-        <div class="tv-vod-title" id="tvVodSectionTitle">🎬 Filmes Sob Demanda</div>
+        <div class="tv-vod-title" id="tvVodSectionTitle">🎬 Filmes</div>
         <select id="tvVodCatSelect" class="tv-vod-cat-select tv-focusable" tabindex="0" title="Filtrar Categoria" style="display:none;">
           <option value="ALL">🌟 Todas as Categorias</option>
         </select>
@@ -4949,20 +4951,24 @@ header.tv-header {
     async function loadFullMovies() {
       if (fullMoviesCache && fullMoviesCache.length > 0) {
         currentMediaList = fullMoviesCache;
-        if (currentMode === 'movies') applyFilterAndRender('');
+        if (currentMode === 'movies' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
         return fullMoviesCache;
       }
       if (_loadingMoviesPromise) return _loadingMoviesPromise;
 
       _loadingMoviesPromise = (async () => {
-        showLoading('Carregando catálogo de filmes e recuperando capas 4K...');
+        if (!document.body.classList.contains('tv-mode')) {
+          showLoading('Carregando catálogo de filmes e recuperando capas 4K...');
+        }
         try {
           const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_vod_streams`);
           const rawMovies = await res.json();
+          const rawList = Array.isArray(rawMovies) ? rawMovies : [];
 
           // Ocultar itens pertencentes à categoria DEMO
-          const demoCatIds = new Set(movieCategories.filter(c => c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
-          const validMovies = rawMovies.filter(m => !demoCatIds.has(String(m.category_id)) && (!m.name || m.name.toLowerCase().trim() !== 'demo'));
+          const catArr = Array.isArray(movieCategories) ? movieCategories : [];
+          const demoCatIds = new Set(catArr.filter(c => c && c.category_name && typeof c.category_name === 'string' && c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
+          const validMovies = rawList.filter(m => !demoCatIds.has(String(m.category_id)) && (!m.name || m.name.toLowerCase().trim() !== 'demo'));
 
           // Ordenar por data de adição (mais recentes primeiro)
           validMovies.sort((a, b) => {
@@ -4972,32 +4978,22 @@ header.tv-header {
             return Number(b.stream_id || 0) - Number(a.stream_id || 0);
           });
 
-          // Limpeza preventiva de vínculos antigos e conflitantes no navegador do usuário
+          // Cache de overrides de usuário do localStorage em memória (elimina 66.000 chamadas síncronas que travam a TV)
+          const userPosterOverrides = new Map();
+          const userNameOverrides = new Map();
           try {
-            const badKeys = ['andplay_match_movie_time'];
-            badKeys.forEach(k => {
-              const v = localStorage.getItem(k);
-              if (v && v.includes('tt2194499')) localStorage.removeItem(k);
-            });
-            [6071584, 6071588, 6071596, 6072337].forEach(sid => {
-              const n = localStorage.getItem(`andplay_name_override_${sid}`);
-              if (n && n.toLowerCase().includes('about time')) {
-                localStorage.removeItem(`andplay_name_override_${sid}`);
-                localStorage.removeItem(`andplay_poster_override_${sid}`);
-              }
-            });
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              if (!k) continue;
+              if (k.startsWith('andplay_poster_override_')) userPosterOverrides.set(k.replace('andplay_poster_override_', ''), localStorage.getItem(k));
+              else if (k.startsWith('andplay_name_override_')) userNameOverrides.set(k.replace('andplay_name_override_', ''), localStorage.getItem(k));
+            }
           } catch (e) {}
 
           // Aplica correções automáticas de metadados e customizações salvas pelo usuário
           validMovies.forEach(m => {
             const override = KNOWN_STREAM_CORRECTIONS[m.stream_id];
             if (override) {
-              // Limpa overrides do usuário em conflito com a correção oficial
-              try {
-                localStorage.removeItem(`andplay_poster_override_${m.stream_id}`);
-                localStorage.removeItem(`andplay_name_override_${m.stream_id}`);
-              } catch (e) {}
-
               if (override.name) m.name = override.name;
               if (override.year) m.year = override.year;
               if (override.originalName) m.originalName = override.originalName;
@@ -5006,12 +5002,13 @@ header.tv-header {
                 m.poster = override.poster;
               }
             } else {
-              const userPoster = localStorage.getItem(`andplay_poster_override_${m.stream_id}`);
+              const sidStr = String(m.stream_id);
+              const userPoster = userPosterOverrides.get(sidStr);
               if (userPoster) {
                 m.stream_icon = userPoster;
                 m.poster = userPoster;
               }
-              const userName = localStorage.getItem(`andplay_name_override_${m.stream_id}`);
+              const userName = userNameOverrides.get(sidStr);
               if (userName) {
                 m.name = userName;
               }
@@ -5040,13 +5037,13 @@ header.tv-header {
           fullMoviesCache = groupMoviesByTitle(validMovies);
 
           currentMediaList = fullMoviesCache;
-          elements.categorySelect.value = 'ALL';
-          elements.resetCategoryBtn.style.display = 'none';
-          elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
-          if (currentMode === 'movies') applyFilterAndRender('');
+          if (elements.categorySelect) elements.categorySelect.value = 'ALL';
+          if (elements.resetCategoryBtn) elements.resetCategoryBtn.style.display = 'none';
+          if (elements.categoryLabel) elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
+          if (currentMode === 'movies' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
           return fullMoviesCache;
         } catch (err) {
-          elements.loading.innerHTML = `<p style="color:#e50914;">Erro ao carregar filmes: ${err.message}</p>`;
+          if (elements.loading) elements.loading.innerHTML = `<p style="color:#e50914;">Erro ao carregar filmes: ${err.message}</p>`;
           throw err;
         } finally {
           hideLoading();
@@ -5060,20 +5057,24 @@ header.tv-header {
     async function loadFullSeries() {
       if (fullSeriesCache && fullSeriesCache.length > 0) {
         currentMediaList = fullSeriesCache;
-        if (currentMode === 'series') applyFilterAndRender('');
+        if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
         return fullSeriesCache;
       }
       if (_loadingSeriesPromise) return _loadingSeriesPromise;
 
       _loadingSeriesPromise = (async () => {
-        showLoading('Carregando catálogo de séries completas...');
+        if (!document.body.classList.contains('tv-mode')) {
+          showLoading('Carregando catálogo de séries completas...');
+        }
         try {
           const res = await fetch(`${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=get_series`);
           const rawSeries = await res.json();
+          const rawList = Array.isArray(rawSeries) ? rawSeries : [];
 
           // Ocultar itens pertencentes à categoria DEMO
-          const demoCatIds = new Set(seriesCategories.filter(c => c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
-          const validSeries = rawSeries.filter(s => !demoCatIds.has(String(s.category_id)) && (!s.name || s.name.toLowerCase().trim() !== 'demo'));
+          const catArr = Array.isArray(seriesCategories) ? seriesCategories : [];
+          const demoCatIds = new Set(catArr.filter(c => c && c.category_name && typeof c.category_name === 'string' && c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
+          const validSeries = rawList.filter(s => !demoCatIds.has(String(s.category_id)) && (!s.name || s.name.toLowerCase().trim() !== 'demo'));
 
           // Ordenar por data de adição / atualização (mais recentes primeiro)
           validSeries.sort((a, b) => {
@@ -5087,13 +5088,13 @@ header.tv-header {
           fullSeriesCache = groupSeriesByTitle(validSeries);
 
           currentMediaList = fullSeriesCache;
-          elements.categorySelect.value = 'ALL';
-          elements.resetCategoryBtn.style.display = 'none';
-          elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
-          if (currentMode === 'series') applyFilterAndRender('');
+          if (elements.categorySelect) elements.categorySelect.value = 'ALL';
+          if (elements.resetCategoryBtn) elements.resetCategoryBtn.style.display = 'none';
+          if (elements.categoryLabel) elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
+          if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
           return fullSeriesCache;
         } catch (err) {
-          elements.loading.innerHTML = `<p style="color:#e50914;">Erro ao carregar séries: ${err.message}</p>`;
+          if (elements.loading) elements.loading.innerHTML = `<p style="color:#e50914;">Erro ao carregar séries: ${err.message}</p>`;
           throw err;
         } finally {
           hideLoading();
@@ -9169,11 +9170,10 @@ header.tv-header {
       });
     }
 
-    // Botões de Ação da Central
+    // Botões de Ação da Central (Enter é acionado de forma unificada pelo keydown da central)
     const btnLive = document.getElementById('tvNavLive');
     if (btnLive) {
       btnLive.addEventListener('click', () => setTvViewMode('fullscreen'));
-      btnLive.addEventListener('keydown', (e) => { if (e.key === 'Enter') setTvViewMode('fullscreen'); });
     }
 
     const btnSports = document.getElementById('tvNavSports');
@@ -9182,13 +9182,10 @@ header.tv-header {
         const rail = document.getElementById('tvSportsRail');
         if (rail) {
           const first = rail.querySelector('.tv-match-card');
-          if (first) first.focus();
-        }
-      });
-      btnSports.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          const rail = document.getElementById('tvSportsRail');
-          if (rail) { const first = rail.querySelector('.tv-match-card'); if (first) first.focus(); }
+          if (first) {
+            first.focus();
+            first.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+          }
         }
       });
     }
@@ -9196,13 +9193,11 @@ header.tv-header {
     const btnMovies = document.getElementById('tvNavMovies');
     if (btnMovies) {
       btnMovies.addEventListener('click', () => openTvVodExplorer('movies'));
-      btnMovies.addEventListener('keydown', (e) => { if (e.key === 'Enter') openTvVodExplorer('movies'); });
     }
 
     const btnSeries = document.getElementById('tvNavSeries');
     if (btnSeries) {
       btnSeries.addEventListener('click', () => openTvVodExplorer('series'));
-      btnSeries.addEventListener('keydown', (e) => { if (e.key === 'Enter') openTvVodExplorer('series'); });
     }
 
     const btnEpg = document.getElementById('tvNavEpg');
@@ -9210,28 +9205,6 @@ header.tv-header {
       btnEpg.addEventListener('click', () => {
         setTvViewMode('fullscreen');
         toggleTvDrawer();
-      });
-      btnEpg.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          setTvViewMode('fullscreen');
-          toggleTvDrawer();
-        }
-      });
-    }
-
-    const btnSync = document.getElementById('tvNavSync');
-    if (btnSync) {
-      btnSync.addEventListener('click', () => {
-        if (typeof fetchLiveChannelsFromApi === 'function') fetchLiveChannelsFromApi();
-        loadTvSportsRail();
-        tvTuneChannel(tvCurrentIdx, true);
-      });
-      btnSync.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          if (typeof fetchLiveChannelsFromApi === 'function') fetchLiveChannelsFromApi();
-          loadTvSportsRail();
-          tvTuneChannel(tvCurrentIdx, true);
-        }
       });
     }
 
@@ -9258,8 +9231,10 @@ header.tv-header {
 
   // VOD Explorer (Filmes & Séries com Filtro por Categoria)
   let _tvVodCurrentCat = 'ALL';
+  let _tvVodLoadToken = 0;
 
   async function openTvVodExplorer(type, targetCatId = 'ALL') {
+    const currentToken = ++_tvVodLoadToken;
     tvVodMode = type;
     tvPlayingSeriesMeta = null;
     tvCurrentSeriesItem = null;
@@ -9269,12 +9244,12 @@ header.tv-header {
     if (backBtn) backBtn.textContent = '← VOLTAR À CENTRAL';
 
     const titleEl = document.getElementById('tvVodSectionTitle');
-    if (titleEl) titleEl.textContent = (type === 'movies') ? '🎬 Filmes Sob Demanda (Cinema)' : '📺 Séries Sob Demanda';
+    if (titleEl) titleEl.textContent = (type === 'movies') ? '🎬 Filmes' : '📺 Séries';
     setTvViewMode('vod');
 
     const container = document.getElementById('tvVodRailsContainer');
     if (!container) return;
-    container.innerHTML = '<div style="color:#ffc107; font-size:16px; font-weight:700; padding:40px; text-align:center;"><div class="spinner" style="margin: 0 auto 15px;"></div>Carregando catálogo para TV...</div>';
+    container.innerHTML = `<div style="color:#ffc107; font-size:16px; font-weight:700; padding:40px; text-align:center;"><div class="spinner" style="margin: 0 auto 15px;"></div>Carregando catálogo de ${type === 'movies' ? 'filmes' : 'séries'}...</div>`;
 
     let allItems = (type === 'movies') ? fullMoviesCache : fullSeriesCache;
     if (!allItems || allItems.length === 0) {
@@ -9287,13 +9262,16 @@ header.tv-header {
           allItems = await loadFullSeries();
         }
       } catch (err) {
+        if (currentToken !== _tvVodLoadToken) return;
         container.innerHTML = `<div style="color:#e50914; padding:30px; text-align:center;">Erro ao carregar catálogo: ${err.message}<br><button class="tv-vod-back-btn tv-focusable" style="margin-top:14px;" onclick="openTvVodExplorer('${type}')">Tentar Novamente</button></div>`;
         return;
       }
     }
 
+    if (currentToken !== _tvVodLoadToken) return;
+
     if (!allItems || allItems.length === 0) {
-      container.innerHTML = '<div style="color:#888; font-size:15px; padding:30px; text-align:center;">Nenhum título encontrado no catálogo.</div>';
+      container.innerHTML = `<div style="color:#888; font-size:15px; padding:30px; text-align:center;">Nenhum título encontrado no catálogo.<br><button class="tv-vod-back-btn tv-focusable" style="margin-top:14px;" onclick="openTvVodExplorer('${type}')">Tentar Novamente</button></div>`;
       return;
     }
 
@@ -9306,7 +9284,7 @@ header.tv-header {
     container.innerHTML = '';
 
     const categories = (type === 'movies') ? (movieCategories || []) : (seriesCategories || []);
-    const validCategories = categories.filter(c => !c.category_name.toLowerCase().includes('demo'));
+    const validCategories = (Array.isArray(categories) ? categories : []).filter(c => c && c.category_name && !String(c.category_name).toLowerCase().includes('demo'));
 
     // 1. Barra de Categorias Horizontal (Pills para Controle Remoto e Toque)
     const catBar = document.createElement('div');
@@ -9330,7 +9308,7 @@ header.tv-header {
       pill.className = `tv-vod-cat-pill tv-focusable ${activeCatId === cId ? 'active' : ''}`;
       pill.dataset.catId = cId;
       pill.tabIndex = 0;
-      pill.textContent = cat.category_name.replace('⚡', '').trim();
+      pill.textContent = (cat.category_name || '').replace('⚡', '').trim() || 'Categoria';
       pill.addEventListener('click', () => {
         _tvVodCurrentCat = cId;
         renderTvVodContent(type, allItems, cId);
@@ -9348,7 +9326,7 @@ header.tv-header {
       validCategories.forEach(cat => {
         const opt = document.createElement('option');
         opt.value = String(cat.category_id);
-        opt.textContent = cat.category_name.replace('⚡', '').trim();
+        opt.textContent = (cat.category_name || '').replace('⚡', '').trim() || 'Categoria';
         catSelect.appendChild(opt);
       });
       catSelect.value = activeCatId;
@@ -9366,7 +9344,7 @@ header.tv-header {
       return String(item.category_id) === activeCatId;
     });
 
-    if (filtered.length === 0) {
+    if (!filtered || filtered.length === 0) {
       const emptyDiv = document.createElement('div');
       emptyDiv.style.cssText = 'color:#888; font-size:15px; padding:40px; text-align:center;';
       emptyDiv.textContent = 'Nenhum título encontrado nesta categoria.';
@@ -9374,22 +9352,37 @@ header.tv-header {
       return;
     }
 
-    // 3. Renderiza Grade de Posters VOD
+    // 3. Renderiza Grade de Posters VOD (até 120 itens para fluidez máxima)
     const grid = document.createElement('div');
     grid.className = 'tv-vod-grid';
 
-    filtered.slice(0, 80).forEach((item, i) => {
+    filtered.slice(0, 120).forEach((item, i) => {
       const card = document.createElement('div');
       card.className = 'tv-vod-poster-card tv-focusable';
       card.tabIndex = 0;
       const poster = item.poster || item.stream_icon || item.cover || '';
-      card.innerHTML = `
-        <img src="${poster}" alt="${item.name}" loading="lazy" onerror="this.style.opacity='0.2'">
-        <div class="tv-vod-card-info">
-          <div class="tv-vod-card-name">${item.name}</div>
-          <div class="tv-vod-card-year">${item.year || ''} ★ ${item.rating || '7.5'}</div>
-        </div>
-      `;
+      const safeTitle = (item.name || item.title || 'Sem título');
+      const ratingNum = parseFloat(String(item.rating || '').replace(',', '.'));
+      const safeRating = (!isNaN(ratingNum) && ratingNum > 0) ? ratingNum.toFixed(1) : '7.5';
+
+      const img = document.createElement('img');
+      img.src = poster;
+      img.alt = safeTitle;
+      img.loading = 'lazy';
+      img.onerror = function() { this.style.opacity = '0.2'; };
+      card.appendChild(img);
+
+      const infoDiv = document.createElement('div');
+      infoDiv.className = 'tv-vod-card-info';
+      const nameDiv = document.createElement('div');
+      nameDiv.className = 'tv-vod-card-name';
+      nameDiv.textContent = safeTitle;
+      const yearDiv = document.createElement('div');
+      yearDiv.className = 'tv-vod-card-year';
+      yearDiv.textContent = `${item.year || ''} ★ ${safeRating}`;
+      infoDiv.appendChild(nameDiv);
+      infoDiv.appendChild(yearDiv);
+      card.appendChild(infoDiv);
 
       card.addEventListener('focus', () => updateTvVodPreview(item));
 
@@ -9426,6 +9419,7 @@ header.tv-header {
   }
 
   function updateTvVodPreview(item) {
+    if (!item) return;
     const title = document.getElementById('tvVodPreviewTitle');
     const meta = document.getElementById('tvVodPreviewMeta');
     const plot = document.getElementById('tvVodPreviewPlot');
@@ -9434,9 +9428,11 @@ header.tv-header {
 
     if (title) title.textContent = item.name || item.title || '';
     if (meta) {
+      const ratingNum = parseFloat(String(item.rating || '').replace(',', '.'));
+      const ratingBadge = (!isNaN(ratingNum) && ratingNum > 0) ? `★ ${ratingNum.toFixed(1)}` : '';
       const badges = [
         item.year ? `Ano: ${item.year}` : '',
-        item.rating ? `★ ${Number(item.rating).toFixed(1)}` : '',
+        ratingBadge,
         item.genre || ''
       ].filter(Boolean);
       meta.innerHTML = badges.map(b => `<span class="tv-meta-badge">${b}</span>`).join(' ');
@@ -9714,10 +9710,9 @@ header.tv-header {
       const getCards = (railId, selector) => Array.from(document.querySelectorAll(`#${railId} ${selector}`));
 
       const pip = document.getElementById('tvPipCard');
-      const menuIds = ['tvNavLive', 'tvNavSports', 'tvNavMovies', 'tvNavSeries', 'tvNavEpg', 'tvNavSync'];
+      const menuIds = ['tvNavLive', 'tvNavSports', 'tvNavMovies', 'tvNavSeries', 'tvNavEpg'];
       const menuItems = menuIds.map(id => document.getElementById(id)).filter(Boolean);
       const menuIdx = menuItems.indexOf(focused);
-      const MENU_COLS = 3;
 
       const chCards = getCards('tvChannelsRail', '.tv-channel-card');
       const spCards = getCards('tvSportsRail', '.tv-match-card');
@@ -9778,40 +9773,40 @@ header.tv-header {
         return;
       }
 
-      // 2. Zona Menu Grid (2 linhas × 3 colunas)
+      // 2. Zona Menu Grid (5 cards: Linha 1 = TV, JOGOS, FILMES | Linha 2 = SÉRIES, GUIA)
       if (menuIdx !== -1) {
-        const row = Math.floor(menuIdx / MENU_COLS);
-        const col = menuIdx % MENU_COLS;
-
         if (key === 'ArrowRight') {
           e.preventDefault();
-          if (col < MENU_COLS - 1 && menuIdx + 1 < menuItems.length) {
-            menuItems[menuIdx + 1].focus();
-            scrollCentralToTop();
-          }
+          if (menuIdx === 0 && menuItems[1]) menuItems[1].focus();
+          else if (menuIdx === 1 && menuItems[2]) menuItems[2].focus();
+          else if (menuIdx === 3 && menuItems[4]) menuItems[4].focus();
+          scrollCentralToTop();
           return;
         }
         if (key === 'ArrowLeft') {
           e.preventDefault();
-          if (col > 0) {
-            menuItems[menuIdx - 1].focus();
-            scrollCentralToTop();
-          } else if (pip) {
-            pip.focus();
-            scrollCentralToTop();
-          }
+          if (menuIdx === 2 && menuItems[1]) menuItems[1].focus();
+          else if (menuIdx === 1 && menuItems[0]) menuItems[0].focus();
+          else if (menuIdx === 4 && menuItems[3]) menuItems[3].focus();
+          else if ((menuIdx === 0 || menuIdx === 3) && pip) pip.focus();
+          scrollCentralToTop();
           return;
         }
         if (key === 'ArrowDown') {
           e.preventDefault();
-          if (row === 0 && menuIdx + MENU_COLS < menuItems.length) {
-            // Desce para a 2ª linha da grid de menu
-            menuItems[menuIdx + MENU_COLS].focus();
+          if (menuIdx === 0 && menuItems[3]) {
+            menuItems[3].focus();
+            scrollCentralToTop();
+          } else if (menuIdx === 1 && menuItems[3]) {
+            menuItems[3].focus();
+            scrollCentralToTop();
+          } else if (menuIdx === 2 && menuItems[4]) {
+            menuItems[4].focus();
             scrollCentralToTop();
           } else {
             // Sai do menu e desce para o trilho de canais
             if (chCards.length) {
-              const targetCh = Math.min(col, chCards.length - 1);
+              const targetCh = (menuIdx === 4) ? Math.min(2, chCards.length - 1) : 0;
               chCards[targetCh].focus();
               scrollCardIntoView(chCards[targetCh], 'center', 'nearest');
             } else if (spCards.length) {
@@ -9823,9 +9818,11 @@ header.tv-header {
         }
         if (key === 'ArrowUp') {
           e.preventDefault();
-          if (row > 0) {
-            // Sobe para a 1ª linha da grid de menu
-            menuItems[menuIdx - MENU_COLS].focus();
+          if (menuIdx === 3 && menuItems[0]) {
+            menuItems[0].focus();
+            scrollCentralToTop();
+          } else if (menuIdx === 4 && menuItems[2]) {
+            menuItems[2].focus();
             scrollCentralToTop();
           } else if (pip) {
             pip.focus();
