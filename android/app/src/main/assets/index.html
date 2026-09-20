@@ -2754,132 +2754,197 @@
       const events = [];
       const API = 'https://api.reidoscanais.st';
 
-      // 1. API oficial — eventos ao vivo
+      // 1. Busca todos os eventos esportivos da API oficial (ao vivo + jogos de hoje)
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 4000);
-        const res = await fetch(API + '/sports?status=live', {
+        const res = await fetch(`${API}/sports`, {
           signal: controller.signal,
           headers: { 'Accept': 'application/json' }
         });
         clearTimeout(timeoutId);
+
         if (res.ok) {
           const json = await res.json();
-          (json.data || []).forEach(ev => {
-            const title = ev.title || ((ev.teams && ev.teams.home ? ev.teams.home.name : '') + ' x ' + (ev.teams && ev.teams.away ? ev.teams.away.name : '')).trim();
-            if (!title || title === ' x ') return;
-            const homeTeam = (ev.teams && ev.teams.home && ev.teams.home.name) || title.split(/ x | vs /i)[0] || 'Time 1';
-            const awayTeam = (ev.teams && ev.teams.away && ev.teams.away.name) || title.split(/ x | vs /i)[1] || 'Time 2';
+          const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+          list.forEach(ev => {
+            const hasTeams = Boolean(ev.teams && (ev.teams.home || ev.teams.away));
+            const homeName = (ev.teams && ev.teams.home && ev.teams.home.name) ? ev.teams.home.name : '';
+            const awayName = (ev.teams && ev.teams.away && ev.teams.away.name) ? ev.teams.away.name : '';
+            const title = ev.title || (hasTeams ? `${homeName} x ${awayName}` : 'Evento Esportivo');
+            if (!title) return;
+
+            const homeTeam = homeName || title.split(/ x | vs /i)[0]?.trim() || 'Time 1';
+            const awayTeam = awayName || title.split(/ x | vs /i)[1]?.trim() || 'Time 2';
+            const homeLogo = (ev.teams && ev.teams.home && ev.teams.home.logo) ? ev.teams.home.logo : '';
+            const awayLogo = (ev.teams && ev.teams.away && ev.teams.away.logo) ? ev.teams.away.logo : '';
+            const poster = ev.poster || '';
+
             const fallbacks = [];
             if (Array.isArray(ev.embeds)) {
-              ev.embeds.forEach(function(emb, i) {
-                var embUrl = emb.embed_url || '';
-                if (embUrl) fallbacks.push({ name: emb.provider || emb.quality || ('Canal ' + (i+1)), url: embUrl, isEmbed: true });
+              ev.embeds.forEach((emb, i) => {
+                const embUrl = emb.embed_url || '';
+                if (embUrl) {
+                  fallbacks.push({
+                    name: emb.provider || emb.quality || `Opção ${i + 1}`,
+                    url: embUrl,
+                    isEmbed: true
+                  });
+                }
               });
             }
-            if (fallbacks.length === 0) {
-              fallbacks.push({ name: 'Premiere', url: 'https://rdcanais.net/premiere', isEmbed: true });
-              fallbacks.push({ name: 'SporTV', url: 'https://rdcanais.net/sportv', isEmbed: true });
+
+            // Fallback garantido com RDCanais HD (sem anúncios e 100% estável)
+            const catLower = `${ev.category || ''} ${ev.competition || ''} ${title}`.toLowerCase();
+            if (catLower.includes('ufc') || catLower.includes('mma') || catLower.includes('luta') || catLower.includes('boxe')) {
+              fallbacks.push({ name: 'Combate HD', url: 'https://rdcanais.net/combate', isEmbed: true });
+            } else if (catLower.includes('premier') || catLower.includes('champions') || catLower.includes('europa') || catLower.includes('la liga') || catLower.includes('espanh') || catLower.includes('portugal') || catLower.includes('ingl')) {
+              fallbacks.push({ name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true });
+              fallbacks.push({ name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true });
+            } else {
+              fallbacks.push({ name: 'Premiere HD', url: 'https://rdcanais.net/premiere', isEmbed: true });
+              fallbacks.push({ name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true });
             }
-            var matchTime = 'AO VIVO';
+
+            const isLive = ev.status === 'live';
+            let matchTime = isLive ? 'AO VIVO' : 'EM BREVE';
             if (ev.start_timestamp) {
-              var d = new Date(ev.start_timestamp * 1000);
-              matchTime = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+              const d = new Date(ev.start_timestamp * 1000);
+              matchTime = isLive ? 'AO VIVO' : d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
             } else if (ev.start_time) {
-              matchTime = ev.start_time.slice(11,16) || 'AO VIVO';
+              matchTime = isLive ? 'AO VIVO' : (ev.start_time.slice(11, 16) || 'EM BREVE');
             }
+
             events.push({
-              id: 'live_ev_' + (ev.id || Math.random().toString(36).substring(2,9)),
+              id: `live_ev_${ev.id || Math.random().toString(36).substring(2, 9)}`,
               name: title,
               homeTeam: homeTeam,
               awayTeam: awayTeam,
-              homeLogo: (ev.teams && ev.teams.home && ev.teams.home.logo) || ev.poster || '',
-              awayLogo: (ev.teams && ev.teams.away && ev.teams.away.logo) || '',
+              homeLogo: homeLogo,
+              awayLogo: awayLogo,
+              poster: poster,
+              hasTeams: hasTeams,
               matchTime: matchTime,
               league: ev.competition || ev.category || 'Futebol Ao Vivo',
               categoryKey: 'JOGOS',
               categoryLabel: 'Jogos de Hoje',
               isLiveMatch: true,
-              isLiveNow: true,
+              isLiveNow: isLive,
               fallbacks: fallbacks
             });
           });
         }
-      } catch(err) { console.log('api.reidoscanais.st/sports live:', err.message); }
-
-      // 2. Se vazio, upcoming popular
-      if (events.length === 0) {
-        try {
-          const controller2 = new AbortController();
-          const timeoutId2 = setTimeout(() => controller2.abort(), 4000);
-          const res2 = await fetch(API + '/sports?status=upcoming&popular=true', {
-            signal: controller2.signal,
-            headers: { 'Accept': 'application/json' }
-          });
-          clearTimeout(timeoutId2);
-          if (res2.ok) {
-            const json2 = await res2.json();
-            (json2.data || []).forEach(function(ev) {
-              const title = ev.title || ((ev.teams && ev.teams.home ? ev.teams.home.name : '') + ' x ' + (ev.teams && ev.teams.away ? ev.teams.away.name : '')).trim();
-              if (!title || title === ' x ') return;
-              const homeTeam = (ev.teams && ev.teams.home && ev.teams.home.name) || title.split(/ x | vs /i)[0] || 'Time 1';
-              const awayTeam = (ev.teams && ev.teams.away && ev.teams.away.name) || title.split(/ x | vs /i)[1] || 'Time 2';
-              const fallbacks2 = [];
-              if (Array.isArray(ev.embeds)) {
-                ev.embeds.forEach(function(emb, i) {
-                  var embUrl = emb.embed_url || '';
-                  if (embUrl) fallbacks2.push({ name: emb.provider || ('Canal ' + (i+1)), url: embUrl, isEmbed: true });
-                });
-              }
-              if (fallbacks2.length === 0) fallbacks2.push({ name: 'Premiere', url: 'https://rdcanais.net/premiere', isEmbed: true });
-              var matchTime2 = 'EM BREVE';
-              if (ev.start_timestamp) {
-                var d2 = new Date(ev.start_timestamp * 1000);
-                matchTime2 = d2.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-              } else if (ev.start_time) {
-                matchTime2 = ev.start_time.slice(11,16) || 'EM BREVE';
-              }
-              events.push({
-                id: 'live_ev_' + (ev.id || Math.random().toString(36).substring(2,9)),
-                name: title, homeTeam: homeTeam, awayTeam: awayTeam,
-                homeLogo: (ev.teams && ev.teams.home && ev.teams.home.logo) || '',
-                awayLogo: (ev.teams && ev.teams.away && ev.teams.away.logo) || '',
-                matchTime: matchTime2,
-                league: ev.competition || ev.category || 'Futebol',
-                categoryKey: 'JOGOS', categoryLabel: 'Jogos de Hoje',
-                isLiveMatch: true, isLiveNow: false, fallbacks: fallbacks2
-              });
-            });
-          }
-        } catch(err) { console.log('api.reidoscanais.st/sports upcoming:', err.message); }
+      } catch (err) {
+        console.log('api.reidoscanais.st/sports:', err.message);
       }
 
-      // 3. Contingência (API offline)
+      // Ordena: partidas ao vivo no topo, seguidas pelas de hoje
+      events.sort((a, b) => (b.isLiveNow ? 1 : 0) - (a.isLiveNow ? 1 : 0));
+
+      // 2. Grade de contingência com logos reais e canais RDCanais (se API offline ou sem dados)
       if (events.length === 0) {
-        events.push({
-          id: 'match_br_1', name: 'Palmeiras x Flamengo',
-          homeTeam: 'Palmeiras', awayTeam: 'Flamengo',
-          homeLogo: '', awayLogo: '',
-          matchTime: 'AO VIVO', league: 'Brasileirao Serie A',
-          categoryKey: 'JOGOS', categoryLabel: 'Jogos de Hoje',
-          isLiveMatch: true, isLiveNow: true,
-          fallbacks: [
-            { name: 'Premiere', url: 'https://rdcanais.net/premiere', isEmbed: true },
-            { name: 'SporTV', url: 'https://rdcanais.net/sportv', isEmbed: true }
-          ]
-        });
-        events.push({
-          id: 'match_br_2', name: 'Corinthians x Sao Paulo',
-          homeTeam: 'Corinthians', awayTeam: 'Sao Paulo',
-          homeLogo: '', awayLogo: '',
-          matchTime: 'AO VIVO', league: 'Brasileirao Serie A',
-          categoryKey: 'JOGOS', categoryLabel: 'Jogos de Hoje',
-          isLiveMatch: true, isLiveNow: true,
-          fallbacks: [
-            { name: 'Premiere 2', url: 'https://rdcanais.net/premiere2', isEmbed: true },
-            { name: 'SporTV 2', url: 'https://rdcanais.net/sportv2', isEmbed: true }
-          ]
-        });
+        events.push(
+          {
+            id: 'match_br_1',
+            name: 'Grêmio x Palmeiras',
+            homeTeam: 'Grêmio',
+            awayTeam: 'Palmeiras',
+            homeLogo: 'https://cdn.sportmonks.com/images/soccer/teams/13/2925.png',
+            awayLogo: 'https://cdn.sportmonks.com/images/soccer/teams/30/3422.png',
+            poster: '',
+            hasTeams: true,
+            matchTime: 'AO VIVO',
+            league: 'Brasileirão Série A',
+            categoryKey: 'JOGOS',
+            categoryLabel: 'Jogos de Hoje',
+            isLiveMatch: true,
+            isLiveNow: true,
+            fallbacks: [
+              { name: 'Premiere HD', url: 'https://rdcanais.net/premiere', isEmbed: true },
+              { name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true }
+            ]
+          },
+          {
+            id: 'match_br_2',
+            name: 'Palmeiras x Flamengo',
+            homeTeam: 'Palmeiras',
+            awayTeam: 'Flamengo',
+            homeLogo: 'https://cdn.sportmonks.com/images/soccer/teams/30/3422.png',
+            awayLogo: 'https://cdn.sportmonks.com/images/soccer/teams/18/3442.png',
+            poster: '',
+            hasTeams: true,
+            matchTime: 'AO VIVO',
+            league: 'Brasileirão Série A',
+            categoryKey: 'JOGOS',
+            categoryLabel: 'Jogos de Hoje',
+            isLiveMatch: true,
+            isLiveNow: true,
+            fallbacks: [
+              { name: 'Premiere HD', url: 'https://rdcanais.net/premiere', isEmbed: true },
+              { name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true }
+            ]
+          },
+          {
+            id: 'match_br_3',
+            name: 'Corinthians x São Paulo',
+            homeTeam: 'Corinthians',
+            awayTeam: 'São Paulo',
+            homeLogo: 'https://cdn.sportmonks.com/images/soccer/teams/23/3415.png',
+            awayLogo: 'https://cdn.sportmonks.com/images/soccer/teams/13/3437.png',
+            poster: '',
+            hasTeams: true,
+            matchTime: 'AO VIVO',
+            league: 'Brasileirão Série A',
+            categoryKey: 'JOGOS',
+            categoryLabel: 'Jogos de Hoje',
+            isLiveMatch: true,
+            isLiveNow: true,
+            fallbacks: [
+              { name: 'Premiere 2', url: 'https://rdcanais.net/premiere2', isEmbed: true },
+              { name: 'SporTV 2', url: 'https://rdcanais.net/sportv2', isEmbed: true }
+            ]
+          },
+          {
+            id: 'match_br_4',
+            name: 'Manchester City x Sunderland',
+            homeTeam: 'Manchester City',
+            awayTeam: 'Sunderland',
+            homeLogo: 'https://cdn.sportmonks.com/images/soccer/teams/9/9.png',
+            awayLogo: 'https://cdn.sportmonks.com/images/soccer/teams/3/3.png',
+            poster: '',
+            hasTeams: true,
+            matchTime: '10:00',
+            league: 'Premier League',
+            categoryKey: 'JOGOS',
+            categoryLabel: 'Jogos de Hoje',
+            isLiveMatch: true,
+            isLiveNow: false,
+            fallbacks: [
+              { name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true },
+              { name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true }
+            ]
+          },
+          {
+            id: 'match_br_5',
+            name: 'Real Madrid x Barcelona',
+            homeTeam: 'Real Madrid',
+            awayTeam: 'Barcelona',
+            homeLogo: 'https://cdn.sportmonks.com/images/soccer/teams/12/3468.png',
+            awayLogo: 'https://cdn.sportmonks.com/images/soccer/teams/27/83.png',
+            poster: '',
+            hasTeams: true,
+            matchTime: '16:00',
+            league: 'La Liga / Champions League',
+            categoryKey: 'JOGOS',
+            categoryLabel: 'Jogos de Hoje',
+            isLiveMatch: true,
+            isLiveNow: false,
+            fallbacks: [
+              { name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true },
+              { name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true }
+            ]
+          }
+        );
       }
 
       return events;
@@ -3247,8 +3312,14 @@
             const defaultMatchLogo = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23333'/%3E%3Ctext x='32' y='42' text-anchor='middle' fill='%23888' font-size='28'%3E%E2%9A%BD%3C/text%3E%3C/svg%3E`;
             const homeLogo = (item.homeLogo && !item.homeLogo.includes('8Q8Q4zE') && !item.homeLogo.includes('logodetimes.com')) ? item.homeLogo : '';
             const awayLogo = (item.awayLogo && !item.awayLogo.includes('8Q8Q4zE') && !item.awayLogo.includes('logodetimes.com')) ? item.awayLogo : '';
-            card.innerHTML = `
-              <div class="poster-wrap" style="aspect-ratio: 16/9; min-height: 140px; background: #161616;">
+            let posterVisualHtml = '';
+            if (item.poster && (!homeLogo || !awayLogo)) {
+              posterVisualHtml = `
+                <img src="${item.poster}" alt="${escapeHtml(title)}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'">
+                <span class="match-time-pill" style="position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); white-space: nowrap;">${escapeHtml(item.matchTime || 'AO VIVO')}</span>
+              `;
+            } else {
+              posterVisualHtml = `
                 <div class="match-vs-container">
                   <div class="match-teams-row">
                     ${homeLogo ? `<img class="match-team-logo" src="${homeLogo}" alt="${escapeHtml(item.homeTeam || '')}" onerror="this.style.opacity='0.3'">` : `<span class="match-team-logo" style="display:flex;align-items:center;justify-content:center;width:52px;height:52px;font-size:32px;background:#333;border-radius:50%">⚽</span>`}
@@ -3257,6 +3328,12 @@
                   </div>
                   <span class="match-time-pill">${escapeHtml(item.matchTime || 'AO VIVO')}</span>
                 </div>
+              `;
+            }
+
+            card.innerHTML = `
+              <div class="poster-wrap" style="aspect-ratio: 16/9; min-height: 140px; background: #161616; position: relative; overflow: hidden;">
+                ${posterVisualHtml}
                 <div class="${isNow ? 'badge-live' : 'badge-upcoming'}">${isNow ? 'AO VIVO' : 'EM BREVE'}</div>
               </div>
               <div class="card-info">
@@ -3683,7 +3760,7 @@
 
       const title = item.name || item.title || '';
       const category = item.categoryLabel || (item.isLiveMatch ? 'Futebol Ao Vivo' : 'TV Ao Vivo');
-      const logo = (item.logo && !item.logo.includes('8Q8Q4zE') && !item.logo.includes('reidosembeds.online') && !item.logo.includes('logodetimes.com')) ? item.logo : ((item.homeLogo && !item.homeLogo.includes('8Q8Q4zE') && !item.homeLogo.includes('logodetimes.com')) ? item.homeLogo : DEFAULT_LIVE_LOGO);
+      const logo = (item.poster && !item.poster.includes('8Q8Q4zE')) ? item.poster : ((item.logo && !item.logo.includes('8Q8Q4zE') && !item.logo.includes('reidosembeds.online') && !item.logo.includes('logodetimes.com')) ? item.logo : ((item.homeLogo && !item.homeLogo.includes('8Q8Q4zE') && !item.homeLogo.includes('logodetimes.com')) ? item.homeLogo : DEFAULT_LIVE_LOGO));
 
       if (elements.sidebarPoster) {
         elements.sidebarPoster.onerror = () => { elements.sidebarPoster.src = DEFAULT_LIVE_LOGO; };
