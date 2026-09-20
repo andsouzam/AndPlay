@@ -2699,9 +2699,7 @@
         .replace(/^hbo-/, 'hbo');
 
       const fallbacks = [
-        { name: 'RDCanais HD', url: 'https://rdcanais.net/' + rdSlug, isEmbed: true },
-        { name: 'Rei dos Embeds HD', url: raw.embed || ('https://v2.rdembed.sbs/' + raw.id), isEmbed: true },
-        { name: 'BRFLIX TV HD', url: 'https://v3.rdse.site/' + cleanSlug, isEmbed: true }
+        { name: 'RDCanais HD', url: 'https://rdcanais.net/' + rdSlug, isEmbed: true }
       ];
 
       if (KNOWN_NATIVE_STREAMS[raw.id]) {
@@ -2777,23 +2775,19 @@
             const awayTeam = ev.time2 || ev.away_team || title.split(/ x | vs /i)[1] || 'Time 2';
 
             const fallbacks = [];
-            if (ev.play_event_url) {
-              fallbacks.push({ name: 'Servidor 1 HD (Rei dos Embeds)', url: ev.play_event_url, isEmbed: true });
-            }
             if (Array.isArray(ev.embeds)) {
               ev.embeds.forEach((emb, i) => {
                 const embUrl = emb.embed_url || emb.url || emb.link || (typeof emb === 'string' ? emb : '');
-                if (embUrl && typeof embUrl === 'string') {
-                  fallbacks.push({ name: emb.name || `Canal Alternativo ${i + 1}`, url: embUrl, isEmbed: true });
+                if (embUrl && typeof embUrl === 'string' && !embUrl.includes('rdembed.sbs')) {
+                  fallbacks.push({ name: emb.name || emb.provider || `Canal ${i + 1} HD`, url: embUrl, isEmbed: true });
                 }
               });
             }
             if (fallbacks.length === 0) {
               fallbacks.push(
-                { name: 'Premiere 1 HD', url: 'https://v2.rdembed.sbs/premiere', isEmbed: true },
-                { name: 'SporTV HD', url: 'https://v2.rdembed.sbs/sportv', isEmbed: true },
-                { name: 'CazéTV HD', url: 'https://v2.rdembed.sbs/cazetv', isEmbed: true },
-                { name: 'ESPN HD', url: 'https://v2.rdembed.sbs/espn', isEmbed: true }
+                { name: 'Premiere 1 (RDCanais)', url: 'https://rdcanais.net/premiere', isEmbed: true },
+                { name: 'SporTV HD (RDCanais)', url: 'https://rdcanais.net/sportv', isEmbed: true },
+                { name: 'ESPN HD (RDCanais)', url: 'https://rdcanais.net/espn', isEmbed: true }
               );
             }
 
@@ -2855,9 +2849,8 @@
               if (fallbacks.length === 0) {
                 fallbacks.push(
                   { name: 'Premiere 1 (RDCanais)', url: 'https://rdcanais.net/premiere', isEmbed: true },
-                  { name: 'Premiere 1 (Rei dos Embeds)', url: 'https://v2.rdembed.sbs/premiere', isEmbed: true },
                   { name: 'SporTV HD (RDCanais)', url: 'https://rdcanais.net/sportv', isEmbed: true },
-                  { name: 'CazéTV HD', url: 'https://v2.rdembed.sbs/cazetv', isEmbed: true }
+                  { name: 'CazéTV HD', url: 'https://www.youtube-nocookie.com/embed/live_stream?channel=UCjE8gVqE5lM_x3Z_t_9y0YQ', isEmbed: true }
                 );
               }
 
@@ -2901,9 +2894,8 @@
             isLiveNow: true,
             fallbacks: [
               { name: 'Premiere 1 (RDCanais)', url: 'https://rdcanais.net/premiere', isEmbed: true },
-              { name: 'Premiere 1 (Rei dos Embeds)', url: 'https://v2.rdembed.sbs/premiere', isEmbed: true },
               { name: 'SporTV HD (RDCanais)', url: 'https://rdcanais.net/sportv', isEmbed: true },
-              { name: 'CazéTV HD', url: 'https://v2.rdembed.sbs/cazetv', isEmbed: true }
+              { name: 'CazéTV HD', url: 'https://www.youtube-nocookie.com/embed/live_stream?channel=UCjE8gVqE5lM_x3Z_t_9y0YQ', isEmbed: true }
             ]
           },
           {
@@ -2921,9 +2913,8 @@
             isLiveNow: true,
             fallbacks: [
               { name: 'Premiere 2 (RDCanais)', url: 'https://rdcanais.net/premiere2', isEmbed: true },
-              { name: 'CazéTV HD (0 Delay)', url: 'https://www.youtube-nocookie.com/embed/live_stream?channel=UCjE8gVqE5lM_x3Z_t_9y0YQ', isEmbed: true },
               { name: 'SporTV 2 (RDCanais)', url: 'https://rdcanais.net/sportv2', isEmbed: true },
-              { name: 'Premiere 2 (Rei dos Embeds)', url: 'https://v2.rdembed.sbs/premiere2', isEmbed: true }
+              { name: 'CazéTV HD (0 Delay)', url: 'https://www.youtube-nocookie.com/embed/live_stream?channel=UCjE8gVqE5lM_x3Z_t_9y0YQ', isEmbed: true }
             ]
           },
           {
@@ -2942,8 +2933,7 @@
             fallbacks: [
               { name: 'ESPN HD (RDCanais)', url: 'https://rdcanais.net/espn', isEmbed: true },
               { name: 'TNT Sports (RDCanais)', url: 'https://rdcanais.net/tnt', isEmbed: true },
-              { name: 'ESPN HD (Rei dos Embeds)', url: 'https://v2.rdembed.sbs/espn', isEmbed: true },
-              { name: 'Space HD', url: 'https://v2.rdembed.sbs/space', isEmbed: true }
+              { name: 'Space HD (RDCanais)', url: 'https://rdcanais.net/space', isEmbed: true }
             ]
           }
         ];
@@ -3610,24 +3600,29 @@
 
       // Configura seletor de servidores/canais (movieVersionSwitcher)
       if (elements.movieVersionSwitcher) {
-        elements.movieVersionSwitcher.style.display = 'flex';
-        elements.movieVersionSwitcher.innerHTML = '';
+        if (fallbacks.length > 1) {
+          elements.movieVersionSwitcher.style.display = 'flex';
+          elements.movieVersionSwitcher.innerHTML = '';
 
-        const switcherLabel = document.createElement('span');
-        switcherLabel.style.cssText = 'color: #ffc107; font-size: 13px; font-weight: 800; display: flex; align-items: center; margin-right: 8px; letter-spacing: 0.5px;';
-        switcherLabel.innerHTML = '⚡ SERVIDORES:';
-        elements.movieVersionSwitcher.appendChild(switcherLabel);
+          const switcherLabel = document.createElement('span');
+          switcherLabel.style.cssText = 'color: #ffc107; font-size: 13px; font-weight: 800; display: flex; align-items: center; margin-right: 8px; letter-spacing: 0.5px;';
+          switcherLabel.innerHTML = '⚡ OPÇÕES:';
+          elements.movieVersionSwitcher.appendChild(switcherLabel);
 
-        fallbacks.forEach((opt, idx) => {
-          const btn = document.createElement('button');
-          btn.className = `btn btn-sm ${idx === fallbackIdx ? 'btn-primary' : 'btn-secondary'}`;
-          btn.style.cssText = 'font-size: 12px; padding: 5px 14px; border-radius: 16px; white-space: nowrap; font-weight: 700;';
-          btn.innerHTML = `${idx === fallbackIdx ? '✓ ' : ''}${escapeHtml(opt.name)}`;
-          btn.addEventListener('click', () => {
-            openLivePlayer(item, idx);
+          fallbacks.forEach((opt, idx) => {
+            const btn = document.createElement('button');
+            btn.className = `btn btn-sm ${idx === fallbackIdx ? 'btn-primary' : 'btn-secondary'}`;
+            btn.style.cssText = 'font-size: 12px; padding: 5px 14px; border-radius: 16px; white-space: nowrap; font-weight: 700;';
+            btn.innerHTML = `${idx === fallbackIdx ? '✓ ' : ''}${escapeHtml(opt.name)}`;
+            btn.addEventListener('click', () => {
+              openLivePlayer(item, idx);
+            });
+            elements.movieVersionSwitcher.appendChild(btn);
           });
-          elements.movieVersionSwitcher.appendChild(btn);
-        });
+        } else {
+          elements.movieVersionSwitcher.style.display = 'none';
+          elements.movieVersionSwitcher.innerHTML = '';
+        }
       }
 
       // Popula barra lateral de informações com dados da partida ou canal e EPG
