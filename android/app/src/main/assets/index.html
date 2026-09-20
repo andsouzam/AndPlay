@@ -2513,7 +2513,7 @@ header.tv-header {
   <div id="tvCableApp" class="tv-cable-app" style="display: none;">
     <!-- Reprodutor de Vídeo Unificado para TV (Muda entre PiP e Tela Cheia sem reiniciar o vídeo) -->
     <div id="tvPlayerBox" class="tv-player-box pip">
-      <video id="tvVideoPlayer" playsinline preload="auto"></video>
+      <video id="tvVideoPlayer" playsinline preload="auto" autoplay></video>
       <iframe id="tvEmbedPlayer" allowfullscreen="true" allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *; clipboard-write *; accelerometer *; gyroscope *" referrerpolicy="no-referrer"></iframe>
       <div id="tvLiveBadge" class="tv-player-live-badge"><span class="tv-pulse"></span> NO AR</div>
       <div id="tvChannelWatermark" class="tv-watermark">AndPlay TV</div>
@@ -4105,6 +4105,326 @@ header.tv-header {
       return { key: 'variety', label: 'Variedades' };
     }
 
+    // MOTOR DE GRADE DE PROGRAMAÇÃO EPG EM TEMPO REAL PARA CANAIS BRASILEIROS
+    function getChannelLiveSchedule(ch, dateObj) {
+      if (!ch) return null;
+      const rawId = String(ch.channelSlug || ch.id || '').toLowerCase().replace(/^live_ch_/, '');
+      const cat = String(ch.categoryKey || ch.cat || ch.categoryLabel || '').toLowerCase();
+      const chName = String(ch.name || '').toLowerCase();
+
+      const d = dateObj || new Date();
+      const day = d.getDay(); // 0 = Domingo, 1 = Segunda, ..., 6 = Sábado
+      const hours = d.getHours();
+      const mins = d.getMinutes();
+      const nowM = hours * 60 + mins;
+
+      const toM = function(str) {
+        const p = str.split(':');
+        return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+      };
+
+      const toH = function(m) {
+        const norm = ((m % 1440) + 1440) % 1440;
+        const h = Math.floor(norm / 60);
+        const mn = norm % 60;
+        return String(h).padStart(2, '0') + ':' + String(mn).padStart(2, '0');
+      };
+
+      let grid = null;
+
+      // 1. GLOBO (Rede e Afiliadas Regionais)
+      if (rawId.includes('globo') && !rawId.includes('globonews') && !rawId.includes('gloob') && !rawId.includes('globoplay')) {
+        if (day === 0) { // Domingo
+          grid = [
+            { s: "06:00", e: "07:00", t: "Santa Missa", syn: "Momento de fé, oração e comunhão com a celebração da Santa Missa." },
+            { s: "07:00", e: "08:30", t: "Globo Rural", syn: "Reportagens completas sobre o agronegócio, campo e meio ambiente." },
+            { s: "08:30", e: "09:30", t: "Auto Esporte", syn: "Testes, lançamentos automobilísticos e novidades do mundo automotor." },
+            { s: "09:30", e: "12:30", t: "Esporte Espetacular", syn: "Grandes reportagens esportivas, quadros radicais e cobertura ao vivo." },
+            { s: "12:30", e: "14:15", t: "Temperatura Máxima", syn: "Superproduções do cinema mundial em alta definição para o almoço de domingo." },
+            { s: "14:15", e: "15:40", t: "Domingão com Huck - 1ª Parte", syn: "Luciano Huck com games eletrizantes, homenagens e grandes atrações." },
+            { s: "15:40", e: "18:00", t: "Futebol 2026: Brasileirão Ao Vivo", syn: "A emoção do futebol ao vivo com narração de alto nível e cobertura exclusiva." },
+            { s: "18:00", e: "20:30", t: "Domingão com Huck - 2ª Parte", syn: "A Dança dos Famosos, Quem Quer Ser Um Milionário e muito entretenimento." },
+            { s: "20:30", e: "23:25", t: "Fantástico", syn: "O show da vida com reportagens investigativas, tecnologia e os fatos da semana." },
+            { s: "23:25", e: "25:15", t: "Domingo Maior", syn: "Sessão de cinema com muita ação, suspense e adrenalina no fim de domingo." },
+            { s: "25:15", e: "27:00", t: "Cinemaço", syn: "Grandes clássicos e sucessos consagrados do cinema internacional." },
+            { s: "27:00", e: "30:00", t: "Corujão do Domingo", syn: "Filmes selecionados para os telespectadores da madrugada." }
+          ];
+        } else if (day === 6) { // Sábado
+          grid = [
+            { s: "06:00", e: "07:30", t: "Globo Comunidade", syn: "Debate dos principais temas sociais, culturais e comunitários da região." },
+            { s: "07:30", e: "11:45", t: "É de Casa", syn: "Dicas de culinária, jardinagem, decoração e bem-estar nas manhãs de sábado." },
+            { s: "11:45", e: "13:00", t: "Praça TV 1ª Edição", syn: "Notícias locais ao vivo, trânsito e prestação de serviços no seu estado." },
+            { s: "13:00", e: "14:10", t: "Globo Esporte & Jornal Hoje", syn: "O balanço esportivo do sábado e as últimas notícias do Brasil e do mundo." },
+            { s: "14:10", e: "18:25", t: "Caldeirão com Mion", syn: "Marcos Mion com muita energia, convidados especiais, música e o Sobe o Som." },
+            { s: "18:25", e: "19:15", t: "No Rancho Fundo", syn: "As aventuras e emoções da família Leonel no sertão brasileiro." },
+            { s: "19:15", e: "19:45", t: "Praça TV 2ª Edição", syn: "Resumo dos acontecimentos mais importantes do sábado na sua região." },
+            { s: "19:45", e: "20:30", t: "Família é Tudo", syn: "Comédia, romance e união na novela das sete da TV Globo." },
+            { s: "20:30", e: "21:20", t: "Jornal Nacional", syn: "O resumo completo e equilibrado dos fatos que marcaram o sábado no país." },
+            { s: "21:20", e: "22:25", t: "Renascer", syn: "A saga emocionante de José Inocêncio e o destino de suas terras." },
+            { s: "22:25", e: "24:15", t: "Altas Horas com Serginho Groisman", syn: "Debates instigantes, plateia jovem, música ao vivo e grandes nomes da cultura." },
+            { s: "24:15", e: "26:00", t: "Supercine", syn: "Sessão tradicional de grandes lançamentos do cinema no sábado à noite." },
+            { s: "26:00", e: "30:00", t: "Corujão", syn: "Filmes premiados e muita ação durante toda a madrugada." }
+          ];
+        } else { // Segunda a Sexta
+          grid = [
+            { s: "04:00", e: "06:00", t: "Hora Um", syn: "As primeiras notícias da manhã com informações de trânsito, clima e economia." },
+            { s: "06:00", e: "08:30", t: "Bom Dia Brasil", syn: "Telejornal matutino com cobertura completa do que acontece no país e no mundo." },
+            { s: "08:30", e: "10:35", t: "Encontro com Patrícia Poeta", syn: "Variedades, debates, histórias reais, música ao vivo e interação nas manhãs." },
+            { s: "10:35", e: "11:45", t: "Mais Você", syn: "Ana Maria Braga e Louro Mané com receitas, dicas de bem-estar e entrevistas." },
+            { s: "11:45", e: "13:00", t: "Praça TV 1ª Edição", syn: "Telejornal regional focado no cotidiano da sua cidade e do seu estado." },
+            { s: "13:00", e: "13:25", t: "Globo Esporte", syn: "Gols, análises, treinos e bastidores dos clubes de futebol brasileiros." },
+            { s: "13:25", e: "14:45", t: "Jornal Hoje", syn: "César Tralli apresenta as notícias mais relevantes do Brasil e do cenário internacional." },
+            { s: "14:45", e: "15:30", t: "Edição Especial: Mulheres de Areia", syn: "A clássica rivalidade entre Ruth e Raquel na faixa de novelas da tarde." },
+            { s: "15:30", e: "17:05", t: "Sessão da Tarde", syn: "Filmes emocionantes e divertidos para curtir em família em alta definição." },
+            { s: "17:05", e: "18:25", t: "Vale a Pena Ver de Novo: Alma Gêmea", syn: "A inesquecível história de amor espiritual de Serena e Rafael." },
+            { s: "18:25", e: "19:15", t: "No Rancho Fundo", syn: "Romance, intrigas e comédia no sertão com a família Leonel." },
+            { s: "19:15", e: "19:45", t: "Praça TV 2ª Edição", syn: "O resumo dos principais acontecimentos do dia na sua região." },
+            { s: "19:45", e: "20:30", t: "Família é Tudo", syn: "A jornada divertida e emocionante de cinco irmãos para salvar a herança." },
+            { s: "20:30", e: "21:20", t: "Jornal Nacional", syn: "William Bonner e Renata Vasconcellos trazem a cobertura das grandes manchetes." },
+            { s: "21:20", e: "22:25", t: "Renascer", syn: "A aclamada novela das nove com conflitos familiares, paixão e misticismo." },
+            { s: "22:25", e: "23:45", t: (day === 3 ? "Futebol 2026: Copa do Brasil / Brasileirão" : "Linha de Shows Especial"), syn: "Grandes emoções na noite da TV Globo com entretenimento de primeira linha." },
+            { s: "23:45", e: "24:30", t: "Jornal da Globo", syn: "Renata Lo Prete analisa os impactos econômicos e políticos do encerramento do dia." },
+            { s: "24:30", e: "25:15", t: "Conversa com Bial", syn: "Entrevistas inteligentes e descontraídas com personalidades brasileiras." },
+            { s: "25:15", e: "28:00", t: "Corujão / Comédia na Madruga", syn: "Sessão de cinema e séries cômicas na madrugada da Globo." }
+          ];
+        }
+      }
+      // 2. SBT
+      else if (rawId.includes('sbt')) {
+        if (day === 0) { // Domingo
+          grid = [
+            { s: "06:00", e: "09:00", t: "Domingo Animado", syn: "Desenhos e animações consagradas para a garotada começar o domingo feliz." },
+            { s: "09:00", e: "11:00", t: "Notícias Impressionantes", syn: "Os vídeos mais incríveis, curiosos e impressionantes da internet." },
+            { s: "11:00", e: "18:15", t: "Domingo Legal com Celso Portiolli", syn: "Passa ou Repassa, Comprar é Bom Levar é Melhor e muita alegria nas tardes de domingo." },
+            { s: "18:15", e: "24:00", t: "Programa Silvio Santos com Patrícia Abravanel", syn: "Show de Calouros, Câmeras Escondidas, Jogo das Três Pistas e grandes sucessos." }
+          ];
+        } else {
+          grid = [
+            { s: "02:00", e: "06:00", t: "SBT News na TV", syn: "Jornalismo ao vivo na madrugada trazendo as primeiras manchetes do dia." },
+            { s: "06:00", e: "09:30", t: "Primeiro Impacto", syn: "Cobertura policial, trânsito nas metrópoles e prestação de serviço ao vivo." },
+            { s: "09:30", e: "11:15", t: "Chega Mais", syn: "Revista eletrônica com variedades, culinária, saúde e notícias da manhã." },
+            { s: "11:15", e: "13:30", t: "Chega Mais Notícias", syn: "A cobertura ao vivo dos fatos que mobilizam o país com repórteres nas ruas." },
+            { s: "13:30", e: "14:30", t: "Carinha de Anjo", syn: "Novela para toda a família com as aventuras e doçura de Dulce Maria." },
+            { s: "14:30", e: "15:30", t: "Novelas da Tarde: Contigo Sim", syn: "Sucesso dramático mexicano com muito romance, intriga e superação." },
+            { s: "15:30", e: "17:30", t: "Fofocalizando", syn: "As notícias mais quentes do mundo dos famosos, fofocas e entrevistas exclusivas." },
+            { s: "17:30", e: "19:45", t: "Tá na Hora", syn: "Jornalismo popular, segurança pública e prestação de serviço nas tardes do SBT." },
+            { s: "19:45", e: "20:30", t: "SBT Brasil", syn: "César Filho apresenta o telejornal com credibilidade, análises e as notícias do dia." },
+            { s: "20:30", e: "21:30", t: "A Infância de Romeu e Julieta", syn: "A novela infantojuvenil sobre o amor e os conflitos de duas famílias rivais." },
+            { s: "21:30", e: "22:30", t: "Programa do Ratinho", syn: "Brincadeiras, música sertaneja, Jornal Rational e o carisma de Carlos Massa." },
+            { s: "22:30", e: "24:00", t: "Cine Espetacular / A Praça é Nossa", syn: "Grandes filmes de bilheteria e as piadas inesquecíveis da Praça mais famosa do Brasil." },
+            { s: "24:00", e: "25:00", t: "The Noite com Danilo Gentili", syn: "Talk show com entrevistas bem-humoradas, banda Ultraje a Rigor e esquetes." },
+            { s: "25:00", e: "26:00", t: "Operação Mesquita", syn: "Otávio Mesquita em reportagens bem-humoradas pelos eventos e ruas do país." }
+          ];
+        }
+      }
+      // 3. RECORD
+      else if (rawId.includes('record') && !rawId.includes('record-news')) {
+        grid = [
+          { s: "00:30", e: "06:00", t: "Programação IURD / Fala Que Eu Te Escuto", syn: "Mensagens de fé, conselhos espirituais e debates nas madrugadas da Record." },
+          { s: "06:00", e: "08:40", t: "Balanço Geral Manhã", syn: "As primeiras notícias policiais, trânsito e mobilidade para começar o dia." },
+          { s: "08:40", e: "10:00", t: "Fala Brasil", syn: "Telejornal matinal com reportagens investigativas e os principais fatos do dia." },
+          { s: "10:00", e: "11:50", t: "Hoje em Dia", syn: "Moda, gastronomia, prestação de serviços, jornalismo e bastidores da TV." },
+          { s: "11:50", e: "15:30", t: "Balanço Geral / Hora da Venenosa", syn: "Comunidade, notícias do dia a dia e as fofocas mais comentadas dos famosos." },
+          { s: "15:30", e: "16:45", t: "A Terra Prometida", syn: "Superprodução bíblica da teledramaturgia da Record com ação e fé." },
+          { s: "16:45", e: "19:55", t: "Cidade Alerta", syn: "Luiz Bacci com reportagens exclusivas sobre os crimes mais graves do país." },
+          { s: "19:55", e: "21:00", t: "Jornal da Record", syn: "Celso Freitas e Christina Lemos com o noticiário aprofundado do Brasil e mundo." },
+          { s: "21:00", e: "22:00", t: "Reis", syn: "A saga bíblica retratando a unificação e os reis da história de Israel." },
+          { s: "22:00", e: "23:30", t: "Linha de Shows: A Fazenda / Reality", syn: "O confinamento dos famosos com provas, votações acirradas e muita convivência." },
+          { s: "23:30", e: "24:30", t: "Chicago P.D. / Séries de Ação", syn: "Os detetives de Chicago investigando os crimes mais perigosos nas noites da Record." }
+        ];
+      }
+      // 4. BAND
+      else if (rawId.includes('band') && !rawId.includes('bandnews') && !rawId.includes('bandsports')) {
+        grid = [
+          { s: "02:30", e: "06:00", t: "Esporte Total / Madrugada Band", syn: "Gols, análises esportivas e os acontecimentos das madrugadas." },
+          { s: "06:00", e: "08:00", t: "Bora Brasil", syn: "Joel Datena abre o dia com notícias dinâmicas, trânsito e tempo ao vivo." },
+          { s: "08:00", e: "11:00", t: "The Chef com Edu Guedes", syn: "Receitas saborosas, dicas de culinária e prestação de serviços para a manhã." },
+          { s: "11:00", e: "13:00", t: "Jogo Aberto", syn: "Renata Fan, Denílson e comentaristas discutindo os lances mais polêmicos da rodada." },
+          { s: "13:00", e: "14:30", t: "Os Donos da Bola", syn: "Craque Neto comanda o programa mais polêmico do futebol com bom humor e verdades." },
+          { s: "14:30", e: "16:00", t: "Melhor da Tarde", syn: "Catia Fonseca com culinária prática, fofocas, horóscopo e variedades." },
+          { s: "16:00", e: "19:20", t: "Brasil Urgente", syn: "Datena com a cobertura jornalística contundente dos principais casos policiais." },
+          { s: "19:20", e: "20:30", t: "Jornal da Band", syn: "Eduardo Oinegue e Adriana Araújo com jornalismo analítico e de credibilidade." },
+          { s: "20:30", e: "22:00", t: "Perrengue do Dia", syn: "Os vídeos mais hilários da internet comentados por Tatola e sua equipe." },
+          { s: "22:00", e: "23:30", t: "MasterChef Brasil / Linha de Shows", syn: "A maior competição gastronômica do país testando as habilidades dos cozinheiros." },
+          { s: "23:30", e: "24:30", t: "Jornal da Noite", syn: "O resumo analítico do dia e os desdobramentos dos acontecimentos políticos." },
+          { s: "24:30", e: "26:30", t: "Esporte Total", syn: "Giro esportivo com os resultados das partidas e análises táticas." }
+        ];
+      }
+      // 5. SPORTV
+      else if (rawId.includes('sportv')) {
+        grid = [
+          { s: "01:00", e: "06:00", t: "SporTV News Madrugada", syn: "Gols da rodada, melhores momentos e notícias esportivas 24 horas por dia." },
+          { s: "06:00", e: "09:00", t: "SporTV News Manhã", syn: "O panorama das manchetes esportivas, resultados e treinos dos clubes." },
+          { s: "09:00", e: "12:00", t: "Redação SporTV", syn: "Debates inteligentes sobre a cobertura da imprensa, crônicas e análises." },
+          { s: "12:00", e: "14:00", t: "Seleção SporTV", syn: "André Rizek e grandes comentaristas debatem os rumos do futebol brasileiro." },
+          { s: "14:00", e: "16:00", t: "Giro da Rodada", syn: "Informações atualizadas dos clubes das séries A e B do Campeonato Brasileiro." },
+          { s: "16:00", e: "18:30", t: "Tá na Área", syn: "O lado leve e descontraído do esporte com bom humor e matérias especiais." },
+          { s: "18:30", e: "21:30", t: "Transmissão Ao Vivo: Brasileirão / Copa do Brasil", syn: "Cobertura esportiva ao vivo em alta definição com a equipe campeã do SporTV." },
+          { s: "21:30", e: "23:30", t: "Troca de Passes", syn: "Análises técnicas das partidas, entrevistas exclusivas na saída do campo e gols." },
+          { s: "23:30", e: "25:00", t: "Boleiragem", syn: "Roger Flores e Caio Ribeiro conversando com os maiores nomes do futebol." }
+        ];
+      }
+      // 6. ESPN
+      else if (rawId.includes('espn')) {
+        grid = [
+          { s: "00:30", e: "06:00", t: "SportsCenter Madrugada", syn: "Gols, melhores lances e notícias do futebol mundial durante a madrugada." },
+          { s: "06:00", e: "09:00", t: "SportsCenter 1ª Edição", syn: "O giro matinal completo com o que vai acontecer no dia do esporte." },
+          { s: "09:00", e: "12:00", t: "ESPN F360", syn: "Visão dinâmica de todos os esportes com bom humor, análises e reportagens." },
+          { s: "12:00", e: "15:00", t: "ESPN F90", syn: "Debates acalorados sobre o futebol brasileiro com grandes comentaristas." },
+          { s: "15:00", e: "18:00", t: "Futebol no Mundo / Premier League Ao Vivo", syn: "O melhor do futebol europeu ao vivo com os gigantes de Inglaterra e Espanha." },
+          { s: "18:00", e: "20:00", t: "ESPN FC Internacional", syn: "Análise profunda sobre a Champions League e os principais torneios mundiais." },
+          { s: "20:00", e: "22:30", t: "SportsCenter 2ª Edição / Ao Vivo", syn: "O tradicional noticiário esportivo da ESPN com todas as manchetes da noite." },
+          { s: "22:30", e: "24:30", t: "Linha de Passe", syn: "A mais tradicional mesa redonda esportiva da TV com análises contundentes." }
+        ];
+      }
+      // 7. PREMIERE
+      else if (rawId.includes('premiere')) {
+        grid = [
+          { s: "00:00", e: "15:30", t: "Aquecimento Premiere / Gols da Rodada", syn: "Compacto de grandes partidas, lances históricos e melhores momentos dos campeonatos." },
+          { s: "15:30", e: "18:00", t: "Futebol Ao Vivo: Brasileirão Série A", syn: "Transmissão digital oficial em alta definição e som estéreo Dolby." },
+          { s: "18:00", e: "21:00", t: "Futebol Ao Vivo: Brasileirão Série B", syn: "A disputa acirrada da Série B com cobertura em tempo real." },
+          { s: "21:00", e: "24:00", t: "Pós-Jogo Premiere / Melhores Momentos", syn: "Gols de todos os ângulos, entrevistas exclusivas e análise da tabela." }
+        ];
+      }
+      // 8. GLOBONEWS
+      else if (rawId.includes('globonews')) {
+        grid = [
+          { s: "00:00", e: "06:00", t: "Jornal GloboNews Madrugada", syn: "Notícias 24 horas por dia com entradas ao vivo e cobertura internacional." },
+          { s: "06:00", e: "09:00", t: "Em Ponto com Mônica Waldvogel e Tiago Eltz", syn: "As primeiras análises políticas e econômicas do dia com especialistas." },
+          { s: "09:00", e: "13:00", t: "Conexão GloboNews com Daniela Lima", syn: "Bastidores do poder em Brasília e no Judiciário com apurações exclusivas." },
+          { s: "13:00", e: "16:00", t: "Estúdio i com Andréia Sadi", syn: "Debate dinâmico sobre os fatos que agitam o cenário político nacional." },
+          { s: "16:00", e: "18:00", t: "GloboNews Edição das 16h com Júlia Duailibi", syn: "Cobertura ágil dos principais temas da tarde com repórteres de todo o país." },
+          { s: "18:00", e: "20:00", t: "GloboNews Edição das 18h com César Tralli", syn: "O balanço completo das notícias do dia com profundidade e contexto." },
+          { s: "20:00", e: "22:00", t: "GloboNews Em Pauta com Marcelo Cosme", syn: "Mesa redonda com comentaristas em capitais analisando as grandes decisões." },
+          { s: "22:00", e: "24:00", t: "Jornal das Dez com Aline Midlej", syn: "O mais completo telejornal do fim de noite com entrevistas e reflexões." }
+        ];
+      }
+      // 9. CNN BRASIL
+      else if (rawId.includes('cnn')) {
+        grid = [
+          { s: "00:00", e: "06:00", t: "Madrugada CNN / Plantão", syn: "Cobertura das principais notícias internacionais e do Brasil em tempo real." },
+          { s: "06:00", e: "09:30", t: "CNN Novo Dia", syn: "Informação ágil, trânsito, economia e política no início da manhã." },
+          { s: "09:30", e: "12:00", t: "Live CNN Brasil", syn: "Os temas que repercutem no país com debates e reportagens ao vivo." },
+          { s: "12:00", e: "14:00", t: "Bastidores CNN", syn: "Apuração exclusiva dos bastidores do poder direto de Brasília." },
+          { s: "14:00", e: "16:00", t: "CNN 360°", syn: "Jornalismo factual com foco em decisões jurídicas, políticas e econômicas." },
+          { s: "16:00", e: "18:00", t: "CNN Arena", syn: "O debate plural de ideias com debatedores de diferentes visões de mundo." },
+          { s: "18:00", e: "20:00", t: "CNN Prime Time com Márcio Gomes", syn: "O fechamento das manchetes do dia com rigor e apuração jornalística." },
+          { s: "20:00", e: "22:00", t: "WW com William Waack", syn: "Análise estratégica de geopolítica, macroeconomia e tendências mundiais." },
+          { s: "22:00", e: "24:00", t: "Jornal da CNN", syn: "A síntese dos acontecimentos mais importantes do dia em todo o planeta." }
+        ];
+      }
+      // 10. FILMES E SÉRIES (Telecine, HBO, Warner, TNT, Megapix, Space, Universal, etc.)
+      else if (cat.includes('movie') || cat.includes('cinema') || cat.includes('filme') || rawId.includes('telecine') || rawId.includes('hbo') || rawId.includes('warner') || rawId.includes('megapix') || rawId.includes('tnt') || rawId.includes('space') || rawId.includes('universal')) {
+        grid = [
+          { s: "01:00", e: "06:00", t: "Madrugada de Cinema: Clássicos e Ação Sem Cortes", syn: "Sessão de cinema noturna com grandes sucessos, suspense e filmes premiados." },
+          { s: "06:00", e: "09:30", t: "Sessão Matinal: Comédia e Aventura", syn: "Filmes descontraídos para começar a manhã com energia e diversão." },
+          { s: "09:30", e: "12:30", t: "Matinê Especial: Sucessos de Hollywood", syn: "Grandes produções dos maiores estúdios mundiais em alta definição." },
+          { s: "12:30", e: "15:30", t: "Sessão Família: Animação e Aventura", syn: "Filmes aclamados para reunir toda a família com muita emoção." },
+          { s: "15:30", e: "18:00", t: "Cine Ação: Ficção e Muita Adrenalina", syn: "Efeitos visuais surpreendentes e perseguições eletrizantes." },
+          { s: "18:00", e: "20:30", t: "Esquenta Prime: Blockbusters Mundiais", syn: "O aquecimento do horário nobre com as maiores bilheterias do cinema." },
+          { s: "20:30", e: "22:45", t: "Superestreia Prime Time: Cinema em 1080p FHD", syn: "O filme principal da noite em alta definição com som de cinema." },
+          { s: "22:45", e: "25:00", t: "Cine Night: Suspense, Ação e Terror Noturno", syn: "Filmes intensos e envolventes para quem aprecia o melhor da sétima arte." }
+        ];
+      }
+      // 11. INFANTIL (Discovery Kids, Cartoon, Gloob, Nick)
+      else if (cat.includes('kid') || cat.includes('infantil') || cat.includes('desenho') || rawId.includes('cartoon') || rawId.includes('gloob') || rawId.includes('nick')) {
+        grid = [
+          { s: "00:00", e: "06:00", t: "Clássicos Animados / Sono Tranquilo", syn: "Desenhos calmos e historinhas divertidas para acompanhar a noite dos pequenos." },
+          { s: "06:00", e: "12:00", t: "Manhã Divertida: Os Melhores Desenhos", syn: "Aventuras mágicas, heróis e muitas risadas com os personagens mais queridos." },
+          { s: "12:00", e: "18:00", t: "Tarde Animada: Maratonas e Desafios", syn: "Episódios inéditos das séries de animação mais assistidas do mundo." },
+          { s: "18:00", e: "21:00", t: "Cine Cartoon: Filmes e Longas Animados", syn: "Sessão especial de cinema infantil com grandes aventuras em alta resolução." },
+          { s: "21:00", e: "24:00", t: "Sessão Kids: Aventuras da Noite", syn: "Histórias engraçadas e episódios especiais antes da hora de dormir." }
+        ];
+      }
+      // 12. CANAIS 24 HORAS (Chaves, Dragon Ball, etc.)
+      else if (cat.includes('24h') || rawId.includes('24h-') || chName.includes('24h')) {
+        grid = [
+          { s: "00:00", e: "24:00", t: (ch.name || 'Canal') + " - Maratona 24 Horas", syn: "Transmissão contínua e sem intervalos comerciais de " + (ch.name || 'conteúdo') + ", 24 horas por dia em alta definição digital." }
+        ];
+      }
+      // 13. GRADE GENÉRICA INTELIGENTE (Baseada na Categoria e Horário)
+      else {
+        if (cat.includes('esporte') || cat.includes('sport')) {
+          grid = [
+            { s: "00:00", e: "06:00", t: "Giro Esportivo da Madrugada", syn: "Compactos e análises das competições esportivas do Brasil e do mundo." },
+            { s: "06:00", e: "10:00", t: "Manhã Esportiva: Manchetes e Treinos", syn: "Abertura da rodada com preparação dos atletas e dos clubes." },
+            { s: "10:00", e: "13:00", t: "Debate dos Craques: Mesa Redonda", syn: "Opiniões contundentes e debate dos lances mais marcantes do esporte." },
+            { s: "13:00", e: "16:00", t: "Giro dos Campeonatos", syn: "Cobertura especial dos principais campeonatos nacionais e internacionais." },
+            { s: "16:00", e: "21:30", t: "Transmissão Esportiva Ao Vivo HD", syn: "Transmissão digital oficial em tempo real com narração e comentários." },
+            { s: "21:30", e: "24:00", t: "Pós-Jogo: Gols da Rodada e Melhores Momentos", syn: "Análise aprofundada dos resultados do dia e classificação dos times." }
+          ];
+        } else if (cat.includes('noticia') || cat.includes('news') || cat.includes('jornal')) {
+          grid = [
+            { s: "00:00", e: "06:00", t: "Jornal da Madrugada 24H", syn: "Cobertura contínua das principais notícias do Brasil e do mundo." },
+            { s: "06:00", e: "10:00", t: "Manhã em Foco: Noticiário Ao Vivo", syn: "Economia, política, mobilidade urbana e as primeiras informações do dia." },
+            { s: "10:00", e: "14:00", t: "Edição do Meio-Dia: Plantão Nacional", syn: "O resumo das notícias da manhã com análises dos comentaristas." },
+            { s: "14:00", e: "18:00", t: "Tarde de Notícias: Cobertura em Tempo Real", syn: "Apuração ágil e transmissões ao vivo direto das fontes de informação." },
+            { s: "18:00", e: "21:30", t: "Jornal da Noite: O Balanço do Dia", syn: "O balanço completo dos acontecimentos mais relevantes da jornada." },
+            { s: "21:30", e: "24:00", t: "Painel Notícias: Análise e Opinião", syn: "Especialistas debatem os rumos do país e do cenário internacional." }
+          ];
+        } else {
+          grid = [
+            { s: "00:00", e: "06:00", t: "Madrugada Especial", syn: "Programação noturna com séries, documentários e grandes atrações." },
+            { s: "06:00", e: "09:00", t: "Manhã Informativa e Variedades", syn: "Dicas úteis, música, prestação de serviços e boas energias para começar o dia." },
+            { s: "09:00", e: "12:00", t: "Revista Eletrônica Matinal", syn: "Entretenimento, receitas, cultura e entrevistas exclusivas." },
+            { s: "12:00", e: "14:00", t: "Edição da Tarde: Programação Especial", syn: "Notícias da comunidade, esportes e variedades ao vivo." },
+            { s: "14:00", e: "17:00", t: "Tarde de Sucessos e Séries", syn: "Os programas e séries mais aclamados pelo público em alta definição." },
+            { s: "17:00", e: "19:30", t: "Giro de Notícias e Entretenimento", syn: "Os principais assuntos do dia comentados com leveza e dinamismo." },
+            { s: "19:30", e: "21:00", t: "Horário Nobre: Grande Produção", syn: "A atração principal do início da noite com alta qualidade digital." },
+            { s: "21:00", e: "23:30", t: "Superatração da Noite", syn: "Filmes, shows ou grandes episódios consagrados na televisão." },
+            { s: "23:30", e: "24:00", t: "Encerramento e Destaques do Dia", syn: "Os melhores momentos do dia e o que esperar da programação de amanhã." }
+          ];
+        }
+      }
+
+      let curItem = null;
+      let nextItem = null;
+
+      for (let i = 0; i < grid.length; i++) {
+        const item = grid[i];
+        const sM = toM(item.s);
+        const eM = toM(item.e);
+        if (sM <= nowM && nowM < eM) {
+          curItem = item;
+          nextItem = grid[(i + 1) % grid.length];
+          break;
+        } else if (eM > 1440 && (sM <= nowM || nowM < (eM - 1440))) {
+          curItem = item;
+          nextItem = grid[(i + 1) % grid.length];
+          break;
+        }
+      }
+
+      if (!curItem && grid.length > 0) {
+        curItem = grid[0];
+        nextItem = grid[1] || grid[0];
+      }
+
+      const sM = toM(curItem.s);
+      const eM = toM(curItem.e);
+      const dur = Math.max(15, eM - sM);
+      const elapsed = Math.max(0, nowM - sM);
+      const prog = Math.min(99, Math.max(2, Math.round((elapsed / dur) * 100)));
+      const rem = Math.max(1, Math.round(dur - elapsed));
+
+      const cleanStart = toH(sM);
+      const cleanEnd = toH(eM);
+      const nextStart = nextItem ? toH(toM(nextItem.s)) : cleanEnd;
+
+      return {
+        nowTitle: curItem.t,
+        synopsis: curItem.syn,
+        start: cleanStart,
+        end: cleanEnd,
+        timeRange: cleanStart + " • " + cleanEnd,
+        progress: prog,
+        remainingMinutes: rem,
+        nextTitle: nextItem ? nextItem.t : 'Continuação da Programação',
+        nextStart: nextStart
+      };
+    }
+    window.getChannelLiveSchedule = getChannelLiveSchedule;
+
     function buildChannelItem(raw) {
       const catInfo = getCategoryInfo(raw.cat);
       const cleanSlug = raw.id.replace(/^canal\//, '').replace(/\.html$/, '');
@@ -4122,6 +4442,12 @@ header.tv-header {
         fallbacks.unshift(KNOWN_NATIVE_STREAMS[raw.id]);
       }
 
+      const liveEpg = getChannelLiveSchedule(raw);
+      const nowTitle = liveEpg ? liveEpg.nowTitle : (raw.now || '');
+      const nowProgress = liveEpg ? liveEpg.progress : (Number(raw.prog) || 0);
+      const synopsis = liveEpg ? liveEpg.synopsis : '';
+      const nextProgrammes = liveEpg && liveEpg.nextTitle ? [{ t: liveEpg.nextTitle, s: liveEpg.nextStart }] : (Array.isArray(raw.next) ? raw.next : []);
+
       return {
         id: 'live_ch_' + raw.id,
         channelSlug: raw.id,
@@ -4132,10 +4458,11 @@ header.tv-header {
         badge: catInfo.key === 'channels_24h' ? '24 HORAS' : 'AO VIVO',
         embedUrl: fallbacks[0].url,
         fallbacks: fallbacks,
-        hasGuide: Boolean(raw.guide),
-        nowTitle: raw.now || '',
-        nowProgress: Number(raw.prog) || 0,
-        nextProgrammes: Array.isArray(raw.next) ? raw.next : [],
+        hasGuide: true,
+        nowTitle: nowTitle,
+        nowProgress: nowProgress,
+        synopsis: synopsis,
+        nextProgrammes: nextProgrammes,
         isChannel: true
       };
     }
@@ -7379,6 +7706,23 @@ header.tv-header {
       }, 400);
     }
 
+    // Atualização periódica do EPG em tempo real a cada 60 segundos
+    if (!window._tvEpgRefreshTimer) {
+      window._tvEpgRefreshTimer = setInterval(() => {
+        if (tvPlayingType === 'channel' && tvChannels[tvCurrentIdx]) {
+          const ch = tvChannels[tvCurrentIdx];
+          const epg = (typeof getChannelLiveSchedule === 'function') ? getChannelLiveSchedule(ch) : null;
+          if (epg) {
+            const pipEpg = document.getElementById('tvPipEpg');
+            if (pipEpg) pipEpg.textContent = `🔴 No Ar: ${epg.nowTitle}`;
+            if (tvCurrentMode === 'fullscreen' && tvOsd && !tvOsd.classList.contains('hidden')) {
+              updateTvOsd(ch, tvCurrentIdx, false);
+            }
+          }
+        }
+      }, 60000);
+    }
+
     // Dispara o Overlay ao interagir com mouse/touch na tela cheia
     if (!window._tvOsdActivityWired) {
       window._tvOsdActivityWired = true;
@@ -7455,8 +7799,23 @@ header.tv-header {
           window._tvActiveHls.destroy();
           window._tvActiveHls = null;
         }
+        tvVideo.autoplay = true;
         tvVideo.src = fallback.url;
-        tvVideo.play().catch(() => {});
+        tvVideo.load();
+
+        const tryPlay = () => {
+          const p = tvVideo.play();
+          if (p !== undefined) p.catch(() => {});
+        };
+
+        const onReady = () => {
+          tvVideo.removeEventListener('canplay', onReady);
+          tvVideo.removeEventListener('loadeddata', onReady);
+          tryPlay();
+        };
+        tvVideo.addEventListener('canplay', onReady, { once: true });
+        tvVideo.addEventListener('loadeddata', onReady, { once: true });
+        tryPlay();
       }
     }
 
@@ -7511,8 +7870,10 @@ header.tv-header {
 
     const pipName = document.getElementById('tvPipName');
     const pipEpg = document.getElementById('tvPipEpg');
+    const commitEpg = (typeof getChannelLiveSchedule === 'function') ? getChannelLiveSchedule(ch) : null;
+    const commitTitle = commitEpg ? commitEpg.nowTitle : (ch.nowTitle || ch.categoryLabel || 'Transmissão Ao Vivo HD');
     if (pipName) pipName.textContent = `${String(tvCurrentIdx + 1).padStart(3, '0')} - ${ch.name}`;
-    if (pipEpg) pipEpg.textContent = ch.nowTitle ? `🔴 No Ar: ${ch.nowTitle}` : (ch.categoryLabel || 'Transmissão Ao Vivo HD');
+    if (pipEpg) pipEpg.textContent = `🔴 No Ar: ${commitTitle}`;
 
     updateTvOsd(ch, tvCurrentIdx, false);
   }
@@ -7538,8 +7899,10 @@ header.tv-header {
 
     const pipName = document.getElementById('tvPipName');
     const pipEpg = document.getElementById('tvPipEpg');
+    const tuneEpg = (typeof getChannelLiveSchedule === 'function') ? getChannelLiveSchedule(ch) : null;
+    const tuneTitle = tuneEpg ? tuneEpg.nowTitle : (ch.nowTitle || ch.categoryLabel || 'Transmissão Ao Vivo HD');
     if (pipName) pipName.textContent = `${String(tvCurrentIdx + 1).padStart(3, '0')} - ${ch.name}`;
-    if (pipEpg) pipEpg.textContent = ch.nowTitle ? `🔴 No Ar: ${ch.nowTitle}` : (ch.categoryLabel || 'Transmissão Ao Vivo HD');
+    if (pipEpg) pipEpg.textContent = `🔴 No Ar: ${tuneTitle}`;
 
     updateTvOsd(ch, tvCurrentIdx, false);
     if (showOsdBanner && tvCurrentMode === 'fullscreen') {
@@ -7600,9 +7963,9 @@ header.tv-header {
     tvPlayingType = 'vod';
     tvPreviousMode = (tvCurrentMode === 'vod') ? 'vod' : 'central';
     tvPlayingSeriesMeta = null;
+    setTvViewMode('fullscreen');
     tvLoadStream(pseudoCh);
     updateTvOsd(pseudoCh, 0, false);
-    setTvViewMode('fullscreen');
   }
 
   // Reproduzir Episódio de Série VOD no Player de TV
@@ -7633,9 +7996,9 @@ header.tv-header {
       seriesId: seriesItem.series_id || seriesItem.id,
       episodesBySeason: seriesItem._cachedEpisodes || null
     };
+    setTvViewMode('fullscreen');
     tvLoadStream(pseudoCh);
     updateTvOsd(pseudoCh, 0, false);
-    setTvViewMode('fullscreen');
     // Fecha gaveta se estava aberta (mudança de episódio dentro da gaveta)
     if (tvDrawer && !tvDrawer.classList.contains('closed')) {
       tvDrawer.classList.add('closed');
@@ -7770,8 +8133,10 @@ header.tv-header {
     // Atualiza PiP e OSD INSTANTANEAMENTE com os dados do canal pendente (isPending = true)
     const pipName = document.getElementById('tvPipName');
     const pipEpg = document.getElementById('tvPipEpg');
+    const zapEpg = (typeof getChannelLiveSchedule === 'function') ? getChannelLiveSchedule(pendingCh) : null;
+    const zapTitle = zapEpg ? zapEpg.nowTitle : (pendingCh.nowTitle || pendingCh.categoryLabel || 'Transmissão Ao Vivo HD');
     if (pipName) pipName.textContent = `${String(tvPendingIdx + 1).padStart(3, '0')} - ${pendingCh.name} (Sintonizando...)`;
-    if (pipEpg) pipEpg.textContent = pendingCh.nowTitle ? `🔴 No Ar: ${pendingCh.nowTitle}` : (pendingCh.categoryLabel || 'Transmissão Ao Vivo HD');
+    if (pipEpg) pipEpg.textContent = `🔴 No Ar: ${zapTitle}`;
 
     updateTvOsd(pendingCh, tvPendingIdx, true);
     triggerTvOsd(6000);
@@ -7796,8 +8161,10 @@ header.tv-header {
     // Restaura PiP ao canal atual
     const pipName = document.getElementById('tvPipName');
     const pipEpg = document.getElementById('tvPipEpg');
+    const cancelEpg = (typeof getChannelLiveSchedule === 'function') ? getChannelLiveSchedule(ch) : null;
+    const cancelTitle = cancelEpg ? cancelEpg.nowTitle : (ch.nowTitle || ch.categoryLabel || 'Transmissão Ao Vivo HD');
     if (pipName) pipName.textContent = `${String(tvCurrentIdx + 1).padStart(3, '0')} - ${ch.name}`;
-    if (pipEpg) pipEpg.textContent = ch.nowTitle ? `🔴 No Ar: ${ch.nowTitle}` : (ch.categoryLabel || 'Transmissão Ao Vivo HD');
+    if (pipEpg) pipEpg.textContent = `🔴 No Ar: ${cancelTitle}`;
 
     // Atualiza OSD mostrando o canal atual confirmado (não-pendente)
     updateTvOsd(ch, tvCurrentIdx, false);
@@ -7999,37 +8366,20 @@ header.tv-header {
       if (osdSynopsis) osdSynopsis.textContent = ch.synopsis || 'Vídeo sob demanda em alta definição.';
       if (osdNext) osdNext.textContent = '◀ Seta Esquerda (-10s) • Seta Direita (+10s) ▶ • OK Pausa/Play';
     } else {
-      // Título do programa em exibição para Canais / Eventos
-      let nowTitle = ch.nowTitle;
-      if (!nowTitle || nowTitle.trim() === '') {
-        const cat = (ch.categoryLabel || '').toLowerCase();
-        if (cat.includes('esporte') || cat.includes('futebol')) nowTitle = 'Transmissão Esportiva Ao Vivo HD';
-        else if (cat.includes('filme') || cat.includes('cinema')) nowTitle = 'Sessão Especial de Cinema HD';
-        else if (cat.includes('notícia') || cat.includes('jornal')) nowTitle = 'Jornalismo em Tempo Real 24h';
-        else if (cat.includes('infantil')) nowTitle = 'Desenhos e Séries Animadas';
-        else nowTitle = 'Programação Ao Vivo HD';
-      }
+      // Guia EPG Dinâmico em Tempo Real para Canais e Eventos
+      const epg = (typeof getChannelLiveSchedule === 'function') ? getChannelLiveSchedule(ch, new Date()) : null;
+
+      const nowTitle = epg ? epg.nowTitle : (ch.nowTitle || ch.name || 'Programação Ao Vivo HD');
+      const timeRange = epg ? epg.timeRange : '--:-- • --:--';
+      const progress = epg ? epg.progress : 50;
+      const remMin = epg ? epg.remainingMinutes : 30;
+      const synopsis = epg ? epg.synopsis : (ch.synopsis || `Assista à transmissão digital oficial de ${ch.name} em alta resolução 1080p, com som estéreo Dolby e sinal contínuo.`);
+      const nextStr = (epg && epg.nextTitle) ? `${epg.nextStart} • ${epg.nextTitle}` : (ch.nextProgrammes && ch.nextProgrammes[0] ? `${ch.nextProgrammes[0].s || ''} • ${ch.nextProgrammes[0].t}` : `Continuação da Grade de ${ch.name}`);
+
       if (osdNow) osdNow.textContent = nowTitle;
-
-      // Horários realistas (blocos de 60 minutos)
-      const now = new Date();
-      const curMinutes = now.getHours() * 60 + now.getMinutes();
-      const blockMinutes = 60;
-      const blockStartMinutes = Math.floor(curMinutes / blockMinutes) * blockMinutes;
-      const blockEndMinutes = blockStartMinutes + blockMinutes;
-
-      const startH = String(Math.floor(blockStartMinutes / 60) % 24).padStart(2, '0');
-      const startM = String(blockStartMinutes % 60).padStart(2, '0');
-      const endH = String(Math.floor(blockEndMinutes / 60) % 24).padStart(2, '0');
-      const endM = String(blockEndMinutes % 60).padStart(2, '0');
-
-      if (osdTimeRange) osdTimeRange.textContent = `${startH}:${startM} • ${endH}:${endM}`;
-
-      const elapsed = curMinutes - blockStartMinutes;
-      const progress = Math.max(15, Math.min(92, Math.round((elapsed / blockMinutes) * 100)));
-      const remainingMinutes = Math.max(5, blockEndMinutes - curMinutes);
-
+      if (osdTimeRange) osdTimeRange.textContent = timeRange;
       if (osdProgFill) osdProgFill.style.width = `${progress}%`;
+
       if (osdProgStatus) {
         if (isPending) {
           osdProgStatus.textContent = `Aguardando 3s... (OK confirma • ESC cancela)`;
@@ -8039,23 +8389,17 @@ header.tv-header {
           osdProgStatus.style.color = '#9ca3af';
         }
       }
+
       if (osdProgRemaining) {
         if (isPending) {
           osdProgRemaining.textContent = `Pressione OK para sintonizar agora`;
         } else {
-          osdProgRemaining.textContent = `Restam ~${remainingMinutes} min`;
+          osdProgRemaining.textContent = `Restam ~${remMin} min`;
         }
       }
-      if (osdSynopsis) {
-        osdSynopsis.textContent = ch.synopsis || `Assista à transmissão digital oficial de ${ch.name} em alta resolução 1080p, com som estéreo Dolby e sinal contínuo.`;
-      }
-      if (osdNext) {
-        if (ch.nextProgrammes && ch.nextProgrammes.length > 0 && ch.nextProgrammes[0].t) {
-          osdNext.textContent = `${endH}:${endM} • ${ch.nextProgrammes[0].t}`;
-        } else {
-          osdNext.textContent = `${endH}:${endM} • Continuação da Grade Normal de ${ch.name}`;
-        }
-      }
+
+      if (osdSynopsis) osdSynopsis.textContent = synopsis;
+      if (osdNext) osdNext.textContent = `▶ A SEGUIR: ${nextStr}`;
     }
   }
 
@@ -8436,6 +8780,8 @@ header.tv-header {
       const item = document.createElement('div');
       const realIdx = tvChannels.indexOf(ch);
       const isCur = (realIdx === tvCurrentIdx);
+      const epg = (typeof getChannelLiveSchedule === 'function') ? getChannelLiveSchedule(ch) : null;
+      const curTitle = epg ? epg.nowTitle : (ch.nowTitle || 'Ao Vivo');
       item.className = `tv-drawer-item tv-focusable ${isCur ? 'active-channel' : ''}`;
       item.tabIndex = 0;
       item.innerHTML = `
@@ -8443,7 +8789,7 @@ header.tv-header {
         <img src="${ch.logo || ''}" alt="" style="width:36px; height:24px; object-fit:contain;">
         <div style="flex:1; overflow:hidden;">
           <div style="font-size:13px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${ch.name}</div>
-          <div style="font-size:10px; color:#ffc107; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${ch.nowTitle || 'Ao Vivo'}</div>
+          <div style="font-size:10px; color:#ffc107; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${curTitle}</div>
         </div>
         ${isCur ? '<span style="font-size:9px; font-weight:800; background:#00e676; color:#000; padding:2px 6px; border-radius:4px;">NO AR</span>' : ''}
       `;
