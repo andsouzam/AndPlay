@@ -2672,6 +2672,29 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
   border: 3px solid #ffc107 !important;
   box-shadow: none !important;
 }
+.tv-floating-back-btn {
+  position: fixed;
+  top: 18px;
+  left: 24px;
+  z-index: 1800;
+  background: rgba(10, 14, 26, 0.92);
+  color: #ffc107;
+  border: 1.5px solid rgba(255, 193, 7, 0.6);
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.8);
+  transition: transform 0.2s, background 0.2s;
+}
+.tv-floating-back-btn:focus, .tv-floating-back-btn:hover {
+  background: #ffc107;
+  color: #000;
+  transform: scale(1.06);
+  outline: none;
+}
 </style>
 </head>
 <body>
@@ -2763,6 +2786,8 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
     <!-- TELA 2: Tela Cheia de TV com OSD (Zapping Mode) -->
     <!-- TELA 2: Tela Cheia de TV com Overlay Estilo TV a Cabo (Zapping Mode) -->
     <div id="tvFullscreenView" class="tv-fullscreen-view" style="display: none;">
+      <!-- Botão Voltar Físico/Visual no topo esquerdo -->
+      <button id="tvFloatingBackBtn" class="tv-floating-back-btn tv-focusable" tabindex="0">⬅ VOLTAR À CENTRAL</button>
       <!-- Indicador Rápido de Zapping no Canto Superior Direito -->
       <div id="tvTopChannelBadge" class="tv-top-channel-badge hidden">
         <span class="tv-top-ch-num" id="tvTopChNum">CH 001</span>
@@ -4600,7 +4625,7 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
       // RDCanais é o player primário: mais leve, troca de canal mais rápida
       // rdembed.sbs fica como fallback caso rdcanais esteja instável
       const fallbacks = [
-        { name: 'HD', url: 'https://rdcanais.net/' + rdSlug, isEmbed: true },
+        { name: 'HD', url: 'https://reidoscanais.com/embed/?id=' + rdSlug, isEmbed: true },
         { name: 'Alternativo', url: raw.embed || ('https://v2.rdembed.sbs/' + rdSlug), isEmbed: true }
       ];
 
@@ -4707,13 +4732,13 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
             // Fallback garantido com RDCanais HD (sem anúncios e 100% estável)
             const catLower = `${ev.category || ''} ${ev.competition || ''} ${title}`.toLowerCase();
             if (catLower.includes('ufc') || catLower.includes('mma') || catLower.includes('luta') || catLower.includes('boxe')) {
-              fallbacks.push({ name: 'Combate HD', url: 'https://rdcanais.net/combate', isEmbed: true });
+              fallbacks.push({ name: 'Combate HD', url: 'https://reidoscanais.com/embed/?id=combate', isEmbed: true });
             } else if (catLower.includes('premier') || catLower.includes('champions') || catLower.includes('europa') || catLower.includes('la liga') || catLower.includes('espanh') || catLower.includes('portugal') || catLower.includes('ingl')) {
-              fallbacks.push({ name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true });
-              fallbacks.push({ name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true });
+              fallbacks.push({ name: 'ESPN HD', url: 'https://reidoscanais.com/embed/?id=espn', isEmbed: true });
+              fallbacks.push({ name: 'TNT Sports', url: 'https://reidoscanais.com/embed/?id=tnt', isEmbed: true });
             } else {
-              fallbacks.push({ name: 'Premiere HD', url: 'https://rdcanais.net/premiere', isEmbed: true });
-              fallbacks.push({ name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true });
+              fallbacks.push({ name: 'Premiere HD', url: 'https://reidoscanais.com/embed/?id=premiere', isEmbed: true });
+              fallbacks.push({ name: 'SporTV HD', url: 'https://reidoscanais.com/embed/?id=sportv', isEmbed: true });
             }
 
             const isLive = ev.status === 'live';
@@ -4770,8 +4795,8 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere HD', url: 'https://rdcanais.net/premiere', isEmbed: true },
-              { name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true }
+              { name: 'Premiere HD', url: 'https://reidoscanais.com/embed/?id=premiere', isEmbed: true },
+              { name: 'SporTV HD', url: 'https://reidoscanais.com/embed/?id=sportv', isEmbed: true }
             ]
           },
           {
@@ -4790,8 +4815,8 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere HD', url: 'https://rdcanais.net/premiere', isEmbed: true },
-              { name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true }
+              { name: 'Premiere HD', url: 'https://reidoscanais.com/embed/?id=premiere', isEmbed: true },
+              { name: 'SporTV HD', url: 'https://reidoscanais.com/embed/?id=sportv', isEmbed: true }
             ]
           },
           {
@@ -4810,8 +4835,8 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere 2', url: 'https://rdcanais.net/premiere2', isEmbed: true },
-              { name: 'SporTV 2', url: 'https://rdcanais.net/sportv2', isEmbed: true }
+              { name: 'Premiere 2', url: 'https://reidoscanais.com/embed/?id=premiere2', isEmbed: true },
+              { name: 'SporTV 2', url: 'https://reidoscanais.com/embed/?id=sportv2', isEmbed: true }
             ]
           },
           {
@@ -4830,8 +4855,8 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
             isLiveMatch: true,
             isLiveNow: false,
             fallbacks: [
-              { name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true },
-              { name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true }
+              { name: 'ESPN HD', url: 'https://reidoscanais.com/embed/?id=espn', isEmbed: true },
+              { name: 'TNT Sports', url: 'https://reidoscanais.com/embed/?id=tnt', isEmbed: true }
             ]
           },
           {
@@ -4850,8 +4875,8 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
             isLiveMatch: true,
             isLiveNow: false,
             fallbacks: [
-              { name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true },
-              { name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true }
+              { name: 'ESPN HD', url: 'https://reidoscanais.com/embed/?id=espn', isEmbed: true },
+              { name: 'TNT Sports', url: 'https://reidoscanais.com/embed/?id=tnt', isEmbed: true }
             ]
           }
         );
@@ -7961,7 +7986,7 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
   // Carrega efetivamente a transmissão no reprodutor unificado (iframe embed ou tag de vídeo)
   function tvLoadStream(ch) {
     if (!ch) return;
-    const fallback = ch.fallbacks && ch.fallbacks[0] ? ch.fallbacks[0] : { url: 'https://rdcanais.net/' + (ch.channelSlug || ch.id), isEmbed: true };
+    const fallback = ch.fallbacks && ch.fallbacks[0] ? ch.fallbacks[0] : { url: 'https://reidoscanais.com/embed/?id=' + (ch.channelSlug || ch.id), isEmbed: true };
     
     if (fallback.isEmbed) {
       if (window._tvActiveHls) {
@@ -8632,7 +8657,21 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
     }
   }
 
-  function triggerTvOsd(duration = 5000) {
+      const floatBack = document.getElementById('tvFloatingBackBtn');
+    if (floatBack && !floatBack._wired) {
+      floatBack._wired = true;
+      floatBack.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.handleAndroidBack();
+      });
+      floatBack.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          window.handleAndroidBack();
+        }
+      });
+    }
+    function triggerTvOsd(duration = 5000) {
     if (tvOsdTimer) clearTimeout(tvOsdTimer);
     const topBadge = document.getElementById('tvTopChannelBadge');
     if (tvOsd) tvOsd.classList.remove('hidden');
@@ -13108,6 +13147,29 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
   border: 3px solid #ffc107 !important;
   box-shadow: none !important;
 }
+.tv-floating-back-btn {
+  position: fixed;
+  top: 18px;
+  left: 24px;
+  z-index: 1800;
+  background: rgba(10, 14, 26, 0.92);
+  color: #ffc107;
+  border: 1.5px solid rgba(255, 193, 7, 0.6);
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  pointer-events: auto;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.8);
+  transition: transform 0.2s, background 0.2s;
+}
+.tv-floating-back-btn:focus, .tv-floating-back-btn:hover {
+  background: #ffc107;
+  color: #000;
+  transform: scale(1.06);
+  outline: none;
+}
 </style>
 </head>
 <body>
@@ -13199,6 +13261,8 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
     <!-- TELA 2: Tela Cheia de TV com OSD (Zapping Mode) -->
     <!-- TELA 2: Tela Cheia de TV com Overlay Estilo TV a Cabo (Zapping Mode) -->
     <div id="tvFullscreenView" class="tv-fullscreen-view" style="display: none;">
+      <!-- Botão Voltar Físico/Visual no topo esquerdo -->
+      <button id="tvFloatingBackBtn" class="tv-floating-back-btn tv-focusable" tabindex="0">⬅ VOLTAR À CENTRAL</button>
       <!-- Indicador Rápido de Zapping no Canto Superior Direito -->
       <div id="tvTopChannelBadge" class="tv-top-channel-badge hidden">
         <span class="tv-top-ch-num" id="tvTopChNum">CH 001</span>
@@ -15036,7 +15100,7 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
       // RDCanais é o player primário: mais leve, troca de canal mais rápida
       // rdembed.sbs fica como fallback caso rdcanais esteja instável
       const fallbacks = [
-        { name: 'HD', url: 'https://rdcanais.net/' + rdSlug, isEmbed: true },
+        { name: 'HD', url: 'https://reidoscanais.com/embed/?id=' + rdSlug, isEmbed: true },
         { name: 'Alternativo', url: raw.embed || ('https://v2.rdembed.sbs/' + rdSlug), isEmbed: true }
       ];
 
@@ -15143,13 +15207,13 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
             // Fallback garantido com RDCanais HD (sem anúncios e 100% estável)
             const catLower = `${ev.category || ''} ${ev.competition || ''} ${title}`.toLowerCase();
             if (catLower.includes('ufc') || catLower.includes('mma') || catLower.includes('luta') || catLower.includes('boxe')) {
-              fallbacks.push({ name: 'Combate HD', url: 'https://rdcanais.net/combate', isEmbed: true });
+              fallbacks.push({ name: 'Combate HD', url: 'https://reidoscanais.com/embed/?id=combate', isEmbed: true });
             } else if (catLower.includes('premier') || catLower.includes('champions') || catLower.includes('europa') || catLower.includes('la liga') || catLower.includes('espanh') || catLower.includes('portugal') || catLower.includes('ingl')) {
-              fallbacks.push({ name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true });
-              fallbacks.push({ name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true });
+              fallbacks.push({ name: 'ESPN HD', url: 'https://reidoscanais.com/embed/?id=espn', isEmbed: true });
+              fallbacks.push({ name: 'TNT Sports', url: 'https://reidoscanais.com/embed/?id=tnt', isEmbed: true });
             } else {
-              fallbacks.push({ name: 'Premiere HD', url: 'https://rdcanais.net/premiere', isEmbed: true });
-              fallbacks.push({ name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true });
+              fallbacks.push({ name: 'Premiere HD', url: 'https://reidoscanais.com/embed/?id=premiere', isEmbed: true });
+              fallbacks.push({ name: 'SporTV HD', url: 'https://reidoscanais.com/embed/?id=sportv', isEmbed: true });
             }
 
             const isLive = ev.status === 'live';
@@ -15206,8 +15270,8 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere HD', url: 'https://rdcanais.net/premiere', isEmbed: true },
-              { name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true }
+              { name: 'Premiere HD', url: 'https://reidoscanais.com/embed/?id=premiere', isEmbed: true },
+              { name: 'SporTV HD', url: 'https://reidoscanais.com/embed/?id=sportv', isEmbed: true }
             ]
           },
           {
@@ -15226,8 +15290,8 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere HD', url: 'https://rdcanais.net/premiere', isEmbed: true },
-              { name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true }
+              { name: 'Premiere HD', url: 'https://reidoscanais.com/embed/?id=premiere', isEmbed: true },
+              { name: 'SporTV HD', url: 'https://reidoscanais.com/embed/?id=sportv', isEmbed: true }
             ]
           },
           {
@@ -15246,8 +15310,8 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere 2', url: 'https://rdcanais.net/premiere2', isEmbed: true },
-              { name: 'SporTV 2', url: 'https://rdcanais.net/sportv2', isEmbed: true }
+              { name: 'Premiere 2', url: 'https://reidoscanais.com/embed/?id=premiere2', isEmbed: true },
+              { name: 'SporTV 2', url: 'https://reidoscanais.com/embed/?id=sportv2', isEmbed: true }
             ]
           },
           {
@@ -15266,8 +15330,8 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
             isLiveMatch: true,
             isLiveNow: false,
             fallbacks: [
-              { name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true },
-              { name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true }
+              { name: 'ESPN HD', url: 'https://reidoscanais.com/embed/?id=espn', isEmbed: true },
+              { name: 'TNT Sports', url: 'https://reidoscanais.com/embed/?id=tnt', isEmbed: true }
             ]
           },
           {
@@ -15286,8 +15350,8 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
             isLiveMatch: true,
             isLiveNow: false,
             fallbacks: [
-              { name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true },
-              { name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true }
+              { name: 'ESPN HD', url: 'https://reidoscanais.com/embed/?id=espn', isEmbed: true },
+              { name: 'TNT Sports', url: 'https://reidoscanais.com/embed/?id=tnt', isEmbed: true }
             ]
           }
         );
@@ -18397,7 +18461,7 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
   // Carrega efetivamente a transmissão no reprodutor unificado (iframe embed ou tag de vídeo)
   function tvLoadStream(ch) {
     if (!ch) return;
-    const fallback = ch.fallbacks && ch.fallbacks[0] ? ch.fallbacks[0] : { url: 'https://rdcanais.net/' + (ch.channelSlug || ch.id), isEmbed: true };
+    const fallback = ch.fallbacks && ch.fallbacks[0] ? ch.fallbacks[0] : { url: 'https://reidoscanais.com/embed/?id=' + (ch.channelSlug || ch.id), isEmbed: true };
     
     if (fallback.isEmbed) {
       if (window._tvActiveHls) {
@@ -19068,7 +19132,21 @@ body.tv-mode .tv-focusable:focus, body.tv-mode .tv-focusable.focused {
     }
   }
 
-  function triggerTvOsd(duration = 5000) {
+      const floatBack = document.getElementById('tvFloatingBackBtn');
+    if (floatBack && !floatBack._wired) {
+      floatBack._wired = true;
+      floatBack.addEventListener('click', (e) => {
+        e.stopPropagation();
+        window.handleAndroidBack();
+      });
+      floatBack.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          window.handleAndroidBack();
+        }
+      });
+    }
+    function triggerTvOsd(duration = 5000) {
     if (tvOsdTimer) clearTimeout(tvOsdTimer);
     const topBadge = document.getElementById('tvTopChannelBadge');
     if (tvOsd) tvOsd.classList.remove('hidden');
