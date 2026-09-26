@@ -92,7 +92,13 @@ public class ChannelRailAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
         } else if (holder instanceof DrawerViewHolder) {
             DrawerViewHolder vh = (DrawerViewHolder) holder;
-            vh.num.setText(String.format("%03d", chNumber));
+            int displayNum = chNumber;
+            if (context instanceof com.andplay.app.MainActivity) {
+                com.andplay.app.MainActivity ma = (com.andplay.app.MainActivity) context;
+                int real = ma.getAllChannels().indexOf(ch);
+                if (real >= 0) displayNum = real + 1;
+            }
+            vh.num.setText(String.format("%03d", displayNum));
             vh.name.setText(ch.name != null ? ch.name : "Canal");
 
             LiveSchedule epg = EpgEngine.getLiveSchedule(ch);

@@ -53,16 +53,22 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import okhttp3.Dns;
 import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.URL;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import android.view.MotionEvent;
 
 import com.andplay.app.adapter.CategoryPillAdapter;
 import com.andplay.app.adapter.ChannelRailAdapter;
@@ -133,6 +139,7 @@ public class MainActivity extends Activity {
 
     // Lateral EPG Drawer
     private LinearLayout epgDrawer;
+    private TextView drawerHeaderTitle;
     private RecyclerView drawerCatsRecycler;
     private RecyclerView drawerChannelsRecycler;
 
@@ -175,7 +182,15 @@ public class MainActivity extends Activity {
 
     private Movie activeVodMovie = null;
     private Series activeVodSeries = null;
+    private Episode activeVodEpisode = null;
+    private String activeVodSeasonNum = "1";
+    private Map<String, List<Episode>> currentSeriesEpisodesMap = new HashMap<>();
     private String currentVodType = "movies";
+    private OkHttpClient sharedOkHttpClient;
+
+    public List<Channel> getAllChannels() {
+        return allChannels;
+    }
 
     private final Handler osdHandler = new Handler(Looper.getMainLooper());
     private final Runnable osdHideRunnable = () -> {
@@ -257,6 +272,7 @@ public class MainActivity extends Activity {
 
         // EPG Drawer
         epgDrawer = findViewById(R.id.epgDrawer);
+        drawerHeaderTitle = findViewById(R.id.drawerHeaderTitle);
         btnDrawerOptions = findViewById(R.id.btnDrawerOptions);
         drawerCatsRecycler = findViewById(R.id.drawerCatsRecycler);
         drawerChannelsRecycler = findViewById(R.id.drawerChannelsRecycler);
@@ -366,7 +382,7 @@ public class MainActivity extends Activity {
         unifiedEmbedWebView = unifiedPlayerBox.findViewById(R.id.unifiedEmbedWebView);
 
         // Configuração de alto desempenho do ExoPlayer com OkHttp e DNS inteligente
-        OkHttpClient okHttpClient = new OkHttpClient.Builder()
+        sharedOkHttpClient = new OkHttpClient.Builder()
                 .followRedirects(true)
                 .followSslRedirects(true)
                 .dns(new StreamDns())
@@ -374,7 +390,7 @@ public class MainActivity extends Activity {
                 .readTimeout(20, TimeUnit.SECONDS)
                 .build();
 
-        OkHttpDataSource.Factory httpDataSourceFactory = new OkHttpDataSource.Factory(okHttpClient)
+        OkHttpDataSource.Factory httpDataSourceFactory = new OkHttpDataSource.Factory(sharedOkHttpClient)
                 .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
         DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(this)
@@ -483,12 +499,112 @@ public class MainActivity extends Activity {
                         || url.contains("tvacabo.free.nf")
                         || url.contains("bolodechocolate.fit")
                         || url.contains("esportesembed.net")
+                        || url.contains("localhost.tattoo")
+                        || url.contains("globo.com")
+                        || url.contains("jwpcdn.com")
                         || url.contains("about:blank")) {
                     return false;
                 }
                 // Bloqueia qualquer redirect para sites de apostas, anúncios ou popunders de frame principal
                 Log.w("EPlayAdBlock", "Bloqueado redirect externo de janela principal: " + url);
                 return true;
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (request == null || request.getUrl() == null) return super.shouldInterceptRequest(view, request);
+                String url = request.getUrl().toString();
+
+                // 1. Intercepta player.js do localhost.tattoo para garantir autoplay e remover botão de pause
+                if (url.contains("localhost.tattoo") && url.contains("player.js")) {
+                    try {
+                        Request okReq = new Request.Builder()
+                                .url(url)
+                                .header("Referer", "https://localhost.tattoo/")
+                                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                                .build();
+                        Response okRes = sharedOkHttpClient.newCall(okReq).execute();
+                        if (okRes.isSuccessful() && okRes.body() != null) {
+                            String originalJs = okRes.body().string();
+                            String injection = "\n;(function(){\n" +
+                                    "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';\n" +
+                                    "  var st = document.createElement('style');\n" +
+                                    "  st.textContent = css;\n" +
+                                    "  (document.head || document.documentElement).appendChild(st);\n" +
+                                    "  function forceStart() {\n" +
+                                    "    try {\n" +
+                                    "      if (typeof jwplayer === 'function') {\n" +
+                                    "        var p = jwplayer();\n" +
+                                    "        if (p && typeof p.play === 'function') {\n" +
+                                    "          p.setMute(false);\n" +
+                                    "          p.setVolume(100);\n" +
+                                    "          var s = typeof p.getState === 'function' ? p.getState() : '';\n" +
+                                    "          if (s === 'paused' || s === 'idle') { p.play(); }\n" +
+                                    "          if (s === 'playing') { if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted(); }\n" +
+                                    "        }\n" +
+                                    "      }\n" +
+                                    "    } catch(e) {}\n" +
+                                    "    try {\n" +
+                                    "      var v = document.querySelector('video');\n" +
+                                    "      if (v) {\n" +
+                                    "        v.muted = false;\n" +
+                                    "        v.volume = 1.0;\n" +
+                                    "        if (v.paused) { v.play().catch(function(){}); }\n" +
+                                    "        else if (v.currentTime > 0) { if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted(); }\n" +
+                                    "      }\n" +
+                                    "    } catch(e) {}\n" +
+                                    "  }\n" +
+                                    "  setInterval(forceStart, 600);\n" +
+                                    "  document.addEventListener('DOMContentLoaded', forceStart);\n" +
+                                    "  window.addEventListener('load', forceStart);\n" +
+                                    "})();\n";
+                            byte[] modifiedBytes = (originalJs + injection).getBytes(StandardCharsets.UTF_8);
+                            return new WebResourceResponse("application/javascript", "UTF-8", new ByteArrayInputStream(modifiedBytes));
+                        }
+                    } catch (Exception e) {
+                        Log.w("EPlay", "Erro ao interceptar player.js: " + e.getMessage());
+                    }
+                }
+
+                // 2. Intercepta hotstar.css e player-v3.1.min.css para ocultar ícones de playback
+                if (url.contains("hotstar.css") || url.contains("player-v3.1.min.css")) {
+                    try {
+                        Request okReq = new Request.Builder()
+                                .url(url)
+                                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36")
+                                .build();
+                        Response okRes = sharedOkHttpClient.newCall(okReq).execute();
+                        if (okRes.isSuccessful() && okRes.body() != null) {
+                            String originalCss = okRes.body().string();
+                            String hideCss = "\n.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }\n";
+                            byte[] cssBytes = (originalCss + hideCss).getBytes(StandardCharsets.UTF_8);
+                            return new WebResourceResponse("text/css", "UTF-8", new ByteArrayInputStream(cssBytes));
+                        }
+                    } catch (Exception e) {
+                        Log.w("EPlay", "Erro ao interceptar CSS do player: " + e.getMessage());
+                    }
+                }
+
+                // 3. Intercepta página principal do rdcanais.net para conceder allow="autoplay *" no iframe
+                if (request.isForMainFrame() && url.contains("rdcanais.net")) {
+                    try {
+                        Request okReq = new Request.Builder()
+                                .url(url)
+                                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                                .build();
+                        Response okRes = sharedOkHttpClient.newCall(okReq).execute();
+                        if (okRes.isSuccessful() && okRes.body() != null) {
+                            String html = okRes.body().string();
+                            html = html.replace("allow=\"encrypted-media\"", "allow=\"autoplay *; encrypted-media *; fullscreen *; picture-in-picture *\"");
+                            byte[] htmlBytes = html.getBytes(StandardCharsets.UTF_8);
+                            return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(htmlBytes));
+                        }
+                    } catch (Exception e) {
+                        Log.w("EPlay", "Erro ao interceptar rdcanais HTML: " + e.getMessage());
+                    }
+                }
+
+                return super.shouldInterceptRequest(view, request);
             }
 
             @Override
@@ -502,7 +618,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // Injeta script seguro para áudio e detecção de reprodução sem disparar detectores de adblock
+                // Injeta script seguro para áudio, remoção de botões sobrepostos e detecção de reprodução
                 String antiAdAndPlaybackScript = "(function() {" +
                         "try {" +
                         "  if (!window.__eplay_h) {" +
@@ -510,12 +626,29 @@ public class MainActivity extends Activity {
                         "    window.open = function() { return { focus: function(){}, close: function(){}, closed: false, location: { href: '' } }; };" +
                         "  }" +
                         "} catch(e) {}" +
-                        "function setMaxAudioAndHook() {" +
+                        "try {" +
+                        "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"] { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';" +
+                        "  var st = document.createElement('style');" +
+                        "  st.textContent = css;" +
+                        "  (document.head || document.documentElement).appendChild(st);" +
+                        "} catch(e) {}" +
+                        "function fixIframesAndAudio() {" +
+                        "  try {" +
+                        "    var ifrs = document.querySelectorAll('iframe');" +
+                        "    for (var j = 0; j < ifrs.length; j++) {" +
+                        "      var ifr = ifrs[j];" +
+                        "      if (!ifr.hasAttribute('allow') || ifr.getAttribute('allow').indexOf('autoplay') === -1) {" +
+                        "        ifr.setAttribute('allow', 'autoplay *; encrypted-media *; fullscreen *; picture-in-picture *');" +
+                        "        ifr.allow = 'autoplay *; encrypted-media *; fullscreen *; picture-in-picture *';" +
+                        "      }" +
+                        "    }" +
+                        "  } catch(e) {}" +
                         "  var media = document.querySelectorAll('video, audio');" +
                         "  for (var i = 0; i < media.length; i++) {" +
                         "    var m = media[i];" +
                         "    m.muted = false;" +
                         "    m.volume = 1.0;" +
+                        "    if (m.paused) { m.play().catch(function(){}); }" +
                         "    if (m.tagName && m.tagName.toLowerCase() === 'video' && !m.__eplay_v) {" +
                         "      m.__eplay_v = true;" +
                         "      m.addEventListener('playing', function() {" +
@@ -533,8 +666,8 @@ public class MainActivity extends Activity {
                         "    }" +
                         "  }" +
                         "}" +
-                        "setMaxAudioAndHook();" +
-                        "setInterval(setMaxAudioAndHook, 800);" +
+                        "fixIframesAndAudio();" +
+                        "setInterval(fixIframesAndAudio, 600);" +
                         "})();";
                 view.evaluateJavascript(antiAdAndPlaybackScript, null);
             }
@@ -744,7 +877,34 @@ public class MainActivity extends Activity {
         }));
     }
 
+    private void triggerAutoplayTap() {
+        if (unifiedEmbedWebView == null) return;
+        int w = unifiedEmbedWebView.getWidth();
+        int h = unifiedEmbedWebView.getHeight();
+        if (w <= 0 || h <= 0) {
+            w = 1280;
+            h = 720;
+        }
+        float x = w / 2.0f;
+        float y = h / 2.0f;
+        long downTime = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0);
+        MotionEvent up = MotionEvent.obtain(downTime, downTime + 50, MotionEvent.ACTION_UP, x, y, 0);
+        unifiedEmbedWebView.dispatchTouchEvent(down);
+        unifiedEmbedWebView.dispatchTouchEvent(up);
+        down.recycle();
+        up.recycle();
+    }
+
     private void setupDrawer() {
+        setupDrawerForLiveTv();
+    }
+
+    private void setupDrawerForLiveTv() {
+        if (drawerHeaderTitle != null) {
+            drawerHeaderTitle.setText("GUIA DE PROGRAMAÇÃO");
+        }
+
         drawerCats.clear();
         drawerCats.add(new Category("ALL", "Todos"));
         drawerCats.add(new Category("open_tv", "Abertos"));
@@ -758,22 +918,237 @@ public class MainActivity extends Activity {
         drawerCatsAdapter = new CategoryPillAdapter(drawerCats, cat -> {
             int idx = drawerCats.indexOf(cat);
             if (idx >= 0) selectedDrawerCatIdx = idx;
-            filterDrawerChannels(cat.category_id);
+            filterDrawerChannels(cat.category_id, null);
             resetDrawerTimeout();
         });
         drawerCatsRecycler.setAdapter(drawerCatsAdapter);
 
-        drawerChannelsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
-        filterDrawerChannels("ALL");
+        // Identifica o canal ativo e a sua categoria
+        Channel currentCh = (allChannels != null && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size())
+                ? allChannels.get(currentChannelIdx) : null;
+
+        selectedDrawerCatIdx = 0;
+        if (currentCh != null && currentCh.key != null) {
+            for (int i = 0; i < drawerCats.size(); i++) {
+                if (currentCh.key.equals(drawerCats.get(i).category_id)) {
+                    selectedDrawerCatIdx = i;
+                    break;
+                }
+            }
+        }
+
+        selectDrawerCategory(selectedDrawerCatIdx, currentCh);
+    }
+
+    private void setupDrawerForSeries() {
+        if (activeVodSeries == null) return;
+        if (drawerHeaderTitle != null) {
+            drawerHeaderTitle.setText("🍿 " + activeVodSeries.getDisplayTitle());
+        }
+
+        if (currentSeriesEpisodesMap == null || currentSeriesEpisodesMap.isEmpty()) {
+            executor.execute(() -> {
+                try {
+                    Map<String, List<Episode>> epMap = ApiClient.getSeriesEpisodes(activeVodSeries.series_id);
+                    mainHandler.post(() -> {
+                        currentSeriesEpisodesMap = epMap;
+                        populateDrawerSeries();
+                    });
+                } catch (Exception ignored) {}
+            });
+        } else {
+            populateDrawerSeries();
+        }
+    }
+
+    private void populateDrawerSeries() {
+        if (currentSeriesEpisodesMap == null || currentSeriesEpisodesMap.isEmpty()) return;
+        drawerCats.clear();
+        List<String> seasonKeys = new ArrayList<>(currentSeriesEpisodesMap.keySet());
+        seasonKeys.sort((a, b) -> {
+            try { return Integer.compare(Integer.parseInt(a), Integer.parseInt(b)); }
+            catch (Exception e) { return a.compareTo(b); }
+        });
+
+        for (String sNum : seasonKeys) {
+            drawerCats.add(new Category(sNum, "Temporada " + sNum));
+        }
+
+        selectedDrawerCatIdx = 0;
+        for (int i = 0; i < seasonKeys.size(); i++) {
+            if (seasonKeys.get(i).equals(activeVodSeasonNum)) {
+                selectedDrawerCatIdx = i;
+                break;
+            }
+        }
+
+        drawerCatsAdapter = new CategoryPillAdapter(drawerCats, cat -> {
+            int idx = drawerCats.indexOf(cat);
+            if (idx >= 0) selectedDrawerCatIdx = idx;
+            filterDrawerSeriesEpisodes(cat.category_id, null);
+            resetDrawerTimeout();
+        });
+        drawerCatsRecycler.setAdapter(drawerCatsAdapter);
+
+        if (!drawerCats.isEmpty()) {
+            drawerCatsAdapter.setSelectedId(drawerCats.get(selectedDrawerCatIdx).category_id);
+            drawerCatsRecycler.scrollToPosition(selectedDrawerCatIdx);
+            filterDrawerSeriesEpisodes(drawerCats.get(selectedDrawerCatIdx).category_id, activeVodEpisode);
+        }
+    }
+
+    private void filterDrawerSeriesEpisodes(String seasonNum, Episode targetEp) {
+        List<Episode> eps = currentSeriesEpisodesMap != null ? currentSeriesEpisodesMap.get(seasonNum) : null;
+        if (eps == null) eps = new ArrayList<>();
+
+        final String activeSeason = seasonNum;
+        EpisodeAdapter adapter = new EpisodeAdapter(this, eps, ep -> {
+            closeDrawer();
+            playSeriesEpisode(activeVodSeries, ep, activeSeason);
+        });
+        drawerChannelsRecycler.setAdapter(adapter);
+
+        int targetPos = 0;
+        if (targetEp != null) {
+            targetPos = eps.indexOf(targetEp);
+            if (targetPos < 0) {
+                for (int i = 0; i < eps.size(); i++) {
+                    if (eps.get(i).id != null && eps.get(i).id.equals(targetEp.id)) {
+                        targetPos = i;
+                        break;
+                    }
+                }
+            }
+            if (targetPos < 0) targetPos = 0;
+        }
+
+        final int focusIndex = targetPos;
+        drawerChannelsRecycler.scrollToPosition(focusIndex);
+        drawerChannelsRecycler.postDelayed(() -> {
+            RecyclerView.ViewHolder vh = drawerChannelsRecycler.findViewHolderForAdapterPosition(focusIndex);
+            if (vh != null && vh.itemView != null) {
+                vh.itemView.requestFocus();
+            } else if (drawerChannelsRecycler.getChildCount() > 0) {
+                View first = drawerChannelsRecycler.getChildAt(0);
+                if (first != null) first.requestFocus();
+            }
+        }, 80);
+    }
+
+    private void setupDrawerForMovie() {
+        if (drawerHeaderTitle != null) {
+            drawerHeaderTitle.setText("🎬 CATÁLOGO DE FILMES");
+        }
+
+        drawerCats.clear();
+        drawerCats.add(new Category("ALL", "Todos os Filmes"));
+        if (movieCategories != null) {
+            for (Category c : movieCategories) {
+                if (c.category_name != null && !c.category_name.toLowerCase().contains("demo")) {
+                    drawerCats.add(c);
+                }
+            }
+        }
+
+        selectedDrawerCatIdx = 0;
+        if (activeVodMovie != null && activeVodMovie.category_id != null) {
+            for (int i = 0; i < drawerCats.size(); i++) {
+                if (activeVodMovie.category_id.equals(drawerCats.get(i).category_id)) {
+                    selectedDrawerCatIdx = i;
+                    break;
+                }
+            }
+        }
+
+        drawerCatsAdapter = new CategoryPillAdapter(drawerCats, cat -> {
+            int idx = drawerCats.indexOf(cat);
+            if (idx >= 0) selectedDrawerCatIdx = idx;
+            filterDrawerMovies(cat.category_id, null);
+            resetDrawerTimeout();
+        });
+        drawerCatsRecycler.setAdapter(drawerCatsAdapter);
+
+        if (!drawerCats.isEmpty()) {
+            drawerCatsAdapter.setSelectedId(drawerCats.get(selectedDrawerCatIdx).category_id);
+            drawerCatsRecycler.scrollToPosition(selectedDrawerCatIdx);
+            filterDrawerMovies(drawerCats.get(selectedDrawerCatIdx).category_id, activeVodMovie);
+        }
+    }
+
+    private void filterDrawerMovies(String catId, Movie targetMovie) {
+        List<Movie> filtered = new ArrayList<>();
+        if (cachedMovies != null) {
+            for (Movie m : cachedMovies) {
+                if ("ALL".equals(catId) || (m.category_id != null && m.category_id.equals(catId))) {
+                    filtered.add(m);
+                    if (filtered.size() >= 100) break;
+                }
+            }
+        }
+
+        drawerChannelsRecycler.setAdapter(new MoviePosterAdapter(this, filtered, new MoviePosterAdapter.OnMovieActionListener() {
+            @Override
+            public void onMovieClick(Movie movie) {
+                closeDrawer();
+                playMovie(movie);
+            }
+
+            @Override
+            public void onMovieFocus(Movie movie) {}
+        }));
+
+        int targetPos = 0;
+        if (targetMovie != null) {
+            targetPos = filtered.indexOf(targetMovie);
+            if (targetPos < 0) {
+                for (int i = 0; i < filtered.size(); i++) {
+                    if (filtered.get(i).stream_id != null && filtered.get(i).stream_id.equals(targetMovie.stream_id)) {
+                        targetPos = i;
+                        break;
+                    }
+                }
+            }
+            if (targetPos < 0) targetPos = 0;
+        }
+
+        final int focusIndex = targetPos;
+        drawerChannelsRecycler.scrollToPosition(focusIndex);
+        drawerChannelsRecycler.postDelayed(() -> {
+            RecyclerView.ViewHolder vh = drawerChannelsRecycler.findViewHolderForAdapterPosition(focusIndex);
+            if (vh != null && vh.itemView != null) {
+                vh.itemView.requestFocus();
+            } else if (drawerChannelsRecycler.getChildCount() > 0) {
+                View first = drawerChannelsRecycler.getChildAt(0);
+                if (first != null) first.requestFocus();
+            }
+        }, 80);
     }
 
     private void switchDrawerCategory(int delta) {
         if (drawerCats.isEmpty()) return;
         selectedDrawerCatIdx = (selectedDrawerCatIdx + delta + drawerCats.size()) % drawerCats.size();
-        selectDrawerCategory(selectedDrawerCatIdx);
+        Category cat = drawerCats.get(selectedDrawerCatIdx);
+        if (drawerCatsAdapter != null) {
+            drawerCatsAdapter.setSelectedId(cat.category_id);
+        }
+        if (drawerCatsRecycler != null) {
+            drawerCatsRecycler.smoothScrollToPosition(selectedDrawerCatIdx);
+        }
+        if (isPlayingVod) {
+            if (activeVodSeries != null) {
+                filterDrawerSeriesEpisodes(cat.category_id, activeVodEpisode);
+            } else if (activeVodMovie != null) {
+                filterDrawerMovies(cat.category_id, activeVodMovie);
+            } else {
+                filterDrawerChannels(cat.category_id, null);
+            }
+        } else {
+            filterDrawerChannels(cat.category_id, null);
+        }
+        resetDrawerTimeout();
     }
 
-    private void selectDrawerCategory(int index) {
+    private void selectDrawerCategory(int index, Channel targetChannel) {
         if (index < 0 || index >= drawerCats.size()) return;
         selectedDrawerCatIdx = index;
         Category cat = drawerCats.get(selectedDrawerCatIdx);
@@ -783,7 +1158,7 @@ public class MainActivity extends Activity {
         if (drawerCatsRecycler != null) {
             drawerCatsRecycler.smoothScrollToPosition(selectedDrawerCatIdx);
         }
-        filterDrawerChannels(cat.category_id);
+        filterDrawerChannels(cat.category_id, targetChannel);
         resetDrawerTimeout();
     }
 
@@ -794,7 +1169,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void filterDrawerChannels(String catId) {
+    private void filterDrawerChannels(String catId, Channel targetChannel) {
         List<Channel> filtered = new ArrayList<>();
         for (Channel ch : allChannels) {
             if ("ALL".equals(catId) || (ch.key != null && ch.key.equals(catId))) {
@@ -816,15 +1191,51 @@ public class MainActivity extends Activity {
             closeDrawer();
             setScreenMode(ScreenMode.FULLSCREEN);
         });
-        adapter.setCurrentPlayingIdx(currentChannelIdx);
+
+        int targetPos = 0;
+        if (targetChannel != null) {
+            targetPos = filtered.indexOf(targetChannel);
+            if (targetPos < 0) {
+                for (int i = 0; i < filtered.size(); i++) {
+                    if (filtered.get(i).id != null && filtered.get(i).id.equals(targetChannel.id)) {
+                        targetPos = i;
+                        break;
+                    }
+                }
+            }
+            if (targetPos < 0) targetPos = 0;
+        } else if (!allChannels.isEmpty() && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
+            Channel curr = allChannels.get(currentChannelIdx);
+            targetPos = filtered.indexOf(curr);
+            if (targetPos < 0) targetPos = 0;
+        }
+
+        adapter.setCurrentPlayingIdx(targetPos);
         drawerChannelsRecycler.setAdapter(adapter);
 
-        drawerChannelsRecycler.post(() -> {
-            if (drawerChannelsRecycler.getChildCount() > 0) {
-                View first = drawerChannelsRecycler.getChildAt(0);
-                if (first != null) first.requestFocus();
+        final int focusIndex = targetPos;
+        drawerChannelsRecycler.scrollToPosition(focusIndex);
+        drawerChannelsRecycler.postDelayed(() -> {
+            RecyclerView.ViewHolder vh = drawerChannelsRecycler.findViewHolderForAdapterPosition(focusIndex);
+            if (vh != null && vh.itemView != null) {
+                vh.itemView.requestFocus();
+            } else {
+                drawerChannelsRecycler.scrollToPosition(focusIndex);
+                drawerChannelsRecycler.postDelayed(() -> {
+                    RecyclerView.ViewHolder vh2 = drawerChannelsRecycler.findViewHolderForAdapterPosition(focusIndex);
+                    if (vh2 != null && vh2.itemView != null) {
+                        vh2.itemView.requestFocus();
+                    } else if (drawerChannelsRecycler.getChildCount() > 0) {
+                        View first = drawerChannelsRecycler.getChildAt(0);
+                        if (first != null) first.requestFocus();
+                    }
+                }, 80);
             }
-        });
+        }, 80);
+    }
+
+    private void filterDrawerChannels(String catId) {
+        filterDrawerChannels(catId, null);
     }
 
     public void tuneChannel(int idx, boolean showOsd) {
@@ -922,6 +1333,17 @@ public class MainActivity extends Activity {
             // Garante autoplay no parâmetro da URL
             String autoplayUrl = url + (url.contains("?") ? "&" : "?") + "autoplay=1";
             unifiedEmbedWebView.loadUrl(autoplayUrl);
+
+            mainHandler.postDelayed(() -> {
+                if (isPlayingEmbed && !isVideoPlaybackActive) {
+                    triggerAutoplayTap();
+                }
+            }, 1200);
+            mainHandler.postDelayed(() -> {
+                if (isPlayingEmbed && !isVideoPlaybackActive) {
+                    triggerAutoplayTap();
+                }
+            }, 2400);
         } else {
             unifiedEmbedWebView.stopLoading();
             unifiedEmbedWebView.loadUrl("about:blank");
@@ -940,6 +1362,8 @@ public class MainActivity extends Activity {
         if (movie == null) return;
         destroyCurrentStream();
         activeVodMovie = movie;
+        activeVodSeries = null;
+        activeVodEpisode = null;
         isPlayingVod = true;
         setScreenMode(ScreenMode.FULLSCREEN);
 
@@ -964,6 +1388,10 @@ public class MainActivity extends Activity {
         if (series == null || ep == null) return;
         destroyCurrentStream();
         isPlayingVod = true;
+        activeVodSeries = series;
+        activeVodEpisode = ep;
+        activeVodSeasonNum = seasonNum;
+        activeVodMovie = null;
         setScreenMode(ScreenMode.FULLSCREEN);
 
         String streamUrl = ep.getStreamUrl(ApiClient.SERVER, ApiClient.USER, ApiClient.PASS);
@@ -1082,22 +1510,17 @@ public class MainActivity extends Activity {
             resetDrawerTimeout();
 
             epgDrawer.post(() -> {
-                // Re-filtra e adapta dimensões dos canais agora que a gaveta tem seus 410dp medidos
-                if (drawerCats != null && !drawerCats.isEmpty() && selectedDrawerCatIdx < drawerCats.size()) {
-                    filterDrawerChannels(drawerCats.get(selectedDrawerCatIdx).category_id);
-                }
-
-                int pos = Math.max(0, currentChannelIdx);
-                drawerChannelsRecycler.scrollToPosition(pos);
-                drawerChannelsRecycler.postDelayed(() -> {
-                    RecyclerView.ViewHolder vh = drawerChannelsRecycler.findViewHolderForAdapterPosition(pos);
-                    if (vh != null && vh.itemView != null) {
-                        vh.itemView.requestFocus();
-                    } else if (drawerChannelsRecycler.getChildCount() > 0) {
-                        View first = drawerChannelsRecycler.getChildAt(0);
-                        if (first != null) first.requestFocus();
+                if (isPlayingVod) {
+                    if (activeVodSeries != null) {
+                        setupDrawerForSeries();
+                    } else if (activeVodMovie != null) {
+                        setupDrawerForMovie();
+                    } else {
+                        setupDrawerForLiveTv();
                     }
-                }, 80);
+                } else {
+                    setupDrawerForLiveTv();
+                }
             });
         }
     }
@@ -1343,6 +1766,7 @@ public class MainActivity extends Activity {
                 Map<String, List<Episode>> episodesMap = ApiClient.getSeriesEpisodes(series.series_id);
                 mainHandler.post(() -> {
                     hideLoading();
+                    currentSeriesEpisodesMap = episodesMap;
                     renderSeriesEpisodes(series, episodesMap);
                 });
             } catch (Exception e) {
@@ -1498,10 +1922,10 @@ public class MainActivity extends Activity {
                             if (pendingZapChannelIdx >= 0) {
                                 confirmPendingZapChannel();
                                 return true;
-                            } else if (osdBanner != null && osdBanner.getVisibility() != View.VISIBLE) {
-                                showOsdBanner(5000);
-                                return true;
                             } else {
+                                if (isPlayingEmbed) {
+                                    triggerAutoplayTap();
+                                }
                                 showOsdBanner(5000);
                                 return true;
                             }
@@ -1514,7 +1938,13 @@ public class MainActivity extends Activity {
                             }
                         }
                     } else {
-                        // Em VOD (Filme ou Série), teclas mostram o banner de informações
+                        // Em VOD (Filme ou Série):
+                        // D-pad Esquerdo abre a gaveta lateral com episódios da série ou lista de filmes!
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                            openDrawer();
+                            return true;
+                        }
+                        // Teclas mostram o banner de informações
                         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
                                 || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                             showOsdBanner(5000);
