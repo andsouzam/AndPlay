@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="no-referrer">
-  <title>AndPlay - Filmes, Séries & TV Ao Vivo</title>
+  <title>EPlay - Filmes, Séries & TV Ao Vivo</title>
 
   <!-- HLS.js para reprodução fluida de canais .m3u8 -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
@@ -3120,15 +3120,12 @@
   <header>
     <div class="header-left">
       <div class="logo" id="logoBtn">
-        <span>🎬</span> AndPlay
+        <span>🎬</span> EPlay
       </div>
       <div class="nav-tabs">
         <button class="nav-tab active" id="tabMoviesBtn">🎬 Filmes</button>
         <button class="nav-tab" id="tabSeriesBtn">📺 Séries</button>
         <button class="nav-tab" id="tabLiveBtn">🔴 TV & Jogos Ao Vivo</button>
-        <button class="nav-tab" id="btnEnterTvMode"
-          style="background: linear-gradient(135deg, rgba(255, 193, 7, 0.22), rgba(0, 230, 118, 0.22)); border: 1.5px solid #ffc107; color: #ffc107; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;"
-          title="Alternar para a interface de TV a Cabo / Receptor">📡 Modo TV a Cabo</button>
       </div>
     </div>
     <div class="controls">
@@ -4194,18 +4191,8 @@
 
       initSidebarState();
 
-      // Se estiver em modo TV (Android App / Smart TV / Projetor / ?mode=tv)
-      const isTvParam = window.location.search.includes('mode=tv');
-      const isTvAgent = navigator.userAgent.includes('AndPlayTV') || navigator.userAgent.includes('SmartTV');
-      const isTvMode = isTvParam || isTvAgent || window.isAndroidTvApp || (window.location.protocol === 'file:');
-
-      // Wiring do atalho "📡 Modo TV a Cabo" no header web
-      const btnEnterTv = document.getElementById('btnEnterTvMode');
-      if (btnEnterTv) {
-        btnEnterTv.addEventListener('click', () => {
-          if (window.enterTvMode) window.enterTvMode();
-        });
-      }
+      // Modo TV acessado unicamente via sublink /tvmode (sem botão e sem redirecionamento automático)
+      const isTvMode = window.location.pathname.endsWith('/tvmode') || window.location.pathname.endsWith('/tvmode/') || window.location.pathname.includes('/tvmode') || window.location.hash.includes('tvmode') || window.location.search.includes('tvmode');
 
       // Wiring do botão "💻 Modo Web" no header da TV
       const btnExitTv = document.getElementById('btnExitTvMode');
@@ -8094,18 +8081,25 @@
 
     // ==================== SCRIPT TV CABO CONTROLLER ====================
     (function () {
-      // Verificação do modo TV (detecta Android App, Smart TV, ?mode=tv, ou arquivo local)
-      const isTvParam = window.location.search.includes('mode=tv');
-      const isTvAgent = navigator.userAgent.includes('AndPlayTV') || navigator.userAgent.includes('SmartTV');
-      const isTvBootMode = isTvParam || isTvAgent || window.isAndroidTvApp || (window.location.protocol === 'file:');
+      // Verificação do modo TV (acessado estritamente via sublink /tvmode ou #/tvmode, sem redirecionamento automático)
+      const isTvBootMode = window.location.pathname.endsWith('/tvmode') || window.location.pathname.endsWith('/tvmode/') || window.location.pathname.includes('/tvmode') || window.location.hash.includes('tvmode') || window.location.search.includes('tvmode');
 
       // Configura estado inicial de modo TV
       let isTvMode = isTvBootMode;
 
       if (isTvBootMode) {
-        console.log('[AndPlay TV] Iniciando modo TV a Cabo / Receptor Smart TV');
+        console.log('[EPlay TV] Iniciando modo TV a Cabo / Receptor Smart TV');
         document.body.classList.add('tv-mode');
       }
+
+      window.addEventListener('hashchange', () => {
+        const wantsTv = window.location.hash.includes('tvmode') || window.location.pathname.includes('/tvmode') || window.location.search.includes('tvmode');
+        if (wantsTv && !isTvMode) {
+          if (window.enterTvMode) window.enterTvMode();
+        } else if (!wantsTv && isTvMode) {
+          if (window.exitTvMode) window.exitTvMode();
+        }
+      });
 
       // Variáveis de Estado do Receptor TV
       let tvChannels = [];

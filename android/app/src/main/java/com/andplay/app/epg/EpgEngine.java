@@ -42,7 +42,10 @@ import java.util.concurrent.Executors;
 public class EpgEngine {
 
     private static final String TAG = "EPlayEPG";
-    private static final String EPG_URL = "https://raw.githubusercontent.com/limaalef/BrazilTVEPG/main/epg.xml";
+    private static final String[] EPG_URLS = {
+            "https://raw.githubusercontent.com/limaalef/BrazilTVEPG/main/epg.xml",
+            "https://iptv-epg.org/files/epg-br.xml"
+    };
     private static final String PREF_NAME = "epg_prefs";
     private static final String KEY_LAST_SYNC = "last_sync_time";
     private static final String CACHE_FILE = "epg_cache.json";
@@ -115,35 +118,49 @@ public class EpgEngine {
         executor.execute(() -> {
             try {
                 Log.d(TAG, "Iniciando download e sincronização do EPG real de TV...");
-                URL url = new URL(EPG_URL);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(10000);
-                conn.setReadTimeout(25000);
-                conn.setRequestProperty("User-Agent", "EPlay Native Android TV 2.0");
+                boolean downloaded = false;
 
-                int code = conn.getResponseCode();
-                if (code == 200) {
-                    InputStream is = conn.getInputStream();
-                    parseXmltv(is);
-                    is.close();
+                for (String epgUrl : EPG_URLS) {
+                    try {
+                        Log.d(TAG, "Tentando baixar EPG da URL: " + epgUrl);
+                        URL url = new URL(epgUrl);
+                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                        conn.setRequestMethod("GET");
+                        conn.setConnectTimeout(10000);
+                        conn.setReadTimeout(30000);
+                        conn.setRequestProperty("User-Agent", "EPlay Native Android TV 2.0");
 
+                        int code = conn.getResponseCode();
+                        if (code == 200) {
+                            InputStream is = conn.getInputStream();
+                            parseXmltv(is);
+                            is.close();
+                            conn.disconnect();
+                            downloaded = true;
+                            Log.i(TAG, "EPG sincronizado com sucesso a partir de " + epgUrl + "! Canais mapeados: " + liveEpgMap.size());
+                            break;
+                        } else {
+                            Log.w(TAG, "HTTP " + code + " ao tentar " + epgUrl);
+                            conn.disconnect();
+                        }
+                    } catch (Exception e) {
+                        Log.w(TAG, "Falha ao baixar EPG de " + epgUrl + ": " + e.getMessage());
+                    }
+                }
+
+                if (downloaded) {
                     // Salva cache local
                     saveLocalCache(appCtx);
 
                     SharedPreferences prefs = appCtx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
                     prefs.edit().putLong(KEY_LAST_SYNC, System.currentTimeMillis()).apply();
-                    Log.i(TAG, "EPG sincronizado com sucesso! Canais mapeados: " + liveEpgMap.size());
 
                     mainHandler.post(() -> {
                         if (updateListener != null) {
                             updateListener.onEpgUpdated();
                         }
                     });
-                } else {
-                    Log.w(TAG, "Falha ao baixar EPG, HTTP " + code);
                 }
-                conn.disconnect();
             } catch (Exception e) {
                 Log.e(TAG, "Erro durante sync do EPG: " + e.getMessage());
             } finally {
@@ -266,6 +283,8 @@ public class EpgEngine {
         String s = raw.toLowerCase(Locale.ROOT);
         s = Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
         s = s.replaceAll("_local", "")
+                .replaceAll("\\.br$", "")
+                .replaceAll("br$", "")
                 .replaceAll("\\bhd\\b", "")
                 .replaceAll("\\buhd\\b", "")
                 .replaceAll("\\b4k\\b", "")
@@ -276,7 +295,18 @@ public class EpgEngine {
     }
 
     public static LiveSchedule getLiveSchedule(Channel ch) {
-        if (ch == null) return null;
+        if (ch == null) {
+            return new LiveSchedule(
+                    "SEM DADOS DE PROGRAMAÇÃO",
+                    "Grade de programação indisponível para este canal no momento.",
+                    "--:--",
+                    "--:--",
+                    0,
+                    0,
+                    "SEM DADOS DE PROGRAMAÇÃO",
+                    "--:--"
+            );
+        }
         long now = System.currentTimeMillis();
         String idKey = normalizeKey(ch.id);
         String nameKey = normalizeKey(ch.name);
@@ -308,78 +338,23 @@ public class EpgEngine {
 
             String startStr = tf.format(new Date(cur.startMs));
             String endStr = tf.format(new Date(cur.stopMs));
-            String nextTitle = (nxt != null && nxt.title != null) ? nxt.title : "Programação Contínua";
-            String nextStart = (nxt != null && nxt.startMs > 0) ? tf.format(new Date(nxt.startMs)) : endStr;
+            String nextTitle = (nxt != null && nxt.title != null) ? nxt.title : "SEM DADOS DE PROGRAMAÇÃO";
+            String nextStart = (nxt != null && nxt.startMs > 0) ? tf.format(new Date(nxt.startMs)) : "--:--";
             String synopsis = (cur.desc != null && !cur.desc.isEmpty()) ? cur.desc : "Transmissão digital oficial ao vivo em alta definição.";
 
             return new LiveSchedule(cur.title, synopsis, startStr, endStr, progress, remainingMin, nextTitle, nextStart);
         }
 
-        // Fonte 2: Dados embutidos em channels.json (now e next)
-        if (ch.now != null && !ch.now.trim().isEmpty()) {
-            String nextTitle = "Programação Contínua";
-            String nextStart = "A Seguir";
-            if (ch.next != null && !ch.next.isEmpty() && ch.next.get(0) != null) {
-                if (ch.next.get(0).t != null) nextTitle = ch.next.get(0).t;
-                if (ch.next.get(0).s != null) nextStart = ch.next.get(0).s;
-            }
-            int prog = ch.prog > 0 ? ch.prog : 50;
-            return new LiveSchedule(
-                    ch.now,
-                    "Transmissão ao vivo em tempo real.",
-                    "Ao Vivo",
-                    nextStart,
-                    prog,
-                    30,
-                    nextTitle,
-                    nextStart
-            );
-        }
-
-        // Fonte 3: Geração dinâmica contextual
-        return generateDynamicSchedule(ch);
-    }
-
-    private static LiveSchedule generateDynamicSchedule(Channel ch) {
-        String chName = (ch.name != null ? ch.name : "Canal");
-        Calendar cal = Calendar.getInstance();
-        int hours = cal.get(Calendar.HOUR_OF_DAY);
-        int mins = cal.get(Calendar.MINUTE);
-        int nowM = hours * 60 + mins;
-
-        String period;
-        String nextPeriod;
-        if (hours >= 6 && hours < 12) {
-            period = "Edição Matinal";
-            nextPeriod = "Edição da Tarde";
-        } else if (hours >= 12 && hours < 18) {
-            period = "Edição da Tarde";
-            nextPeriod = "Horário Nobre";
-        } else if (hours >= 18 && hours < 24) {
-            period = "Horário Nobre";
-            nextPeriod = "Madrugada";
-        } else {
-            period = "Madrugada Especial";
-            nextPeriod = "Edição Matinal";
-        }
-
-        String nowTitle = chName + " - " + period;
-        String nextTitle = chName + " - " + nextPeriod;
-        int prog = Math.min(95, Math.max(10, (mins * 100) / 60));
-        int rem = Math.max(5, 60 - mins);
-
-        String startStr = String.format(Locale.getDefault(), "%02d:00", hours);
-        String endStr = String.format(Locale.getDefault(), "%02d:00", (hours + 1) % 24);
-
+        // Sem dados reais no XMLTV: NUNCA usar valores falsos!
         return new LiveSchedule(
-                nowTitle,
-                "Transmissão digital oficial em alta definição.",
-                startStr,
-                endStr,
-                prog,
-                rem,
-                nextTitle,
-                endStr
+                "SEM DADOS DE PROGRAMAÇÃO",
+                "Grade de programação indisponível para este canal no momento.",
+                "--:--",
+                "--:--",
+                0,
+                0,
+                "SEM DADOS DE PROGRAMAÇÃO",
+                "--:--"
         );
     }
 

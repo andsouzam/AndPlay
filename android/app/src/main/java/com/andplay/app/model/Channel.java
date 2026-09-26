@@ -33,7 +33,12 @@ public class Channel implements Serializable {
         }
     }
 
-    public List<StreamFallback> getFallbacks() {
+    public List<StreamFallback> getFallbacks(android.content.Context context) {
+        List<String> priority = com.andplay.app.provider.ProviderManager.getPriorityList(context);
+        return getFallbacks(priority);
+    }
+
+    public List<StreamFallback> getFallbacks(List<String> priorityOrder) {
         List<StreamFallback> list = new ArrayList<>();
         String cleanSlug = (id != null) ? id.replaceFirst("^canal/", "").replaceFirst("\\.html$", "") : "";
         String rdSlug = cleanSlug.replaceFirst("^telecine-", "telecine").replaceFirst("^hbo-", "hbo");
@@ -47,16 +52,35 @@ public class Channel implements Serializable {
             list.add(new StreamFallback("HLS Nativo 1080p", "https://jmp2.uk/plu-6759eeb1bd523200083b4f29.m3u8", false));
         }
 
-        // Primary: RDCanais
-        list.add(new StreamFallback("HD 1", "https://rdcanais.net/" + rdSlug, true));
-        // Fallback: Embed alternativo oficial
-        if (embed != null && !embed.isEmpty()) {
-            list.add(new StreamFallback("HD 2", embed, true));
-        } else {
-            list.add(new StreamFallback("HD 2", "https://v2.rdembed.sbs/" + rdSlug, true));
+        if (priorityOrder == null || priorityOrder.isEmpty()) {
+            priorityOrder = java.util.Arrays.asList(
+                    com.andplay.app.provider.ProviderManager.PROVIDER_RDCANAIS,
+                    com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED,
+                    com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE
+            );
         }
-        // Fallback: RedeCanais / StreamVerde
-        list.add(new StreamFallback("Servidor 3", "https://streamverde.net/canais/" + cleanSlug + "/embed", true));
+
+        int serverNum = 1;
+        for (String prov : priorityOrder) {
+            if (com.andplay.app.provider.ProviderManager.PROVIDER_RDCANAIS.equals(prov)) {
+                list.add(new StreamFallback("RDCanais (HD " + serverNum + ")", "https://rdcanais.net/" + rdSlug, true));
+                serverNum++;
+            } else if (com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED.equals(prov)) {
+                if (embed != null && !embed.isEmpty()) {
+                    list.add(new StreamFallback("RDEmbed (HD " + serverNum + ")", embed, true));
+                } else {
+                    list.add(new StreamFallback("RDEmbed (HD " + serverNum + ")", "https://v2.rdembed.sbs/" + rdSlug, true));
+                }
+                serverNum++;
+            } else if (com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE.equals(prov)) {
+                list.add(new StreamFallback("StreamVerde (HD " + serverNum + ")", "https://streamverde.net/canais/" + cleanSlug + "/embed", true));
+                serverNum++;
+            }
+        }
         return list;
+    }
+
+    public List<StreamFallback> getFallbacks() {
+        return getFallbacks((List<String>) null);
     }
 }

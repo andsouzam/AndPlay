@@ -2,7 +2,10 @@ package com.andplay.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import com.andplay.app.provider.ProviderManager;
+import java.util.Arrays;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -93,6 +96,8 @@ public class MainActivity extends Activity {
     private NestedScrollView centralScroll;
     private TextView headerClock;
     private TextView headerDate;
+    private View btnHeaderOptions;
+    private View btnDrawerOptions;
     private FrameLayout pipContainer;
     private TextView pipChannelName;
     private TextView pipProgramTitle;
@@ -202,6 +207,7 @@ public class MainActivity extends Activity {
         centralScroll = findViewById(R.id.centralScroll);
         headerClock = findViewById(R.id.headerClock);
         headerDate = findViewById(R.id.headerDate);
+        btnHeaderOptions = findViewById(R.id.btnHeaderOptions);
         pipContainer = findViewById(R.id.pipContainer);
         pipChannelName = findViewById(R.id.pipChannelName);
         pipProgramTitle = findViewById(R.id.pipProgramTitle);
@@ -234,6 +240,7 @@ public class MainActivity extends Activity {
 
         // EPG Drawer
         epgDrawer = findViewById(R.id.epgDrawer);
+        btnDrawerOptions = findViewById(R.id.btnDrawerOptions);
         drawerCatsRecycler = findViewById(R.id.drawerCatsRecycler);
         drawerChannelsRecycler = findViewById(R.id.drawerChannelsRecycler);
 
@@ -501,7 +508,7 @@ public class MainActivity extends Activity {
                             Channel ch = allChannels.get(currentChannelIdx);
                             LiveSchedule epg = EpgEngine.getLiveSchedule(ch);
                             updateOsd(ch, currentChannelIdx, epg);
-                            pipProgramTitle.setText("🔴 No Ar: " + (epg != null ? epg.nowTitle : (ch.now != null ? ch.now : "Ao Vivo")));
+                            pipProgramTitle.setText("🔴 No Ar: " + (epg != null && !"SEM DADOS DE PROGRAMAÇÃO".equals(epg.nowTitle) ? epg.nowTitle : "SEM DADOS DE PROGRAMAÇÃO"));
                         }
                         if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE && !drawerCats.isEmpty()) {
                             Category cat = drawerCats.get(selectedDrawerCatIdx);
@@ -549,6 +556,28 @@ public class MainActivity extends Activity {
         btnNavEpg.setOnClickListener(v -> {
             toggleDrawer();
         });
+
+        if (btnHeaderOptions != null) {
+            btnHeaderOptions.setOnClickListener(v -> showProviderOptionsDialog());
+            btnHeaderOptions.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    showProviderOptionsDialog();
+                    return true;
+                }
+                return false;
+            });
+        }
+
+        if (btnDrawerOptions != null) {
+            btnDrawerOptions.setOnClickListener(v -> showProviderOptionsDialog());
+            btnDrawerOptions.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    showProviderOptionsDialog();
+                    return true;
+                }
+                return false;
+            });
+        }
 
         floatingBackBtn.setOnClickListener(v -> setScreenMode(ScreenMode.CENTRAL));
         vodBackBtn.setOnClickListener(v -> setScreenMode(ScreenMode.CENTRAL));
@@ -683,13 +712,13 @@ public class MainActivity extends Activity {
 
         // Atualiza PiP
         pipChannelName.setText(String.format("%03d - %s", currentChannelIdx + 1, ch.name));
-        pipProgramTitle.setText("🔴 No Ar: " + (epg != null ? epg.nowTitle : (ch.now != null ? ch.now : "Ao Vivo")));
+        pipProgramTitle.setText("🔴 No Ar: " + (epg != null && !"SEM DADOS DE PROGRAMAÇÃO".equals(epg.nowTitle) ? epg.nowTitle : "SEM DADOS DE PROGRAMAÇÃO"));
 
         // Atualiza OSD
         updateOsd(ch, currentChannelIdx, epg);
 
-        // Carrega transmissão
-        List<Channel.StreamFallback> fallbacks = ch.getFallbacks();
+        // Carrega transmissão respeitando a prioridade de provedores do usuário
+        List<Channel.StreamFallback> fallbacks = ch.getFallbacks(this);
         if (!fallbacks.isEmpty()) {
             Channel.StreamFallback primary = fallbacks.get(0);
             playStream(primary.url, primary.isEmbed);
@@ -847,18 +876,18 @@ public class MainActivity extends Activity {
         osdChNum.setText(String.format("%03d", chIdx + 1));
         osdChName.setText(ch.name);
 
-        if (epg != null) {
+        if (epg != null && !"SEM DADOS DE PROGRAMAÇÃO".equals(epg.nowTitle)) {
             osdNowTitle.setText("🔴 NO AR: " + epg.nowTitle);
             osdRemaining.setText(String.format("Restam ~%d min (%s)", epg.remainingMinutes, epg.timeRange));
             osdSynopsis.setText(epg.synopsis);
             osdNextProgram.setText("A Seguir: " + epg.nextStart + " • " + epg.nextTitle);
             osdProgressBar.setProgress(epg.progress);
         } else {
-            osdNowTitle.setText("🔴 NO AR: " + (ch.now != null ? ch.now : "Transmissão Ao Vivo"));
-            osdRemaining.setText("Ao Vivo");
-            osdSynopsis.setText("Transmissão contínua em tempo real.");
-            osdNextProgram.setText("Programação contínua.");
-            osdProgressBar.setProgress(50);
+            osdNowTitle.setText("🔴 NO AR: SEM DADOS DE PROGRAMAÇÃO");
+            osdRemaining.setText("--:--");
+            osdSynopsis.setText("Grade de programação indisponível para este canal no momento.");
+            osdNextProgram.setText("A Seguir: SEM DADOS DE PROGRAMAÇÃO");
+            osdProgressBar.setProgress(0);
         }
     }
 
@@ -1271,11 +1300,14 @@ public class MainActivity extends Activity {
                     stepZapChannel(-1);
                     return true;
                 }
-            } else if (keyCode == KeyEvent.KEYCODE_GUIDE || keyCode == KeyEvent.KEYCODE_INFO || keyCode == KeyEvent.KEYCODE_MENU) {
+            } else if (keyCode == KeyEvent.KEYCODE_GUIDE || keyCode == KeyEvent.KEYCODE_INFO) {
                 if (currentMode == ScreenMode.FULLSCREEN) {
                     toggleDrawer();
                     return true;
                 }
+            } else if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_SETTINGS) {
+                showProviderOptionsDialog();
+                return true;
             } else if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
                 if (exoPlayer != null) {
                     if (exoPlayer.isPlaying()) exoPlayer.pause();
@@ -1407,6 +1439,132 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Pressione Voltar novamente para sair", Toast.LENGTH_SHORT).show();
         }
         return true;
+    }
+
+    private void showProviderOptionsDialog() {
+        List<String> currentPriority = ProviderManager.getPriorityList(this);
+
+        String[] options = new String[] {
+                "⭐ 1º StreamVerde | 2º RDCanais | 3º RDEmbed",
+                "⚡ 1º RDCanais | 2º RDEmbed | 3º StreamVerde (Padrão)",
+                "🚀 1º RDEmbed | 2º StreamVerde | 3º RDCanais",
+                "🟢 1º StreamVerde | 2º RDEmbed | 3º RDCanais",
+                "🛠️ Escolher Provedor Primário (1º Lugar)..."
+        };
+
+        int selectedIndex = 1;
+        if (currentPriority.size() >= 2) {
+            String p0 = currentPriority.get(0);
+            String p1 = currentPriority.get(1);
+            if (ProviderManager.PROVIDER_STREAMVERDE.equals(p0) && ProviderManager.PROVIDER_RDCANAIS.equals(p1)) {
+                selectedIndex = 0;
+            } else if (ProviderManager.PROVIDER_RDCANAIS.equals(p0) && ProviderManager.PROVIDER_RDEMBED.equals(p1)) {
+                selectedIndex = 1;
+            } else if (ProviderManager.PROVIDER_RDEMBED.equals(p0)) {
+                selectedIndex = 2;
+            } else if (ProviderManager.PROVIDER_STREAMVERDE.equals(p0) && ProviderManager.PROVIDER_RDEMBED.equals(p1)) {
+                selectedIndex = 3;
+            }
+        }
+
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("⚙️ Prioridade dos Provedores de TV")
+                .setSingleChoiceItems(options, selectedIndex, (dialog, which) -> {
+                    dialog.dismiss();
+                    if (which == 0) {
+                        ProviderManager.setPriorityList(MainActivity.this, Arrays.asList(
+                                ProviderManager.PROVIDER_STREAMVERDE,
+                                ProviderManager.PROVIDER_RDCANAIS,
+                                ProviderManager.PROVIDER_RDEMBED
+                        ));
+                        applyProviderChange("StreamVerde (streamverde.net)");
+                    } else if (which == 1) {
+                        ProviderManager.setPriorityList(MainActivity.this, Arrays.asList(
+                                ProviderManager.PROVIDER_RDCANAIS,
+                                ProviderManager.PROVIDER_RDEMBED,
+                                ProviderManager.PROVIDER_STREAMVERDE
+                        ));
+                        applyProviderChange("RDCanais (rdcanais.net)");
+                    } else if (which == 2) {
+                        ProviderManager.setPriorityList(MainActivity.this, Arrays.asList(
+                                ProviderManager.PROVIDER_RDEMBED,
+                                ProviderManager.PROVIDER_STREAMVERDE,
+                                ProviderManager.PROVIDER_RDCANAIS
+                        ));
+                        applyProviderChange("RDEmbed (v2.rdembed.sbs)");
+                    } else if (which == 3) {
+                        ProviderManager.setPriorityList(MainActivity.this, Arrays.asList(
+                                ProviderManager.PROVIDER_STREAMVERDE,
+                                ProviderManager.PROVIDER_RDEMBED,
+                                ProviderManager.PROVIDER_RDCANAIS
+                        ));
+                        applyProviderChange("StreamVerde (streamverde.net)");
+                    } else if (which == 4) {
+                        showCustomProviderOrderDialog();
+                    }
+                })
+                .setNegativeButton("Fechar", null)
+                .show();
+    }
+
+    private void showCustomProviderOrderDialog() {
+        String[] providers = new String[] {
+                "StreamVerde (streamverde.net)",
+                "RDCanais (rdcanais.net)",
+                "RDEmbed (v2.rdembed.sbs)"
+        };
+        final String[] provIds = new String[] {
+                ProviderManager.PROVIDER_STREAMVERDE,
+                ProviderManager.PROVIDER_RDCANAIS,
+                ProviderManager.PROVIDER_RDEMBED
+        };
+
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Escolha o 1º Provedor (Primário)")
+                .setItems(providers, (dialog, which) -> {
+                    String chosen1 = provIds[which];
+                    showSecondaryProviderDialog(chosen1);
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    private void showSecondaryProviderDialog(String primaryId) {
+        List<String> remaining = new ArrayList<>();
+        if (!ProviderManager.PROVIDER_STREAMVERDE.equals(primaryId)) remaining.add(ProviderManager.PROVIDER_STREAMVERDE);
+        if (!ProviderManager.PROVIDER_RDCANAIS.equals(primaryId)) remaining.add(ProviderManager.PROVIDER_RDCANAIS);
+        if (!ProviderManager.PROVIDER_RDEMBED.equals(primaryId)) remaining.add(ProviderManager.PROVIDER_RDEMBED);
+
+        String[] labels = new String[remaining.size()];
+        for (int i = 0; i < remaining.size(); i++) {
+            labels[i] = ProviderManager.getProviderDisplayName(remaining.get(i));
+        }
+
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Escolha o 2º Provedor (Secundário)")
+                .setItems(labels, (dialog, which) -> {
+                    String chosen2 = remaining.get(which);
+                    String chosen3 = "";
+                    for (String r : remaining) {
+                        if (!r.equals(chosen2)) {
+                            chosen3 = r;
+                            break;
+                        }
+                    }
+                    ProviderManager.setPriorityList(MainActivity.this, Arrays.asList(primaryId, chosen2, chosen3));
+                    applyProviderChange(ProviderManager.getProviderDisplayName(primaryId));
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    private void applyProviderChange(String primaryName) {
+        Toast.makeText(this, "Prioridade salva! 1º: " + primaryName, Toast.LENGTH_SHORT).show();
+        // Se houver canal sintonizado, recarrega com o novo provedor primário
+        if (!allChannels.isEmpty() && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size() && !isPlayingVod) {
+            destroyCurrentStream();
+            tuneChannel(currentChannelIdx, currentMode == ScreenMode.FULLSCREEN);
+        }
     }
 
     @Override
