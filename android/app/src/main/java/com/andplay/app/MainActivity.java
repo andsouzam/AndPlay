@@ -1227,7 +1227,7 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view, url);
                 mainHandler.post(() -> {
                     onPlaybackStarted();
-                    if (currentMode == ScreenMode.FULLSCREEN) {
+                    if (!isPlayingEmbed && currentMode == ScreenMode.FULLSCREEN) {
                         scheduleOsdHide(5000);
                     }
                 });
@@ -1240,7 +1240,7 @@ public class MainActivity extends Activity {
                         "  }" +
                         "} catch(e) {}" +
                         "try {" +
-                        "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"] { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';" +
+                        "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], .vjs-text-track-display, .vjs-loading-spinner, .vjs-poster, header, footer, nav, .menu, #sidebar, .chat, .comments, .site-header, .site-footer { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; } body, html { background: #000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }';" +
                         "  var st = document.createElement('style');" +
                         "  st.textContent = css;" +
                         "  (document.head || document.documentElement).appendChild(st);" +
@@ -1254,6 +1254,13 @@ public class MainActivity extends Activity {
                         "        ifr.setAttribute('allow', 'autoplay *; encrypted-media *; fullscreen *; picture-in-picture *');" +
                         "        ifr.allow = 'autoplay *; encrypted-media *; fullscreen *; picture-in-picture *';" +
                         "      }" +
+                        "      ifr.style.position = 'fixed';" +
+                        "      ifr.style.top = '0';" +
+                        "      ifr.style.left = '0';" +
+                        "      ifr.style.width = '100vw';" +
+                        "      ifr.style.height = '100vh';" +
+                        "      ifr.style.zIndex = '2147483647';" +
+                        "      ifr.style.border = 'none';" +
                         "    }" +
                         "  } catch(e) {}" +
                         "  var media = document.querySelectorAll('video, audio');" +
@@ -2494,7 +2501,7 @@ public class MainActivity extends Activity {
             mainHandler.postDelayed(() -> {
                 if (isPlayingEmbed) {
                     onPlaybackStarted();
-                    if (currentMode == ScreenMode.FULLSCREEN) {
+                    if (!isPlayingEmbed && currentMode == ScreenMode.FULLSCREEN) {
                         scheduleOsdHide(5000);
                     }
                 }
@@ -2783,7 +2790,8 @@ public class MainActivity extends Activity {
             startVodProgressTicker();
             updateVodProgress();
         }
-        if (!wasActive && currentMode == ScreenMode.FULLSCREEN && osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
+        // Para canais WebView/RDCanais (isPlayingEmbed), o overlay permanece sempre cobrindo o player interno conforme solicitado pelo usuário
+        if (!isPlayingEmbed && !wasActive && currentMode == ScreenMode.FULLSCREEN && osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
             scheduleOsdHide(5000);
         }
     }
@@ -2799,8 +2807,10 @@ public class MainActivity extends Activity {
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
 
-        // O overlay sempre fecha sozinho após 5s, sem travar na tela
-        scheduleOsdHide(5000);
+        // O overlay fecha sozinho após 5s apenas em transmissões nativas; em embeds (RDCanais) permanece cobrindo
+        if (!isPlayingEmbed) {
+            scheduleOsdHide(5000);
+        }
     }
 
     public void showOsdBanner(int durationMs) {
@@ -2809,10 +2819,12 @@ public class MainActivity extends Activity {
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
 
-        if (isVideoPlaybackActive) {
-            scheduleOsdHide(durationMs > 0 ? durationMs : 5000);
-        } else {
-            showOsdBannerLoading();
+        if (!isPlayingEmbed) {
+            if (isVideoPlaybackActive) {
+                scheduleOsdHide(durationMs > 0 ? durationMs : 5000);
+            } else {
+                showOsdBannerLoading();
+            }
         }
     }
 
@@ -3784,9 +3796,9 @@ public class MainActivity extends Activity {
                             }
                         }
 
-                        // Prolonga o OSD se estiver visível e reprodução ativa
+                        // Prolonga o OSD se estiver visível e reprodução ativa (em transmissões nativas)
                         if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
-                            if (isVideoPlaybackActive) {
+                            if (!isPlayingEmbed && isVideoPlaybackActive) {
                                 scheduleOsdHide(5000);
                             }
                         }
