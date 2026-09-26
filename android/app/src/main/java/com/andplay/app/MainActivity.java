@@ -36,6 +36,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
 import androidx.core.widget.NestedScrollView;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
@@ -147,6 +148,7 @@ public class MainActivity extends Activity {
     private String currentActiveStreamUrl = "";
     private boolean isPlayingEmbed = false;
     private boolean isPlayingVod = false;
+    private boolean isVideoPlaybackActive = false;
 
     private Movie activeVodMovie = null;
     private Series activeVodSeries = null;
@@ -272,6 +274,21 @@ public class MainActivity extends Activity {
         // Configuração do ExoPlayer
         exoPlayer = new ExoPlayer.Builder(this).build();
         exoPlayer.setPlayWhenReady(true);
+        exoPlayer.addListener(new Player.Listener() {
+            @Override
+            public void onPlaybackStateChanged(int playbackState) {
+                if (playbackState == Player.STATE_READY && exoPlayer.getPlayWhenReady()) {
+                    mainHandler.post(() -> onPlaybackStarted());
+                }
+            }
+
+            @Override
+            public void onIsPlayingChanged(boolean isPlaying) {
+                if (isPlaying) {
+                    mainHandler.post(() -> onPlaybackStarted());
+                }
+            }
+        });
         unifiedExoPlayerView.setPlayer(exoPlayer);
 
         // Configuração Avançada do WebView com Proteção Total Contra Anúncios
@@ -292,6 +309,13 @@ public class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         }
+
+        unifiedEmbedWebView.addJavascriptInterface(new Object() {
+            @android.webkit.JavascriptInterface
+            public void onVideoStarted() {
+                mainHandler.post(() -> onPlaybackStarted());
+            }
+        }, "AndroidPlayback");
 
         unifiedEmbedWebView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -327,6 +351,10 @@ public class MainActivity extends Activity {
                 if (url.startsWith("file://")
                         || url.contains("rdcanais.net")
                         || url.contains("v2.rdembed.sbs")
+                        || url.contains("streamverde.net")
+                        || url.contains("cazetv.shop")
+                        || url.contains("tvacabo.top")
+                        || url.contains("tvacabo.free.nf")
                         || url.contains("bolodechocolate.fit")
                         || url.contains("esportesembed.net")
                         || url.contains("about:blank")) {
@@ -340,8 +368,8 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // Injeta script que trava window.open, cliques simulados em anúncios e garante volume no máximo
-                String antiAdScript = "(function() {" +
+                // Injeta script que trava popups/anúncios, força volume máximo e detecta início da reprodução real do vídeo
+                String antiAdAndPlaybackScript = "(function() {" +
                         "window.open = function() { return null; };" +
                         "window.alert = function() { };" +
                         "window.confirm = function() { return false; };" +
@@ -349,17 +377,33 @@ public class MainActivity extends Activity {
                         "  var a = e.target.closest('a');" +
                         "  if (a && a.target === '_blank') { e.preventDefault(); e.stopPropagation(); }" +
                         "}, true);" +
-                        "function setMaxAudio() {" +
+                        "function setMaxAudioAndHook() {" +
                         "  var media = document.querySelectorAll('video, audio');" +
                         "  for (var i = 0; i < media.length; i++) {" +
-                        "    media[i].muted = false;" +
-                        "    media[i].volume = 1.0;" +
+                        "    var m = media[i];" +
+                        "    m.muted = false;" +
+                        "    m.volume = 1.0;" +
+                        "    if (m.tagName && m.tagName.toLowerCase() === 'video' && !m.__eplay_h) {" +
+                        "      m.__eplay_h = true;" +
+                        "      m.addEventListener('playing', function() {" +
+                        "        if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted();" +
+                        "      });" +
+                        "      m.addEventListener('timeupdate', function() {" +
+                        "        if (m.currentTime > 0.3 && !m.__eplay_sent) {" +
+                        "          m.__eplay_sent = true;" +
+                        "          if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted();" +
+                        "        }" +
+                        "      });" +
+                        "    }" +
+                        "    if (!m.paused && m.currentTime > 0) {" +
+                        "      if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted();" +
+                        "    }" +
                         "  }" +
                         "}" +
-                        "setMaxAudio();" +
-                        "setInterval(setMaxAudio, 1500);" +
+                        "setMaxAudioAndHook();" +
+                        "setInterval(setMaxAudioAndHook, 800);" +
                         "})();";
-                view.evaluateJavascript(antiAdScript, null);
+                view.evaluateJavascript(antiAdAndPlaybackScript, null);
             }
 
             @Override
@@ -448,6 +492,23 @@ public class MainActivity extends Activity {
                 setupChannelsRail();
                 setupSportsRail();
                 setupDrawer();
+
+                // Inicializa o sincronizador de EPG real de TV
+                EpgEngine.init(MainActivity.this);
+                EpgEngine.setUpdateListener(() -> {
+                    mainHandler.post(() -> {
+                        if (!allChannels.isEmpty() && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
+                            Channel ch = allChannels.get(currentChannelIdx);
+                            LiveSchedule epg = EpgEngine.getLiveSchedule(ch);
+                            updateOsd(ch, currentChannelIdx, epg);
+                            pipProgramTitle.setText("🔴 No Ar: " + (epg != null ? epg.nowTitle : (ch.now != null ? ch.now : "Ao Vivo")));
+                        }
+                        if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE && !drawerCats.isEmpty()) {
+                            Category cat = drawerCats.get(selectedDrawerCatIdx);
+                            filterDrawerChannels(cat.category_id);
+                        }
+                    });
+                });
 
                 if (!allChannels.isEmpty()) {
                     tuneChannel(0, false);
@@ -635,7 +696,7 @@ public class MainActivity extends Activity {
         }
 
         if (showOsd && currentMode == ScreenMode.FULLSCREEN) {
-            showOsdBanner(5000);
+            showOsdBannerLoading();
         }
     }
 
@@ -677,6 +738,7 @@ public class MainActivity extends Activity {
     }
 
     private void playStream(String url, boolean isEmbed) {
+        isVideoPlaybackActive = false;
         currentActiveStreamUrl = url;
         isPlayingEmbed = isEmbed;
         enforceMaxVolume();
@@ -727,7 +789,7 @@ public class MainActivity extends Activity {
         osdNextProgram.setText("Áudio Original / Dublado");
         osdProgressBar.setProgress(100);
 
-        showOsdBanner(5000);
+        showOsdBannerLoading();
     }
 
     public void playSeriesEpisode(Series series, Episode ep, String seasonNum) {
@@ -750,7 +812,7 @@ public class MainActivity extends Activity {
         osdNextProgram.setText("Próximo episódio disponível na lista.");
         osdProgressBar.setProgress(100);
 
-        showOsdBanner(5000);
+        showOsdBannerLoading();
     }
 
     public void playSportsEvent(SportsEvent ev) {
@@ -774,7 +836,7 @@ public class MainActivity extends Activity {
         osdNextProgram.setText("Compactos e melhores momentos ao final da partida.");
         osdProgressBar.setProgress(100);
 
-        showOsdBanner(5000);
+        showOsdBannerLoading();
     }
 
     private void updateOsd(Channel ch, int chIdx, LiveSchedule epg) {
@@ -800,12 +862,44 @@ public class MainActivity extends Activity {
         }
     }
 
+    public void onPlaybackStarted() {
+        isVideoPlaybackActive = true;
+        enforceMaxVolume();
+        if (currentMode == ScreenMode.FULLSCREEN && osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
+            scheduleOsdHide(5000);
+        }
+    }
+
+    public void scheduleOsdHide(int durationMs) {
+        osdHandler.removeCallbacks(osdHideRunnable);
+        osdHandler.postDelayed(osdHideRunnable, durationMs);
+    }
+
+    public void showOsdBannerLoading() {
+        osdHandler.removeCallbacks(osdHideRunnable);
+        if (floatingBackBtn != null) floatingBackBtn.setVisibility(View.VISIBLE);
+        if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
+        if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
+
+        // Fallback de segurança: se a reprodução não disparar em 15s, agenda fechamento
+        osdHandler.postDelayed(() -> {
+            if (!isVideoPlaybackActive && currentMode == ScreenMode.FULLSCREEN) {
+                scheduleOsdHide(5000);
+            }
+        }, 15000);
+    }
+
     public void showOsdBanner(int durationMs) {
         osdHandler.removeCallbacks(osdHideRunnable);
         if (floatingBackBtn != null) floatingBackBtn.setVisibility(View.VISIBLE);
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
-        osdHandler.postDelayed(osdHideRunnable, durationMs);
+
+        if (isVideoPlaybackActive) {
+            scheduleOsdHide(durationMs > 0 ? durationMs : 5000);
+        } else {
+            showOsdBannerLoading();
+        }
     }
 
     public void hideOsdBanner() {
@@ -822,14 +916,19 @@ public class MainActivity extends Activity {
             hideOsdBanner();
             resetDrawerTimeout();
 
-            drawerChannelsRecycler.post(() -> {
+            epgDrawer.post(() -> {
+                // Re-filtra e adapta dimensões dos canais agora que a gaveta tem seus 410dp medidos
+                if (drawerCats != null && !drawerCats.isEmpty() && selectedDrawerCatIdx < drawerCats.size()) {
+                    filterDrawerChannels(drawerCats.get(selectedDrawerCatIdx).category_id);
+                }
+
                 int pos = Math.max(0, currentChannelIdx);
                 drawerChannelsRecycler.scrollToPosition(pos);
                 drawerChannelsRecycler.postDelayed(() -> {
                     RecyclerView.ViewHolder vh = drawerChannelsRecycler.findViewHolderForAdapterPosition(pos);
                     if (vh != null && vh.itemView != null) {
                         vh.itemView.requestFocus();
-                    } else {
+                    } else if (drawerChannelsRecycler.getChildCount() > 0) {
                         View first = drawerChannelsRecycler.getChildAt(0);
                         if (first != null) first.requestFocus();
                     }
@@ -865,8 +964,11 @@ public class MainActivity extends Activity {
         if (mode == ScreenMode.FULLSCREEN) {
             // Reanexa o player unificado no host de tela cheia sem recarregar o vídeo
             attachPlayerToHost(fullscreenPlayerHost);
-            enforceMaxVolume();
-            showOsdBanner(5000);
+            if (isVideoPlaybackActive) {
+                showOsdBanner(5000);
+            } else {
+                showOsdBannerLoading();
+            }
         } else if (mode == ScreenMode.CENTRAL) {
             // Reanexa o player unificado no host do PiP sem recarregar o vídeo
             closeDrawer();
@@ -1237,9 +1339,11 @@ public class MainActivity extends Activity {
                             }
                         }
 
-                        // Prolonga o OSD se estiver visível
+                        // Prolonga o OSD se estiver visível e reprodução ativa
                         if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
-                            showOsdBanner(5000);
+                            if (isVideoPlaybackActive) {
+                                scheduleOsdHide(5000);
+                            }
                         }
                     } else {
                         // Em VOD (Filme ou Série), teclas mostram o banner de informações

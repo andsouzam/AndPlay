@@ -48,13 +48,15 @@ public class Channel implements Serializable {
         }
 
         // Primary: RDCanais
-        list.add(new StreamFallback("HD", "https://rdcanais.net/" + rdSlug, true));
-        // Fallback: RDEmbed
+        list.add(new StreamFallback("HD 1", "https://rdcanais.net/" + rdSlug, true));
+        // Fallback: Embed alternativo oficial
         if (embed != null && !embed.isEmpty()) {
-            list.add(new StreamFallback("Alternativo", embed, true));
+            list.add(new StreamFallback("HD 2", embed, true));
         } else {
-            list.add(new StreamFallback("Alternativo", "https://v2.rdembed.sbs/" + rdSlug, true));
+            list.add(new StreamFallback("HD 2", "https://v2.rdembed.sbs/" + rdSlug, true));
         }
+        // Fallback: RedeCanais / StreamVerde
+        list.add(new StreamFallback("Servidor 3", "https://streamverde.net/canais/" + cleanSlug + "/embed", true));
         return list;
     }
 }

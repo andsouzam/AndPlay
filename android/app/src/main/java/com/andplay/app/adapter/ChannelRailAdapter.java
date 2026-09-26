@@ -124,12 +124,9 @@ public class ChannelRailAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
             vh.itemView.setOnFocusChangeListener((v, hasFocus) -> {
                 v.setSelected(hasFocus);
-                v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(80).start();
-                if (hasFocus) {
-                    v.setElevation(6f);
-                } else {
-                    v.setElevation(0f);
-                }
+                v.setScaleX(1.0f);
+                v.setScaleY(1.0f);
+                v.setElevation(hasFocus ? 4f : 0f);
             });
         }
     }

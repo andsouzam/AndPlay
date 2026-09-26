@@ -39,7 +39,19 @@ public class ApiClient {
             Type type = new TypeToken<List<Channel>>() {}.getType();
             List<Channel> channels = gson.fromJson(reader, type);
             reader.close();
-            if (channels != null) return channels;
+            if (channels != null) {
+                List<Channel> valid = new ArrayList<>();
+                for (Channel ch : channels) {
+                    if (ch == null || ch.id == null) continue;
+                    String idLow = ch.id.toLowerCase();
+                    String nameLow = (ch.name != null) ? ch.name.toLowerCase() : "";
+                    if (idLow.contains("appletv") || nameLow.contains("apple tv")) {
+                        continue;
+                    }
+                    valid.add(ch);
+                }
+                return valid;
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
