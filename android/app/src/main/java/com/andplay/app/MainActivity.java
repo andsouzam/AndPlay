@@ -242,6 +242,30 @@ public class MainActivity extends Activity {
 
     private long lastBackAt = 0;
 
+    // Mosaico (Multi-View 2 ou 4 Telas)
+    private LinearLayout mosaicLayout;
+    private LinearLayout mosaicRow1, mosaicRow2;
+    private TextView btnDrawerMosaic;
+    private boolean isMosaicActive = false;
+    private int mosaicScreenCount = 2;
+    private int mosaicTargetSlotIdx = -1;
+    private long lastMosaicBackAt = 0;
+    private int mosaicInitialChannelIdx = 0;
+    private ScreenMode preMosaicMode = ScreenMode.FULLSCREEN;
+
+    private static class MosaicSlotItem {
+        FrameLayout slotView;
+        FrameLayout playerHost;
+        TextView titleView;
+        TextView audioView;
+        Channel channel;
+        WebView webView;
+        ExoPlayer exoPlayer;
+        PlayerView playerView;
+        boolean isPlayingEmbed;
+    }
+    private final MosaicSlotItem[] mosaicSlots = new MosaicSlotItem[4];
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -350,6 +374,343 @@ public class MainActivity extends Activity {
         // Loading
         loadingLayout = findViewById(R.id.loadingLayout);
         loadingText = findViewById(R.id.loadingText);
+
+        // Mosaico
+        mosaicLayout = findViewById(R.id.mosaicLayout);
+        mosaicRow1 = findViewById(R.id.mosaicRow1);
+        mosaicRow2 = findViewById(R.id.mosaicRow2);
+        btnDrawerMosaic = findViewById(R.id.btnDrawerMosaic);
+        initMosaicSlots();
+    }
+
+    private void initMosaicSlots() {
+        for (int i = 0; i < 4; i++) {
+            mosaicSlots[i] = new MosaicSlotItem();
+        }
+        mosaicSlots[0].slotView = findViewById(R.id.mosaicSlot1);
+        mosaicSlots[0].playerHost = findViewById(R.id.mosaicSlotPlayer1);
+        mosaicSlots[0].titleView = findViewById(R.id.mosaicSlotTitle1);
+        mosaicSlots[0].audioView = findViewById(R.id.mosaicSlotAudio1);
+
+        mosaicSlots[1].slotView = findViewById(R.id.mosaicSlot2);
+        mosaicSlots[1].playerHost = findViewById(R.id.mosaicSlotPlayer2);
+        mosaicSlots[1].titleView = findViewById(R.id.mosaicSlotTitle2);
+        mosaicSlots[1].audioView = findViewById(R.id.mosaicSlotAudio2);
+
+        mosaicSlots[2].slotView = findViewById(R.id.mosaicSlot3);
+        mosaicSlots[2].playerHost = findViewById(R.id.mosaicSlotPlayer3);
+        mosaicSlots[2].titleView = findViewById(R.id.mosaicSlotTitle3);
+        mosaicSlots[2].audioView = findViewById(R.id.mosaicSlotAudio3);
+
+        mosaicSlots[3].slotView = findViewById(R.id.mosaicSlot4);
+        mosaicSlots[3].playerHost = findViewById(R.id.mosaicSlotPlayer4);
+        mosaicSlots[3].titleView = findViewById(R.id.mosaicSlotTitle4);
+        mosaicSlots[3].audioView = findViewById(R.id.mosaicSlotAudio4);
+
+        for (int i = 0; i < 4; i++) {
+            final int slotIdx = i;
+            MosaicSlotItem slot = mosaicSlots[i];
+            if (slot.slotView != null) {
+                slot.slotView.setOnFocusChangeListener((v, hasFocus) -> {
+                    if (hasFocus && isMosaicActive) {
+                        onMosaicSlotFocused(slotIdx);
+                    }
+                });
+                slot.slotView.setOnClickListener(v -> {
+                    if (isMosaicActive) {
+                        onMosaicSlotClicked(slotIdx);
+                    }
+                });
+                slot.slotView.setOnKeyListener((v, keyCode, event) -> {
+                    if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                        if (isMosaicActive) {
+                            onMosaicSlotClicked(slotIdx);
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+            }
+        }
+    }
+
+    private void showMosaicDialog() {
+        closeDrawer();
+        String[] options = new String[] {
+                "2 Telas (Lado a Lado)",
+                "4 Telas (Grade 2x2)"
+        };
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("⊞ Modo Mosaico (Multi-View)")
+                .setItems(options, (dialog, which) -> {
+                    dialog.dismiss();
+                    int count = (which == 0) ? 2 : 4;
+                    enterMosaicMode(count);
+                })
+                .setNegativeButton("Cancelar", null)
+                .show();
+    }
+
+    private void enterMosaicMode(int screenCount) {
+        if (isMosaicActive) {
+            exitMosaicMode(false);
+        }
+        isMosaicActive = true;
+        mosaicScreenCount = screenCount;
+        mosaicInitialChannelIdx = currentChannelIdx;
+        preMosaicMode = currentMode;
+
+        closeDrawer();
+        hideOsdBanner();
+        if (fullGuideLayout != null) fullGuideLayout.setVisibility(View.GONE);
+
+        centralLayout.setVisibility(View.GONE);
+        fullscreenLayout.setVisibility(View.GONE);
+        vodLayout.setVisibility(View.GONE);
+        seriesDetailLayout.setVisibility(View.GONE);
+
+        if (exoPlayer != null) {
+            exoPlayer.stop();
+            exoPlayer.clearMediaItems();
+        }
+        if (unifiedEmbedWebView != null) {
+            unifiedEmbedWebView.stopLoading();
+            unifiedEmbedWebView.loadUrl("about:blank");
+        }
+
+        mosaicLayout.setVisibility(View.VISIBLE);
+        if (screenCount == 2) {
+            mosaicRow1.setVisibility(View.VISIBLE);
+            mosaicRow2.setVisibility(View.GONE);
+        } else {
+            mosaicRow1.setVisibility(View.VISIBLE);
+            mosaicRow2.setVisibility(View.VISIBLE);
+        }
+
+        for (int i = 0; i < 4; i++) {
+            MosaicSlotItem slot = mosaicSlots[i];
+            clearMosaicSlot(slot);
+            if (slot.titleView != null) {
+                slot.titleView.setText("TELA " + (i + 1) + " - Pressione OK para Canal");
+            }
+            if (slot.audioView != null) {
+                slot.audioView.setText("🔇 MUDO");
+                slot.audioView.setTextColor(android.graphics.Color.parseColor("#888888"));
+            }
+        }
+
+        Channel initialCh = (!allChannels.isEmpty() && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size())
+                ? allChannels.get(currentChannelIdx) : null;
+        if (initialCh != null) {
+            tuneMosaicSlot(0, initialCh);
+        }
+
+        if (mosaicSlots[0].slotView != null) {
+            mosaicSlots[0].slotView.postDelayed(() -> {
+                if (mosaicSlots[0].slotView != null) {
+                    mosaicSlots[0].slotView.requestFocus();
+                    onMosaicSlotFocused(0);
+                }
+            }, 150);
+        }
+    }
+
+    private void onMosaicSlotFocused(int focusedIdx) {
+        for (int i = 0; i < 4; i++) {
+            MosaicSlotItem slot = mosaicSlots[i];
+            boolean isFocused = (i == focusedIdx);
+            if (slot.audioView != null) {
+                if (isFocused) {
+                    slot.audioView.setText("🔊 ÁUDIO");
+                    slot.audioView.setTextColor(android.graphics.Color.parseColor("#FFD700"));
+                } else {
+                    slot.audioView.setText("🔇 MUDO");
+                    slot.audioView.setTextColor(android.graphics.Color.parseColor("#888888"));
+                }
+            }
+            setSlotAudioMuted(slot, !isFocused);
+        }
+    }
+
+    private void setSlotAudioMuted(MosaicSlotItem slot, boolean muted) {
+        if (slot == null) return;
+        if (slot.exoPlayer != null) {
+            slot.exoPlayer.setVolume(muted ? 0.0f : 1.0f);
+        }
+        if (slot.webView != null) {
+            String script = "(function() {" +
+                    "try {" +
+                    "  var media = document.querySelectorAll('video, audio');" +
+                    "  for (var i = 0; i < media.length; i++) {" +
+                    "    media[i].muted = " + (muted ? "true" : "false") + ";" +
+                    (!muted ? "    media[i].volume = 1.0; if (media[i].paused) media[i].play().catch(function(){});" : "") +
+                    "  }" +
+                    "} catch(e) {}" +
+                    "})();";
+            slot.webView.evaluateJavascript(script, null);
+        }
+    }
+
+    private void onMosaicSlotClicked(int slotIdx) {
+        mosaicTargetSlotIdx = slotIdx;
+        openDrawer();
+    }
+
+    private void tuneMosaicSlot(int slotIdx, Channel ch) {
+        if (slotIdx < 0 || slotIdx >= 4 || ch == null) return;
+        MosaicSlotItem slot = mosaicSlots[slotIdx];
+        clearMosaicSlot(slot);
+        slot.channel = ch;
+
+        int chNum = allChannels.indexOf(ch) + 1;
+        if (slot.titleView != null) {
+            slot.titleView.setText(String.format(Locale.getDefault(), "TELA %d - %03d %s", slotIdx + 1, chNum, ch.name));
+        }
+
+        List<Channel.StreamFallback> fallbacks = ch.getFallbacks(this);
+        if (fallbacks.isEmpty()) return;
+        Channel.StreamFallback primary = fallbacks.get(0);
+
+        boolean isSlotFocused = (slot.slotView != null && slot.slotView.isFocused());
+
+        if (primary.isEmbed) {
+            slot.isPlayingEmbed = true;
+            WebView wv = new WebView(this);
+            slot.webView = wv;
+
+            WebSettings ws = wv.getSettings();
+            ws.setJavaScriptEnabled(true);
+            ws.setDomStorageEnabled(true);
+            ws.setDatabaseEnabled(true);
+            ws.setMediaPlaybackRequiresUserGesture(false);
+            ws.setAllowFileAccess(true);
+            ws.setAllowContentAccess(true);
+            ws.setUseWideViewPort(true);
+            ws.setLoadWithOverviewMode(true);
+            ws.setSupportMultipleWindows(false);
+            ws.setUserAgentString("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+                CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true);
+            }
+
+            wv.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+                    return false;
+                }
+            });
+
+            wv.setWebViewClient(new WebViewClient() {
+                @Override
+                public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                    if (request != null && !request.isForMainFrame()) return false;
+                    String url = request != null ? request.getUrl().toString() : "";
+                    if (url.startsWith("file://")
+                            || url.contains("rdcanais.net")
+                            || url.contains("v2.rdembed.sbs")
+                            || url.contains("streamverde.net")
+                            || url.contains("cazetv.shop")
+                            || url.contains("tvacabo.top")
+                            || url.contains("about:blank")) {
+                        return false;
+                    }
+                    return true;
+                }
+
+                @Override
+                public void onPageFinished(WebView view, String url) {
+                    super.onPageFinished(view, url);
+                    boolean isFocused = (slot.slotView != null && slot.slotView.isFocused());
+                    String script = "(function() {" +
+                            "try {" +
+                            "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"] { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';" +
+                            "  var st = document.createElement('style');" +
+                            "  st.textContent = css;" +
+                            "  (document.head || document.documentElement).appendChild(st);" +
+                            "} catch(e) {}" +
+                            "function applyAudio() {" +
+                            "  var media = document.querySelectorAll('video, audio');" +
+                            "  for (var i = 0; i < media.length; i++) {" +
+                            "    media[i].muted = " + (!isFocused) + ";" +
+                            (isFocused ? "    media[i].volume = 1.0;" : "") +
+                            "    if (media[i].paused) media[i].play().catch(function(){});" +
+                            "  }" +
+                            "}" +
+                            "applyAudio();" +
+                            "setInterval(applyAudio, 1000);" +
+                            "})();";
+                    view.evaluateJavascript(script, null);
+                }
+            });
+
+            slot.playerHost.addView(wv, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+
+            String autoplayUrl = primary.url + (primary.url.contains("?") ? "&" : "?") + "autoplay=1";
+            wv.loadUrl(autoplayUrl);
+
+        } else {
+            slot.isPlayingEmbed = false;
+            PlayerView pv = new PlayerView(this);
+            pv.setUseController(false);
+            slot.playerView = pv;
+
+            ExoPlayer ep = new ExoPlayer.Builder(this).build();
+            slot.exoPlayer = ep;
+            pv.setPlayer(ep);
+
+            slot.playerHost.addView(pv, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+
+            ep.setVolume(isSlotFocused ? 1.0f : 0.0f);
+            ep.setMediaItem(MediaItem.fromUri(primary.url));
+            ep.prepare();
+            ep.play();
+        }
+    }
+
+    private void clearMosaicSlot(MosaicSlotItem slot) {
+        if (slot == null) return;
+        if (slot.exoPlayer != null) {
+            slot.exoPlayer.stop();
+            slot.exoPlayer.release();
+            slot.exoPlayer = null;
+        }
+        if (slot.webView != null) {
+            slot.webView.stopLoading();
+            slot.webView.loadUrl("about:blank");
+            slot.webView.clearHistory();
+            slot.webView.destroy();
+            slot.webView = null;
+        }
+        if (slot.playerHost != null) {
+            slot.playerHost.removeAllViews();
+        }
+        slot.playerView = null;
+        slot.channel = null;
+    }
+
+    private void exitMosaicMode(boolean restorePrevious) {
+        isMosaicActive = false;
+        mosaicTargetSlotIdx = -1;
+
+        for (int i = 0; i < 4; i++) {
+            clearMosaicSlot(mosaicSlots[i]);
+        }
+
+        if (mosaicLayout != null) {
+            mosaicLayout.setVisibility(View.GONE);
+        }
+
+        if (restorePrevious) {
+            setScreenMode(ScreenMode.FULLSCREEN);
+            if (!allChannels.isEmpty() && mosaicInitialChannelIdx >= 0 && mosaicInitialChannelIdx < allChannels.size()) {
+                tuneChannel(mosaicInitialChannelIdx, true);
+            }
+        }
     }
 
     public static class StreamDns implements Dns {
@@ -1078,13 +1439,14 @@ public class MainActivity extends Activity {
         executor.execute(() -> {
             allChannels = ApiClient.loadLocalChannels(this);
             sortChannelsByGroup(allChannels);
-            allSports = ApiClient.getLiveSports();
+            allSports = ApiClient.getDefaultSportsFallbacks();
 
             mainHandler.post(() -> {
                 hideLoading();
                 setupChannelsRail();
                 setupSportsRail();
                 setupDrawer();
+                refreshSportsEvents();
 
                 // Inicializa o sincronizador de EPG real de TV
                 EpgEngine.init(MainActivity.this);
@@ -1196,6 +1558,17 @@ public class MainActivity extends Activity {
             btnDrawerOptions.setOnKeyListener((v, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
                     showProviderOptionsDialog();
+                    return true;
+                }
+                return false;
+            });
+        }
+
+        if (btnDrawerMosaic != null) {
+            btnDrawerMosaic.setOnClickListener(v -> showMosaicDialog());
+            btnDrawerMosaic.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    showMosaicDialog();
                     return true;
                 }
                 return false;
@@ -1715,6 +2088,17 @@ public class MainActivity extends Activity {
             }
         }
         ChannelRailAdapter adapter = new ChannelRailAdapter(this, filtered, true, (ch, idx) -> {
+            if (isMosaicActive) {
+                closeDrawer();
+                if (mosaicTargetSlotIdx >= 0 && mosaicTargetSlotIdx < 4) {
+                    tuneMosaicSlot(mosaicTargetSlotIdx, ch);
+                    if (mosaicSlots[mosaicTargetSlotIdx] != null && mosaicSlots[mosaicTargetSlotIdx].slotView != null) {
+                        mosaicSlots[mosaicTargetSlotIdx].slotView.requestFocus();
+                        onMosaicSlotFocused(mosaicTargetSlotIdx);
+                    }
+                }
+                return;
+            }
             int realIdx = allChannels.indexOf(ch);
             int targetIdx = realIdx >= 0 ? realIdx : idx;
             // Se for o mesmo canal que já está tocando, abre o guia completo de programação
@@ -2108,6 +2492,7 @@ public class MainActivity extends Activity {
     }
 
     public void showOsdBannerLoading() {
+        if (isMosaicActive) return;
         osdHandler.removeCallbacks(osdHideRunnable);
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
@@ -2121,6 +2506,7 @@ public class MainActivity extends Activity {
     }
 
     public void showOsdBanner(int durationMs) {
+        if (isMosaicActive) return;
         osdHandler.removeCallbacks(osdHideRunnable);
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
@@ -2719,6 +3105,9 @@ public class MainActivity extends Activity {
                     }
                 }
                 // UP e DOWN navegam normalmente pelos itens do RecyclerView
+            } else if (isMosaicActive) {
+                // Durante modo Mosaico com gaveta fechada, eventos de DPAD e Enter navegam entre os slots
+                return super.dispatchKeyEvent(event);
             } else if (currentMode == ScreenMode.SERIES_DETAIL) {
                 // CENÁRIO 2: DETALHES DA SÉRIE
                 // DPAD esquerda/direita só alterna temporada se o foco NÃO estiver no seletor de temporadas!
@@ -2875,6 +3264,26 @@ public class MainActivity extends Activity {
 
         if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
             closeDrawer();
+            return true;
+        }
+
+        if (isMosaicActive) {
+            long now = SystemClock.elapsedRealtime();
+            if (now - lastMosaicBackAt < 3000) {
+                lastMosaicBackAt = 0;
+                new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle("Sair do Mosaico")
+                        .setMessage("Deseja realmente sair do modo Mosaico e voltar à exibição padrão?")
+                        .setPositiveButton("Sim, Sair", (dialog, which) -> {
+                            dialog.dismiss();
+                            exitMosaicMode(true);
+                        })
+                        .setNegativeButton("Continuar no Mosaico", (dialog, which) -> dialog.dismiss())
+                        .show();
+            } else {
+                lastMosaicBackAt = now;
+                Toast.makeText(this, "Pressione Voltar novamente para sair do Mosaico", Toast.LENGTH_SHORT).show();
+            }
             return true;
         }
 
@@ -3320,7 +3729,15 @@ public class MainActivity extends Activity {
         hideSystemUI();
         enforceMaxVolume();
         startSportsRefreshTicker();
-        if (exoPlayer != null && !isPlayingEmbed) exoPlayer.play();
+        if (isMosaicActive) {
+            for (int i = 0; i < 4; i++) {
+                if (mosaicSlots[i] != null && mosaicSlots[i].exoPlayer != null) {
+                    mosaicSlots[i].exoPlayer.play();
+                }
+            }
+        } else if (exoPlayer != null && !isPlayingEmbed) {
+            exoPlayer.play();
+        }
     }
 
     @Override
@@ -3329,13 +3746,24 @@ public class MainActivity extends Activity {
         if (isPlayingVod) {
             saveCurrentVodProgress();
         }
-        if (exoPlayer != null) exoPlayer.pause();
+        if (isMosaicActive) {
+            for (int i = 0; i < 4; i++) {
+                if (mosaicSlots[i] != null && mosaicSlots[i].exoPlayer != null) {
+                    mosaicSlots[i].exoPlayer.pause();
+                }
+            }
+        } else if (exoPlayer != null) {
+            exoPlayer.pause();
+        }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         stopSportsRefreshTicker();
+        if (isMosaicActive) {
+            exitMosaicMode(false);
+        }
         destroyCurrentStream();
         if (exoPlayer != null) {
             exoPlayer.release();

@@ -19,11 +19,11 @@ public final class AndPlayGlideModule extends AppGlideModule {
         int diskCacheSizeBytes = 300 * 1024 * 1024; // 300 MB
         builder.setDiskCache(new InternalCacheDiskCacheFactory(context, "image_cache", diskCacheSizeBytes));
 
-        // Limita o consumo de memória RAM para cache de imagens (100 MB)
+        // Limita o consumo de memória RAM para cache de imagens (30 MB seguro para evitar OOM no projetor)
         MemorySizeCalculator calculator = new MemorySizeCalculator.Builder(context)
-                .setMemoryCacheScreens(2.0f)
+                .setMemoryCacheScreens(1.5f)
                 .build();
-        builder.setMemoryCache(new LruResourceCache(Math.min(calculator.getMemoryCacheSize(), 100 * 1024 * 1024)));
+        builder.setMemoryCache(new LruResourceCache(Math.min(calculator.getMemoryCacheSize(), 30 * 1024 * 1024)));
     }
 
     @Override

@@ -73,15 +73,34 @@ public class Channel implements Serializable {
                 }
                 serverNum++;
             } else if (com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE.equals(prov)) {
-                String svSlug = cleanSlug.replace("-", "").toLowerCase();
-                if ("warner".equalsIgnoreCase(cleanSlug) || "warner".equalsIgnoreCase(id)) {
-                    svSlug = "warnerchannel";
-                }
-                list.add(new StreamFallback("StreamVerde (HLS Direto)", "https://svd.cazetv.shop/streamverde/" + svSlug + ".m3u8", false));
+                String svSlug = getStreamVerdeSlug(cleanSlug);
+                list.add(new StreamFallback("StreamVerde (HD " + serverNum + ")", "https://streamverde.net/canais/" + svSlug + "/embed/", true));
                 serverNum++;
             }
         }
         return list;
+    }
+
+    public static String getStreamVerdeSlug(String cleanSlug) {
+        if (cleanSlug == null || cleanSlug.isEmpty()) return "";
+        String s = cleanSlug.toLowerCase();
+        if ("warner".equals(s) || "warnerchannel".equals(s)) return "warnerchannel";
+        if ("recordsp".equals(s)) return "record";
+        if ("bandsp".equals(s)) return "band";
+        if ("sbt".equals(s)) return "sbt-central";
+        if ("premiere".equals(s)) return "premiere-1";
+
+        if (s.contains("-")) return s;
+
+        if (s.startsWith("globo") && s.length() == 7) {
+            return "globo-" + s.substring(5);
+        }
+
+        if (s.matches(".*[a-z]+[0-9]+$")) {
+            return s.replaceAll("([a-z]+)([0-9]+)", "$1-$2");
+        }
+
+        return s;
     }
 
     public List<StreamFallback> getFallbacks() {

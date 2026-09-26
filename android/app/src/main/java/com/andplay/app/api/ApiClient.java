@@ -104,10 +104,29 @@ public class ApiClient {
         try {
             InputStream is = context.getAssets().open("channels.json");
             BufferedReader reader = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8));
-            Type type = new TypeToken<List<Channel>>() {}.getType();
-            List<Channel> channels = gson.fromJson(reader, type);
+            JsonElement root = JsonParser.parseReader(reader);
             reader.close();
-            if (channels != null) {
+
+            JsonArray arr = null;
+            if (root != null) {
+                if (root.isJsonArray()) {
+                    arr = root.getAsJsonArray();
+                } else if (root.isJsonObject()) {
+                    JsonObject obj = root.getAsJsonObject();
+                    if (obj.has("value") && obj.get("value").isJsonArray()) {
+                        arr = obj.getAsJsonArray("value");
+                    } else if (obj.has("channels") && obj.get("channels").isJsonArray()) {
+                        arr = obj.getAsJsonArray("channels");
+                    } else if (obj.has("data") && obj.get("data").isJsonArray()) {
+                        arr = obj.getAsJsonArray("data");
+                    }
+                }
+            }
+
+            if (arr != null) {
+                Type type = new TypeToken<List<Channel>>() {}.getType();
+                List<Channel> channels = gson.fromJson(arr, type);
+                if (channels != null) {
                 List<Channel> valid = new ArrayList<>();
                 for (Channel ch : channels) {
                     if (ch == null || ch.id == null) continue;
@@ -163,7 +182,8 @@ public class ApiClient {
                 }
                 return valid;
             }
-        } catch (Exception e) {
+        }
+    } catch (Exception e) {
             e.printStackTrace();
         }
         return new ArrayList<>();
@@ -706,18 +726,26 @@ public class ApiClient {
                             ev.name = homeName + " x " + awayName;
                         }
 
-                        // Stream Fallbacks
+                        // Stream Fallbacks (StreamVerde primário, RDCanais secundário)
                         boolean isSouthAmerica = leagueName.contains("Brasileirão") || leagueName.contains("Libertadores") || leagueName.contains("Brasil");
                         if (isSouthAmerica) {
-                            ev.fallbacks.add(new Channel.StreamFallback("Premiere HD", "https://rdcanais.net/premiere", true));
-                            ev.fallbacks.add(new Channel.StreamFallback("SporTV HD", "https://rdcanais.net/sportv", true));
-                            ev.fallbacks.add(new Channel.StreamFallback("Globo SP", "https://rdcanais.net/globosp", true));
-                            ev.fallbacks.add(new Channel.StreamFallback("Cazé TV", "https://rdcanais.net/cazetv", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("StreamVerde (Premiere)", "https://streamverde.net/canais/premiere-1/embed/", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("StreamVerde (SporTV)", "https://streamverde.net/canais/sportv/embed/", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("StreamVerde (Globo SP)", "https://streamverde.net/canais/globo-sp/embed/", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("StreamVerde (Cazé TV)", "https://streamverde.net/canais/cazetv-1/embed/", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("RDCanais (Premiere HD)", "https://rdcanais.net/premiere", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("RDCanais (SporTV HD)", "https://rdcanais.net/sportv", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("RDCanais (Globo SP)", "https://rdcanais.net/globosp", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("RDCanais (Cazé TV)", "https://rdcanais.net/cazetv", true));
                         } else {
-                            ev.fallbacks.add(new Channel.StreamFallback("TNT HD", "https://rdcanais.net/tnt", true));
-                            ev.fallbacks.add(new Channel.StreamFallback("ESPN HD", "https://rdcanais.net/espn", true));
-                            ev.fallbacks.add(new Channel.StreamFallback("ESPN 4 HD", "https://rdcanais.net/espn4", true));
-                            ev.fallbacks.add(new Channel.StreamFallback("SporTV 2 HD", "https://rdcanais.net/sportv2", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("StreamVerde (ESPN)", "https://streamverde.net/canais/espn/embed/", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("StreamVerde (ESPN 4)", "https://streamverde.net/canais/espn-4/embed/", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("StreamVerde (SporTV 2)", "https://streamverde.net/canais/sportv-2/embed/", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("StreamVerde (TNT)", "https://streamverde.net/canais/tnt/embed/", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("RDCanais (ESPN HD)", "https://rdcanais.net/espn", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("RDCanais (ESPN 4 HD)", "https://rdcanais.net/espn4", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("RDCanais (SporTV 2 HD)", "https://rdcanais.net/sportv2", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("RDCanais (TNT HD)", "https://rdcanais.net/tnt", true));
                         }
 
                         list.add(ev);
@@ -744,7 +772,8 @@ public class ApiClient {
         evUfc.isLive = false;
         evUfc.homeLogo = "https://reidosembeds.online/img/combate.png";
         evUfc.awayLogo = "https://reidosembeds.online/img/combate.png";
-        evUfc.fallbacks.add(new Channel.StreamFallback("Combate HD", "https://rdcanais.net/combate", true));
+        evUfc.fallbacks.add(new Channel.StreamFallback("StreamVerde (Combate)", "https://streamverde.net/canais/combate/embed/", true));
+        evUfc.fallbacks.add(new Channel.StreamFallback("RDCanais (Combate HD)", "https://rdcanais.net/combate", true));
         list.add(evUfc);
 
         return list;
@@ -752,52 +781,94 @@ public class ApiClient {
 
     public static List<SportsEvent> getDefaultSportsFallbacks() {
         List<SportsEvent> list = new ArrayList<>();
+
+        // Partida 1: Grêmio x Palmeiras
         SportsEvent ev1 = new SportsEvent();
-        ev1.id = "sport_flamengo_palmeiras";
-        ev1.name = "Flamengo x Palmeiras";
+        ev1.id = "match_br_1";
+        ev1.name = "Grêmio x Palmeiras";
         ev1.league = "Brasileirão Série A";
-        ev1.matchTime = "16:00";
+        ev1.matchTime = "AO VIVO";
         ev1.isLive = true;
-        ev1.homeLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/9770.png";
+        ev1.homeLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/9768.png";
         ev1.awayLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/10283.png";
-        ev1.fallbacks.add(new Channel.StreamFallback("Premiere HD", "https://rdcanais.net/premiere", true));
-        ev1.fallbacks.add(new Channel.StreamFallback("SporTV HD", "https://rdcanais.net/sportv", true));
+        ev1.fallbacks.add(new Channel.StreamFallback("StreamVerde (Premiere)", "https://streamverde.net/canais/premiere-1/embed/", true));
+        ev1.fallbacks.add(new Channel.StreamFallback("StreamVerde (SporTV)", "https://streamverde.net/canais/sportv/embed/", true));
+        ev1.fallbacks.add(new Channel.StreamFallback("RDCanais (Premiere HD)", "https://rdcanais.net/premiere", true));
+        ev1.fallbacks.add(new Channel.StreamFallback("RDCanais (SporTV HD)", "https://rdcanais.net/sportv", true));
         list.add(ev1);
 
+        // Partida 2: Palmeiras x Flamengo
         SportsEvent ev2 = new SportsEvent();
-        ev2.id = "sport_corinthians_saopaulo";
-        ev2.name = "Corinthians x São Paulo";
-        ev2.league = "Brasileirão Série A (Majestoso)";
-        ev2.matchTime = "18:30";
+        ev2.id = "match_br_2";
+        ev2.name = "Palmeiras x Flamengo";
+        ev2.league = "Brasileirão Série A";
+        ev2.matchTime = "AO VIVO";
         ev2.isLive = true;
-        ev2.homeLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/9808.png";
-        ev2.awayLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/10277.png";
-        ev2.fallbacks.add(new Channel.StreamFallback("Premiere HD", "https://rdcanais.net/premiere", true));
-        ev2.fallbacks.add(new Channel.StreamFallback("Globo SP", "https://rdcanais.net/globosp", true));
+        ev2.homeLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/10283.png";
+        ev2.awayLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/9770.png";
+        ev2.fallbacks.add(new Channel.StreamFallback("StreamVerde (Premiere)", "https://streamverde.net/canais/premiere-1/embed/", true));
+        ev2.fallbacks.add(new Channel.StreamFallback("StreamVerde (Globo SP)", "https://streamverde.net/canais/globo-sp/embed/", true));
+        ev2.fallbacks.add(new Channel.StreamFallback("RDCanais (Premiere HD)", "https://rdcanais.net/premiere", true));
+        ev2.fallbacks.add(new Channel.StreamFallback("RDCanais (Globo SP)", "https://rdcanais.net/globosp", true));
         list.add(ev2);
 
+        // Partida 3: Corinthians x São Paulo (Majestoso)
         SportsEvent ev3 = new SportsEvent();
-        ev3.id = "sport_realmadrid_barcelona";
-        ev3.name = "Real Madrid x Barcelona";
-        ev3.league = "La Liga (El Clásico)";
-        ev3.matchTime = "16:00";
-        ev3.isLive = false;
-        ev3.homeLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/8633.png";
-        ev3.awayLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/8634.png";
-        ev3.fallbacks.add(new Channel.StreamFallback("ESPN HD", "https://rdcanais.net/espn", true));
-        ev3.fallbacks.add(new Channel.StreamFallback("Star+ HD", "https://rdcanais.net/espn4", true));
+        ev3.id = "match_br_3";
+        ev3.name = "Corinthians x São Paulo";
+        ev3.league = "Brasileirão Série A (Majestoso)";
+        ev3.matchTime = "18:30";
+        ev3.isLive = true;
+        ev3.homeLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/9808.png";
+        ev3.awayLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/10277.png";
+        ev3.fallbacks.add(new Channel.StreamFallback("StreamVerde (Premiere 2)", "https://streamverde.net/canais/premiere-2/embed/", true));
+        ev3.fallbacks.add(new Channel.StreamFallback("StreamVerde (SporTV 2)", "https://streamverde.net/canais/sportv-2/embed/", true));
+        ev3.fallbacks.add(new Channel.StreamFallback("RDCanais (Premiere 2)", "https://rdcanais.net/premiere2", true));
+        ev3.fallbacks.add(new Channel.StreamFallback("RDCanais (SporTV 2)", "https://rdcanais.net/sportv2", true));
         list.add(ev3);
 
+        // Partida 4: Manchester City x Sunderland
         SportsEvent ev4 = new SportsEvent();
-        ev4.id = "sport_ufc_main_event";
-        ev4.name = "UFC Fight Night: Card Principal";
-        ev4.league = "MMA / Artes Marciais";
-        ev4.matchTime = "21:00";
+        ev4.id = "match_br_4";
+        ev4.name = "Manchester City x Sunderland";
+        ev4.league = "Premier League";
+        ev4.matchTime = "10:00";
         ev4.isLive = false;
-        ev4.homeLogo = "https://reidosembeds.online/img/combate.png";
-        ev4.awayLogo = "https://reidosembeds.online/img/combate.png";
-        ev4.fallbacks.add(new Channel.StreamFallback("Combate HD", "https://rdcanais.net/combate", true));
+        ev4.homeLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/8456.png";
+        ev4.awayLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/8472.png";
+        ev4.fallbacks.add(new Channel.StreamFallback("StreamVerde (ESPN)", "https://streamverde.net/canais/espn/embed/", true));
+        ev4.fallbacks.add(new Channel.StreamFallback("StreamVerde (TNT)", "https://streamverde.net/canais/tnt/embed/", true));
+        ev4.fallbacks.add(new Channel.StreamFallback("RDCanais (ESPN HD)", "https://rdcanais.net/espn", true));
+        ev4.fallbacks.add(new Channel.StreamFallback("RDCanais (TNT Sports)", "https://rdcanais.net/tnt", true));
         list.add(ev4);
+
+        // Partida 5: Real Madrid x Barcelona (El Clásico)
+        SportsEvent ev5 = new SportsEvent();
+        ev5.id = "match_br_5";
+        ev5.name = "Real Madrid x Barcelona";
+        ev5.league = "La Liga / Champions League";
+        ev5.matchTime = "16:00";
+        ev5.isLive = false;
+        ev5.homeLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/8633.png";
+        ev5.awayLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/8634.png";
+        ev5.fallbacks.add(new Channel.StreamFallback("StreamVerde (ESPN)", "https://streamverde.net/canais/espn/embed/", true));
+        ev5.fallbacks.add(new Channel.StreamFallback("StreamVerde (ESPN 4)", "https://streamverde.net/canais/espn-4/embed/", true));
+        ev5.fallbacks.add(new Channel.StreamFallback("RDCanais (ESPN HD)", "https://rdcanais.net/espn", true));
+        ev5.fallbacks.add(new Channel.StreamFallback("RDCanais (ESPN 4 HD)", "https://rdcanais.net/espn4", true));
+        list.add(ev5);
+
+        // Partida 6: UFC Fight Night
+        SportsEvent ev6 = new SportsEvent();
+        ev6.id = "sport_ufc_main_event";
+        ev6.name = "UFC Fight Night: Card Principal";
+        ev6.league = "MMA / Artes Marciais";
+        ev6.matchTime = "21:00";
+        ev6.isLive = false;
+        ev6.homeLogo = "https://reidosembeds.online/img/combate.png";
+        ev6.awayLogo = "https://reidosembeds.online/img/combate.png";
+        ev6.fallbacks.add(new Channel.StreamFallback("StreamVerde (Combate)", "https://streamverde.net/canais/combate/embed/", true));
+        ev6.fallbacks.add(new Channel.StreamFallback("RDCanais (Combate HD)", "https://rdcanais.net/combate", true));
+        list.add(ev6);
 
         return list;
     }

@@ -598,6 +598,243 @@
 
 
     <!-- ======================================================== -->
+    <!-- TELA MOSAICO (MULTI-VIEW 2 OU 4 TELAS)                   -->
+    <!-- ======================================================== -->
+    <LinearLayout
+        android:id="@+id/mosaicLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#050811"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <!-- LINHA 1 (SLOT 1 E SLOT 2) -->
+        <LinearLayout
+            android:id="@+id/mosaicRow1"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+
+            <!-- SLOT 1 -->
+            <FrameLayout
+                android:id="@+id/mosaicSlot1"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_margin="3dp"
+                android:background="@drawable/mosaic_slot_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusRight="@+id/mosaicSlot2"
+                android:nextFocusDown="@+id/mosaicSlot3">
+
+                <FrameLayout
+                    android:id="@+id/mosaicSlotPlayer1"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <!-- HEADER DO SLOT -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top"
+                    android:background="#B0000000"
+                    android:orientation="horizontal"
+                    android:paddingStart="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/mosaicSlotTitle1"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="TELA 1 - Pressione OK para Canal"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/mosaicSlotAudio1"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔊 ÁUDIO"
+                        android:textColor="#FFD700"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- SLOT 2 -->
+            <FrameLayout
+                android:id="@+id/mosaicSlot2"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_margin="3dp"
+                android:background="@drawable/mosaic_slot_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusLeft="@+id/mosaicSlot1"
+                android:nextFocusDown="@+id/mosaicSlot4">
+
+                <FrameLayout
+                    android:id="@+id/mosaicSlotPlayer2"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <!-- HEADER DO SLOT -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top"
+                    android:background="#B0000000"
+                    android:orientation="horizontal"
+                    android:paddingStart="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/mosaicSlotTitle2"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="TELA 2 - Pressione OK para Canal"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/mosaicSlotAudio2"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔇 MUDO"
+                        android:textColor="#888888"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </FrameLayout>
+        </LinearLayout>
+
+        <!-- LINHA 2 (SLOT 3 E SLOT 4) - VISÍVEL APENAS NO MODO 4 TELAS -->
+        <LinearLayout
+            android:id="@+id/mosaicRow2"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+
+            <!-- SLOT 3 -->
+            <FrameLayout
+                android:id="@+id/mosaicSlot3"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_margin="3dp"
+                android:background="@drawable/mosaic_slot_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusUp="@+id/mosaicSlot1"
+                android:nextFocusRight="@+id/mosaicSlot4">
+
+                <FrameLayout
+                    android:id="@+id/mosaicSlotPlayer3"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top"
+                    android:background="#B0000000"
+                    android:orientation="horizontal"
+                    android:paddingStart="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/mosaicSlotTitle3"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="TELA 3 - Pressione OK para Canal"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/mosaicSlotAudio3"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔇 MUDO"
+                        android:textColor="#888888"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <!-- SLOT 4 -->
+            <FrameLayout
+                android:id="@+id/mosaicSlot4"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_margin="3dp"
+                android:background="@drawable/mosaic_slot_selector"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusUp="@+id/mosaicSlot2"
+                android:nextFocusLeft="@+id/mosaicSlot3">
+
+                <FrameLayout
+                    android:id="@+id/mosaicSlotPlayer4"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top"
+                    android:background="#B0000000"
+                    android:orientation="horizontal"
+                    android:paddingStart="8dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/mosaicSlotTitle4"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="TELA 4 - Pressione OK para Canal"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/mosaicSlotAudio4"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔇 MUDO"
+                        android:textColor="#888888"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </FrameLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+
+    <!-- ======================================================== -->
     <!-- GAVETA LATERAL EPG (SLIDE ESQUERDO - FLUTUANTE EM QUALQUER TELA) -->
     <!-- ======================================================== -->
     <LinearLayout
@@ -636,14 +873,30 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:background="@drawable/card_focus_bg"
-                android:clickable="false"
-                android:focusable="false"
-                android:visibility="gone"
+                android:clickable="true"
+                android:focusable="true"
                 android:paddingStart="10dp"
                 android:paddingTop="4dp"
                 android:paddingEnd="10dp"
                 android:paddingBottom="4dp"
                 android:text="⚙️ OPÇÕES"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btnDrawerMosaic"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:background="@drawable/card_focus_bg"
+                android:clickable="true"
+                android:focusable="true"
+                android:paddingStart="10dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="4dp"
+                android:text="⊞ MOSAICO"
                 android:textColor="#FFFFFF"
                 android:textSize="11sp"
                 android:textStyle="bold" />
