@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.SharedPreferences;
 import com.andplay.app.provider.ProviderManager;
 import java.util.Arrays;
 import android.media.AudioManager;
@@ -714,12 +715,19 @@ public class MainActivity extends Activity {
         }
     }
 
+    private static final String PREF_VOD_PROGRESS = "vod_playback_progress_prefs";
+    private int vodSaveCounter = 0;
     private final Handler vodProgressHandler = new Handler(Looper.getMainLooper());
     private final Runnable vodProgressRunnable = new Runnable() {
         @Override
         public void run() {
             if (isPlayingVod && exoPlayer != null && currentMode == ScreenMode.FULLSCREEN) {
                 updateVodProgress();
+                vodSaveCounter++;
+                if (vodSaveCounter >= 5) {
+                    vodSaveCounter = 0;
+                    saveCurrentVodProgress();
+                }
                 vodProgressHandler.postDelayed(this, 1000);
             }
         }
@@ -741,6 +749,68 @@ public class MainActivity extends Activity {
         long minutes = (totalSec % 3600) / 60;
         long seconds = totalSec % 60;
         return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds);
+    }
+
+    private String getCurrentVodKey() {
+        if (activeVodMovie != null && activeVodMovie.stream_id != null) {
+            return "movie_" + activeVodMovie.stream_id;
+        }
+        if (activeVodEpisode != null && activeVodEpisode.id != null) {
+            return "episode_" + activeVodEpisode.id;
+        }
+        if (activeVodSeries != null && activeVodEpisode != null) {
+            return "series_" + activeVodSeries.series_id + "_s" + activeVodSeasonNum + "_e" + activeVodEpisode.episode_num;
+        }
+        return null;
+    }
+
+    private void saveCurrentVodProgress() {
+        if (!isPlayingVod || exoPlayer == null) return;
+        String key = getCurrentVodKey();
+        if (key == null) return;
+        long pos = exoPlayer.getCurrentPosition();
+        long dur = exoPlayer.getDuration();
+        saveVodProgress(key, pos, dur);
+    }
+
+    private void saveVodProgress(String key, long positionMs, long durationMs) {
+        if (key == null || key.isEmpty()) return;
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE);
+            // Se assistiu mais de 95% do vídeo ou restam menos de 30 segundos, considera concluído e limpa
+            if (durationMs > 0 && (positionMs >= durationMs - 30000 || positionMs >= (long) (durationMs * 0.95))) {
+                prefs.edit().remove(key).remove(key + "_dur").remove(key + "_time").apply();
+                return;
+            }
+            // Salva apenas se assistiu pelo menos 10 segundos
+            if (positionMs > 10000) {
+                prefs.edit()
+                        .putLong(key, positionMs)
+                        .putLong(key + "_dur", durationMs)
+                        .putLong(key + "_time", System.currentTimeMillis())
+                        .apply();
+            }
+        } catch (Exception e) {
+            Log.w("EPlayVOD", "Erro ao salvar progresso VOD: " + e.getMessage());
+        }
+    }
+
+    private long getVodProgress(String key) {
+        if (key == null || key.isEmpty()) return 0;
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE);
+            return prefs.getLong(key, 0);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private void clearVodProgress(String key) {
+        if (key == null || key.isEmpty()) return;
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE);
+            prefs.edit().remove(key).remove(key + "_dur").remove(key + "_time").apply();
+        } catch (Exception ignored) {}
     }
 
     private void updateVodProgress() {
@@ -770,6 +840,9 @@ public class MainActivity extends Activity {
     }
 
     private void destroyCurrentStream() {
+        if (isPlayingVod) {
+            saveCurrentVodProgress();
+        }
         stopVodProgressTicker();
         if (exoPlayer != null) {
             exoPlayer.stop();
@@ -1391,6 +1464,10 @@ public class MainActivity extends Activity {
     }
 
     private void playStream(String url, boolean isEmbed) {
+        playStream(url, isEmbed, 0);
+    }
+
+    private void playStream(String url, boolean isEmbed, long startPositionMs) {
         isVideoPlaybackActive = false;
         currentActiveStreamUrl = url;
         isPlayingEmbed = isEmbed;
@@ -1427,6 +1504,9 @@ public class MainActivity extends Activity {
 
             MediaItem item = MediaItem.fromUri(url);
             exoPlayer.setMediaItem(item);
+            if (startPositionMs > 0) {
+                exoPlayer.seekTo(startPositionMs);
+            }
             exoPlayer.prepare();
             exoPlayer.play();
         }
@@ -1434,6 +1514,33 @@ public class MainActivity extends Activity {
 
     public void playMovie(Movie movie) {
         if (movie == null) return;
+        String key = "movie_" + movie.stream_id;
+        long savedPos = getVodProgress(key);
+
+        if (savedPos > 10000) {
+            String[] options = new String[] {
+                    "▶️ CONTINUAR DE ONDE PAROU (" + formatDuration(savedPos) + ")",
+                    "🔄 VOLTAR AO INÍCIO"
+            };
+            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("🎬 " + movie.getDisplayTitle() + "\n(Parou em " + formatDuration(savedPos) + ")")
+                    .setItems(options, (dialog, which) -> {
+                        dialog.dismiss();
+                        if (which == 0) {
+                            startMoviePlayback(movie, savedPos);
+                        } else {
+                            clearVodProgress(key);
+                            startMoviePlayback(movie, 0);
+                        }
+                    })
+                    .setNegativeButton("Cancelar", null)
+                    .show();
+        } else {
+            startMoviePlayback(movie, 0);
+        }
+    }
+
+    private void startMoviePlayback(Movie movie, long startPos) {
         destroyCurrentStream();
         activeVodMovie = movie;
         activeVodSeries = null;
@@ -1442,7 +1549,7 @@ public class MainActivity extends Activity {
         setScreenMode(ScreenMode.FULLSCREEN);
 
         String streamUrl = movie.getStreamUrl(ApiClient.SERVER, ApiClient.USER, ApiClient.PASS);
-        playStream(streamUrl, false);
+        playStream(streamUrl, false, startPos);
 
         // Preenche OSD com dados do filme
         topChNum.setText("VOD");
@@ -1450,7 +1557,11 @@ public class MainActivity extends Activity {
         osdChNum.setText("FILME");
         osdChName.setText(movie.getDisplayTitle());
         osdNowTitle.setText("🎬 " + movie.getDisplayTitle());
-        osdRemaining.setText("00:00:00 / Carregando...");
+        if (startPos > 0) {
+            osdRemaining.setText(formatDuration(startPos) + " / Retomando...");
+        } else {
+            osdRemaining.setText("00:00:00 / Carregando...");
+        }
         osdSynopsis.setText(movie.plot != null && !movie.plot.isEmpty() ? movie.plot : "Filme sob demanda em alta definição.");
         osdNextProgram.setText(movie.genre != null && !movie.genre.isEmpty() ? "Gênero: " + movie.genre : "Áudio Original / Dublado");
         osdProgressBar.setProgress(0);
@@ -1461,6 +1572,34 @@ public class MainActivity extends Activity {
 
     public void playSeriesEpisode(Series series, Episode ep, String seasonNum) {
         if (series == null || ep == null) return;
+        String key = ep.id != null ? "episode_" + ep.id : "series_" + (series.series_id != null ? series.series_id : "") + "_s" + seasonNum + "_e" + ep.episode_num;
+        long savedPos = getVodProgress(key);
+
+        String fullTitle = series.getDisplayTitle() + " • T" + seasonNum + ":E" + ep.episode_num;
+        if (savedPos > 10000) {
+            String[] options = new String[] {
+                    "▶️ CONTINUAR DE ONDE PAROU (" + formatDuration(savedPos) + ")",
+                    "🔄 VOLTAR AO INÍCIO"
+            };
+            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("🍿 " + fullTitle + "\n(Parou em " + formatDuration(savedPos) + ")")
+                    .setItems(options, (dialog, which) -> {
+                        dialog.dismiss();
+                        if (which == 0) {
+                            startSeriesEpisodePlayback(series, ep, seasonNum, savedPos);
+                        } else {
+                            clearVodProgress(key);
+                            startSeriesEpisodePlayback(series, ep, seasonNum, 0);
+                        }
+                    })
+                    .setNegativeButton("Cancelar", null)
+                    .show();
+        } else {
+            startSeriesEpisodePlayback(series, ep, seasonNum, 0);
+        }
+    }
+
+    private void startSeriesEpisodePlayback(Series series, Episode ep, String seasonNum, long startPos) {
         destroyCurrentStream();
         isPlayingVod = true;
         activeVodSeries = series;
@@ -1470,7 +1609,7 @@ public class MainActivity extends Activity {
         setScreenMode(ScreenMode.FULLSCREEN);
 
         String streamUrl = ep.getStreamUrl(ApiClient.SERVER, ApiClient.USER, ApiClient.PASS);
-        playStream(streamUrl, false);
+        playStream(streamUrl, false, startPos);
 
         String fullTitle = series.getDisplayTitle() + " • T" + seasonNum + ":E" + ep.episode_num;
         topChNum.setText("SÉRIE");
@@ -1478,7 +1617,11 @@ public class MainActivity extends Activity {
         osdChNum.setText("T" + seasonNum);
         osdChName.setText(fullTitle);
         osdNowTitle.setText("🍿 " + ep.getDisplayTitle());
-        osdRemaining.setText("00:00:00 / Carregando...");
+        if (startPos > 0) {
+            osdRemaining.setText(formatDuration(startPos) + " / Retomando...");
+        } else {
+            osdRemaining.setText("00:00:00 / Carregando...");
+        }
         osdSynopsis.setText(ep.info != null && ep.info.plot != null && !ep.info.plot.isEmpty() ? ep.info.plot : series.plot);
         osdNextProgram.setText("Próximo episódio disponível na lista.");
         osdProgressBar.setProgress(0);
@@ -1848,7 +1991,17 @@ public class MainActivity extends Activity {
             Glide.with(this).load(poster).diskCacheStrategy(DiskCacheStrategy.ALL).into(vodHeroPoster);
         }
 
-        vodHeroWatchBtn.setText("series".equals(currentVodType) ? "▶ VER EPISÓDIOS (OK)" : "▶ ASSISTIR (OK)");
+        if ("movies".equals(currentVodType) && m.stream_id != null) {
+            String key = "movie_" + m.stream_id;
+            long saved = getVodProgress(key);
+            if (saved > 10000) {
+                vodHeroWatchBtn.setText("▶ CONTINUAR (" + formatDuration(saved) + ")");
+            } else {
+                vodHeroWatchBtn.setText("▶ ASSISTIR (OK)");
+            }
+        } else {
+            vodHeroWatchBtn.setText("series".equals(currentVodType) ? "▶ VER EPISÓDIOS (OK)" : "▶ ASSISTIR (OK)");
+        }
         vodHeroWatchBtn.setOnClickListener(v -> {
             if ("movies".equals(currentVodType)) {
                 playMovie(m);
@@ -2289,6 +2442,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        if (isPlayingVod) {
+            saveCurrentVodProgress();
+        }
         if (exoPlayer != null) exoPlayer.pause();
     }
 

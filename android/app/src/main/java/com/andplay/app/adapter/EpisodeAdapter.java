@@ -59,6 +59,21 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
             if (listener != null) listener.onEpisodeClick(ep);
         });
 
+        if (holder.watchBtn != null) {
+            long saved = 0;
+            try {
+                if (ep.id != null) {
+                    saved = context.getSharedPreferences("vod_playback_progress_prefs", Context.MODE_PRIVATE)
+                            .getLong("episode_" + ep.id, 0);
+                }
+            } catch (Exception ignored) {}
+            if (saved > 10000) {
+                holder.watchBtn.setText("▶ Retomar");
+            } else {
+                holder.watchBtn.setText("▶ Assistir");
+            }
+        }
+
         holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
             v.animate().scaleX(hasFocus ? 1.04f : 1.0f).scaleY(hasFocus ? 1.04f : 1.0f).setDuration(150).start();
         });
