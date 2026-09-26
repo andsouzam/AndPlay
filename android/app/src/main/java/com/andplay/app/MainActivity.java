@@ -988,11 +988,29 @@ public class MainActivity extends Activity {
         String name = ch.name != null ? ch.name.toLowerCase(Locale.ROOT) : "";
 
         if (groupRank == 1) {
-            // Globo SP como primeiro canal absoluto (Canal 001)
+            // 1. Globo SP como primeiro canal absoluto (Canal 001)
             if ("globosp".equals(id) || name.startsWith("globo sp")) {
-                return 0;
+                return 1;
             }
-            return 1;
+            // 2. Demais canais GLOBO e derivados (ex.: TV Asa Branca, TV Bahia, Globo RJ, etc.)
+            if (id.startsWith("globo") || name.startsWith("globo") || "globoal".equals(id) || "globoba".equals(id)
+                    || name.contains("asa branca") || name.contains("tv bahia")) {
+                return 10;
+            }
+            // 3. Band SP
+            if ("bandsp".equals(id) || name.startsWith("band sp") || "band".equals(id)) {
+                return 20;
+            }
+            // 4. Record SP
+            if ("recordsp".equals(id) || name.startsWith("record sp") || "record".equals(id)) {
+                return 30;
+            }
+            // 5. SBT
+            if ("sbt".equals(id) || name.equals("sbt")) {
+                return 40;
+            }
+            // 6. Demais canais abertos (ordem alfabética)
+            return 50;
         }
 
         if (groupRank == 2) {

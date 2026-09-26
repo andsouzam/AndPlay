@@ -107,7 +107,8 @@ public class EpgEngine {
         // Globo Regionais (Mapeamento de Afiliadas das Capitais + Fallback para Rede Nacional)
         REGIONAL_ALIASES.put("globoba", Arrays.asList("tvbahia", "globobahia", "redebugbahia", "globoba", "globobrasil", "tvglobo", "globosp", "globorj", "globo"));
         REGIONAL_ALIASES.put("tvbahia", Arrays.asList("tvbahia", "globobahia", "globoba", "globobrasil", "tvglobo", "globosp", "globo"));
-        REGIONAL_ALIASES.put("globoal", Arrays.asList("tvgazetaalagoas", "tvgazetaal", "tvgazetamaceio", "tvgazeta", "globoalagoas", "globoal", "globobrasil", "tvglobo", "globosp", "globo"));
+        REGIONAL_ALIASES.put("globoal", Arrays.asList("tvasabranca", "asabranca", "tvgazetaalagoas", "tvgazetaal", "tvgazetamaceio", "tvgazeta", "globoalagoas", "globoal", "globobrasil", "tvglobo", "globosp", "globo"));
+        REGIONAL_ALIASES.put("tvasabranca", Arrays.asList("tvasabranca", "asabranca", "globoal", "globobrasil", "tvglobo", "globosp", "globo"));
         REGIONAL_ALIASES.put("globoam", Arrays.asList("redeamazonica", "tvamazonas", "redeamazonicamanaus", "globoam", "globoamazonas", "globobrasil", "tvglobo", "globosp", "globo"));
         REGIONAL_ALIASES.put("globoap", Arrays.asList("redeamazonicamacapa", "tvamapa", "redeamazonica", "globoap", "globobrasil", "tvglobo", "globosp", "globo"));
         REGIONAL_ALIASES.put("globoac", Arrays.asList("redeamazonicariobranco", "tvacre", "redeamazonica", "globoac", "globobrasil", "tvglobo", "globosp", "globo"));

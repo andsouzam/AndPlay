@@ -111,11 +111,20 @@ public class ApiClient {
                     if (idLow.contains("appletv") || nameLow.contains("apple tv")) {
                         continue;
                     }
-                    if ("24h-spacetoday".equals(idLow) || "24h-os-jetsons".equals(idLow) || nameLow.contains("spacetoday") || nameLow.contains("jetsons")) {
+                    if ("amazonsat".equals(idLow) || "24h-spacetoday".equals(idLow) || "24h-os-jetsons".equals(idLow)
+                            || "bandba".equals(idLow) || "bandmg".equals(idLow) || "bandpa".equals(idLow) || "bandpb".equals(idLow) || "bandpe".equals(idLow)
+                            || "recordmt".equals(idLow) || "recordpb".equals(idLow) || "recordrn".equals(idLow) || "recordro".equals(idLow)
+                            || "sbtpi".equals(idLow) || nameLow.contains("spacetoday") || nameLow.contains("jetsons")) {
                         continue;
                     }
                     if ("premiere".equals(ch.id) || "premiere 1".equalsIgnoreCase(ch.name)) {
                         ch.name = "Premiere Clubes";
+                    }
+                    if ("globoal".equals(idLow)) {
+                        ch.name = "TV Asa Branca";
+                    }
+                    if ("globoba".equals(idLow)) {
+                        ch.name = "TV Bahia";
                     }
                     ch.name = sanitizeText(ch.name);
                     ch.cat = sanitizeText(ch.cat);
