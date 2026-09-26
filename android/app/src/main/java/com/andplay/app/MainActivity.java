@@ -142,6 +142,8 @@ public class MainActivity extends Activity {
     private FrameLayout fullscreenLayout;
     private LinearLayout topChannelBadge;
     private TextView topChNum, topChName;
+    private LinearLayout fullscreenEmbedTopBar, fullscreenEmbedBottomBar;
+    private TextView embedChannelName, embedProgramTitle, embedClock;
     private LinearLayout osdBanner;
     private TextView osdChNum, osdChName, osdClock, osdNowTitle, osdRemaining, osdSynopsis, osdNextProgram;
     private ProgressBar osdProgressBar;
@@ -321,6 +323,11 @@ public class MainActivity extends Activity {
         topChannelBadge = findViewById(R.id.topChannelBadge);
         topChNum = findViewById(R.id.topChNum);
         topChName = findViewById(R.id.topChName);
+        fullscreenEmbedTopBar = findViewById(R.id.fullscreenEmbedTopBar);
+        fullscreenEmbedBottomBar = findViewById(R.id.fullscreenEmbedBottomBar);
+        embedChannelName = findViewById(R.id.embedChannelName);
+        embedProgramTitle = findViewById(R.id.embedProgramTitle);
+        embedClock = findViewById(R.id.embedClock);
 
         osdBanner = findViewById(R.id.osdBanner);
         osdChNum = findViewById(R.id.osdChNum);
@@ -1166,8 +1173,8 @@ public class MainActivity extends Activity {
                     }
                 }
 
-                // 4. Intercepta hotstar.css e player-v3.1.min.css com cache em RAM
-                if (url.contains("hotstar.css") || url.contains("player-v3.1.min.css")) {
+                // 4. Intercepta hotstar.css, player-v3.1.min.css e outros CSS de players com cache em RAM
+                if (url.contains("hotstar.css") || url.contains("player-v3.1.min.css") || (url.contains(".css") && (url.contains("player") || url.contains("jwplayer") || url.contains("plyr")))) {
                     byte[] cachedCss = STATIC_WEB_CACHE.get(url);
                     if (cachedCss != null) {
                         return new WebResourceResponse("text/css", "UTF-8", new ByteArrayInputStream(cachedCss));
@@ -1180,7 +1187,7 @@ public class MainActivity extends Activity {
                         Response okRes = sharedOkHttpClient.newCall(okReq).execute();
                         if (okRes.isSuccessful() && okRes.body() != null) {
                             String originalCss = okRes.body().string();
-                            String hideCss = "\n.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }\n";
+                            String hideCss = "\n.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], video::-webkit-media-controls { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }\n";
                             byte[] cssBytes = (originalCss + hideCss).getBytes(StandardCharsets.UTF_8);
                             STATIC_WEB_CACHE.put(url, cssBytes);
                             return new WebResourceResponse("text/css", "UTF-8", new ByteArrayInputStream(cssBytes));
@@ -1190,24 +1197,28 @@ public class MainActivity extends Activity {
                     }
                 }
 
-                // 5. Intercepta página principal do rdcanais.net limpando anúncios e garantindo permissões de autoplay
-                if (request.isForMainFrame() && url.contains("rdcanais.net")) {
-                    try {
-                        Request okReq = new Request.Builder()
-                                .url(url)
-                                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-                                .build();
-                        Response okRes = sharedOkHttpClient.newCall(okReq).execute();
-                        if (okRes.isSuccessful() && okRes.body() != null) {
-                            String html = okRes.body().string();
-                            html = html.replaceAll("(?is)<script[^>]*aclib[^>]*>.*?</script>", "")
-                                       .replaceAll("(?is)<script[^>]*histats[^>]*>.*?</script>", "")
-                                       .replace("allow=\"encrypted-media\"", "allow=\"autoplay *; encrypted-media *; fullscreen *; picture-in-picture *\"");
-                            byte[] htmlBytes = html.getBytes(StandardCharsets.UTF_8);
-                            return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(htmlBytes));
+                // 5. Intercepta páginas e frames do rdcanais.net e rdembed limpando anúncios, controles e garantindo permissões de autoplay
+                if (url.contains("rdcanais.net") || url.contains("rdembed") || url.contains("redecanais")) {
+                    if (request.isForMainFrame() || url.contains(".php") || url.contains("/embed") || url.contains("/canal") || !url.contains(".")) {
+                        try {
+                            Request okReq = new Request.Builder()
+                                    .url(url)
+                                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                                    .build();
+                            Response okRes = sharedOkHttpClient.newCall(okReq).execute();
+                            if (okRes.isSuccessful() && okRes.body() != null) {
+                                String html = okRes.body().string();
+                                String hideStyle = "<style>.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], video::-webkit-media-controls { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; } body, html { background: #000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }</style>";
+                                html = html.replaceAll("(?is)<script[^>]*aclib[^>]*>.*?</script>", "")
+                                           .replaceAll("(?is)<script[^>]*histats[^>]*>.*?</script>", "")
+                                           .replace("allow=\"encrypted-media\"", "allow=\"autoplay *; encrypted-media *; fullscreen *; picture-in-picture *\"")
+                                           .replaceFirst("(?i)<head>", "<head>" + hideStyle);
+                                byte[] htmlBytes = html.getBytes(StandardCharsets.UTF_8);
+                                return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(htmlBytes));
+                            }
+                        } catch (Exception e) {
+                            Log.w("EPlay", "Erro ao interceptar rdcanais HTML: " + e.getMessage());
                         }
-                    } catch (Exception e) {
-                        Log.w("EPlay", "Erro ao interceptar rdcanais HTML: " + e.getMessage());
                     }
                 }
 
@@ -1227,7 +1238,7 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view, url);
                 mainHandler.post(() -> {
                     onPlaybackStarted();
-                    if (!isPlayingEmbed && currentMode == ScreenMode.FULLSCREEN) {
+                    if (currentMode == ScreenMode.FULLSCREEN) {
                         scheduleOsdHide(5000);
                     }
                 });
@@ -1240,7 +1251,7 @@ public class MainActivity extends Activity {
                         "  }" +
                         "} catch(e) {}" +
                         "try {" +
-                        "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], .vjs-text-track-display, .vjs-loading-spinner, .vjs-poster, header, footer, nav, .menu, #sidebar, .chat, .comments, .site-header, .site-footer { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; } body, html { background: #000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }';" +
+                        "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, .jw-title-primary, .jw-title-secondary, .vjs-title-bar, .jw-media-controls, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], .vjs-text-track-display, .vjs-loading-spinner, .vjs-poster, video::-webkit-media-controls, video::-webkit-media-controls-enclosure, ::-webkit-scrollbar, header, footer, nav, .menu, #sidebar, .chat, .comments, .site-header, .site-footer { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; width: 0 !important; height: 0 !important; } body, html { background: #000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }';" +
                         "  var st = document.createElement('style');" +
                         "  st.textContent = css;" +
                         "  (document.head || document.documentElement).appendChild(st);" +
@@ -1498,6 +1509,7 @@ public class MainActivity extends Activity {
                 if (headerClock != null) headerClock.setText(timeStr);
                 if (headerDate != null) headerDate.setText(dateStr);
                 if (osdClock != null) osdClock.setText(timeStr);
+                if (embedClock != null) embedClock.setText(timeStr);
 
                 mainHandler.postDelayed(this, 1000);
             }
@@ -2480,6 +2492,7 @@ public class MainActivity extends Activity {
         currentActiveStreamUrl = url;
         isPlayingEmbed = isEmbed;
         enforceMaxVolume();
+        updateEmbedBarsVisibility();
 
         if (isEmbed) {
             if (exoPlayer != null) {
@@ -2501,7 +2514,7 @@ public class MainActivity extends Activity {
             mainHandler.postDelayed(() -> {
                 if (isPlayingEmbed) {
                     onPlaybackStarted();
-                    if (!isPlayingEmbed && currentMode == ScreenMode.FULLSCREEN) {
+                    if (currentMode == ScreenMode.FULLSCREEN) {
                         scheduleOsdHide(5000);
                     }
                 }
@@ -2756,6 +2769,9 @@ public class MainActivity extends Activity {
         osdNextProgram.setText("Compactos e melhores momentos ao final da partida.");
         osdProgressBar.setProgress(100);
 
+        if (embedChannelName != null) embedChannelName.setText(ev.getDisplayName());
+        if (embedProgramTitle != null) embedProgramTitle.setText("⚽ " + ev.getDisplayLeague());
+
         showOsdBanner(5000);
     }
 
@@ -2767,18 +2783,37 @@ public class MainActivity extends Activity {
         osdChNum.setText(String.format("%03d", chIdx + 1));
         osdChName.setText(ch.name);
 
+        if (embedChannelName != null) {
+            embedChannelName.setText(String.format("%03d - %s", chIdx + 1, ch.name));
+        }
+
         if (epg != null && !"SEM DADOS DE PROGRAMAÇÃO".equals(epg.nowTitle)) {
             osdNowTitle.setText("🔴 NO AR: " + epg.nowTitle);
             osdRemaining.setText(String.format("Restam ~%d min (%s)", epg.remainingMinutes, epg.timeRange));
             osdSynopsis.setText(epg.synopsis);
             osdNextProgram.setText("A Seguir: " + epg.nextStart + " • " + epg.nextTitle);
             osdProgressBar.setProgress(epg.progress);
+            if (embedProgramTitle != null) embedProgramTitle.setText("🔴 No Ar: " + epg.nowTitle);
         } else {
             osdNowTitle.setText("🔴 NO AR: SEM DADOS DE PROGRAMAÇÃO");
             osdRemaining.setText("--:--");
             osdSynopsis.setText("Grade de programação indisponível para este canal no momento.");
             osdNextProgram.setText("A Seguir: SEM DADOS DE PROGRAMAÇÃO");
             osdProgressBar.setProgress(0);
+            if (embedProgramTitle != null) embedProgramTitle.setText("🔴 No Ar: Transmissão Ao Vivo");
+        }
+    }
+
+    private void updateEmbedBarsVisibility() {
+        boolean showEmbed = (currentMode == ScreenMode.FULLSCREEN && isPlayingEmbed);
+        if (fullscreenEmbedTopBar != null) {
+            fullscreenEmbedTopBar.setVisibility(showEmbed ? View.VISIBLE : View.GONE);
+        }
+        if (fullscreenEmbedBottomBar != null) {
+            fullscreenEmbedBottomBar.setVisibility(showEmbed ? View.VISIBLE : View.GONE);
+        }
+        if (showEmbed && topChannelBadge != null) {
+            topChannelBadge.setVisibility(View.GONE);
         }
     }
 
@@ -2790,8 +2825,8 @@ public class MainActivity extends Activity {
             startVodProgressTicker();
             updateVodProgress();
         }
-        // Para canais WebView/RDCanais (isPlayingEmbed), o overlay permanece sempre cobrindo o player interno conforme solicitado pelo usuário
-        if (!isPlayingEmbed && !wasActive && currentMode == ScreenMode.FULLSCREEN && osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
+        updateEmbedBarsVisibility();
+        if (!wasActive && currentMode == ScreenMode.FULLSCREEN && osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
             scheduleOsdHide(5000);
         }
     }
@@ -2804,27 +2839,23 @@ public class MainActivity extends Activity {
     public void showOsdBannerLoading() {
         if (isMosaicActive) return;
         osdHandler.removeCallbacks(osdHideRunnable);
-        if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
+        updateEmbedBarsVisibility();
+        if (topChannelBadge != null && !isPlayingEmbed) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
-
-        // O overlay fecha sozinho após 5s apenas em transmissões nativas; em embeds (RDCanais) permanece cobrindo
-        if (!isPlayingEmbed) {
-            scheduleOsdHide(5000);
-        }
+        scheduleOsdHide(5000);
     }
 
     public void showOsdBanner(int durationMs) {
         if (isMosaicActive) return;
         osdHandler.removeCallbacks(osdHideRunnable);
-        if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
+        updateEmbedBarsVisibility();
+        if (topChannelBadge != null && !isPlayingEmbed) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
 
-        if (!isPlayingEmbed) {
-            if (isVideoPlaybackActive) {
-                scheduleOsdHide(durationMs > 0 ? durationMs : 5000);
-            } else {
-                showOsdBannerLoading();
-            }
+        if (isVideoPlaybackActive) {
+            scheduleOsdHide(durationMs > 0 ? durationMs : 5000);
+        } else {
+            showOsdBannerLoading();
         }
     }
 
@@ -2894,6 +2925,7 @@ public class MainActivity extends Activity {
         fullscreenLayout.setVisibility(mode == ScreenMode.FULLSCREEN ? View.VISIBLE : View.GONE);
         vodLayout.setVisibility(mode == ScreenMode.VOD ? View.VISIBLE : View.GONE);
         seriesDetailLayout.setVisibility(mode == ScreenMode.SERIES_DETAIL ? View.VISIBLE : View.GONE);
+        updateEmbedBarsVisibility();
 
         if (mode == ScreenMode.FULLSCREEN) {
             // Reanexa o player unificado no host de tela cheia sem recarregar o vídeo
@@ -3796,9 +3828,9 @@ public class MainActivity extends Activity {
                             }
                         }
 
-                        // Prolonga o OSD se estiver visível e reprodução ativa (em transmissões nativas)
+                        // Prolonga o OSD se estiver visível e reprodução ativa
                         if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
-                            if (!isPlayingEmbed && isVideoPlaybackActive) {
+                            if (isVideoPlaybackActive) {
                                 scheduleOsdHide(5000);
                             }
                         }
@@ -4145,7 +4177,7 @@ public class MainActivity extends Activity {
         channelNumberBuffer.append(digit);
         String currentInput = channelNumberBuffer.toString();
 
-        if (topChannelBadge != null) {
+        if (!isPlayingEmbed && topChannelBadge != null) {
             topChannelBadge.setVisibility(View.VISIBLE);
         }
         if (topChNum != null) {
@@ -4153,6 +4185,9 @@ public class MainActivity extends Activity {
         }
         if (topChName != null) {
             topChName.setText("Sintonizando...");
+        }
+        if (embedChannelName != null && isPlayingEmbed) {
+            embedChannelName.setText("CH " + currentInput + " - Sintonizando...");
         }
         if (osdChNum != null) {
             osdChNum.setText(currentInput);
