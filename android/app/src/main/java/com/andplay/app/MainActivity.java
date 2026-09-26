@@ -998,6 +998,9 @@ public class MainActivity extends Activity {
             cookieManager.setAcceptThirdPartyCookies(unifiedEmbedWebView, true);
         }
 
+        unifiedEmbedWebView.setFocusable(false);
+        unifiedEmbedWebView.setFocusableInTouchMode(false);
+
         // Configuração Avançada do WebView com User-Agent limpo de navegador padrão Android
         WebSettings ws = unifiedEmbedWebView.getSettings();
         ws.setJavaScriptEnabled(true);
@@ -1197,9 +1200,9 @@ public class MainActivity extends Activity {
                     }
                 }
 
-                // 5. Intercepta páginas e frames do rdcanais.net e rdembed limpando anúncios, controles e garantindo permissões de autoplay
-                if (url.contains("rdcanais.net") || url.contains("rdembed") || url.contains("redecanais")) {
-                    if (request.isForMainFrame() || url.contains(".php") || url.contains("/embed") || url.contains("/canal") || !url.contains(".")) {
+                // 5. Intercepta páginas e frames do rdcanais.net, bolodechocolate e rdembed limpando anúncios, controles e garantindo permissões de autoplay
+                if (url.contains("rdcanais.net") || url.contains("rdembed") || url.contains("redecanais") || url.contains("bolodechocolate")) {
+                    if (request.isForMainFrame() || url.endsWith(".html") || url.endsWith(".php") || url.contains("/embed/")) {
                         try {
                             Request okReq = new Request.Builder()
                                     .url(url)
@@ -3820,9 +3823,6 @@ public class MainActivity extends Activity {
                                 openDrawer();
                                 return true;
                             } else {
-                                if (isPlayingEmbed) {
-                                    triggerAutoplayTap();
-                                }
                                 showOsdBanner(5000);
                                 return true;
                             }

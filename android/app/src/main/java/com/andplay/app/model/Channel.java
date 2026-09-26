@@ -112,8 +112,8 @@ public class Channel implements Serializable {
         if ("warner".equals(s) || "warner".equalsIgnoreCase(id) || "warnerchannel".equals(s)) {
             return "warnerchannel";
         }
-        if ("premiere".equals(s) || "premiereclubes".equals(s)) {
-            return "premiereclubes";
+        if ("premiere".equals(s) || "premiereclubes".equals(s) || "premiere1".equals(s)) {
+            return "premiere";
         }
         if ("recordsp".equals(s)) {
             return "recordsp";
