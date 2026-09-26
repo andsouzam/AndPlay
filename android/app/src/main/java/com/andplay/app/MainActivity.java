@@ -252,6 +252,7 @@ public class MainActivity extends Activity {
     private long lastMosaicBackAt = 0;
     private int mosaicInitialChannelIdx = 0;
     private ScreenMode preMosaicMode = ScreenMode.FULLSCREEN;
+    private static final Map<String, byte[]> STATIC_WEB_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static class MosaicSlotItem {
         FrameLayout slotView;
@@ -657,7 +658,11 @@ public class MainActivity extends Activity {
             pv.setUseController(false);
             slot.playerView = pv;
 
-            ExoPlayer ep = new ExoPlayer.Builder(this).build();
+            DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(this)
+                    .setDataSourceFactory(new OkHttpDataSource.Factory(sharedOkHttpClient));
+            ExoPlayer ep = new ExoPlayer.Builder(this)
+                    .setMediaSourceFactory(mediaSourceFactory)
+                    .build();
             slot.exoPlayer = ep;
             pv.setPlayer(ep);
 
@@ -726,6 +731,26 @@ public class MainActivity extends Activity {
                         InetAddress.getByName("104.21.96.54"),
                         InetAddress.getByName("172.67.173.73")
                 ));
+                CACHE.put("static.s23-cloudfront-net.lat", Arrays.asList(
+                        InetAddress.getByName("104.21.49.33"),
+                        InetAddress.getByName("172.67.158.120")
+                ));
+                CACHE.put("api.reidoscanais.st", Arrays.asList(
+                        InetAddress.getByName("104.21.4.193"),
+                        InetAddress.getByName("172.67.154.45")
+                ));
+                CACHE.put("esportesembed.net", Arrays.asList(
+                        InetAddress.getByName("172.67.162.24"),
+                        InetAddress.getByName("104.21.15.95")
+                ));
+                CACHE.put("rdcanais.net", Arrays.asList(
+                        InetAddress.getByName("104.21.82.94"),
+                        InetAddress.getByName("172.67.199.224")
+                ));
+                CACHE.put("streamverde.net", Arrays.asList(
+                        InetAddress.getByName("104.21.28.81"),
+                        InetAddress.getByName("172.67.170.106")
+                ));
             } catch (Exception ignored) {}
         }
 
@@ -735,11 +760,57 @@ public class MainActivity extends Activity {
             if (CACHE.containsKey(hostname)) {
                 return CACHE.get(hostname);
             }
+
+            boolean isBlockedDomain = hostname.contains("reidoscanais")
+                    || hostname.contains("cazetv")
+                    || hostname.contains("streamverde")
+                    || hostname.contains("cloudfront-net")
+                    || hostname.endsWith(".lat")
+                    || hostname.contains("esportesembed")
+                    || hostname.contains("rdcanais")
+                    || hostname.contains("rdembed");
+
+            // Para domínios frequentemente bloqueados por operadoras, consulta DoH 1.1.1.1 prioritariamente
+            if (isBlockedDomain) {
+                List<InetAddress> dohIps = queryDoh(hostname);
+                if (dohIps != null && !dohIps.isEmpty()) {
+                    CACHE.put(hostname, dohIps);
+                    return dohIps;
+                }
+            }
+
             try {
                 List<InetAddress> sys = Dns.SYSTEM.lookup(hostname);
                 if (sys != null && !sys.isEmpty()) return sys;
             } catch (UnknownHostException ignored) {}
 
+            List<InetAddress> dohIps = queryDoh(hostname);
+            if (dohIps != null && !dohIps.isEmpty()) {
+                CACHE.put(hostname, dohIps);
+                return dohIps;
+            }
+
+            if (hostname.contains("cazetv.shop") || hostname.contains("streamverde")) {
+                List<InetAddress> ips = CACHE.get("svd.cazetv.shop");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("s23-cloudfront-net")) {
+                List<InetAddress> ips = CACHE.get("static.s23-cloudfront-net.lat");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("s22-cloudfront-net") || hostname.endsWith(".lat")) {
+                List<InetAddress> ips = CACHE.get("cdn1.s22-cloudfront-net.lat");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("reidoscanais")) {
+                List<InetAddress> ips = CACHE.get("api.reidoscanais.st");
+                if (ips != null) return ips;
+            }
+
+            throw new UnknownHostException("Não foi possível resolver host: " + hostname);
+        }
+
+        private List<InetAddress> queryDoh(String hostname) {
             try {
                 URL url = new URL("https://1.1.1.1/dns-query?name=" + hostname + "&type=A");
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -763,23 +834,12 @@ public class MainActivity extends Activity {
                             }
                         }
                         if (!ips.isEmpty()) {
-                            CACHE.put(hostname, ips);
                             return ips;
                         }
                     }
                 }
             } catch (Exception ignored) {}
-
-            if (hostname.contains("cazetv.shop") || hostname.contains("streamverde")) {
-                List<InetAddress> ips = CACHE.get("svd.cazetv.shop");
-                if (ips != null) return ips;
-            }
-            if (hostname.contains("s22-cloudfront-net") || hostname.endsWith(".lat")) {
-                List<InetAddress> ips = CACHE.get("cdn1.s22-cloudfront-net.lat");
-                if (ips != null) return ips;
-            }
-
-            throw new UnknownHostException("Não foi possível resolver host: " + hostname);
+            return null;
         }
     }
 
@@ -800,8 +860,13 @@ public class MainActivity extends Activity {
                 .readTimeout(20, TimeUnit.SECONDS)
                 .build();
 
+        Map<String, String> defaultHeaders = new HashMap<>();
+        defaultHeaders.put("Referer", "https://streamverde.net/");
+        defaultHeaders.put("Origin", "https://streamverde.net");
+
         OkHttpDataSource.Factory httpDataSourceFactory = new OkHttpDataSource.Factory(sharedOkHttpClient)
-                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .setDefaultRequestProperties(defaultHeaders);
 
         DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(this)
                 .setDataSourceFactory(httpDataSourceFactory);
@@ -932,7 +997,44 @@ public class MainActivity extends Activity {
                 if (request == null || request.getUrl() == null) return super.shouldInterceptRequest(view, request);
                 String url = request.getUrl().toString();
 
-                // 1. Intercepta player.js do localhost.tattoo para garantir autoplay e remover botão de pause
+                // 1. Bloqueia anúncios, rastreadores e popunders conhecidos instantaneamente sem requisição de rede
+                if (url.contains("aclib")
+                        || url.contains("histats")
+                        || url.contains("statcounter")
+                        || url.contains("popunder")
+                        || url.contains("doubleclick")
+                        || url.contains("googlesyndication")
+                        || url.contains("adnxs")
+                        || url.contains("adservice")) {
+                    return new WebResourceResponse("text/javascript", "UTF-8", new ByteArrayInputStream(new byte[0]));
+                }
+
+                // 2. Cache em memória RAM de bibliotecas JS do player (JWPlayer, Bitmovin) para carregamento instantâneo
+                boolean isPlayerAsset = url.contains("jwplayer.latest.js")
+                        || url.contains("jwplayer.js")
+                        || url.contains("jwplayer.cast.js")
+                        || url.contains("bitmovinplayer.js");
+
+                if (isPlayerAsset) {
+                    byte[] cached = STATIC_WEB_CACHE.get(url);
+                    if (cached != null) {
+                        return new WebResourceResponse("application/javascript", "UTF-8", new ByteArrayInputStream(cached));
+                    }
+                    try {
+                        Request okReq = new Request.Builder()
+                                .url(url)
+                                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36")
+                                .build();
+                        Response okRes = sharedOkHttpClient.newCall(okReq).execute();
+                        if (okRes.isSuccessful() && okRes.body() != null) {
+                            byte[] data = okRes.body().bytes();
+                            STATIC_WEB_CACHE.put(url, data);
+                            return new WebResourceResponse("application/javascript", "UTF-8", new ByteArrayInputStream(data));
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                // 3. Intercepta player.js do localhost.tattoo para garantir autoplay e remover botão de pause
                 if (url.contains("localhost.tattoo") && url.contains("player.js")) {
                     try {
                         Request okReq = new Request.Builder()
@@ -983,8 +1085,12 @@ public class MainActivity extends Activity {
                     }
                 }
 
-                // 2. Intercepta hotstar.css e player-v3.1.min.css para ocultar ícones de playback
+                // 4. Intercepta hotstar.css e player-v3.1.min.css com cache em RAM
                 if (url.contains("hotstar.css") || url.contains("player-v3.1.min.css")) {
+                    byte[] cachedCss = STATIC_WEB_CACHE.get(url);
+                    if (cachedCss != null) {
+                        return new WebResourceResponse("text/css", "UTF-8", new ByteArrayInputStream(cachedCss));
+                    }
                     try {
                         Request okReq = new Request.Builder()
                                 .url(url)
@@ -995,6 +1101,7 @@ public class MainActivity extends Activity {
                             String originalCss = okRes.body().string();
                             String hideCss = "\n.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }\n";
                             byte[] cssBytes = (originalCss + hideCss).getBytes(StandardCharsets.UTF_8);
+                            STATIC_WEB_CACHE.put(url, cssBytes);
                             return new WebResourceResponse("text/css", "UTF-8", new ByteArrayInputStream(cssBytes));
                         }
                     } catch (Exception e) {
@@ -1002,7 +1109,7 @@ public class MainActivity extends Activity {
                     }
                 }
 
-                // 3. Intercepta página principal do rdcanais.net para conceder allow="autoplay *" no iframe
+                // 5. Intercepta página principal do rdcanais.net limpando anúncios e garantindo permissões de autoplay
                 if (request.isForMainFrame() && url.contains("rdcanais.net")) {
                     try {
                         Request okReq = new Request.Builder()
@@ -1012,7 +1119,9 @@ public class MainActivity extends Activity {
                         Response okRes = sharedOkHttpClient.newCall(okReq).execute();
                         if (okRes.isSuccessful() && okRes.body() != null) {
                             String html = okRes.body().string();
-                            html = html.replace("allow=\"encrypted-media\"", "allow=\"autoplay *; encrypted-media *; fullscreen *; picture-in-picture *\"");
+                            html = html.replaceAll("(?is)<script[^>]*aclib[^>]*>.*?</script>", "")
+                                       .replaceAll("(?is)<script[^>]*histats[^>]*>.*?</script>", "")
+                                       .replace("allow=\"encrypted-media\"", "allow=\"autoplay *; encrypted-media *; fullscreen *; picture-in-picture *\"");
                             byte[] htmlBytes = html.getBytes(StandardCharsets.UTF_8);
                             return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(htmlBytes));
                         }
@@ -1035,6 +1144,12 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                mainHandler.post(() -> {
+                    onPlaybackStarted();
+                    if (currentMode == ScreenMode.FULLSCREEN) {
+                        scheduleOsdHide(5000);
+                    }
+                });
                 // Injeta script seguro para áudio, remoção de botões sobrepostos e detecção de reprodução
                 String antiAdAndPlaybackScript = "(function() {" +
                         "try {" +
@@ -1439,7 +1554,7 @@ public class MainActivity extends Activity {
         executor.execute(() -> {
             allChannels = ApiClient.loadLocalChannels(this);
             sortChannelsByGroup(allChannels);
-            allSports = ApiClient.getDefaultSportsFallbacks();
+            allSports = ApiClient.getLiveSports();
 
             mainHandler.post(() -> {
                 hideLoading();
@@ -1562,6 +1677,9 @@ public class MainActivity extends Activity {
                 }
                 return false;
             });
+            btnDrawerOptions.setOnFocusChangeListener((v, hasFocus) -> {
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(120).start();
+            });
         }
 
         if (btnDrawerMosaic != null) {
@@ -1572,6 +1690,9 @@ public class MainActivity extends Activity {
                     return true;
                 }
                 return false;
+            });
+            btnDrawerMosaic.setOnFocusChangeListener((v, hasFocus) -> {
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(120).start();
             });
         }
     }
@@ -1765,12 +1886,11 @@ public class MainActivity extends Activity {
 
     private void triggerAutoplayTap() {
         if (unifiedEmbedWebView == null) return;
+        // Segurança absoluta: nunca disparar touch events simulados no modo CENTRAL para não clicar acidentalmente nos canais do grid
+        if (currentMode != ScreenMode.FULLSCREEN) return;
         int w = unifiedEmbedWebView.getWidth();
         int h = unifiedEmbedWebView.getHeight();
-        if (w <= 0 || h <= 0) {
-            w = 1280;
-            h = 720;
-        }
+        if (w <= 0 || h <= 0) return;
         float x = w / 2.0f;
         float y = h / 2.0f;
         long downTime = SystemClock.uptimeMillis();
@@ -2282,15 +2402,18 @@ public class MainActivity extends Activity {
             unifiedEmbedWebView.loadUrl(autoplayUrl);
 
             mainHandler.postDelayed(() -> {
-                if (isPlayingEmbed && !isVideoPlaybackActive) {
+                if (isPlayingEmbed && !isVideoPlaybackActive && currentMode == ScreenMode.FULLSCREEN) {
                     triggerAutoplayTap();
                 }
             }, 1200);
             mainHandler.postDelayed(() -> {
-                if (isPlayingEmbed && !isVideoPlaybackActive) {
-                    triggerAutoplayTap();
+                if (isPlayingEmbed) {
+                    onPlaybackStarted();
+                    if (currentMode == ScreenMode.FULLSCREEN) {
+                        scheduleOsdHide(5000);
+                    }
                 }
-            }, 2400);
+            }, 2200);
         } else {
             unifiedEmbedWebView.stopLoading();
             unifiedEmbedWebView.loadUrl("about:blank");
@@ -2429,14 +2552,42 @@ public class MainActivity extends Activity {
 
     public void playSportsEvent(SportsEvent ev) {
         if (ev == null) return;
+        List<Channel.StreamFallback> options = ev.fallbacks;
+        if (options == null || options.isEmpty()) {
+            Toast.makeText(this, "Nenhuma transmissão disponível para esta partida no momento.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // Se houver mais de um canal/opção disponível, apresenta diálogo para o usuário escolher qual canal assistir
+        if (options.size() > 1) {
+            String[] names = new String[options.size()];
+            for (int i = 0; i < options.size(); i++) {
+                Channel.StreamFallback fb = options.get(i);
+                names[i] = "📺 " + fb.name;
+            }
+
+            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("⚽ " + ev.getDisplayName() + "\nEscolha o canal de transmissão:")
+                    .setItems(names, (dialog, which) -> {
+                        dialog.dismiss();
+                        startSportsPlayback(ev, which);
+                    })
+                    .setNegativeButton("Cancelar", null)
+                    .show();
+        } else {
+            startSportsPlayback(ev, 0);
+        }
+    }
+
+    private void startSportsPlayback(SportsEvent ev, int fallbackIndex) {
         destroyCurrentStream();
         isPlayingVod = false;
         setScreenMode(ScreenMode.FULLSCREEN);
 
-        if (!ev.fallbacks.isEmpty()) {
-            Channel.StreamFallback fb = ev.fallbacks.get(0);
-            playStream(fb.url, fb.isEmbed);
-        }
+        currentChannelFallbacks = ev.fallbacks;
+        currentFallbackIdx = Math.max(0, Math.min(fallbackIndex, ev.fallbacks.size() - 1));
+        Channel.StreamFallback fb = ev.fallbacks.get(currentFallbackIdx);
+        playStream(fb.url, fb.isEmbed);
 
         topChNum.setText("AO VIVO");
         topChName.setText(ev.getDisplayName());
@@ -2444,11 +2595,11 @@ public class MainActivity extends Activity {
         osdChName.setText(ev.getDisplayName());
         osdNowTitle.setText("⚽ " + ev.getDisplayLeague());
         osdRemaining.setText(ev.matchTime != null ? ev.matchTime : "Ao Vivo");
-        osdSynopsis.setText(ev.getDisplayName() + " - Transmissão oficial ao vivo com cobertura em tempo real.");
+        osdSynopsis.setText(ev.getDisplayName() + " - Transmissão via " + fb.name);
         osdNextProgram.setText("Compactos e melhores momentos ao final da partida.");
         osdProgressBar.setProgress(100);
 
-        showOsdBannerLoading();
+        showOsdBanner(5000);
     }
 
     private void updateOsd(Channel ch, int chIdx, LiveSchedule epg) {
@@ -2497,12 +2648,8 @@ public class MainActivity extends Activity {
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
 
-        // Fallback de segurança: se a reprodução não disparar em 15s, agenda fechamento
-        osdHandler.postDelayed(() -> {
-            if (!isVideoPlaybackActive && currentMode == ScreenMode.FULLSCREEN) {
-                scheduleOsdHide(5000);
-            }
-        }, 15000);
+        // O overlay sempre fecha sozinho após 5s, sem travar na tela
+        scheduleOsdHide(5000);
     }
 
     public void showOsdBanner(int durationMs) {
@@ -3060,51 +3207,118 @@ public class MainActivity extends Activity {
             if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
                 resetDrawerTimeout();
 
-                // Se o foco estiver no cabeçalho/categorias da gaveta, permite navegação padrão do D-Pad entre as pills
-                if (drawerCatsRecycler != null && drawerCatsRecycler.hasFocus()) {
+                // 1. Se o foco estiver no botão de OPÇÕES ou no botão de MOSAICO:
+                boolean isOptionsFocused = (btnDrawerOptions != null && btnDrawerOptions.hasFocus());
+                boolean isMosaicFocused = (btnDrawerMosaic != null && btnDrawerMosaic.hasFocus());
+
+                if (isOptionsFocused || isMosaicFocused) {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                        if (isOptionsFocused && btnDrawerMosaic != null) {
+                            btnDrawerMosaic.requestFocus();
+                            return true;
+                        }
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                        if (isMosaicFocused && btnDrawerOptions != null) {
+                            btnDrawerOptions.requestFocus();
+                            return true;
+                        }
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                        if (drawerCatsRecycler != null && drawerCatsRecycler.getChildCount() > 0) {
+                            View child = drawerCatsRecycler.getLayoutManager() != null
+                                    ? drawerCatsRecycler.getLayoutManager().findViewByPosition(selectedDrawerCatIdx)
+                                    : null;
+                            if (child != null) child.requestFocus();
+                            else drawerCatsRecycler.getChildAt(0).requestFocus();
+                            return true;
+                        } else if (drawerChannelsRecycler != null && drawerChannelsRecycler.getChildCount() > 0) {
+                            drawerChannelsRecycler.getChildAt(0).requestFocus();
+                            return true;
+                        }
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                        return true;
+                    }
                     return super.dispatchKeyEvent(event);
                 }
 
-                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    RecyclerView.LayoutManager lm = drawerChannelsRecycler != null ? drawerChannelsRecycler.getLayoutManager() : null;
-                    if (lm instanceof GridLayoutManager) {
-                        GridLayoutManager glm = (GridLayoutManager) lm;
-                        int spanCount = glm.getSpanCount();
+                // 2. Se o foco estiver no seletor de categorias da gaveta:
+                if (drawerCatsRecycler != null && drawerCatsRecycler.hasFocus()) {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                        if (btnDrawerOptions != null) {
+                            btnDrawerOptions.requestFocus();
+                            return true;
+                        }
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                        if (drawerChannelsRecycler != null && drawerChannelsRecycler.getChildCount() > 0) {
+                            drawerChannelsRecycler.getChildAt(0).requestFocus();
+                            return true;
+                        }
+                    }
+                    return super.dispatchKeyEvent(event);
+                }
+
+                // 3. Se o foco estiver na lista/grade de canais da gaveta:
+                if (drawerChannelsRecycler != null && drawerChannelsRecycler.hasFocus()) {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                         View focused = drawerChannelsRecycler.findFocus();
                         View itemView = focused != null ? drawerChannelsRecycler.findContainingItemView(focused) : null;
                         int pos = itemView != null ? drawerChannelsRecycler.getChildAdapterPosition(itemView) : RecyclerView.NO_POSITION;
-                        if (pos != RecyclerView.NO_POSITION) {
-                            int col = pos % spanCount;
-                            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                                if (col > 0) {
-                                    // Move foco na mesma linha para a coluna esquerda
-                                    return super.dispatchKeyEvent(event);
-                                } else {
-                                    switchDrawerCategory(-1);
-                                    return true;
-                                }
-                            } else {
-                                int itemCount = drawerChannelsRecycler.getAdapter() != null ? drawerChannelsRecycler.getAdapter().getItemCount() : 0;
-                                if (col < spanCount - 1 && pos + 1 < itemCount) {
-                                    // Move foco na mesma linha para a coluna direita
-                                    return super.dispatchKeyEvent(event);
-                                } else {
-                                    switchDrawerCategory(1);
-                                    return true;
-                                }
+                        RecyclerView.LayoutManager lm = drawerChannelsRecycler.getLayoutManager();
+                        int spanCount = (lm instanceof GridLayoutManager) ? ((GridLayoutManager) lm).getSpanCount() : 1;
+                        if (pos < spanCount || !drawerChannelsRecycler.canScrollVertically(-1)) {
+                            // Subindo além da primeira linha de canais, sobe para as categorias
+                            if (drawerCatsRecycler != null && drawerCatsRecycler.getChildCount() > 0) {
+                                View child = drawerCatsRecycler.getLayoutManager() != null
+                                        ? drawerCatsRecycler.getLayoutManager().findViewByPosition(selectedDrawerCatIdx)
+                                        : null;
+                                if (child != null) child.requestFocus();
+                                else drawerCatsRecycler.getChildAt(0).requestFocus();
+                            } else if (btnDrawerOptions != null) {
+                                btnDrawerOptions.requestFocus();
                             }
+                            return true;
                         }
                     }
 
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                        switchDrawerCategory(-1);
-                        return true;
-                    } else {
-                        switchDrawerCategory(1);
-                        return true;
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                        RecyclerView.LayoutManager lm = drawerChannelsRecycler.getLayoutManager();
+                        if (lm instanceof GridLayoutManager) {
+                            GridLayoutManager glm = (GridLayoutManager) lm;
+                            int spanCount = glm.getSpanCount();
+                            View focused = drawerChannelsRecycler.findFocus();
+                            View itemView = focused != null ? drawerChannelsRecycler.findContainingItemView(focused) : null;
+                            int pos = itemView != null ? drawerChannelsRecycler.getChildAdapterPosition(itemView) : RecyclerView.NO_POSITION;
+                            if (pos != RecyclerView.NO_POSITION) {
+                                int col = pos % spanCount;
+                                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                                    if (col > 0) {
+                                        return super.dispatchKeyEvent(event);
+                                    } else {
+                                        switchDrawerCategory(-1);
+                                        return true;
+                                    }
+                                } else {
+                                    int itemCount = drawerChannelsRecycler.getAdapter() != null ? drawerChannelsRecycler.getAdapter().getItemCount() : 0;
+                                    if (col < spanCount - 1 && pos + 1 < itemCount) {
+                                        return super.dispatchKeyEvent(event);
+                                    } else {
+                                        switchDrawerCategory(1);
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                            switchDrawerCategory(-1);
+                            return true;
+                        } else {
+                            switchDrawerCategory(1);
+                            return true;
+                        }
                     }
                 }
-                // UP e DOWN navegam normalmente pelos itens do RecyclerView
+
+                return super.dispatchKeyEvent(event);
             } else if (isMosaicActive) {
                 // Durante modo Mosaico com gaveta fechada, eventos de DPAD e Enter navegam entre os slots
                 return super.dispatchKeyEvent(event);

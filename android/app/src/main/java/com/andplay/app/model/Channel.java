@@ -73,33 +73,29 @@ public class Channel implements Serializable {
                 }
                 serverNum++;
             } else if (com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE.equals(prov)) {
-                String svSlug = getStreamVerdeSlug(cleanSlug);
-                list.add(new StreamFallback("StreamVerde (HD " + serverNum + ")", "https://streamverde.net/canais/" + svSlug + "/embed/", true));
+                String svSlug = getStreamVerdeSlug(cleanSlug, id);
+                list.add(new StreamFallback("StreamVerde (HLS Direto)", "https://svd.cazetv.shop/streamverde/" + svSlug + ".m3u8", false));
                 serverNum++;
             }
         }
         return list;
     }
 
-    public static String getStreamVerdeSlug(String cleanSlug) {
-        if (cleanSlug == null || cleanSlug.isEmpty()) return "";
-        String s = cleanSlug.toLowerCase();
-        if ("warner".equals(s) || "warnerchannel".equals(s)) return "warnerchannel";
-        if ("recordsp".equals(s)) return "record";
-        if ("bandsp".equals(s)) return "band";
-        if ("sbt".equals(s)) return "sbt-central";
-        if ("premiere".equals(s)) return "premiere-1";
-
-        if (s.contains("-")) return s;
-
-        if (s.startsWith("globo") && s.length() == 7) {
-            return "globo-" + s.substring(5);
+    public static String getStreamVerdeSlug(String cleanSlug, String id) {
+        if (cleanSlug == null) cleanSlug = "";
+        String s = cleanSlug.replace("-", "").toLowerCase();
+        if ("warner".equals(s) || "warner".equalsIgnoreCase(id) || "warnerchannel".equals(s)) {
+            return "warnerchannel";
         }
-
-        if (s.matches(".*[a-z]+[0-9]+$")) {
-            return s.replaceAll("([a-z]+)([0-9]+)", "$1-$2");
+        if ("premiere".equals(s) || "premiereclubes".equals(s)) {
+            return "premiereclubes";
         }
-
+        if ("recordsp".equals(s)) {
+            return "recordsp";
+        }
+        if ("bandsp".equals(s)) {
+            return "bandsp";
+        }
         return s;
     }
 
