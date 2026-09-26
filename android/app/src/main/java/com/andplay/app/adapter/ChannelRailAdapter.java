@@ -1,6 +1,7 @@
 package com.andplay.app.adapter;
 
 import android.content.Context;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -67,18 +68,26 @@ public class ChannelRailAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 Glide.with(context)
                         .load(ch.logo)
                         .diskCacheStrategy(DiskCacheStrategy.ALL)
-                        .placeholder(R.drawable.ic_launcher)
+                        .placeholder(R.drawable.card_focus_bg)
                         .into(vh.logo);
             } else {
-                vh.logo.setImageResource(R.drawable.ic_launcher);
+                vh.logo.setImageResource(R.drawable.card_focus_bg);
             }
 
             vh.itemView.setOnClickListener(v -> {
                 if (listener != null) listener.onChannelClick(ch, position);
             });
 
+            vh.itemView.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    v.performClick();
+                    return true;
+                }
+                return false;
+            });
+
             vh.itemView.setOnFocusChangeListener((v, hasFocus) -> {
-                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(150).start();
+                v.animate().scaleX(hasFocus ? 1.05f : 1.0f).scaleY(hasFocus ? 1.05f : 1.0f).setDuration(120).start();
             });
 
         } else if (holder instanceof DrawerViewHolder) {
@@ -98,15 +107,23 @@ public class ChannelRailAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                         .diskCacheStrategy(DiskCacheStrategy.ALL)
                         .into(vh.logo);
             } else {
-                vh.logo.setImageResource(R.drawable.ic_launcher);
+                vh.logo.setImageResource(R.drawable.card_focus_bg);
             }
 
             vh.itemView.setOnClickListener(v -> {
                 if (listener != null) listener.onChannelClick(ch, position);
             });
 
+            vh.itemView.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    v.performClick();
+                    return true;
+                }
+                return false;
+            });
+
             vh.itemView.setOnFocusChangeListener((v, hasFocus) -> {
-                v.animate().scaleX(hasFocus ? 1.04f : 1.0f).scaleY(hasFocus ? 1.04f : 1.0f).setDuration(150).start();
+                v.animate().scaleX(hasFocus ? 1.03f : 1.0f).scaleY(hasFocus ? 1.03f : 1.0f).setDuration(120).start();
             });
         }
     }

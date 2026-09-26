@@ -7,11 +7,19 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Log;
 import android.view.KeyEvent;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.webkit.ConsoleMessage;
+import android.webkit.RenderProcessGoneDetail;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -68,12 +76,14 @@ public class MainActivity extends Activity {
     private ScreenMode currentMode = ScreenMode.CENTRAL;
     private ScreenMode previousMode = ScreenMode.CENTRAL;
 
-    // ExoPlayer & WebView Fallback
+    // Single Unified Video Player (reutilizado entre PiP e Tela Cheia sem recarregar o vídeo)
+    private FrameLayout unifiedPlayerBox;
+    private PlayerView unifiedExoPlayerView;
+    private WebView unifiedEmbedWebView;
     private ExoPlayer exoPlayer;
-    private PlayerView pipPlayerView;
-    private PlayerView fullscreenPlayerView;
-    private WebView pipEmbedView;
-    private WebView fullscreenEmbedView;
+
+    private FrameLayout pipPlayerHost;
+    private FrameLayout fullscreenPlayerHost;
 
     // Central Views
     private LinearLayout centralLayout;
@@ -83,7 +93,7 @@ public class MainActivity extends Activity {
     private FrameLayout pipContainer;
     private TextView pipChannelName;
     private TextView pipProgramTitle;
-    private LinearLayout btnNavLive, btnNavSports, btnNavMovies, btnNavSeries, btnNavEpg;
+    private LinearLayout btnNavMovies, btnNavSeries, btnNavSports, btnNavEpg;
     private RecyclerView channelsRail;
     private RecyclerView sportsRail;
     private RecyclerView moviesRail;
@@ -96,6 +106,8 @@ public class MainActivity extends Activity {
     private LinearLayout osdBanner;
     private TextView osdChNum, osdChName, osdClock, osdNowTitle, osdRemaining, osdSynopsis, osdNextProgram;
     private ProgressBar osdProgressBar;
+
+    // Lateral EPG Drawer
     private LinearLayout epgDrawer;
     private RecyclerView drawerCatsRecycler;
     private RecyclerView drawerChannelsRecycler;
@@ -130,12 +142,13 @@ public class MainActivity extends Activity {
     private List<Category> seriesCategories = new ArrayList<>();
 
     private int currentChannelIdx = 0;
+    private String currentActiveStreamUrl = "";
     private boolean isPlayingEmbed = false;
     private boolean isPlayingVod = false;
 
     private Movie activeVodMovie = null;
     private Series activeVodSeries = null;
-    private String currentVodType = "movies"; // "movies" or "series"
+    private String currentVodType = "movies";
 
     private final Handler osdHandler = new Handler(Looper.getMainLooper());
     private final Runnable osdHideRunnable = () -> {
@@ -157,7 +170,7 @@ public class MainActivity extends Activity {
 
         bindViews();
         hideSystemUI();
-        initPlayer();
+        initUnifiedPlayer();
         initClock();
 
         loadInitialData();
@@ -165,21 +178,22 @@ public class MainActivity extends Activity {
     }
 
     private void bindViews() {
+        // Hosts de vídeo
+        pipPlayerHost = findViewById(R.id.pipPlayerHost);
+        fullscreenPlayerHost = findViewById(R.id.fullscreenPlayerHost);
+
         // Central
         centralLayout = findViewById(R.id.centralLayout);
         centralScroll = findViewById(R.id.centralScroll);
         headerClock = findViewById(R.id.headerClock);
         headerDate = findViewById(R.id.headerDate);
         pipContainer = findViewById(R.id.pipContainer);
-        pipPlayerView = findViewById(R.id.pipPlayerView);
-        pipEmbedView = findViewById(R.id.pipEmbedView);
         pipChannelName = findViewById(R.id.pipChannelName);
         pipProgramTitle = findViewById(R.id.pipProgramTitle);
 
-        btnNavLive = findViewById(R.id.btnNavLive);
-        btnNavSports = findViewById(R.id.btnNavSports);
         btnNavMovies = findViewById(R.id.btnNavMovies);
         btnNavSeries = findViewById(R.id.btnNavSeries);
+        btnNavSports = findViewById(R.id.btnNavSports);
         btnNavEpg = findViewById(R.id.btnNavEpg);
 
         channelsRail = findViewById(R.id.channelsRail);
@@ -188,8 +202,6 @@ public class MainActivity extends Activity {
 
         // Fullscreen
         fullscreenLayout = findViewById(R.id.fullscreenLayout);
-        fullscreenPlayerView = findViewById(R.id.fullscreenPlayerView);
-        fullscreenEmbedView = findViewById(R.id.fullscreenEmbedView);
         floatingBackBtn = findViewById(R.id.floatingBackBtn);
         topChannelBadge = findViewById(R.id.topChannelBadge);
         topChNum = findViewById(R.id.topChNum);
@@ -205,6 +217,7 @@ public class MainActivity extends Activity {
         osdNextProgram = findViewById(R.id.osdNextProgram);
         osdProgressBar = findViewById(R.id.osdProgressBar);
 
+        // EPG Drawer
         epgDrawer = findViewById(R.id.epgDrawer);
         drawerCatsRecycler = findViewById(R.id.drawerCatsRecycler);
         drawerChannelsRecycler = findViewById(R.id.drawerChannelsRecycler);
@@ -233,39 +246,138 @@ public class MainActivity extends Activity {
         // Loading
         loadingLayout = findViewById(R.id.loadingLayout);
         loadingText = findViewById(R.id.loadingText);
-
-        setupWebViews();
     }
 
     @SuppressLint("SetJavaScriptEnabled")
-    private void setupWebViews() {
-        WebViewClient client = new WebViewClient() {
+    @OptIn(markerClass = UnstableApi.class)
+    private void initUnifiedPlayer() {
+        // Infla o player único que será acoplado no PiP ou em Tela Cheia
+        unifiedPlayerBox = (FrameLayout) LayoutInflater.from(this).inflate(R.layout.player_box, null);
+        unifiedExoPlayerView = unifiedPlayerBox.findViewById(R.id.unifiedExoPlayerView);
+        unifiedEmbedWebView = unifiedPlayerBox.findViewById(R.id.unifiedEmbedWebView);
+
+        // Configuração do ExoPlayer
+        exoPlayer = new ExoPlayer.Builder(this).build();
+        exoPlayer.setPlayWhenReady(true);
+        unifiedExoPlayerView.setPlayer(exoPlayer);
+
+        // Configuração Avançada do WebView com Proteção Total Contra Anúncios
+        WebSettings ws = unifiedEmbedWebView.getSettings();
+        ws.setJavaScriptEnabled(true);
+        ws.setDomStorageEnabled(true);
+        ws.setDatabaseEnabled(true);
+        ws.setMediaPlaybackRequiresUserGesture(false); // Autoplay garantido
+        ws.setAllowFileAccess(true);
+        ws.setAllowContentAccess(true);
+        ws.setUseWideViewPort(true);
+        ws.setLoadWithOverviewMode(true);
+        ws.setCacheMode(WebSettings.LOAD_DEFAULT);
+        ws.setSupportMultipleWindows(false); // Impede popups
+        ws.setJavaScriptCanOpenWindowsAutomatically(false); // Bloqueia abertura automática de abas
+        ws.setUserAgentString(ws.getUserAgentString() + " EPlayTV/2.0 (SmartTV/Projector; CableBox)");
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
+
+        unifiedEmbedWebView.setWebChromeClient(new WebChromeClient() {
             @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, android.os.Message resultMsg) {
+                // Bloqueio definitivo de popups e novas janelas
                 return false;
             }
-        };
 
-        for (WebView wv : new WebView[]{pipEmbedView, fullscreenEmbedView}) {
-            if (wv == null) continue;
-            WebSettings ws = wv.getSettings();
-            ws.setJavaScriptEnabled(true);
-            ws.setDomStorageEnabled(true);
-            ws.setMediaPlaybackRequiresUserGesture(false);
-            ws.setAllowFileAccess(true);
-            ws.setAllowContentAccess(true);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+            @Override
+            public boolean onJsAlert(WebView view, String url, String message, android.webkit.JsResult result) {
+                result.confirm();
+                return true;
             }
-            wv.setWebViewClient(client);
+
+            @Override
+            public boolean onJsConfirm(WebView view, String url, String message, android.webkit.JsResult result) {
+                result.confirm();
+                return true;
+            }
+
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage consoleMessage) {
+                Log.d("EPlayPlayer", consoleMessage.message());
+                return true;
+            }
+        });
+
+        unifiedEmbedWebView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                // Permite apenas o player e seus domínios legítimos de stream
+                if (url.startsWith("file://")
+                        || url.contains("rdcanais.net")
+                        || url.contains("v2.rdembed.sbs")
+                        || url.contains("bolodechocolate.fit")
+                        || url.contains("esportesembed.net")
+                        || url.contains("about:blank")) {
+                    return false;
+                }
+                // Bloqueia qualquer redirect para sites de apostas, anúncios ou popunders
+                Log.w("EPlayAdBlock", "Bloqueado redirect externo: " + url);
+                return true;
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                // Injeta script que trava window.open e cliques simulados em anúncios
+                String antiAdScript = "(function() {" +
+                        "window.open = function() { return null; };" +
+                        "window.alert = function() { };" +
+                        "window.confirm = function() { return false; };" +
+                        "document.addEventListener('click', function(e) {" +
+                        "  var a = e.target.closest('a');" +
+                        "  if (a && a.target === '_blank') { e.preventDefault(); e.stopPropagation(); }" +
+                        "}, true);" +
+                        "})();";
+                view.evaluateJavascript(antiAdScript, null);
+            }
+
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                Log.e("EPlay", "WebView RenderProcessGone crash=" + detail.didCrash());
+                destroyCurrentStream();
+                return true;
+            }
+        });
+
+        // Inicializa o player no container PiP da Central
+        pipPlayerHost.addView(unifiedPlayerBox, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+    }
+
+    private void attachPlayerToHost(FrameLayout targetHost) {
+        if (unifiedPlayerBox == null || targetHost == null) return;
+        ViewGroup parent = (ViewGroup) unifiedPlayerBox.getParent();
+        if (parent != targetHost) {
+            if (parent != null) {
+                parent.removeView(unifiedPlayerBox);
+            }
+            targetHost.addView(unifiedPlayerBox, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+            ));
         }
     }
 
-    @OptIn(markerClass = UnstableApi.class)
-    private void initPlayer() {
-        exoPlayer = new ExoPlayer.Builder(this).build();
-        exoPlayer.setPlayWhenReady(true);
-        pipPlayerView.setPlayer(exoPlayer);
+    private void destroyCurrentStream() {
+        if (exoPlayer != null) {
+            exoPlayer.stop();
+            exoPlayer.clearMediaItems();
+        }
+        if (unifiedEmbedWebView != null) {
+            unifiedEmbedWebView.stopLoading();
+            unifiedEmbedWebView.loadUrl("about:blank");
+            unifiedEmbedWebView.clearHistory();
+        }
+        currentActiveStreamUrl = "";
     }
 
     private void initClock() {
@@ -317,18 +429,26 @@ public class MainActivity extends Activity {
     }
 
     private void setupCentralButtons() {
+        // Clicar ou teclar Enter no miniplayer -> expande imediatamente para Tela Cheia sem recarregar o stream
         pipContainer.setOnClickListener(v -> setScreenMode(ScreenMode.FULLSCREEN));
-        btnNavLive.setOnClickListener(v -> setScreenMode(ScreenMode.FULLSCREEN));
+        pipContainer.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                setScreenMode(ScreenMode.FULLSCREEN);
+                return true;
+            }
+            return false;
+        });
+
+        // 4 Botões Diretos: Cima (Filmes / Séries) >> Baixo (Jogos / Guia)
+        btnNavMovies.setOnClickListener(v -> openVodExplorer("movies"));
+        btnNavSeries.setOnClickListener(v -> openVodExplorer("series"));
         btnNavSports.setOnClickListener(v -> {
             if (centralScroll != null && sportsRail != null) {
                 centralScroll.smoothScrollTo(0, sportsRail.getTop() - 100);
                 sportsRail.requestFocus();
             }
         });
-        btnNavMovies.setOnClickListener(v -> openVodExplorer("movies"));
-        btnNavSeries.setOnClickListener(v -> openVodExplorer("series"));
         btnNavEpg.setOnClickListener(v -> {
-            setScreenMode(ScreenMode.FULLSCREEN);
             toggleDrawer();
         });
 
@@ -340,6 +460,13 @@ public class MainActivity extends Activity {
     private void setupChannelsRail() {
         channelsRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         channelsRail.setAdapter(new ChannelRailAdapter(this, allChannels, false, (ch, idx) -> {
+            // Se for o mesmo canal já em execução, apenas redimensiona para tela cheia
+            if (idx == currentChannelIdx && (currentActiveStreamUrl != null && !currentActiveStreamUrl.isEmpty())) {
+                setScreenMode(ScreenMode.FULLSCREEN);
+                return;
+            }
+            // Canal diferente: destrói player anterior e sintoniza novo
+            destroyCurrentStream();
             tuneChannel(idx, true);
             setScreenMode(ScreenMode.FULLSCREEN);
         }));
@@ -368,11 +495,12 @@ public class MainActivity extends Activity {
     private void setupDrawer() {
         List<Category> drawerCats = new ArrayList<>();
         drawerCats.add(new Category("ALL", "Todos"));
-        drawerCats.add(new Category("sports", "Esportes"));
         drawerCats.add(new Category("open_tv", "Abertos"));
+        drawerCats.add(new Category("sports", "Esportes"));
         drawerCats.add(new Category("movies", "Filmes 24H"));
         drawerCats.add(new Category("kids", "Infantil"));
         drawerCats.add(new Category("variety", "Variedades"));
+        drawerCats.add(new Category("channels_24h", "24 Horas"));
 
         drawerCatsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         drawerCatsRecycler.setAdapter(new CategoryPillAdapter(drawerCats, cat -> filterDrawerChannels(cat.category_id)));
@@ -390,8 +518,18 @@ public class MainActivity extends Activity {
         }
         ChannelRailAdapter adapter = new ChannelRailAdapter(this, filtered, true, (ch, idx) -> {
             int realIdx = allChannels.indexOf(ch);
-            tuneChannel(realIdx >= 0 ? realIdx : idx, true);
+            int targetIdx = realIdx >= 0 ? realIdx : idx;
+            // Se for o mesmo canal que já está tocando, apenas fecha a gaveta e garante tela cheia
+            if (targetIdx == currentChannelIdx && (currentActiveStreamUrl != null && !currentActiveStreamUrl.isEmpty())) {
+                epgDrawer.setVisibility(View.GONE);
+                setScreenMode(ScreenMode.FULLSCREEN);
+                return;
+            }
+            // Canal diferente: destrói conexões anteriores e sintoniza
+            destroyCurrentStream();
+            tuneChannel(targetIdx, true);
             epgDrawer.setVisibility(View.GONE);
+            setScreenMode(ScreenMode.FULLSCREEN);
         });
         adapter.setCurrentPlayingIdx(currentChannelIdx);
         drawerChannelsRecycler.setAdapter(adapter);
@@ -419,34 +557,32 @@ public class MainActivity extends Activity {
             playStream(primary.url, primary.isEmbed);
         }
 
-        if (showOsd) {
+        if (showOsd && currentMode == ScreenMode.FULLSCREEN) {
             showOsdBanner(6000);
         }
     }
 
     private void playStream(String url, boolean isEmbed) {
+        currentActiveStreamUrl = url;
         isPlayingEmbed = isEmbed;
+
         if (isEmbed) {
-            if (exoPlayer != null) exoPlayer.pause();
-            pipPlayerView.setVisibility(View.GONE);
-            fullscreenPlayerView.setVisibility(View.GONE);
+            if (exoPlayer != null) {
+                exoPlayer.stop();
+                exoPlayer.clearMediaItems();
+            }
+            unifiedExoPlayerView.setVisibility(View.GONE);
+            unifiedEmbedWebView.setVisibility(View.VISIBLE);
 
-            WebView activeWeb = (currentMode == ScreenMode.FULLSCREEN) ? fullscreenEmbedView : pipEmbedView;
-            WebView idleWeb = (currentMode == ScreenMode.FULLSCREEN) ? pipEmbedView : fullscreenEmbedView;
-
-            idleWeb.setVisibility(View.GONE);
-            idleWeb.loadUrl("about:blank");
-
-            activeWeb.setVisibility(View.VISIBLE);
-            activeWeb.loadUrl(url);
+            // Garante autoplay no parâmetro da URL
+            String autoplayUrl = url + (url.contains("?") ? "&" : "?") + "autoplay=1";
+            unifiedEmbedWebView.loadUrl(autoplayUrl);
         } else {
-            pipEmbedView.setVisibility(View.GONE);
-            pipEmbedView.loadUrl("about:blank");
-            fullscreenEmbedView.setVisibility(View.GONE);
-            fullscreenEmbedView.loadUrl("about:blank");
+            unifiedEmbedWebView.stopLoading();
+            unifiedEmbedWebView.loadUrl("about:blank");
+            unifiedEmbedWebView.setVisibility(View.GONE);
 
-            pipPlayerView.setVisibility(currentMode == ScreenMode.CENTRAL ? View.VISIBLE : View.GONE);
-            fullscreenPlayerView.setVisibility(currentMode == ScreenMode.FULLSCREEN ? View.VISIBLE : View.GONE);
+            unifiedExoPlayerView.setVisibility(View.VISIBLE);
 
             MediaItem item = MediaItem.fromUri(url);
             exoPlayer.setMediaItem(item);
@@ -457,6 +593,7 @@ public class MainActivity extends Activity {
 
     public void playMovie(Movie movie) {
         if (movie == null) return;
+        destroyCurrentStream();
         activeVodMovie = movie;
         isPlayingVod = true;
         setScreenMode(ScreenMode.FULLSCREEN);
@@ -480,6 +617,7 @@ public class MainActivity extends Activity {
 
     public void playSeriesEpisode(Series series, Episode ep, String seasonNum) {
         if (series == null || ep == null) return;
+        destroyCurrentStream();
         isPlayingVod = true;
         setScreenMode(ScreenMode.FULLSCREEN);
 
@@ -502,6 +640,7 @@ public class MainActivity extends Activity {
 
     public void playSportsEvent(SportsEvent ev) {
         if (ev == null) return;
+        destroyCurrentStream();
         isPlayingVod = false;
         setScreenMode(ScreenMode.FULLSCREEN);
 
@@ -557,8 +696,22 @@ public class MainActivity extends Activity {
             epgDrawer.setVisibility(View.GONE);
         } else {
             epgDrawer.setVisibility(View.VISIBLE);
-            drawerChannelsRecycler.requestFocus();
             drawerHandler.postDelayed(drawerHideRunnable, 8000);
+
+            // Garante foco suave na lista de canais
+            drawerChannelsRecycler.post(() -> {
+                int pos = Math.max(0, currentChannelIdx);
+                drawerChannelsRecycler.scrollToPosition(pos);
+                drawerChannelsRecycler.postDelayed(() -> {
+                    RecyclerView.ViewHolder vh = drawerChannelsRecycler.findViewHolderForAdapterPosition(pos);
+                    if (vh != null && vh.itemView != null) {
+                        vh.itemView.requestFocus();
+                    } else {
+                        View first = drawerChannelsRecycler.getChildAt(0);
+                        if (first != null) first.requestFocus();
+                    }
+                }, 80);
+            });
         }
     }
 
@@ -572,33 +725,17 @@ public class MainActivity extends Activity {
         seriesDetailLayout.setVisibility(mode == ScreenMode.SERIES_DETAIL ? View.VISIBLE : View.GONE);
 
         if (mode == ScreenMode.FULLSCREEN) {
-            pipPlayerView.setPlayer(null);
-            fullscreenPlayerView.setPlayer(exoPlayer);
-
-            if (isPlayingEmbed) {
-                pipEmbedView.setVisibility(View.GONE);
-                fullscreenEmbedView.setVisibility(View.VISIBLE);
-                fullscreenEmbedView.loadUrl(allChannels.get(currentChannelIdx).getFallbacks().get(0).url);
-            } else {
-                fullscreenPlayerView.setVisibility(View.VISIBLE);
-            }
+            // Reanexa o player unificado no host de tela cheia sem recarregar o vídeo
+            attachPlayerToHost(fullscreenPlayerHost);
             showOsdBanner(5000);
         } else if (mode == ScreenMode.CENTRAL) {
-            fullscreenPlayerView.setPlayer(null);
-            pipPlayerView.setPlayer(exoPlayer);
-
-            if (isPlayingEmbed) {
-                fullscreenEmbedView.setVisibility(View.GONE);
-                pipEmbedView.setVisibility(View.VISIBLE);
-                pipEmbedView.loadUrl(allChannels.get(currentChannelIdx).getFallbacks().get(0).url);
-            } else {
-                pipPlayerView.setVisibility(View.VISIBLE);
-            }
+            // Reanexa o player unificado no host do PiP sem recarregar o vídeo
+            if (epgDrawer != null) epgDrawer.setVisibility(View.GONE);
+            attachPlayerToHost(pipPlayerHost);
             pipContainer.requestFocus();
         } else if (mode == ScreenMode.VOD) {
+            if (epgDrawer != null) epgDrawer.setVisibility(View.GONE);
             if (exoPlayer != null && !isPlayingVod) exoPlayer.pause();
-            pipEmbedView.loadUrl("about:blank");
-            fullscreenEmbedView.loadUrl("about:blank");
             vodBackBtn.requestFocus();
         }
     }
@@ -685,7 +822,7 @@ public class MainActivity extends Activity {
         for (Movie m : all) {
             if ("ALL".equals(catId) || (m.category_id != null && m.category_id.equals(catId))) {
                 filtered.add(m);
-                if (filtered.size() >= 120) break; // limite para 60 FPS
+                if (filtered.size() >= 120) break;
             }
         }
 
@@ -891,11 +1028,9 @@ public class MainActivity extends Activity {
                     tuneChannel(currentChannelIdx + 1, true);
                     return true;
                 }
-            } else if (keyCode == KeyEvent.KEYCODE_GUIDE || keyCode == KeyEvent.KEYCODE_INFO) {
-                if (currentMode == ScreenMode.FULLSCREEN) {
-                    toggleDrawer();
-                    return true;
-                }
+            } else if (keyCode == KeyEvent.KEYCODE_GUIDE || keyCode == KeyEvent.KEYCODE_INFO || keyCode == KeyEvent.KEYCODE_MENU) {
+                toggleDrawer();
+                return true;
             } else if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
                 if (exoPlayer != null) {
                     if (exoPlayer.isPlaying()) exoPlayer.pause();
@@ -905,9 +1040,29 @@ public class MainActivity extends Activity {
                 }
             }
 
-            // Atividade do usuário reinicia OSD se estiver em tela cheia
-            if (currentMode == ScreenMode.FULLSCREEN && osdBanner.getVisibility() == View.VISIBLE) {
-                showOsdBanner(6000);
+            // Em tela cheia: DPAD_RIGHT ou ENTER quando o OSD está visível abre a gaveta EPG
+            if (currentMode == ScreenMode.FULLSCREEN) {
+                if (epgDrawer.getVisibility() == View.VISIBLE) {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                        epgDrawer.setVisibility(View.GONE);
+                        return true;
+                    }
+                    drawerHandler.removeCallbacks(drawerHideRunnable);
+                    drawerHandler.postDelayed(drawerHideRunnable, 8000);
+                } else {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                        if (osdBanner.getVisibility() == View.VISIBLE) {
+                            toggleDrawer();
+                            return true;
+                        } else {
+                            showOsdBanner(6000);
+                            return true;
+                        }
+                    }
+                    if (osdBanner.getVisibility() == View.VISIBLE) {
+                        showOsdBanner(6000);
+                    }
+                }
             }
         }
 
@@ -920,11 +1075,12 @@ public class MainActivity extends Activity {
     }
 
     private boolean handleBack() {
+        if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
+            epgDrawer.setVisibility(View.GONE);
+            return true;
+        }
+
         if (currentMode == ScreenMode.FULLSCREEN) {
-            if (epgDrawer.getVisibility() == View.VISIBLE) {
-                epgDrawer.setVisibility(View.GONE);
-                return true;
-            }
             if (isPlayingVod) {
                 setScreenMode(previousMode == ScreenMode.SERIES_DETAIL ? ScreenMode.SERIES_DETAIL : ScreenMode.VOD);
                 return true;
@@ -975,6 +1131,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        destroyCurrentStream();
         if (exoPlayer != null) {
             exoPlayer.release();
             exoPlayer = null;

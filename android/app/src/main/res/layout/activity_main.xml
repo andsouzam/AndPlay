@@ -4,22 +4,26 @@
     android:id="@+id/appRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#070709">
+    android:background="#070709"
+    android:clipChildren="false"
+    android:clipToPadding="false">
 
     <!-- ======================================================== -->
-    <!-- TELA 1: CENTRAL DA TV (HOME COM PIP, 5 CARDS E TRILHOS)   -->
+    <!-- TELA 1: CENTRAL DA TV (HOME COM PIP, 4 CARDS E TRILHOS)   -->
     <!-- ======================================================== -->
     <LinearLayout
         android:id="@+id/centralLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:orientation="vertical">
 
-        <!-- CABEÇALHO DA CENTRAL -->
+        <!-- CABEÇALHO LIMPO (SEM NOMES PRÓPRIOS OU PROPAGANDA) -->
         <LinearLayout
             android:id="@+id/headerLayout"
             android:layout_width="match_parent"
-            android:layout_height="44dp"
+            android:layout_height="42dp"
             android:background="#0A0E1A"
             android:gravity="center_vertical"
             android:paddingStart="24dp"
@@ -28,10 +32,8 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="ANDPLAY"
-                android:textColor="#FFC107"
-                android:textSize="15sp"
-                android:textStyle="bold" />
+                android:text="📺"
+                android:textSize="16sp" />
 
             <TextView
                 android:layout_width="wrap_content"
@@ -42,7 +44,7 @@
                 android:paddingTop="2dp"
                 android:paddingEnd="6dp"
                 android:paddingBottom="2dp"
-                android:text="MODO TV"
+                android:text="AO VIVO"
                 android:textColor="#000000"
                 android:textSize="9sp"
                 android:textStyle="bold" />
@@ -76,21 +78,27 @@
             android:id="@+id/centralScroll"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:fillViewport="true">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:clipToPadding="false"
                 android:orientation="vertical"
                 android:paddingStart="24dp"
                 android:paddingTop="12dp"
                 android:paddingEnd="24dp"
                 android:paddingBottom="36dp">
 
-                <!-- SEÇÃO SUPERIOR: PIP À ESQUERDA + 5 CARDS À DIREITA -->
+                <!-- SEÇÃO SUPERIOR: PIP À ESQUERDA + 4 CARDS À DIREITA (2x2) -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="220dp"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
                     android:orientation="horizontal">
 
                     <!-- PLAYER PIP (CLIQUE/ENTER -> TELA CHEIA) -->
@@ -105,25 +113,18 @@
                         android:focusableInTouchMode="true"
                         android:padding="3dp">
 
-                        <androidx.media3.ui.PlayerView
-                            android:id="@+id/pipPlayerView"
+                        <!-- CONTAINER ONDE O REPRODUTOR UNIFICADO FICA NO MODO PIP -->
+                        <FrameLayout
+                            android:id="@+id/pipPlayerHost"
                             android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            app:use_controller="false"
-                            app:surface_type="surface_view" />
-
-                        <WebView
-                            android:id="@+id/pipEmbedView"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:visibility="gone" />
+                            android:layout_height="match_parent" />
 
                         <!-- BARRA SUPERIOR DO PIP COM NOME E PROGRAMA -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_gravity="top"
-                            android:background="#A0000000"
+                            android:background="#B0000000"
                             android:orientation="vertical"
                             android:padding="6dp">
 
@@ -150,23 +151,27 @@
                         </LinearLayout>
                     </FrameLayout>
 
-                    <!-- GRADE DE 5 CARDS PRINCIPAIS (3 EM CIMA, 2 EMBAIXO) -->
+                    <!-- GRADE DE 4 CARDS: CIMA (FILMES/SÉRIES) >> BAIXO (JOGOS/GUIA) -->
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="match_parent"
                         android:layout_marginStart="14dp"
                         android:layout_weight="1.0"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
                         android:orientation="vertical">
 
-                        <!-- LINHA 1: TV, JOGOS, FILMES -->
+                        <!-- LINHA 1: FILMES / SÉRIES -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="0dp"
                             android:layout_weight="1"
+                            android:clipChildren="false"
+                            android:clipToPadding="false"
                             android:orientation="horizontal">
 
                             <LinearLayout
-                                android:id="@+id/btnNavLive"
+                                android:id="@+id/btnNavMovies"
                                 android:layout_width="0dp"
                                 android:layout_height="match_parent"
                                 android:layout_marginEnd="6dp"
@@ -181,18 +186,57 @@
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="📺"
-                                    android:textSize="24sp" />
+                                    android:text="🎬"
+                                    android:textSize="26sp" />
 
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:text="TV"
+                                    android:layout_marginTop="3dp"
+                                    android:text="FILMES"
                                     android:textColor="#FFFFFF"
                                     android:textSize="13sp"
                                     android:textStyle="bold" />
                             </LinearLayout>
+
+                            <LinearLayout
+                                android:id="@+id/btnNavSeries"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="1"
+                                android:background="@drawable/card_focus_bg"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:focusableInTouchMode="true"
+                                android:gravity="center"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="🍿"
+                                    android:textSize="26sp" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginTop="3dp"
+                                    android:text="SÉRIES"
+                                    android:textColor="#FFFFFF"
+                                    android:textSize="13sp"
+                                    android:textStyle="bold" />
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <!-- LINHA 2: JOGOS / GUIA -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_marginTop="8dp"
+                            android:layout_weight="1"
+                            android:clipChildren="false"
+                            android:clipToPadding="false"
+                            android:orientation="horizontal">
 
                             <LinearLayout
                                 android:id="@+id/btnNavSports"
@@ -211,79 +255,13 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="⚽"
-                                    android:textSize="24sp" />
+                                    android:textSize="26sp" />
 
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
+                                    android:layout_marginTop="3dp"
                                     android:text="JOGOS"
-                                    android:textColor="#FFFFFF"
-                                    android:textSize="13sp"
-                                    android:textStyle="bold" />
-                            </LinearLayout>
-
-                            <LinearLayout
-                                android:id="@+id/btnNavMovies"
-                                android:layout_width="0dp"
-                                android:layout_height="match_parent"
-                                android:layout_weight="1"
-                                android:background="@drawable/card_focus_bg"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:focusableInTouchMode="true"
-                                android:gravity="center"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="🎬"
-                                    android:textSize="24sp" />
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:text="FILMES"
-                                    android:textColor="#FFFFFF"
-                                    android:textSize="13sp"
-                                    android:textStyle="bold" />
-                            </LinearLayout>
-                        </LinearLayout>
-
-                        <!-- LINHA 2: SÉRIES, GUIA -->
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="0dp"
-                            android:layout_marginTop="8dp"
-                            android:layout_weight="1"
-                            android:orientation="horizontal">
-
-                            <LinearLayout
-                                android:id="@+id/btnNavSeries"
-                                android:layout_width="0dp"
-                                android:layout_height="match_parent"
-                                android:layout_marginEnd="6dp"
-                                android:layout_weight="1"
-                                android:background="@drawable/card_focus_bg"
-                                android:clickable="true"
-                                android:focusable="true"
-                                android:focusableInTouchMode="true"
-                                android:gravity="center"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="🍿"
-                                    android:textSize="24sp" />
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
-                                    android:text="SÉRIES"
                                     android:textColor="#FFFFFF"
                                     android:textSize="13sp"
                                     android:textStyle="bold" />
@@ -305,12 +283,12 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:text="📋"
-                                    android:textSize="24sp" />
+                                    android:textSize="26sp" />
 
                                 <TextView
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:layout_marginTop="2dp"
+                                    android:layout_marginTop="3dp"
                                     android:text="GUIA"
                                     android:textColor="#FFFFFF"
                                     android:textSize="13sp"
@@ -320,12 +298,12 @@
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- TRILHO 1: CANAIS EM DESTAQUE -->
+                <!-- TRILHO 1: CANAIS EM DESTAQUE (COM ESPAÇAMENTO PARA NÃO CORTAR O SELETOR) -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="18dp"
-                    android:layout_marginBottom="8dp"
+                    android:layout_marginTop="16dp"
+                    android:layout_marginBottom="4dp"
                     android:text="📺 Canais em Destaque"
                     android:textColor="#FFFFFF"
                     android:textSize="15sp"
@@ -335,16 +313,19 @@
                     android:id="@+id/channelsRail"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:clipChildren="false"
                     android:clipToPadding="false"
-                    android:orientation="horizontal" />
+                    android:orientation="horizontal"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="12dp" />
 
                 <!-- TRILHO 2: JOGOS E EVENTOS AO VIVO -->
                 <TextView
                     android:id="@+id/sportsTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="18dp"
-                    android:layout_marginBottom="8dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="4dp"
                     android:text="⚽ Jogos e Eventos Ao Vivo"
                     android:textColor="#FFFFFF"
                     android:textSize="15sp"
@@ -354,15 +335,18 @@
                     android:id="@+id/sportsRail"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:clipChildren="false"
                     android:clipToPadding="false"
-                    android:orientation="horizontal" />
+                    android:orientation="horizontal"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="12dp" />
 
                 <!-- TRILHO 3: FILMES EM DESTAQUE -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="18dp"
-                    android:layout_marginBottom="8dp"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="4dp"
                     android:text="🎬 Filmes em Destaque"
                     android:textColor="#FFFFFF"
                     android:textSize="15sp"
@@ -372,15 +356,18 @@
                     android:id="@+id/moviesRail"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:clipChildren="false"
                     android:clipToPadding="false"
-                    android:orientation="horizontal" />
+                    android:orientation="horizontal"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="12dp" />
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
     </LinearLayout>
 
 
     <!-- ======================================================== -->
-    <!-- TELA 2: TELA CHEIA (PLAYER COM OSD, GAVETA EPG E ZAPPING) -->
+    <!-- TELA 2: TELA CHEIA (PLAYER REDIMENSIONADO COM OSD E EPG)  -->
     <!-- ======================================================== -->
     <FrameLayout
         android:id="@+id/fullscreenLayout"
@@ -388,19 +375,11 @@
         android:layout_height="match_parent"
         android:visibility="gone">
 
-        <!-- PLAYER EM TELA CHEIA -->
-        <androidx.media3.ui.PlayerView
-            android:id="@+id/fullscreenPlayerView"
+        <!-- HOST ONDE O REPRODUTOR UNIFICADO FICA EM TELA CHEIA -->
+        <FrameLayout
+            android:id="@+id/fullscreenPlayerHost"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            app:use_controller="false"
-            app:surface_type="surface_view" />
-
-        <WebView
-            android:id="@+id/fullscreenEmbedView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:visibility="gone" />
+            android:layout_height="match_parent" />
 
         <!-- BOTÃO VOLTAR FLUTUANTE (CANTO SUPERIOR ESQUERDO) -->
         <TextView
@@ -568,56 +547,62 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="A Seguir: 21:20 • Novela das Nove: Vale Tudo"
+                android:text="A Seguir: 21:20 • Novela das Nove"
                 android:textColor="#888888"
                 android:textSize="11sp" />
         </LinearLayout>
-
-        <!-- GAVETA LATERAL EPG (SLIDE DIREITO) -->
-        <LinearLayout
-            android:id="@+id/epgDrawer"
-            android:layout_width="380dp"
-            android:layout_height="match_parent"
-            android:layout_gravity="end"
-            android:background="#FA080E1C"
-            android:orientation="vertical"
-            android:padding="16dp"
-            android:visibility="gone">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="GUIA DE PROGRAMAÇÃO"
-                android:textColor="#FFC107"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="Categorias: Esq/Dir  |  Canais: Cima/Baixo  |  OK: Sintonizar"
-                android:textColor="#888888"
-                android:textSize="10sp" />
-
-            <!-- PILLS DE CATEGORIAS DA GAVETA -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/drawerCatsRecycler"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:layout_marginBottom="10dp"
-                android:clipToPadding="false"
-                android:orientation="horizontal" />
-
-            <!-- LISTA DE CANAIS DA GAVETA -->
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/drawerChannelsRecycler"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1" />
-        </LinearLayout>
     </FrameLayout>
+
+
+    <!-- ======================================================== -->
+    <!-- GAVETA LATERAL EPG (SLIDE DIREITO - FLUTUANTE EM QUALQUER TELA) -->
+    <!-- ======================================================== -->
+    <LinearLayout
+        android:id="@+id/epgDrawer"
+        android:layout_width="390dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
+        android:background="#FB080E1C"
+        android:clickable="true"
+        android:elevation="30dp"
+        android:focusable="true"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="GUIA DE PROGRAMAÇÃO"
+            android:textColor="#FFC107"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Categorias: Esq/Dir  |  Canais: Cima/Baixo  |  OK: Sintonizar"
+            android:textColor="#888888"
+            android:textSize="10sp" />
+
+        <!-- PILLS DE CATEGORIAS DA GAVETA -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/drawerCatsRecycler"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="10dp"
+            android:clipToPadding="false"
+            android:orientation="horizontal" />
+
+        <!-- LISTA DE CANAIS DA GAVETA -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/drawerChannelsRecycler"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+    </LinearLayout>
 
 
     <!-- ======================================================== -->
