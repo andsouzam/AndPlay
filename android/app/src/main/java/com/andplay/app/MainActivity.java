@@ -992,9 +992,14 @@ public class MainActivity extends Activity {
             if ("globosp".equals(id) || name.startsWith("globo sp")) {
                 return 1;
             }
-            // 2. Demais canais GLOBO e derivados (ex.: TV Asa Branca, TV Bahia, Globo RJ, etc.)
-            if (id.startsWith("globo") || name.startsWith("globo") || "globoal".equals(id) || "globoba".equals(id)
-                    || name.contains("asa branca") || name.contains("tv bahia")) {
+            // 2. Demais canais GLOBO e derivados (ex.: TV Asa Branca, TV Bahia, TV Anhanguera, TV Morena, RBS TV, Globo Minas, etc.)
+            if (id.startsWith("globo") || name.contains("globo")
+                    || "globoal".equals(id) || "globoba".equals(id) || "globoam".equals(id)
+                    || "globodf".equals(id) || "globogo".equals(id) || "globomg".equals(id)
+                    || "globoms".equals(id) || "globors".equals(id)
+                    || name.contains("asa branca") || name.contains("bahia")
+                    || name.contains("anhanguera") || name.contains("morena")
+                    || name.contains("rbs") || name.contains("amazônica") || name.contains("brasília")) {
                 return 10;
             }
             // 3. Band SP
@@ -1213,9 +1218,47 @@ public class MainActivity extends Activity {
         }));
     }
 
+    // Periodic Sports Refresh (a cada 10 minutos)
+    private static final long SPORTS_REFRESH_INTERVAL_MS = 10 * 60 * 1000L;
+    private final Handler sportsRefreshHandler = new Handler(Looper.getMainLooper());
+    private final Runnable sportsRefreshRunnable = new Runnable() {
+        @Override
+        public void run() {
+            refreshSportsEvents();
+            sportsRefreshHandler.postDelayed(this, SPORTS_REFRESH_INTERVAL_MS);
+        }
+    };
+
+    private void startSportsRefreshTicker() {
+        sportsRefreshHandler.removeCallbacks(sportsRefreshRunnable);
+        sportsRefreshHandler.postDelayed(sportsRefreshRunnable, SPORTS_REFRESH_INTERVAL_MS);
+    }
+
+    private void stopSportsRefreshTicker() {
+        sportsRefreshHandler.removeCallbacks(sportsRefreshRunnable);
+    }
+
+    private void refreshSportsEvents() {
+        executor.execute(() -> {
+            try {
+                List<SportsEvent> fresh = ApiClient.getLiveSports();
+                if (fresh != null && !fresh.isEmpty()) {
+                    mainHandler.post(() -> {
+                        allSports.clear();
+                        allSports.addAll(fresh);
+                        if (sportsRail != null && sportsRail.getAdapter() != null) {
+                            sportsRail.getAdapter().notifyDataSetChanged();
+                        }
+                    });
+                }
+            } catch (Exception ignored) {}
+        });
+    }
+
     private void setupSportsRail() {
         sportsRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         sportsRail.setAdapter(new SportsRailAdapter(this, allSports, ev -> playSportsEvent(ev)));
+        startSportsRefreshTicker();
     }
 
     private static boolean isDemoMovie(Movie m) {
@@ -3276,6 +3319,7 @@ public class MainActivity extends Activity {
         super.onResume();
         hideSystemUI();
         enforceMaxVolume();
+        startSportsRefreshTicker();
         if (exoPlayer != null && !isPlayingEmbed) exoPlayer.play();
     }
 
@@ -3291,6 +3335,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        stopSportsRefreshTicker();
         destroyCurrentStream();
         if (exoPlayer != null) {
             exoPlayer.release();

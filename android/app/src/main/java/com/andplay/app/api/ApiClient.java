@@ -21,10 +21,15 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.OkHttpClient;
@@ -125,6 +130,24 @@ public class ApiClient {
                     }
                     if ("globoba".equals(idLow)) {
                         ch.name = "TV Bahia";
+                    }
+                    if ("globoam".equals(idLow)) {
+                        ch.name = "Globo Amazônica";
+                    }
+                    if ("globodf".equals(idLow)) {
+                        ch.name = "Globo Brasília";
+                    }
+                    if ("globogo".equals(idLow)) {
+                        ch.name = "TV Anhanguera";
+                    }
+                    if ("globomg".equals(idLow)) {
+                        ch.name = "Globo Minas";
+                    }
+                    if ("globoms".equals(idLow)) {
+                        ch.name = "TV Morena";
+                    }
+                    if ("globors".equals(idLow)) {
+                        ch.name = "RBS TV";
                     }
                     ch.name = sanitizeText(ch.name);
                     ch.cat = sanitizeText(ch.cat);
@@ -547,9 +570,188 @@ public class ApiClient {
         return result;
     }
 
-    public static List<SportsEvent> getLiveSports() {
+    private static final String[] ESPN_SCOREBOARDS = new String[] {
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/bra.1/scoreboard",
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/conmebol.libertadores/scoreboard",
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard",
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard",
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard"
+    };
+
+    private static String formatIsoMatchTime(String isoDate) {
+        if (isoDate == null || isoDate.isEmpty()) return "Hoje";
+        try {
+            String cleaned = isoDate.replace("Z", "+0000");
+            SimpleDateFormat inFmt = new SimpleDateFormat(
+                    isoDate.contains(".") ? "yyyy-MM-dd'T'HH:mm:ss.SSSZ" : (cleaned.length() > 22 ? "yyyy-MM-dd'T'HH:mm:ssZ" : "yyyy-MM-dd'T'HH:mmZ"),
+                    Locale.US
+            );
+            inFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+            Date date = inFmt.parse(cleaned);
+            if (date != null) {
+                SimpleDateFormat outFmt = new SimpleDateFormat("HH:mm", Locale.US);
+                outFmt.setTimeZone(TimeZone.getTimeZone("America/Sao_Paulo"));
+                return outFmt.format(date);
+            }
+        } catch (Exception ignored) {}
+        return "Hoje";
+    }
+
+    private static String formatLeagueName(String rawLeague) {
+        if (rawLeague == null) return "Futebol";
+        String low = rawLeague.toLowerCase(Locale.ROOT);
+        if (low.contains("brazilian") || low.contains("serie a") || low.contains("brasileir")) return "Brasileirão Série A";
+        if (low.contains("libertadores")) return "Libertadores";
+        if (low.contains("champions")) return "Champions League";
+        if (low.contains("premier")) return "Premier League";
+        if (low.contains("laliga") || low.contains("spanish")) return "La Liga";
+        if (low.contains("copa do brasil")) return "Copa do Brasil";
+        if (low.contains("sul-americana") || low.contains("sudamericana")) return "Sul-Americana";
+        return rawLeague;
+    }
+
+    private static List<SportsEvent> fetchDynamicLiveSports() {
         List<SportsEvent> list = new ArrayList<>();
-        // Fallback garantido de partidas de alta relevância (Brasileirão, Champions League, UFC)
+        for (String url : ESPN_SCOREBOARDS) {
+            try {
+                Request request = new Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0 (Android TV)")
+                        .build();
+                try (Response response = httpClient.newCall(request).execute()) {
+                    if (!response.isSuccessful() || response.body() == null) continue;
+                    String json = response.body().string();
+                    JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+                    if (!root.has("events")) continue;
+
+                    String leagueName = "Futebol";
+                    if (root.has("leagues")) {
+                        JsonArray lArr = root.getAsJsonArray("leagues");
+                        if (lArr.size() > 0 && lArr.get(0).isJsonObject()) {
+                            leagueName = formatLeagueName(optString(lArr.get(0).getAsJsonObject(), "name", "Futebol"));
+                        }
+                    }
+
+                    JsonArray events = root.getAsJsonArray("events");
+                    for (int i = 0; i < events.size(); i++) {
+                        JsonElement evElem = events.get(i);
+                        if (!evElem.isJsonObject()) continue;
+                        JsonObject evObj = evElem.getAsJsonObject();
+
+                        String evId = optString(evObj, "id", "");
+                        String evDate = optString(evObj, "date", "");
+                        if (!evObj.has("competitions")) continue;
+                        JsonArray comps = evObj.getAsJsonArray("competitions");
+                        if (comps.size() == 0 || !comps.get(0).isJsonObject()) continue;
+                        JsonObject comp = comps.get(0).getAsJsonObject();
+
+                        boolean isLive = false;
+                        String statusClock = "";
+                        String state = "pre";
+                        if (comp.has("status") && comp.get("status").isJsonObject()) {
+                            JsonObject status = comp.getAsJsonObject("status");
+                            statusClock = optString(status, "displayClock", "");
+                            if (status.has("type") && status.get("type").isJsonObject()) {
+                                state = optString(status.getAsJsonObject("type"), "state", "pre");
+                                isLive = "in".equalsIgnoreCase(state);
+                            }
+                        }
+
+                        if (!comp.has("competitors")) continue;
+                        JsonArray competitors = comp.getAsJsonArray("competitors");
+                        String homeName = "", awayName = "", homeLogo = "", awayLogo = "";
+                        String homeScore = "", awayScore = "";
+
+                        for (int c = 0; c < competitors.size(); c++) {
+                            JsonObject competitor = competitors.get(c).getAsJsonObject();
+                            String homeAway = optString(competitor, "homeAway", "");
+                            String score = optString(competitor, "score", "");
+                            JsonObject team = competitor.has("team") && competitor.get("team").isJsonObject() ? competitor.getAsJsonObject("team") : null;
+                            String tName = team != null ? optString(team, "displayName", "") : "";
+                            String tLogo = team != null ? optString(team, "logo", "") : "";
+
+                            if ("home".equalsIgnoreCase(homeAway)) {
+                                homeName = tName;
+                                homeLogo = tLogo;
+                                homeScore = score;
+                            } else {
+                                awayName = tName;
+                                awayLogo = tLogo;
+                                awayScore = score;
+                            }
+                        }
+
+                        if (homeName.isEmpty() || awayName.isEmpty()) continue;
+
+                        SportsEvent ev = new SportsEvent();
+                        ev.id = "espn_" + evId;
+                        ev.league = leagueName;
+                        ev.isLive = isLive;
+                        ev.homeLogo = homeLogo;
+                        ev.awayLogo = awayLogo;
+
+                        if (isLive) {
+                            ev.matchTime = !statusClock.isEmpty() ? statusClock : "AO VIVO";
+                            if (!homeScore.isEmpty() && !awayScore.isEmpty()) {
+                                ev.name = homeName + " " + homeScore + " x " + awayScore + " " + awayName;
+                            } else {
+                                ev.name = homeName + " x " + awayName;
+                            }
+                        } else if ("post".equalsIgnoreCase(state)) {
+                            ev.matchTime = (!homeScore.isEmpty() && !awayScore.isEmpty())
+                                    ? "Fim (" + homeScore + "x" + awayScore + ")" : "Finalizado";
+                            ev.name = homeName + " x " + awayName;
+                        } else {
+                            ev.matchTime = formatIsoMatchTime(evDate);
+                            ev.name = homeName + " x " + awayName;
+                        }
+
+                        // Stream Fallbacks
+                        boolean isSouthAmerica = leagueName.contains("Brasileirão") || leagueName.contains("Libertadores") || leagueName.contains("Brasil");
+                        if (isSouthAmerica) {
+                            ev.fallbacks.add(new Channel.StreamFallback("Premiere HD", "https://rdcanais.net/premiere", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("SporTV HD", "https://rdcanais.net/sportv", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("Globo SP", "https://rdcanais.net/globosp", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("Cazé TV", "https://rdcanais.net/cazetv", true));
+                        } else {
+                            ev.fallbacks.add(new Channel.StreamFallback("TNT HD", "https://rdcanais.net/tnt", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("ESPN HD", "https://rdcanais.net/espn", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("ESPN 4 HD", "https://rdcanais.net/espn4", true));
+                            ev.fallbacks.add(new Channel.StreamFallback("SporTV 2 HD", "https://rdcanais.net/sportv2", true));
+                        }
+
+                        list.add(ev);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+
+        // Ordena: Ao Vivo primeiro, depois Em Breve (pre), depois Finalizados (post)
+        Collections.sort(list, (e1, e2) -> {
+            if (e1.isLive != e2.isLive) return e1.isLive ? -1 : 1;
+            boolean e1Post = e1.matchTime != null && e1.matchTime.startsWith("Fim");
+            boolean e2Post = e2.matchTime != null && e2.matchTime.startsWith("Fim");
+            if (e1Post != e2Post) return e1Post ? 1 : -1;
+            return 0;
+        });
+
+        // Adiciona evento de MMA / UFC garantido
+        SportsEvent evUfc = new SportsEvent();
+        evUfc.id = "sport_ufc_main_event";
+        evUfc.name = "UFC Fight Night: Card Principal";
+        evUfc.league = "MMA / Artes Marciais";
+        evUfc.matchTime = "21:00";
+        evUfc.isLive = false;
+        evUfc.homeLogo = "https://reidosembeds.online/img/combate.png";
+        evUfc.awayLogo = "https://reidosembeds.online/img/combate.png";
+        evUfc.fallbacks.add(new Channel.StreamFallback("Combate HD", "https://rdcanais.net/combate", true));
+        list.add(evUfc);
+
+        return list;
+    }
+
+    public static List<SportsEvent> getDefaultSportsFallbacks() {
+        List<SportsEvent> list = new ArrayList<>();
         SportsEvent ev1 = new SportsEvent();
         ev1.id = "sport_flamengo_palmeiras";
         ev1.name = "Flamengo x Palmeiras";
@@ -598,5 +800,15 @@ public class ApiClient {
         list.add(ev4);
 
         return list;
+    }
+
+    public static List<SportsEvent> getLiveSports() {
+        try {
+            List<SportsEvent> dynamicList = fetchDynamicLiveSports();
+            if (dynamicList != null && dynamicList.size() > 1) {
+                return dynamicList;
+            }
+        } catch (Exception ignored) {}
+        return getDefaultSportsFallbacks();
     }
 }
