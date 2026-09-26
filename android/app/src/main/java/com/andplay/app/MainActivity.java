@@ -130,8 +130,22 @@ public class MainActivity extends Activity {
     private View btnHeaderOptions;
     private View btnDrawerOptions;
     private FrameLayout pipContainer;
+    private View pipOverlayBar;
     private TextView pipChannelName;
     private TextView pipProgramTitle;
+    private final Handler pipOverlayHandler = new Handler(Looper.getMainLooper());
+    private final Runnable pipOverlayHideRunnable = () -> {
+        if (pipOverlayBar != null) {
+            pipOverlayBar.setVisibility(View.GONE);
+        }
+    };
+
+    private void showPipOverlay() {
+        if (pipOverlayBar == null) return;
+        pipOverlayBar.setVisibility(View.VISIBLE);
+        pipOverlayHandler.removeCallbacks(pipOverlayHideRunnable);
+        pipOverlayHandler.postDelayed(pipOverlayHideRunnable, 5000);
+    }
     private LinearLayout btnNavMovies, btnNavSeries, btnNavSports, btnNavEpg;
     private RecyclerView channelsRail;
     private RecyclerView sportsRail;
@@ -142,8 +156,6 @@ public class MainActivity extends Activity {
     private FrameLayout fullscreenLayout;
     private LinearLayout topChannelBadge;
     private TextView topChNum, topChName;
-    private LinearLayout fullscreenEmbedTopBar, fullscreenEmbedBottomBar;
-    private TextView embedChannelName, embedProgramTitle, embedClock;
     private LinearLayout osdBanner;
     private TextView osdChNum, osdChName, osdClock, osdNowTitle, osdRemaining, osdSynopsis, osdNextProgram;
     private ProgressBar osdProgressBar;
@@ -262,9 +274,13 @@ public class MainActivity extends Activity {
     private ScreenMode preMosaicMode = ScreenMode.FULLSCREEN;
     private static final Map<String, byte[]> STATIC_WEB_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
 
+    private int currentMosaicFocusedIdx = 0;
+
     private static class MosaicSlotItem {
         FrameLayout slotView;
         FrameLayout playerHost;
+        View overlayView;
+        Runnable hideOverlayRunnable;
         TextView titleView;
         TextView audioView;
         Channel channel;
@@ -296,6 +312,11 @@ public class MainActivity extends Activity {
     private void bindViews() {
         // Hosts de vídeo
         pipPlayerHost = findViewById(R.id.pipPlayerHost);
+        if (pipPlayerHost != null) {
+            pipPlayerHost.setFocusable(false);
+            pipPlayerHost.setFocusableInTouchMode(false);
+            pipPlayerHost.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        }
         fullscreenPlayerHost = findViewById(R.id.fullscreenPlayerHost);
 
         // Central
@@ -305,6 +326,7 @@ public class MainActivity extends Activity {
         headerDate = findViewById(R.id.headerDate);
         btnHeaderOptions = findViewById(R.id.btnHeaderOptions);
         pipContainer = findViewById(R.id.pipContainer);
+        pipOverlayBar = findViewById(R.id.pipOverlayBar);
         pipChannelName = findViewById(R.id.pipChannelName);
         pipProgramTitle = findViewById(R.id.pipProgramTitle);
 
@@ -323,11 +345,6 @@ public class MainActivity extends Activity {
         topChannelBadge = findViewById(R.id.topChannelBadge);
         topChNum = findViewById(R.id.topChNum);
         topChName = findViewById(R.id.topChName);
-        fullscreenEmbedTopBar = findViewById(R.id.fullscreenEmbedTopBar);
-        fullscreenEmbedBottomBar = findViewById(R.id.fullscreenEmbedBottomBar);
-        embedChannelName = findViewById(R.id.embedChannelName);
-        embedProgramTitle = findViewById(R.id.embedProgramTitle);
-        embedClock = findViewById(R.id.embedClock);
 
         osdBanner = findViewById(R.id.osdBanner);
         osdChNum = findViewById(R.id.osdChNum);
@@ -412,27 +429,36 @@ public class MainActivity extends Activity {
         }
         mosaicSlots[0].slotView = findViewById(R.id.mosaicSlot1);
         mosaicSlots[0].playerHost = findViewById(R.id.mosaicSlotPlayer1);
+        mosaicSlots[0].overlayView = findViewById(R.id.mosaicSlotOverlay1);
         mosaicSlots[0].titleView = findViewById(R.id.mosaicSlotTitle1);
         mosaicSlots[0].audioView = findViewById(R.id.mosaicSlotAudio1);
 
         mosaicSlots[1].slotView = findViewById(R.id.mosaicSlot2);
         mosaicSlots[1].playerHost = findViewById(R.id.mosaicSlotPlayer2);
+        mosaicSlots[1].overlayView = findViewById(R.id.mosaicSlotOverlay2);
         mosaicSlots[1].titleView = findViewById(R.id.mosaicSlotTitle2);
         mosaicSlots[1].audioView = findViewById(R.id.mosaicSlotAudio2);
 
         mosaicSlots[2].slotView = findViewById(R.id.mosaicSlot3);
         mosaicSlots[2].playerHost = findViewById(R.id.mosaicSlotPlayer3);
+        mosaicSlots[2].overlayView = findViewById(R.id.mosaicSlotOverlay3);
         mosaicSlots[2].titleView = findViewById(R.id.mosaicSlotTitle3);
         mosaicSlots[2].audioView = findViewById(R.id.mosaicSlotAudio3);
 
         mosaicSlots[3].slotView = findViewById(R.id.mosaicSlot4);
         mosaicSlots[3].playerHost = findViewById(R.id.mosaicSlotPlayer4);
+        mosaicSlots[3].overlayView = findViewById(R.id.mosaicSlotOverlay4);
         mosaicSlots[3].titleView = findViewById(R.id.mosaicSlotTitle4);
         mosaicSlots[3].audioView = findViewById(R.id.mosaicSlotAudio4);
 
         for (int i = 0; i < 4; i++) {
             final int slotIdx = i;
             MosaicSlotItem slot = mosaicSlots[i];
+            if (slot.playerHost != null) {
+                slot.playerHost.setFocusable(false);
+                slot.playerHost.setFocusableInTouchMode(false);
+                slot.playerHost.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+            }
             if (slot.slotView != null) {
                 slot.slotView.setOnFocusChangeListener((v, hasFocus) -> {
                     if (hasFocus && isMosaicActive) {
@@ -454,6 +480,61 @@ public class MainActivity extends Activity {
                     return false;
                 });
             }
+        }
+    }
+
+    private void showMosaicSlotOverlay(int slotIdx) {
+        if (slotIdx < 0 || slotIdx >= 4) return;
+        MosaicSlotItem slot = mosaicSlots[slotIdx];
+        if (slot == null || slot.overlayView == null) return;
+        slot.overlayView.setVisibility(View.VISIBLE);
+        if (slot.hideOverlayRunnable != null) {
+            mainHandler.removeCallbacks(slot.hideOverlayRunnable);
+        }
+        slot.hideOverlayRunnable = () -> {
+            if (isMosaicActive && slot.overlayView != null) {
+                slot.overlayView.setVisibility(View.GONE);
+            }
+        };
+        mainHandler.postDelayed(slot.hideOverlayRunnable, 5000);
+    }
+
+    private void setMosaicSlotFocus(int targetIdx) {
+        if (targetIdx < 0 || targetIdx >= mosaicScreenCount) return;
+        currentMosaicFocusedIdx = targetIdx;
+        for (int i = 0; i < 4; i++) {
+            if (mosaicSlots[i] != null && mosaicSlots[i].slotView != null) {
+                if (i == targetIdx) {
+                    mosaicSlots[i].slotView.requestFocus();
+                } else {
+                    mosaicSlots[i].slotView.clearFocus();
+                }
+            }
+        }
+        onMosaicSlotFocused(targetIdx);
+    }
+
+    private void moveMosaicFocus(int deltaX, int deltaY) {
+        int current = currentMosaicFocusedIdx;
+        int target = current;
+        if (mosaicScreenCount == 2) {
+            if (deltaX < 0) target = 0;
+            else if (deltaX > 0) target = 1;
+        } else {
+            int row = current / 2;
+            int col = current % 2;
+            if (deltaX != 0) {
+                col = Math.max(0, Math.min(1, col + deltaX));
+            }
+            if (deltaY != 0) {
+                row = Math.max(0, Math.min(1, row + deltaY));
+            }
+            target = row * 2 + col;
+        }
+        if (target != current) {
+            setMosaicSlotFocus(target);
+        } else {
+            showMosaicSlotOverlay(current);
         }
     }
 
@@ -520,6 +601,13 @@ public class MainActivity extends Activity {
                 slot.audioView.setText("🔇 MUDO");
                 slot.audioView.setTextColor(android.graphics.Color.parseColor("#888888"));
             }
+            if (i < screenCount) {
+                showMosaicSlotOverlay(i);
+            } else {
+                if (slot.overlayView != null) {
+                    slot.overlayView.setVisibility(View.GONE);
+                }
+            }
         }
 
         Channel initialCh = (!allChannels.isEmpty() && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size())
@@ -528,17 +616,18 @@ public class MainActivity extends Activity {
             tuneMosaicSlot(0, initialCh);
         }
 
+        currentMosaicFocusedIdx = 0;
         if (mosaicSlots[0].slotView != null) {
             mosaicSlots[0].slotView.postDelayed(() -> {
                 if (mosaicSlots[0].slotView != null) {
-                    mosaicSlots[0].slotView.requestFocus();
-                    onMosaicSlotFocused(0);
+                    setMosaicSlotFocus(0);
                 }
             }, 150);
         }
     }
 
     private void onMosaicSlotFocused(int focusedIdx) {
+        currentMosaicFocusedIdx = focusedIdx;
         for (int i = 0; i < 4; i++) {
             MosaicSlotItem slot = mosaicSlots[i];
             boolean isFocused = (i == focusedIdx);
@@ -552,6 +641,19 @@ public class MainActivity extends Activity {
                 }
             }
             setSlotAudioMuted(slot, !isFocused);
+            if (isFocused) {
+                showMosaicSlotOverlay(i);
+                if (slot.isPlayingEmbed && slot.webView != null) {
+                    triggerViewTap(slot.webView);
+                }
+            } else {
+                if (slot.hideOverlayRunnable != null) {
+                    mainHandler.removeCallbacks(slot.hideOverlayRunnable);
+                }
+                if (slot.overlayView != null) {
+                    slot.overlayView.setVisibility(View.GONE);
+                }
+            }
         }
     }
 
@@ -587,6 +689,7 @@ public class MainActivity extends Activity {
         slot.fallbacks = ch.getFallbacks(this);
         slot.currentFallbackIdx = 0;
 
+        showMosaicSlotOverlay(slotIdx);
         playMosaicSlotFallback(slotIdx);
     }
 
@@ -605,6 +708,148 @@ public class MainActivity extends Activity {
                 slot.titleView.setText(String.format(Locale.getDefault(), "TELA %d - %03d %s (Sem Sinal)", slotIdx + 1, chNum, slot.channel != null ? slot.channel.name : ""));
             }
         }
+    }
+
+    private WebResourceResponse handleEmbedInterception(WebView view, WebResourceRequest request, boolean isMosaic) {
+        if (request == null || request.getUrl() == null) return null;
+        String url = request.getUrl().toString();
+
+        // 1. Bloqueia anúncios, rastreadores e popunders conhecidos instantaneamente sem requisição de rede
+        if (url.contains("aclib")
+                || url.contains("histats")
+                || url.contains("statcounter")
+                || url.contains("popunder")
+                || url.contains("doubleclick")
+                || url.contains("googlesyndication")
+                || url.contains("adnxs")
+                || url.contains("adservice")) {
+            return new WebResourceResponse("text/javascript", "UTF-8", new ByteArrayInputStream(new byte[0]));
+        }
+
+        // 2. Cache em memória RAM de bibliotecas JS do player (JWPlayer, Bitmovin) para carregamento instantâneo
+        boolean isPlayerAsset = url.contains("jwplayer.latest.js")
+                || url.contains("jwplayer.js")
+                || url.contains("jwplayer.cast.js")
+                || url.contains("bitmovinplayer.js");
+
+        if (isPlayerAsset) {
+            byte[] cached = STATIC_WEB_CACHE.get(url);
+            if (cached != null) {
+                return new WebResourceResponse("application/javascript", "UTF-8", new ByteArrayInputStream(cached));
+            }
+            try {
+                Request okReq = new Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36")
+                        .build();
+                Response okRes = sharedOkHttpClient.newCall(okReq).execute();
+                if (okRes.isSuccessful() && okRes.body() != null) {
+                    byte[] data = okRes.body().bytes();
+                    STATIC_WEB_CACHE.put(url, data);
+                    return new WebResourceResponse("application/javascript", "UTF-8", new ByteArrayInputStream(data));
+                }
+            } catch (Exception ignored) {}
+        }
+
+        // 3. Intercepta player.js do localhost.tattoo para garantir autoplay e remover botão de pause
+        if (url.contains("localhost.tattoo") && url.contains("player.js")) {
+            try {
+                Request okReq = new Request.Builder()
+                        .url(url)
+                        .header("Referer", "https://localhost.tattoo/")
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                        .build();
+                Response okRes = sharedOkHttpClient.newCall(okReq).execute();
+                if (okRes.isSuccessful() && okRes.body() != null) {
+                    String originalJs = okRes.body().string();
+                    String injection = "\n;(function(){\n" +
+                            "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';\n" +
+                            "  var st = document.createElement('style');\n" +
+                            "  st.textContent = css;\n" +
+                            "  (document.head || document.documentElement).appendChild(st);\n" +
+                            "  function forceStart() {\n" +
+                            "    try {\n" +
+                            "      if (typeof jwplayer === 'function') {\n" +
+                            "        var p = jwplayer();\n" +
+                            "        if (p && typeof p.play === 'function') {\n" +
+                            (!isMosaic ? "          p.setMute(false);\n          p.setVolume(100);\n" : "") +
+                            "          var s = typeof p.getState === 'function' ? p.getState() : '';\n" +
+                            "          if (s === 'paused' || s === 'idle') { p.play(); }\n" +
+                            (!isMosaic ? "          if (s === 'playing') { if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted(); }\n" : "") +
+                            "        }\n" +
+                            "      }\n" +
+                            "    } catch(e) {}\n" +
+                            "    try {\n" +
+                            "      var v = document.querySelector('video');\n" +
+                            "      if (v) {\n" +
+                            (!isMosaic ? "        v.muted = false;\n        v.volume = 1.0;\n" : "") +
+                            "        if (v.paused) { v.play().catch(function(){}); }\n" +
+                            (!isMosaic ? "        else if (v.currentTime > 0) { if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted(); }\n" : "") +
+                            "      }\n" +
+                            "    } catch(e) {}\n" +
+                            "  }\n" +
+                            "  setInterval(forceStart, 600);\n" +
+                            "  document.addEventListener('DOMContentLoaded', forceStart);\n" +
+                            "  window.addEventListener('load', forceStart);\n" +
+                            "})();\n";
+                    byte[] modifiedBytes = (originalJs + injection).getBytes(StandardCharsets.UTF_8);
+                    return new WebResourceResponse("application/javascript", "UTF-8", new ByteArrayInputStream(modifiedBytes));
+                }
+            } catch (Exception e) {
+                Log.w("EPlay", "Erro ao interceptar player.js: " + e.getMessage());
+            }
+        }
+
+        // 4. Intercepta hotstar.css, player-v3.1.min.css e outros CSS de players com cache em RAM
+        if (url.contains("hotstar.css") || url.contains("player-v3.1.min.css") || (url.contains(".css") && (url.contains("player") || url.contains("jwplayer") || url.contains("plyr")))) {
+            byte[] cachedCss = STATIC_WEB_CACHE.get(url);
+            if (cachedCss != null) {
+                return new WebResourceResponse("text/css", "UTF-8", new ByteArrayInputStream(cachedCss));
+            }
+            try {
+                Request okReq = new Request.Builder()
+                        .url(url)
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36")
+                        .build();
+                Response okRes = sharedOkHttpClient.newCall(okReq).execute();
+                if (okRes.isSuccessful() && okRes.body() != null) {
+                    String originalCss = okRes.body().string();
+                    String hideCss = "\n.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], video::-webkit-media-controls { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }\n";
+                    byte[] cssBytes = (originalCss + hideCss).getBytes(StandardCharsets.UTF_8);
+                    STATIC_WEB_CACHE.put(url, cssBytes);
+                    return new WebResourceResponse("text/css", "UTF-8", new ByteArrayInputStream(cssBytes));
+                }
+            } catch (Exception e) {
+                Log.w("EPlay", "Erro ao interceptar CSS do player: " + e.getMessage());
+            }
+        }
+
+        // 5. Intercepta páginas e frames do rdcanais.net, bolodechocolate e rdembed limpando anúncios, controles e garantindo permissões de autoplay
+        if (url.contains("rdcanais.net") || url.contains("rdembed") || url.contains("redecanais") || url.contains("bolodechocolate")) {
+            if (request.isForMainFrame() || url.endsWith(".html") || url.endsWith(".php") || url.contains("/embed/")) {
+                try {
+                    Request okReq = new Request.Builder()
+                            .url(url)
+                            .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                            .build();
+                    Response okRes = sharedOkHttpClient.newCall(okReq).execute();
+                    if (okRes.isSuccessful() && okRes.body() != null) {
+                        String html = okRes.body().string();
+                        String hideStyle = "<style>.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], video::-webkit-media-controls { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; } body, html { background: #000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }</style>";
+                        html = html.replaceAll("(?is)<script[^>]*aclib[^>]*>.*?</script>", "")
+                                   .replaceAll("(?is)<script[^>]*histats[^>]*>.*?</script>", "")
+                                   .replace("allow=\"encrypted-media\"", "allow=\"autoplay *; encrypted-media *; fullscreen *; picture-in-picture *\"")
+                                   .replaceFirst("(?i)<head>", "<head>" + hideStyle);
+                        byte[] htmlBytes = html.getBytes(StandardCharsets.UTF_8);
+                        return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(htmlBytes));
+                    }
+                } catch (Exception e) {
+                    Log.w("EPlay", "Erro ao interceptar rdcanais HTML: " + e.getMessage());
+                }
+            }
+        }
+
+        return null;
     }
 
     private void playMosaicSlotFallback(int slotIdx) {
@@ -643,6 +888,8 @@ public class MainActivity extends Activity {
         if (fb.isEmbed) {
             slot.isPlayingEmbed = true;
             WebView wv = new WebView(this);
+            wv.setFocusable(false);
+            wv.setFocusableInTouchMode(false);
             slot.webView = wv;
 
             WebSettings ws = wv.getSettings();
@@ -687,6 +934,13 @@ public class MainActivity extends Activity {
                 }
 
                 @Override
+                public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                    WebResourceResponse res = handleEmbedInterception(view, request, true);
+                    if (res != null) return res;
+                    return super.shouldInterceptRequest(view, request);
+                }
+
+                @Override
                 public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                     super.onReceivedError(view, request, error);
                     if (request != null && request.isForMainFrame()) {
@@ -701,21 +955,28 @@ public class MainActivity extends Activity {
                     boolean isFocused = (slot.slotView != null && slot.slotView.isFocused());
                     String script = "(function() {" +
                             "try {" +
-                            "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"] { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';" +
+                            "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"] { display: none !important; opacity: 0 !important; visibility: hidden !important; }';" +
                             "  var st = document.createElement('style');" +
                             "  st.textContent = css;" +
                             "  (document.head || document.documentElement).appendChild(st);" +
                             "} catch(e) {}" +
-                            "function applyAudio() {" +
+                            "function forcePlay() {" +
                             "  var media = document.querySelectorAll('video, audio');" +
                             "  for (var i = 0; i < media.length; i++) {" +
                             "    media[i].muted = " + (!isFocused) + ";" +
                             (isFocused ? "    media[i].volume = 1.0;" : "") +
                             "    if (media[i].paused) media[i].play().catch(function(){});" +
                             "  }" +
+                            "  var btns = document.querySelectorAll('.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .vjs-big-play-button, .plyr__control--overlaid, button[aria-label*=\"Play\" i], button[title*=\"Play\" i], .play-button, [class*=\"play\"]');" +
+                            "  for (var j = 0; j < btns.length; j++) {" +
+                            "    try { btns[j].click(); } catch(e){}" +
+                            "  }" +
+                            "  if (typeof jwplayer === 'function') {" +
+                            "    try { jwplayer().play(); } catch(e){}" +
+                            "  }" +
                             "}" +
-                            "applyAudio();" +
-                            "setInterval(applyAudio, 1000);" +
+                            "forcePlay();" +
+                            "setInterval(forcePlay, 800);" +
                             "})();";
                     view.evaluateJavascript(script, null);
                 }
@@ -728,9 +989,29 @@ public class MainActivity extends Activity {
             String autoplayUrl = fb.url + (fb.url.contains("?") ? "&" : "?") + "autoplay=1";
             wv.loadUrl(autoplayUrl);
 
+            mainHandler.postDelayed(() -> {
+                if (isMosaicActive && slot.isPlayingEmbed && slot.webView == wv) {
+                    triggerViewTap(wv);
+                }
+            }, 1200);
+
+            mainHandler.postDelayed(() -> {
+                if (isMosaicActive && slot.isPlayingEmbed && slot.webView == wv) {
+                    triggerViewTap(wv);
+                }
+            }, 2200);
+
+            mainHandler.postDelayed(() -> {
+                if (isMosaicActive && slot.isPlayingEmbed && slot.webView == wv) {
+                    triggerViewTap(wv);
+                }
+            }, 3500);
+
         } else {
             slot.isPlayingEmbed = false;
             PlayerView pv = new PlayerView(this);
+            pv.setFocusable(false);
+            pv.setFocusableInTouchMode(false);
             pv.setUseController(false);
             slot.playerView = pv;
 
@@ -763,6 +1044,9 @@ public class MainActivity extends Activity {
 
     private void clearMosaicSlot(MosaicSlotItem slot) {
         if (slot == null) return;
+        if (slot.hideOverlayRunnable != null) {
+            mainHandler.removeCallbacks(slot.hideOverlayRunnable);
+        }
         if (slot.exoPlayer != null) {
             slot.exoPlayer.stop();
             slot.exoPlayer.release();
@@ -789,6 +1073,9 @@ public class MainActivity extends Activity {
         mosaicTargetSlotIdx = -1;
 
         for (int i = 0; i < 4; i++) {
+            if (mosaicSlots[i] != null && mosaicSlots[i].hideOverlayRunnable != null) {
+                mainHandler.removeCallbacks(mosaicSlots[i].hideOverlayRunnable);
+            }
             clearMosaicSlot(mosaicSlots[i]);
         }
 
@@ -1085,146 +1372,8 @@ public class MainActivity extends Activity {
 
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                if (request == null || request.getUrl() == null) return super.shouldInterceptRequest(view, request);
-                String url = request.getUrl().toString();
-
-                // 1. Bloqueia anúncios, rastreadores e popunders conhecidos instantaneamente sem requisição de rede
-                if (url.contains("aclib")
-                        || url.contains("histats")
-                        || url.contains("statcounter")
-                        || url.contains("popunder")
-                        || url.contains("doubleclick")
-                        || url.contains("googlesyndication")
-                        || url.contains("adnxs")
-                        || url.contains("adservice")) {
-                    return new WebResourceResponse("text/javascript", "UTF-8", new ByteArrayInputStream(new byte[0]));
-                }
-
-                // 2. Cache em memória RAM de bibliotecas JS do player (JWPlayer, Bitmovin) para carregamento instantâneo
-                boolean isPlayerAsset = url.contains("jwplayer.latest.js")
-                        || url.contains("jwplayer.js")
-                        || url.contains("jwplayer.cast.js")
-                        || url.contains("bitmovinplayer.js");
-
-                if (isPlayerAsset) {
-                    byte[] cached = STATIC_WEB_CACHE.get(url);
-                    if (cached != null) {
-                        return new WebResourceResponse("application/javascript", "UTF-8", new ByteArrayInputStream(cached));
-                    }
-                    try {
-                        Request okReq = new Request.Builder()
-                                .url(url)
-                                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36")
-                                .build();
-                        Response okRes = sharedOkHttpClient.newCall(okReq).execute();
-                        if (okRes.isSuccessful() && okRes.body() != null) {
-                            byte[] data = okRes.body().bytes();
-                            STATIC_WEB_CACHE.put(url, data);
-                            return new WebResourceResponse("application/javascript", "UTF-8", new ByteArrayInputStream(data));
-                        }
-                    } catch (Exception ignored) {}
-                }
-
-                // 3. Intercepta player.js do localhost.tattoo para garantir autoplay e remover botão de pause
-                if (url.contains("localhost.tattoo") && url.contains("player.js")) {
-                    try {
-                        Request okReq = new Request.Builder()
-                                .url(url)
-                                .header("Referer", "https://localhost.tattoo/")
-                                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-                                .build();
-                        Response okRes = sharedOkHttpClient.newCall(okReq).execute();
-                        if (okRes.isSuccessful() && okRes.body() != null) {
-                            String originalJs = okRes.body().string();
-                            String injection = "\n;(function(){\n" +
-                                    "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';\n" +
-                                    "  var st = document.createElement('style');\n" +
-                                    "  st.textContent = css;\n" +
-                                    "  (document.head || document.documentElement).appendChild(st);\n" +
-                                    "  function forceStart() {\n" +
-                                    "    try {\n" +
-                                    "      if (typeof jwplayer === 'function') {\n" +
-                                    "        var p = jwplayer();\n" +
-                                    "        if (p && typeof p.play === 'function') {\n" +
-                                    "          p.setMute(false);\n" +
-                                    "          p.setVolume(100);\n" +
-                                    "          var s = typeof p.getState === 'function' ? p.getState() : '';\n" +
-                                    "          if (s === 'paused' || s === 'idle') { p.play(); }\n" +
-                                    "          if (s === 'playing') { if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted(); }\n" +
-                                    "        }\n" +
-                                    "      }\n" +
-                                    "    } catch(e) {}\n" +
-                                    "    try {\n" +
-                                    "      var v = document.querySelector('video');\n" +
-                                    "      if (v) {\n" +
-                                    "        v.muted = false;\n" +
-                                    "        v.volume = 1.0;\n" +
-                                    "        if (v.paused) { v.play().catch(function(){}); }\n" +
-                                    "        else if (v.currentTime > 0) { if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted(); }\n" +
-                                    "      }\n" +
-                                    "    } catch(e) {}\n" +
-                                    "  }\n" +
-                                    "  setInterval(forceStart, 600);\n" +
-                                    "  document.addEventListener('DOMContentLoaded', forceStart);\n" +
-                                    "  window.addEventListener('load', forceStart);\n" +
-                                    "})();\n";
-                            byte[] modifiedBytes = (originalJs + injection).getBytes(StandardCharsets.UTF_8);
-                            return new WebResourceResponse("application/javascript", "UTF-8", new ByteArrayInputStream(modifiedBytes));
-                        }
-                    } catch (Exception e) {
-                        Log.w("EPlay", "Erro ao interceptar player.js: " + e.getMessage());
-                    }
-                }
-
-                // 4. Intercepta hotstar.css, player-v3.1.min.css e outros CSS de players com cache em RAM
-                if (url.contains("hotstar.css") || url.contains("player-v3.1.min.css") || (url.contains(".css") && (url.contains("player") || url.contains("jwplayer") || url.contains("plyr")))) {
-                    byte[] cachedCss = STATIC_WEB_CACHE.get(url);
-                    if (cachedCss != null) {
-                        return new WebResourceResponse("text/css", "UTF-8", new ByteArrayInputStream(cachedCss));
-                    }
-                    try {
-                        Request okReq = new Request.Builder()
-                                .url(url)
-                                .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36")
-                                .build();
-                        Response okRes = sharedOkHttpClient.newCall(okReq).execute();
-                        if (okRes.isSuccessful() && okRes.body() != null) {
-                            String originalCss = okRes.body().string();
-                            String hideCss = "\n.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], video::-webkit-media-controls { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }\n";
-                            byte[] cssBytes = (originalCss + hideCss).getBytes(StandardCharsets.UTF_8);
-                            STATIC_WEB_CACHE.put(url, cssBytes);
-                            return new WebResourceResponse("text/css", "UTF-8", new ByteArrayInputStream(cssBytes));
-                        }
-                    } catch (Exception e) {
-                        Log.w("EPlay", "Erro ao interceptar CSS do player: " + e.getMessage());
-                    }
-                }
-
-                // 5. Intercepta páginas e frames do rdcanais.net, bolodechocolate e rdembed limpando anúncios, controles e garantindo permissões de autoplay
-                if (url.contains("rdcanais.net") || url.contains("rdembed") || url.contains("redecanais") || url.contains("bolodechocolate")) {
-                    if (request.isForMainFrame() || url.endsWith(".html") || url.endsWith(".php") || url.contains("/embed/")) {
-                        try {
-                            Request okReq = new Request.Builder()
-                                    .url(url)
-                                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-                                    .build();
-                            Response okRes = sharedOkHttpClient.newCall(okReq).execute();
-                            if (okRes.isSuccessful() && okRes.body() != null) {
-                                String html = okRes.body().string();
-                                String hideStyle = "<style>.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], video::-webkit-media-controls { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; } body, html { background: #000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }</style>";
-                                html = html.replaceAll("(?is)<script[^>]*aclib[^>]*>.*?</script>", "")
-                                           .replaceAll("(?is)<script[^>]*histats[^>]*>.*?</script>", "")
-                                           .replace("allow=\"encrypted-media\"", "allow=\"autoplay *; encrypted-media *; fullscreen *; picture-in-picture *\"")
-                                           .replaceFirst("(?i)<head>", "<head>" + hideStyle);
-                                byte[] htmlBytes = html.getBytes(StandardCharsets.UTF_8);
-                                return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(htmlBytes));
-                            }
-                        } catch (Exception e) {
-                            Log.w("EPlay", "Erro ao interceptar rdcanais HTML: " + e.getMessage());
-                        }
-                    }
-                }
-
+                WebResourceResponse res = handleEmbedInterception(view, request, false);
+                if (res != null) return res;
                 return super.shouldInterceptRequest(view, request);
             }
 
@@ -1242,7 +1391,7 @@ public class MainActivity extends Activity {
                 mainHandler.post(() -> {
                     onPlaybackStarted();
                     if (currentMode == ScreenMode.FULLSCREEN) {
-                        scheduleOsdHide(5000);
+                        scheduleOsdHide(getOsdTimeoutMs());
                     }
                 });
                 // Injeta script seguro para áudio, remoção de botões sobrepostos e detecção de reprodução
@@ -1512,7 +1661,6 @@ public class MainActivity extends Activity {
                 if (headerClock != null) headerClock.setText(timeStr);
                 if (headerDate != null) headerDate.setText(dateStr);
                 if (osdClock != null) osdClock.setText(timeStr);
-                if (embedClock != null) embedClock.setText(timeStr);
 
                 mainHandler.postDelayed(this, 1000);
             }
@@ -1522,6 +1670,79 @@ public class MainActivity extends Activity {
     private static final String PREF_APP_STATE = "andplay_app_state";
     private static final String KEY_LAST_CHANNEL_ID = "last_channel_id";
     private static final String KEY_LAST_CHANNEL_INDEX = "last_channel_idx";
+    private static final String KEY_RECENT_CHANNELS = "recent_channels_ids";
+
+    private void addRecentChannel(String channelId) {
+        if (channelId == null || channelId.isEmpty()) return;
+        try {
+            SharedPreferences sp = getSharedPreferences(PREF_APP_STATE, Context.MODE_PRIVATE);
+            String raw = sp.getString(KEY_RECENT_CHANNELS, "");
+            List<String> list = new ArrayList<>();
+            if (!raw.isEmpty()) {
+                String[] parts = raw.split(",");
+                for (String p : parts) {
+                    p = p.trim();
+                    if (!p.isEmpty() && !p.equals(channelId) && !list.contains(p)) {
+                        list.add(p);
+                    }
+                }
+            }
+            list.add(0, channelId);
+            while (list.size() > 5) {
+                list.remove(list.size() - 1);
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < list.size(); i++) {
+                if (i > 0) sb.append(",");
+                sb.append(list.get(i));
+            }
+            sp.edit().putString(KEY_RECENT_CHANNELS, sb.toString()).apply();
+        } catch (Exception ignored) {}
+    }
+
+    private List<String> getRecentChannelIds() {
+        List<String> list = new ArrayList<>();
+        try {
+            SharedPreferences sp = getSharedPreferences(PREF_APP_STATE, Context.MODE_PRIVATE);
+            String raw = sp.getString(KEY_RECENT_CHANNELS, "");
+            if (!raw.isEmpty()) {
+                String[] parts = raw.split(",");
+                for (String p : parts) {
+                    p = p.trim();
+                    if (!p.isEmpty() && !list.contains(p)) {
+                        list.add(p);
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return list;
+    }
+
+    private List<Channel> getFeaturedChannelsList() {
+        if (allChannels == null || allChannels.isEmpty()) return new ArrayList<>();
+        List<Channel> featured = new ArrayList<>();
+        java.util.Set<String> addedIds = new java.util.HashSet<>();
+
+        List<String> recentIds = getRecentChannelIds();
+        for (String id : recentIds) {
+            for (Channel ch : allChannels) {
+                if (id.equals(ch.id)) {
+                    featured.add(ch);
+                    addedIds.add(id);
+                    break;
+                }
+            }
+        }
+
+        for (Channel ch : allChannels) {
+            if (ch.id != null && addedIds.contains(ch.id)) {
+                continue;
+            }
+            featured.add(ch);
+        }
+
+        return featured;
+    }
 
     private int getChannelGroupRank(Channel ch) {
         if (ch == null) return 6;
@@ -1735,6 +1956,16 @@ public class MainActivity extends Activity {
     private void setupCentralButtons() {
         // Clicar ou teclar Enter no miniplayer -> expande imediatamente para Tela Cheia sem recarregar o stream
         pipContainer.setOnClickListener(v -> setScreenMode(ScreenMode.FULLSCREEN));
+        pipContainer.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) {
+                showPipOverlay();
+            } else {
+                pipOverlayHandler.removeCallbacks(pipOverlayHideRunnable);
+                if (pipOverlayBar != null) {
+                    pipOverlayBar.setVisibility(View.GONE);
+                }
+            }
+        });
         pipContainer.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
                 setScreenMode(ScreenMode.FULLSCREEN);
@@ -1805,16 +2036,19 @@ public class MainActivity extends Activity {
     }
 
     private void setupChannelsRail() {
+        List<Channel> featuredChannels = getFeaturedChannelsList();
         channelsRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
-        channelsRail.setAdapter(new ChannelRailAdapter(this, allChannels, false, (ch, idx) -> {
+        channelsRail.setAdapter(new ChannelRailAdapter(this, featuredChannels, false, (ch, idx) -> {
+            int originalIdx = allChannels.indexOf(ch);
+            if (originalIdx < 0) originalIdx = idx;
             // Se for o mesmo canal já em execução, apenas redimensiona para tela cheia
-            if (idx == currentChannelIdx && (currentActiveStreamUrl != null && !currentActiveStreamUrl.isEmpty())) {
+            if (originalIdx == currentChannelIdx && (currentActiveStreamUrl != null && !currentActiveStreamUrl.isEmpty())) {
                 setScreenMode(ScreenMode.FULLSCREEN);
                 return;
             }
             // Canal diferente: destrói player anterior e sintoniza novo
             destroyCurrentStream();
-            tuneChannel(idx, true);
+            tuneChannel(originalIdx, true);
             setScreenMode(ScreenMode.FULLSCREEN);
         }));
     }
@@ -1991,22 +2225,34 @@ public class MainActivity extends Activity {
         }));
     }
 
+    private void triggerViewTap(View view) {
+        if (view == null) return;
+        view.post(() -> {
+            int w = view.getWidth();
+            int h = view.getHeight();
+            if (w <= 0 || h <= 0) return;
+            float x = w / 2.0f;
+            float y = h / 2.0f;
+            long downTime = SystemClock.uptimeMillis();
+            MotionEvent down = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0);
+            MotionEvent up = MotionEvent.obtain(downTime, downTime + 50, MotionEvent.ACTION_UP, x, y, 0);
+            view.dispatchTouchEvent(down);
+            view.dispatchTouchEvent(up);
+            down.recycle();
+            up.recycle();
+            if (isMosaicActive && currentMosaicFocusedIdx >= 0 && currentMosaicFocusedIdx < 4) {
+                if (mosaicSlots[currentMosaicFocusedIdx] != null && mosaicSlots[currentMosaicFocusedIdx].slotView != null) {
+                    mosaicSlots[currentMosaicFocusedIdx].slotView.requestFocus();
+                }
+            }
+        });
+    }
+
     private void triggerAutoplayTap() {
         if (unifiedEmbedWebView == null) return;
         // Segurança absoluta: nunca disparar touch events simulados no modo CENTRAL para não clicar acidentalmente nos canais do grid
         if (currentMode != ScreenMode.FULLSCREEN) return;
-        int w = unifiedEmbedWebView.getWidth();
-        int h = unifiedEmbedWebView.getHeight();
-        if (w <= 0 || h <= 0) return;
-        float x = w / 2.0f;
-        float y = h / 2.0f;
-        long downTime = SystemClock.uptimeMillis();
-        MotionEvent down = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0);
-        MotionEvent up = MotionEvent.obtain(downTime, downTime + 50, MotionEvent.ACTION_UP, x, y, 0);
-        unifiedEmbedWebView.dispatchTouchEvent(down);
-        unifiedEmbedWebView.dispatchTouchEvent(up);
-        down.recycle();
-        up.recycle();
+        triggerViewTap(unifiedEmbedWebView);
     }
 
     private void setupDrawer() {
@@ -2014,6 +2260,8 @@ public class MainActivity extends Activity {
     }
 
     private void setupDrawerForLiveTv() {
+        if (btnDrawerOptions != null) btnDrawerOptions.setVisibility(View.VISIBLE);
+        if (btnDrawerMosaic != null) btnDrawerMosaic.setVisibility(View.VISIBLE);
         if (drawerHeaderTitle != null) {
             drawerHeaderTitle.setText("GUIA DE PROGRAMAÇÃO");
         }
@@ -2064,6 +2312,8 @@ public class MainActivity extends Activity {
     }
 
     private void setupDrawerForSeries() {
+        if (btnDrawerOptions != null) btnDrawerOptions.setVisibility(View.GONE);
+        if (btnDrawerMosaic != null) btnDrawerMosaic.setVisibility(View.GONE);
         if (activeVodSeries == null) return;
         if (drawerHeaderTitle != null) {
             drawerHeaderTitle.setText("🍿 " + activeVodSeries.getDisplayTitle());
@@ -2160,6 +2410,8 @@ public class MainActivity extends Activity {
     }
 
     private void setupDrawerForMovie() {
+        if (btnDrawerOptions != null) btnDrawerOptions.setVisibility(View.GONE);
+        if (btnDrawerMosaic != null) btnDrawerMosaic.setVisibility(View.GONE);
         if (drawerHeaderTitle != null) {
             drawerHeaderTitle.setText("🎬 CATÁLOGO DE FILMES");
         }
@@ -2412,6 +2664,7 @@ public class MainActivity extends Activity {
                     .putString(KEY_LAST_CHANNEL_ID, ch.id != null ? ch.id : "")
                     .putInt(KEY_LAST_CHANNEL_INDEX, currentChannelIdx)
                     .apply();
+            addRecentChannel(ch.id);
         } catch (Exception ignored) {}
 
         LiveSchedule epg = EpgEngine.getLiveSchedule(ch);
@@ -2419,6 +2672,9 @@ public class MainActivity extends Activity {
         // Atualiza PiP
         pipChannelName.setText(String.format("%03d - %s", currentChannelIdx + 1, ch.name));
         pipProgramTitle.setText("🔴 No Ar: " + (epg != null && !"SEM DADOS DE PROGRAMAÇÃO".equals(epg.nowTitle) ? epg.nowTitle : "SEM DADOS DE PROGRAMAÇÃO"));
+        if (currentMode == ScreenMode.CENTRAL && pipContainer != null && pipContainer.isFocused()) {
+            showPipOverlay();
+        }
 
         // Atualiza OSD
         updateOsd(ch, currentChannelIdx, epg);
@@ -2495,7 +2751,6 @@ public class MainActivity extends Activity {
         currentActiveStreamUrl = url;
         isPlayingEmbed = isEmbed;
         enforceMaxVolume();
-        updateEmbedBarsVisibility();
 
         if (isEmbed) {
             if (exoPlayer != null) {
@@ -2518,7 +2773,7 @@ public class MainActivity extends Activity {
                 if (isPlayingEmbed) {
                     onPlaybackStarted();
                     if (currentMode == ScreenMode.FULLSCREEN) {
-                        scheduleOsdHide(5000);
+                        scheduleOsdHide(getOsdTimeoutMs());
                     }
                 }
             }, 2200);
@@ -2772,10 +3027,7 @@ public class MainActivity extends Activity {
         osdNextProgram.setText("Compactos e melhores momentos ao final da partida.");
         osdProgressBar.setProgress(100);
 
-        if (embedChannelName != null) embedChannelName.setText(ev.getDisplayName());
-        if (embedProgramTitle != null) embedProgramTitle.setText("⚽ " + ev.getDisplayLeague());
-
-        showOsdBanner(5000);
+        showOsdBanner(getOsdTimeoutMs());
     }
 
     private void updateOsd(Channel ch, int chIdx, LiveSchedule epg) {
@@ -2786,38 +3038,23 @@ public class MainActivity extends Activity {
         osdChNum.setText(String.format("%03d", chIdx + 1));
         osdChName.setText(ch.name);
 
-        if (embedChannelName != null) {
-            embedChannelName.setText(String.format("%03d - %s", chIdx + 1, ch.name));
-        }
-
         if (epg != null && !"SEM DADOS DE PROGRAMAÇÃO".equals(epg.nowTitle)) {
             osdNowTitle.setText("🔴 NO AR: " + epg.nowTitle);
             osdRemaining.setText(String.format("Restam ~%d min (%s)", epg.remainingMinutes, epg.timeRange));
             osdSynopsis.setText(epg.synopsis);
             osdNextProgram.setText("A Seguir: " + epg.nextStart + " • " + epg.nextTitle);
             osdProgressBar.setProgress(epg.progress);
-            if (embedProgramTitle != null) embedProgramTitle.setText("🔴 No Ar: " + epg.nowTitle);
         } else {
             osdNowTitle.setText("🔴 NO AR: SEM DADOS DE PROGRAMAÇÃO");
             osdRemaining.setText("--:--");
             osdSynopsis.setText("Grade de programação indisponível para este canal no momento.");
             osdNextProgram.setText("A Seguir: SEM DADOS DE PROGRAMAÇÃO");
             osdProgressBar.setProgress(0);
-            if (embedProgramTitle != null) embedProgramTitle.setText("🔴 No Ar: Transmissão Ao Vivo");
         }
     }
 
-    private void updateEmbedBarsVisibility() {
-        boolean showEmbed = (currentMode == ScreenMode.FULLSCREEN && isPlayingEmbed);
-        if (fullscreenEmbedTopBar != null) {
-            fullscreenEmbedTopBar.setVisibility(showEmbed ? View.VISIBLE : View.GONE);
-        }
-        if (fullscreenEmbedBottomBar != null) {
-            fullscreenEmbedBottomBar.setVisibility(showEmbed ? View.VISIBLE : View.GONE);
-        }
-        if (showEmbed && topChannelBadge != null) {
-            topChannelBadge.setVisibility(View.GONE);
-        }
+    private int getOsdTimeoutMs() {
+        return (isPlayingEmbed && !isPlayingVod) ? 15000 : 5000;
     }
 
     public void onPlaybackStarted() {
@@ -2828,9 +3065,8 @@ public class MainActivity extends Activity {
             startVodProgressTicker();
             updateVodProgress();
         }
-        updateEmbedBarsVisibility();
         if (!wasActive && currentMode == ScreenMode.FULLSCREEN && osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
-            scheduleOsdHide(5000);
+            scheduleOsdHide(getOsdTimeoutMs());
         }
     }
 
@@ -2842,21 +3078,24 @@ public class MainActivity extends Activity {
     public void showOsdBannerLoading() {
         if (isMosaicActive) return;
         osdHandler.removeCallbacks(osdHideRunnable);
-        updateEmbedBarsVisibility();
-        if (topChannelBadge != null && !isPlayingEmbed) topChannelBadge.setVisibility(View.VISIBLE);
+        if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
-        scheduleOsdHide(5000);
+        scheduleOsdHide(getOsdTimeoutMs());
     }
 
     public void showOsdBanner(int durationMs) {
         if (isMosaicActive) return;
         osdHandler.removeCallbacks(osdHideRunnable);
-        updateEmbedBarsVisibility();
-        if (topChannelBadge != null && !isPlayingEmbed) topChannelBadge.setVisibility(View.VISIBLE);
+        if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
 
+        int dur = durationMs > 0 ? durationMs : getOsdTimeoutMs();
+        if (isPlayingEmbed && !isPlayingVod && dur < 15000) {
+            dur = 15000;
+        }
+
         if (isVideoPlaybackActive) {
-            scheduleOsdHide(durationMs > 0 ? durationMs : 5000);
+            scheduleOsdHide(dur);
         } else {
             showOsdBannerLoading();
         }
@@ -2878,6 +3117,14 @@ public class MainActivity extends Activity {
             hideOsdBanner();
             resetDrawerTimeout();
 
+            if (isPlayingVod) {
+                if (btnDrawerOptions != null) btnDrawerOptions.setVisibility(View.GONE);
+                if (btnDrawerMosaic != null) btnDrawerMosaic.setVisibility(View.GONE);
+            } else {
+                if (btnDrawerOptions != null) btnDrawerOptions.setVisibility(View.VISIBLE);
+                if (btnDrawerMosaic != null) btnDrawerMosaic.setVisibility(View.VISIBLE);
+            }
+
             epgDrawer.post(() -> {
                 if (isPlayingVod) {
                     if (activeVodSeries != null) {
@@ -2898,6 +3145,11 @@ public class MainActivity extends Activity {
         drawerHandler.removeCallbacks(drawerHideRunnable);
         if (epgDrawer != null) {
             epgDrawer.setVisibility(View.GONE);
+        }
+        if (isMosaicActive && currentMosaicFocusedIdx >= 0 && currentMosaicFocusedIdx < 4) {
+            if (mosaicSlots[currentMosaicFocusedIdx] != null && mosaicSlots[currentMosaicFocusedIdx].slotView != null) {
+                mosaicSlots[currentMosaicFocusedIdx].slotView.requestFocus();
+            }
         }
     }
 
@@ -2921,6 +3173,13 @@ public class MainActivity extends Activity {
             }
         }
 
+        if (mode != ScreenMode.CENTRAL) {
+            pipOverlayHandler.removeCallbacks(pipOverlayHideRunnable);
+            if (pipOverlayBar != null) {
+                pipOverlayBar.setVisibility(View.GONE);
+            }
+        }
+
         previousMode = currentMode;
         currentMode = mode;
 
@@ -2928,13 +3187,12 @@ public class MainActivity extends Activity {
         fullscreenLayout.setVisibility(mode == ScreenMode.FULLSCREEN ? View.VISIBLE : View.GONE);
         vodLayout.setVisibility(mode == ScreenMode.VOD ? View.VISIBLE : View.GONE);
         seriesDetailLayout.setVisibility(mode == ScreenMode.SERIES_DETAIL ? View.VISIBLE : View.GONE);
-        updateEmbedBarsVisibility();
 
         if (mode == ScreenMode.FULLSCREEN) {
             // Reanexa o player unificado no host de tela cheia sem recarregar o vídeo
             attachPlayerToHost(fullscreenPlayerHost);
             if (isVideoPlaybackActive) {
-                showOsdBanner(5000);
+                showOsdBanner(getOsdTimeoutMs());
             } else {
                 showOsdBannerLoading();
             }
@@ -2947,8 +3205,10 @@ public class MainActivity extends Activity {
                 pipContainer.postDelayed(() -> {
                     pipContainer.setFocusable(true);
                     pipContainer.requestFocus();
+                    showPipOverlay();
                 }, 100);
             }
+            setupChannelsRail();
             setupSeriesRail();
             if ((currentActiveStreamUrl == null || currentActiveStreamUrl.isEmpty()) && !allChannels.isEmpty()) {
                 tuneChannel(currentChannelIdx, false);
@@ -3665,10 +3925,11 @@ public class MainActivity extends Activity {
                 // 2. Se o foco estiver no seletor de categorias da gaveta:
                 if (drawerCatsRecycler != null && drawerCatsRecycler.hasFocus()) {
                     if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                        if (btnDrawerOptions != null) {
+                        if (!isPlayingVod && btnDrawerOptions != null && btnDrawerOptions.getVisibility() == View.VISIBLE) {
                             btnDrawerOptions.requestFocus();
                             return true;
                         }
+                        return true;
                     } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                         if (drawerChannelsRecycler != null && drawerChannelsRecycler.getChildCount() > 0) {
                             drawerChannelsRecycler.getChildAt(0).requestFocus();
@@ -3686,7 +3947,7 @@ public class MainActivity extends Activity {
                         int pos = itemView != null ? drawerChannelsRecycler.getChildAdapterPosition(itemView) : RecyclerView.NO_POSITION;
                         RecyclerView.LayoutManager lm = drawerChannelsRecycler.getLayoutManager();
                         int spanCount = (lm instanceof GridLayoutManager) ? ((GridLayoutManager) lm).getSpanCount() : 1;
-                        if (pos < spanCount || !drawerChannelsRecycler.canScrollVertically(-1)) {
+                        if (pos >= 0 && pos < spanCount) {
                             // Subindo além da primeira linha de canais, sobe para as categorias
                             if (drawerCatsRecycler != null && drawerCatsRecycler.getChildCount() > 0) {
                                 View child = drawerCatsRecycler.getLayoutManager() != null
@@ -3694,7 +3955,7 @@ public class MainActivity extends Activity {
                                         : null;
                                 if (child != null) child.requestFocus();
                                 else drawerCatsRecycler.getChildAt(0).requestFocus();
-                            } else if (btnDrawerOptions != null) {
+                            } else if (!isPlayingVod && btnDrawerOptions != null && btnDrawerOptions.getVisibility() == View.VISIBLE) {
                                 btnDrawerOptions.requestFocus();
                             }
                             return true;
@@ -3742,7 +4003,31 @@ public class MainActivity extends Activity {
 
                 return super.dispatchKeyEvent(event);
             } else if (isMosaicActive) {
-                // Durante modo Mosaico com gaveta fechada, eventos de DPAD e Enter navegam entre os slots
+                // Durante modo Mosaico com gaveta fechada, interceptar DPAD e Enter explicitamente para navegar entre os slots
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                        moveMosaicFocus(-1, 0);
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                        moveMosaicFocus(1, 0);
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                        moveMosaicFocus(0, -1);
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                        moveMosaicFocus(0, 1);
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                        onMosaicSlotClicked(currentMosaicFocusedIdx);
+                        return true;
+                    }
+                } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                            || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                            || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                        return true;
+                    }
+                }
                 return super.dispatchKeyEvent(event);
             } else if (currentMode == ScreenMode.SERIES_DETAIL) {
                 // CENÁRIO 2: DETALHES DA SÉRIE
@@ -3761,7 +4046,7 @@ public class MainActivity extends Activity {
                             View focused = seriesEpisodesRecycler.findFocus();
                             View itemView = focused != null ? seriesEpisodesRecycler.findContainingItemView(focused) : null;
                             int pos = itemView != null ? seriesEpisodesRecycler.getChildAdapterPosition(itemView) : -1;
-                            if (pos <= 0 || !seriesEpisodesRecycler.canScrollVertically(-1)) {
+                            if (pos == 0) {
                                 focusCurrentSeasonPill();
                                 return true;
                             }
@@ -3791,7 +4076,7 @@ public class MainActivity extends Activity {
                         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                             if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
                                 // Dentro do overlay de informações, DPAD_LEFT não aciona o menu gaveta
-                                scheduleOsdHide(5000);
+                                scheduleOsdHide(getOsdTimeoutMs());
                                 return true;
                             }
                             if (pendingZapChannelIdx >= 0) {
@@ -3823,7 +4108,7 @@ public class MainActivity extends Activity {
                                 openDrawer();
                                 return true;
                             } else {
-                                showOsdBanner(5000);
+                                showOsdBanner(getOsdTimeoutMs());
                                 return true;
                             }
                         }
@@ -3831,22 +4116,13 @@ public class MainActivity extends Activity {
                         // Prolonga o OSD se estiver visível e reprodução ativa
                         if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
                             if (isVideoPlaybackActive) {
-                                scheduleOsdHide(5000);
+                                scheduleOsdHide(getOsdTimeoutMs());
                             }
                         }
                     } else {
                         // Em VOD (Filme ou Série):
-                        // D-pad Esquerdo abre a gaveta lateral apenas se o overlay NÃO estiver visível; no overlay, retrocede 15s
+                        // D-pad Esquerdo abre a gaveta lateral
                         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                            if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
-                                if (exoPlayer != null && exoPlayer.getDuration() > 0) {
-                                    long target = Math.max(0, exoPlayer.getCurrentPosition() - 15000);
-                                    exoPlayer.seekTo(target);
-                                    updateVodProgress();
-                                    showOsdBanner(5000);
-                                }
-                                return true;
-                            }
                             openDrawer();
                             return true;
                         }
@@ -3860,11 +4136,18 @@ public class MainActivity extends Activity {
                                 return true;
                             }
                         }
-                        // ENTER abre a gaveta se OSD já estiver visível, senão exibe o OSD
+                        // ENTER / OK: se overlay estiver visível, alterna play/pause; senão exibe o OSD
                         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                             if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
-                                suppressNextEnterUp = true;
-                                openDrawer();
+                                if (exoPlayer != null) {
+                                    if (exoPlayer.isPlaying()) {
+                                        exoPlayer.pause();
+                                    } else {
+                                        exoPlayer.play();
+                                    }
+                                    updateVodProgress();
+                                    showOsdBanner(5000);
+                                }
                                 return true;
                             } else {
                                 updateVodProgress();
@@ -4177,7 +4460,7 @@ public class MainActivity extends Activity {
         channelNumberBuffer.append(digit);
         String currentInput = channelNumberBuffer.toString();
 
-        if (!isPlayingEmbed && topChannelBadge != null) {
+        if (topChannelBadge != null) {
             topChannelBadge.setVisibility(View.VISIBLE);
         }
         if (topChNum != null) {
@@ -4185,9 +4468,6 @@ public class MainActivity extends Activity {
         }
         if (topChName != null) {
             topChName.setText("Sintonizando...");
-        }
-        if (embedChannelName != null && isPlayingEmbed) {
-            embedChannelName.setText("CH " + currentInput + " - Sintonizando...");
         }
         if (osdChNum != null) {
             osdChNum.setText(currentInput);

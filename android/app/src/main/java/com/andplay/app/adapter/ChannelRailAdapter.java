@@ -58,10 +58,16 @@ public class ChannelRailAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         Channel ch = channels.get(position);
         int chNumber = position + 1;
+        int displayNum = chNumber;
+        if (context instanceof com.andplay.app.MainActivity) {
+            com.andplay.app.MainActivity ma = (com.andplay.app.MainActivity) context;
+            int real = ma.getAllChannels().indexOf(ch);
+            if (real >= 0) displayNum = real + 1;
+        }
 
         if (holder instanceof RailViewHolder) {
             RailViewHolder vh = (RailViewHolder) holder;
-            vh.num.setText(String.format("CH %03d", chNumber));
+            vh.num.setText(String.format("CH %03d", displayNum));
             vh.name.setText(ch.name != null ? ch.name : "Canal");
 
             if (ch.logo != null && !ch.logo.isEmpty()) {
@@ -92,12 +98,6 @@ public class ChannelRailAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
         } else if (holder instanceof DrawerViewHolder) {
             DrawerViewHolder vh = (DrawerViewHolder) holder;
-            int displayNum = chNumber;
-            if (context instanceof com.andplay.app.MainActivity) {
-                com.andplay.app.MainActivity ma = (com.andplay.app.MainActivity) context;
-                int real = ma.getAllChannels().indexOf(ch);
-                if (real >= 0) displayNum = real + 1;
-            }
             vh.num.setText(String.format("%03d", displayNum));
             vh.name.setText(ch.name != null ? ch.name : "Canal");
 
