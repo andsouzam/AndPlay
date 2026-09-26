@@ -246,6 +246,7 @@ public class MainActivity extends Activity {
     };
 
     private long lastBackAt = 0;
+    private AlertDialog activeSearchDialog = null;
 
     // Mosaico (Multi-View 2 ou 4 Telas)
     private LinearLayout mosaicLayout;
@@ -1052,6 +1053,8 @@ public class MainActivity extends Activity {
                 String url = request != null ? request.getUrl().toString() : "";
                 if (url.startsWith("file://")
                         || url.contains("rdcanais.net")
+                        || url.contains("redecanaistv.af")
+                        || url.contains("redecanais")
                         || url.contains("v2.rdembed.sbs")
                         || url.contains("streamverde.net")
                         || url.contains("cazetv.shop")
@@ -1262,7 +1265,10 @@ public class MainActivity extends Activity {
                         "    if (m.tagName && m.tagName.toLowerCase() === 'video' && !m.__eplay_v) {" +
                         "      m.__eplay_v = true;" +
                         "      m.addEventListener('playing', function() {" +
-                        "        if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted();" +
+                        "        if (!m.__eplay_sent) {" +
+                        "          m.__eplay_sent = true;" +
+                        "          if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted();" +
+                        "        }" +
                         "      });" +
                         "      m.addEventListener('timeupdate', function() {" +
                         "        if (m.currentTime > 0.3 && !m.__eplay_sent) {" +
@@ -1271,7 +1277,8 @@ public class MainActivity extends Activity {
                         "        }" +
                         "      });" +
                         "    }" +
-                        "    if (!m.paused && m.currentTime > 0) {" +
+                        "    if (!m.paused && m.currentTime > 0 && !m.__eplay_sent) {" +
+                        "      m.__eplay_sent = true;" +
                         "      if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted();" +
                         "    }" +
                         "  }" +
@@ -2769,13 +2776,14 @@ public class MainActivity extends Activity {
     }
 
     public void onPlaybackStarted() {
+        boolean wasActive = isVideoPlaybackActive;
         isVideoPlaybackActive = true;
         enforceMaxVolume();
         if (isPlayingVod) {
             startVodProgressTicker();
             updateVodProgress();
         }
-        if (currentMode == ScreenMode.FULLSCREEN && osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
+        if (!wasActive && currentMode == ScreenMode.FULLSCREEN && osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
             scheduleOsdHide(5000);
         }
     }
@@ -3088,14 +3096,47 @@ public class MainActivity extends Activity {
         }
     }
 
+    private static String quickClean(String s) {
+        if (s == null || s.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = Character.toLowerCase(s.charAt(i));
+            switch (c) {
+                case 'á': case 'à': case 'ã': case 'â': case 'ä': c = 'a'; break;
+                case 'é': case 'è': case 'ê': case 'ë': c = 'e'; break;
+                case 'í': case 'ì': case 'î': case 'ï': c = 'i'; break;
+                case 'ó': case 'ò': case 'õ': case 'ô': case 'ö': c = 'o'; break;
+                case 'ú': case 'ù': case 'û': case 'ü': c = 'u'; break;
+                case 'ç': c = 'c'; break;
+                case 'ñ': c = 'n'; break;
+            }
+            if (Character.isLetterOrDigit(c) || c == ' ') {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
     private void showVodSearchDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
         builder.setTitle(isViewingSeries ? "🔍 Buscar Séries" : "🔍 Buscar Filmes");
 
         final EditText input = new EditText(this);
         input.setHint(isViewingSeries ? "Digite o nome da série, gênero ou ator..." : "Digite o nome do filme, gênero ou ator...");
+
+        // Estilização com alto contraste visível em qualquer tema (TV/Box)
+        android.graphics.drawable.GradientDrawable gd = new android.graphics.drawable.GradientDrawable();
+        gd.setColor(android.graphics.Color.parseColor("#121826"));
+        gd.setStroke((int) (2 * getResources().getDisplayMetrics().density), android.graphics.Color.parseColor("#FFC107"));
+        gd.setCornerRadius(10 * getResources().getDisplayMetrics().density);
+        input.setBackground(gd);
         input.setTextColor(android.graphics.Color.WHITE);
-        input.setHintTextColor(android.graphics.Color.GRAY);
+        input.setHintTextColor(android.graphics.Color.parseColor("#9AA0A6"));
+        input.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 16);
+        input.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        int padH = (int) (16 * getResources().getDisplayMetrics().density);
+        int padV = (int) (12 * getResources().getDisplayMetrics().density);
+        input.setPadding(padH, padV, padH, padV);
         input.setSingleLine(true);
         input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
 
@@ -3103,11 +3144,11 @@ public class MainActivity extends Activity {
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         );
-        int pad = (int) (24 * getResources().getDisplayMetrics().density);
-        params.leftMargin = pad;
-        params.rightMargin = pad;
-        params.topMargin = pad / 2;
-        params.bottomMargin = pad / 2;
+        int margin = (int) (20 * getResources().getDisplayMetrics().density);
+        params.leftMargin = margin;
+        params.rightMargin = margin;
+        params.topMargin = margin / 2;
+        params.bottomMargin = margin / 2;
         input.setLayoutParams(params);
         container.addView(input);
         builder.setView(container);
@@ -3127,7 +3168,14 @@ public class MainActivity extends Activity {
 
         builder.setNegativeButton("Cancelar", null);
 
-        AlertDialog dialog = builder.create();
+        final AlertDialog dialog = builder.create();
+        activeSearchDialog = dialog;
+        dialog.setOnDismissListener(d -> {
+            if (activeSearchDialog == dialog) {
+                activeSearchDialog = null;
+            }
+        });
+
         input.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE
                     || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_DOWN)) {
@@ -3153,98 +3201,123 @@ public class MainActivity extends Activity {
             return;
         }
 
-        String qNorm = EpgEngine.normalizeForMatch(query);
+        final String cleanQuery = quickClean(query.trim());
+        if (cleanQuery.isEmpty()) return;
 
-        if (isViewingSeries) {
-            if (cachedSeries == null || cachedSeries.isEmpty()) return;
-            List<Movie> converted = new ArrayList<>();
-            List<Series> rawFiltered = new ArrayList<>();
-            for (Series s : cachedSeries) {
-                String searchTarget = (s.name != null ? s.name : "") + " "
-                        + (s.title != null ? s.title : "") + " "
-                        + (s.genre != null ? s.genre : "") + " "
-                        + (s.cast != null ? s.cast : "") + " "
-                        + (s.director != null ? s.director : "") + " "
-                        + (s.plot != null ? s.plot : "");
-                if (EpgEngine.normalizeForMatch(searchTarget).contains(qNorm)) {
-                    rawFiltered.add(s);
-                    Movie pseudo = new Movie();
-                    pseudo.stream_id = s.series_id;
-                    pseudo.name = s.name;
-                    pseudo.title = s.title;
-                    pseudo.stream_icon = s.cover;
-                    pseudo.plot = s.plot;
-                    pseudo.rating = s.rating;
-                    pseudo.genre = s.genre;
-                    converted.add(pseudo);
-                }
-            }
+        showLoading("Pesquisando por \"" + query + "\"...");
 
-            if (converted.isEmpty()) {
-                Toast.makeText(this, "Nenhuma série encontrada para \"" + query + "\"", Toast.LENGTH_SHORT).show();
-                return;
-            }
+        executor.execute(() -> {
+            try {
+                if (isViewingSeries) {
+                    if (cachedSeries == null || cachedSeries.isEmpty()) {
+                        mainHandler.post(this::hideLoading);
+                        return;
+                    }
+                    List<Movie> converted = new ArrayList<>();
+                    List<Series> rawFiltered = new ArrayList<>();
+                    for (Series s : cachedSeries) {
+                        String nameClean = quickClean(s.name);
+                        String titleClean = quickClean(s.title);
+                        String genreClean = quickClean(s.genre);
+                        String castClean = quickClean(s.cast);
 
-            vodHeroTitle.setText("🔍 Séries: \"" + query + "\" (" + converted.size() + " encontradas)");
-            vodHeroPlot.setText("Resultados da pesquisa por \"" + query + "\". Selecione para assistir.");
-
-            vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
-            vodGridRecycler.setAdapter(new MoviePosterAdapter(this, converted, true, new MoviePosterAdapter.OnMovieActionListener() {
-                @Override
-                public void onMovieClick(Movie m) {
-                    for (Series s : rawFiltered) {
-                        if (s.series_id != null && s.series_id.equals(m.stream_id)) {
-                            openSeriesDetail(s);
-                            break;
+                        if (nameClean.contains(cleanQuery) || titleClean.contains(cleanQuery)
+                                || genreClean.contains(cleanQuery) || castClean.contains(cleanQuery)) {
+                            rawFiltered.add(s);
+                            Movie pseudo = new Movie();
+                            pseudo.stream_id = s.series_id;
+                            pseudo.name = s.name;
+                            pseudo.title = s.title;
+                            pseudo.stream_icon = s.cover;
+                            pseudo.plot = s.plot;
+                            pseudo.rating = s.rating;
+                            pseudo.genre = s.genre;
+                            converted.add(pseudo);
                         }
                     }
-                }
 
-                @Override
-                public void onMovieFocus(Movie movie) {
-                    updateVodHero(movie);
-                }
-            }));
-            vodGridRecycler.requestFocus();
+                    mainHandler.post(() -> {
+                        hideLoading();
+                        if (converted.isEmpty()) {
+                            Toast.makeText(MainActivity.this, "Nenhuma série encontrada para \"" + query + "\"", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
 
-        } else {
-            if (cachedMovies == null || cachedMovies.isEmpty()) return;
-            List<Movie> filtered = new ArrayList<>();
-            for (Movie m : cachedMovies) {
-                if (isDemoMovie(m)) continue;
-                String searchTarget = (m.name != null ? m.name : "") + " "
-                        + (m.title != null ? m.title : "") + " "
-                        + (m.genre != null ? m.genre : "") + " "
-                        + (m.cast != null ? m.cast : "") + " "
-                        + (m.director != null ? m.director : "") + " "
-                        + (m.plot != null ? m.plot : "");
-                if (EpgEngine.normalizeForMatch(searchTarget).contains(qNorm)) {
-                    filtered.add(m);
+                        vodHeroTitle.setText("🔍 Séries: \"" + query + "\" (" + converted.size() + " encontradas)");
+                        vodHeroPlot.setText("Resultados da pesquisa por \"" + query + "\". Selecione para assistir.");
+
+                        vodGridRecycler.setLayoutManager(new GridLayoutManager(MainActivity.this, 7));
+                        vodGridRecycler.setAdapter(new MoviePosterAdapter(MainActivity.this, converted, true, new MoviePosterAdapter.OnMovieActionListener() {
+                            @Override
+                            public void onMovieClick(Movie m) {
+                                for (Series s : rawFiltered) {
+                                    if (s.series_id != null && s.series_id.equals(m.stream_id)) {
+                                        openSeriesDetail(s);
+                                        break;
+                                    }
+                                }
+                            }
+
+                            @Override
+                            public void onMovieFocus(Movie movie) {
+                                updateVodHero(movie);
+                            }
+                        }));
+                        vodGridRecycler.requestFocus();
+                    });
+
+                } else {
+                    if (cachedMovies == null || cachedMovies.isEmpty()) {
+                        mainHandler.post(this::hideLoading);
+                        return;
+                    }
+                    List<Movie> filtered = new ArrayList<>();
+                    for (Movie m : cachedMovies) {
+                        if (isDemoMovie(m)) continue;
+                        String nameClean = quickClean(m.name);
+                        String titleClean = quickClean(m.title);
+                        String genreClean = quickClean(m.genre);
+                        String castClean = quickClean(m.cast);
+
+                        if (nameClean.contains(cleanQuery) || titleClean.contains(cleanQuery)
+                                || genreClean.contains(cleanQuery) || castClean.contains(cleanQuery)) {
+                            filtered.add(m);
+                        }
+                    }
+
+                    mainHandler.post(() -> {
+                        hideLoading();
+                        if (filtered.isEmpty()) {
+                            Toast.makeText(MainActivity.this, "Nenhum filme encontrado para \"" + query + "\"", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+
+                        vodHeroTitle.setText("🔍 Filmes: \"" + query + "\" (" + filtered.size() + " encontrados)");
+                        vodHeroPlot.setText("Resultados da pesquisa por \"" + query + "\". Selecione para assistir.");
+
+                        vodGridRecycler.setLayoutManager(new GridLayoutManager(MainActivity.this, 7));
+                        vodGridRecycler.setAdapter(new MoviePosterAdapter(MainActivity.this, filtered, true, new MoviePosterAdapter.OnMovieActionListener() {
+                            @Override
+                            public void onMovieClick(Movie movie) {
+                                playMovie(movie);
+                            }
+
+                            @Override
+                            public void onMovieFocus(Movie movie) {
+                                updateVodHero(movie);
+                            }
+                        }));
+                        vodGridRecycler.requestFocus();
+                    });
                 }
+            } catch (Throwable t) {
+                Log.e("EPlay", "Erro na busca VOD", t);
+                mainHandler.post(() -> {
+                    hideLoading();
+                    Toast.makeText(MainActivity.this, "Erro ao realizar busca.", Toast.LENGTH_SHORT).show();
+                });
             }
-
-            if (filtered.isEmpty()) {
-                Toast.makeText(this, "Nenhum filme encontrado para \"" + query + "\"", Toast.LENGTH_SHORT).show();
-                return;
-            }
-
-            vodHeroTitle.setText("🔍 Filmes: \"" + query + "\" (" + filtered.size() + " encontrados)");
-            vodHeroPlot.setText("Resultados da pesquisa por \"" + query + "\". Selecione para assistir.");
-
-            vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
-            vodGridRecycler.setAdapter(new MoviePosterAdapter(this, filtered, true, new MoviePosterAdapter.OnMovieActionListener() {
-                @Override
-                public void onMovieClick(Movie movie) {
-                    playMovie(movie);
-                }
-
-                @Override
-                public void onMovieFocus(Movie movie) {
-                    updateVodHero(movie);
-                }
-            }));
-            vodGridRecycler.requestFocus();
-        }
+        });
     }
 
     private void updateVodHero(Movie m) {
@@ -3773,6 +3846,12 @@ public class MainActivity extends Activity {
     }
 
     private boolean handleBack() {
+        if (activeSearchDialog != null && activeSearchDialog.isShowing()) {
+            activeSearchDialog.dismiss();
+            activeSearchDialog = null;
+            return true;
+        }
+
         if (fullGuideLayout != null && fullGuideLayout.getVisibility() == View.VISIBLE) {
             closeFullGuide();
             return true;

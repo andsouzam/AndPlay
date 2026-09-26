@@ -75,7 +75,9 @@ public class Channel implements Serializable {
         int serverNum = 1;
         for (String prov : priorityOrder) {
             if (com.andplay.app.provider.ProviderManager.PROVIDER_RDCANAIS.equals(prov)) {
-                list.add(new StreamFallback("RDCanais (HD " + serverNum + ")", "https://rdcanais.net/" + rdSlug, true));
+                String rcSlug = getRedeCanaisSlug(cleanSlug, id);
+                list.add(new StreamFallback("RDCanais Player (HD " + serverNum + ")", "https://redecanaistv.af/player3/ch.php?canal=" + rcSlug, true));
+                list.add(new StreamFallback("RDCanais Portal (HD " + serverNum + ")", "https://rdcanais.net/" + rdSlug, true));
                 serverNum++;
             } else if (com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED.equals(prov)) {
                 if (embed != null && !embed.isEmpty()) {
@@ -91,9 +93,67 @@ public class Channel implements Serializable {
             }
         }
 
-        // TV a Cabo secondary embed fallback
-        list.add(new StreamFallback("TVaCabo (HD)", "https://redecanaistv.af/player3/ch.php?canal=" + rdSlug, true));
         return list;
+    }
+
+    public static String getRedeCanaisSlug(String cleanSlug, String id) {
+        String s = (cleanSlug != null && !cleanSlug.isEmpty()) ? cleanSlug : (id != null ? id : "");
+        s = s.replaceFirst("^canal/", "").replaceFirst("\\.html$", "").trim().toLowerCase();
+
+        // Canais Globo: RedeCanais usa o prefixo "bobo"
+        if ("globosp".equals(s)) return "bobosp";
+        if ("globorj".equals(s)) return "boborj";
+        if ("globomg".equals(s)) return "bobomg";
+        if ("globonordeste".equals(s)) return "bobonordeste";
+        if ("globoam".equals(s)) return "boboam";
+        if ("globodf".equals(s)) return "bobodf";
+        if ("globogo".equals(s)) return "bobogo";
+        if ("globoms".equals(s)) return "boboms";
+        if ("globors".equals(s)) return "bobors";
+        if ("globoba".equals(s)) return "boboba";
+        if (s.startsWith("globo-")) return "bobo" + s.substring(6);
+        if (s.startsWith("globo") && !s.equals("globonews") && !s.equals("globoplaynovelas")) {
+            return "bobo" + s.substring(5);
+        }
+
+        // Esportes
+        if ("sportv".equals(s) || "sportv-1".equals(s)) return "sportv1";
+        if ("sportv-2".equals(s)) return "sportv2";
+        if ("sportv-3".equals(s)) return "sportv3";
+        if ("premiere".equals(s) || "premiereclubes".equals(s) || "premiere-clubes".equals(s)) return "premiereclubes";
+        if ("premiere-2".equals(s)) return "premiere2";
+        if ("premiere-3".equals(s)) return "premiere3";
+        if ("premiere-4".equals(s)) return "premiere4";
+        if ("premiere-5".equals(s)) return "premiere5";
+        if ("premiere-6".equals(s)) return "premiere6";
+        if ("premiere-7".equals(s)) return "premiere7";
+        if ("premiere-8".equals(s)) return "premiere8";
+        if ("cazetv".equals(s) || "cazetv-1".equals(s)) return "cazetv1";
+        if ("cazetv-2".equals(s)) return "cazetv2";
+        if ("cazetv-3".equals(s)) return "cazetv3";
+        if ("espn-1".equals(s)) return "espn";
+        if ("espn-2".equals(s)) return "espn2";
+        if ("espn-3".equals(s)) return "espn3";
+        if ("espn-4".equals(s)) return "espn4";
+        if ("espn-5".equals(s)) return "espn5";
+        if ("espn-6".equals(s)) return "espn6";
+
+        // Canais Abertos
+        if ("recordtv".equals(s) || "recordsp".equals(s) || "record-sp".equals(s)) return "record";
+        if ("bandsp".equals(s) || "band-sp".equals(s)) return "band";
+
+        // Filmes, Séries e Variedades
+        if ("warnerchannel".equals(s) || "warner-channel".equals(s)) return "warner";
+        if ("universaltv".equals(s) || "universal-tv".equals(s)) return "universal";
+        if ("ae".equals(s) || "a&e".equals(s) || "canal-ae".equals(s)) return "aie";
+        if ("id".equals(s) || "investigacao-discovery".equals(s)) return "investigacaodiscovery";
+        if ("discoveryhomeehealth".equals(s) || "discovery-home-health".equals(s)) return "discoveryhomeihealth";
+        if ("discoveryscience".equals(s) || "discovery-science".equals(s)) return "discoverysience";
+        if ("saborarte".equals(s) || "sabor-arte".equals(s)) return "saboriarte";
+        if ("cartoon-network".equals(s)) return "cartoon";
+        if ("off".equals(s) || "canaloff".equals(s)) return "off";
+
+        return s.replace("-", "");
     }
 
     public static String getStreamVerdeSlug(String cleanSlug, String id) {
