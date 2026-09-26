@@ -1,5 +1,6 @@
 package com.andplay.app.adapter;
 
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -44,6 +45,11 @@ public class CategoryPillAdapter extends RecyclerView.Adapter<CategoryPillAdapte
         holder.pillText.setText(cat.getCleanName());
         boolean isSelected = cat.category_id != null && cat.category_id.equals(selectedId);
         holder.pillText.setSelected(isSelected);
+        if (isSelected) {
+            holder.pillText.setTextColor(0xFF000000);
+        } else {
+            holder.pillText.setTextColor(0xFFFFFFFF);
+        }
 
         holder.itemView.setOnClickListener(v -> {
             selectedId = cat.category_id;
@@ -51,8 +57,21 @@ public class CategoryPillAdapter extends RecyclerView.Adapter<CategoryPillAdapte
             if (listener != null) listener.onCategoryClick(cat);
         });
 
+        holder.itemView.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || keyCode == android.view.KeyEvent.KEYCODE_ENTER)) {
+                v.performClick();
+                return true;
+            }
+            return false;
+        });
+
         holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
-            v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(150).start();
+            v.animate().scaleX(hasFocus ? 1.05f : 1.0f).scaleY(hasFocus ? 1.05f : 1.0f).setDuration(100).start();
+            if (hasFocus) {
+                holder.pillText.setTextColor(0xFF000000);
+            } else if (!isSelected) {
+                holder.pillText.setTextColor(0xFFFFFFFF);
+            }
         });
     }
 

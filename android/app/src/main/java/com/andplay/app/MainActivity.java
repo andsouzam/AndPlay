@@ -2,6 +2,8 @@ package com.andplay.app;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
+import android.media.AudioManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -152,12 +154,22 @@ public class MainActivity extends Activity {
 
     private final Handler osdHandler = new Handler(Looper.getMainLooper());
     private final Runnable osdHideRunnable = () -> {
-        if (osdBanner != null) osdBanner.setVisibility(View.GONE);
+        hideOsdBanner();
     };
 
     private final Handler drawerHandler = new Handler(Looper.getMainLooper());
     private final Runnable drawerHideRunnable = () -> {
-        if (epgDrawer != null) epgDrawer.setVisibility(View.GONE);
+        closeDrawer();
+    };
+
+    private CategoryPillAdapter drawerCatsAdapter;
+    private final List<Category> drawerCats = new ArrayList<>();
+    private int selectedDrawerCatIdx = 0;
+
+    private int pendingZapChannelIdx = -1;
+    private final Handler zapHandler = new Handler(Looper.getMainLooper());
+    private final Runnable zapConfirmRunnable = () -> {
+        confirmPendingZapChannel();
     };
 
     private long lastBackAt = 0;
@@ -170,6 +182,7 @@ public class MainActivity extends Activity {
 
         bindViews();
         hideSystemUI();
+        enforceMaxVolume();
         initUnifiedPlayer();
         initClock();
 
@@ -327,7 +340,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // Injeta script que trava window.open e cliques simulados em anúncios
+                // Injeta script que trava window.open, cliques simulados em anúncios e garante volume no máximo
                 String antiAdScript = "(function() {" +
                         "window.open = function() { return null; };" +
                         "window.alert = function() { };" +
@@ -336,6 +349,15 @@ public class MainActivity extends Activity {
                         "  var a = e.target.closest('a');" +
                         "  if (a && a.target === '_blank') { e.preventDefault(); e.stopPropagation(); }" +
                         "}, true);" +
+                        "function setMaxAudio() {" +
+                        "  var media = document.querySelectorAll('video, audio');" +
+                        "  for (var i = 0; i < media.length; i++) {" +
+                        "    media[i].muted = false;" +
+                        "    media[i].volume = 1.0;" +
+                        "  }" +
+                        "}" +
+                        "setMaxAudio();" +
+                        "setInterval(setMaxAudio, 1500);" +
                         "})();";
                 view.evaluateJavascript(antiAdScript, null);
             }
@@ -352,6 +374,21 @@ public class MainActivity extends Activity {
         pipPlayerHost.addView(unifiedPlayerBox, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
         ));
+    }
+
+    private void enforceMaxVolume() {
+        try {
+            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (am != null) {
+                int maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+                am.setStreamVolume(AudioManager.STREAM_MUSIC, maxVol, 0);
+            }
+        } catch (Exception e) {
+            Log.w("EPlay", "Ajuste de volume maximo: " + e.getMessage());
+        }
+        if (exoPlayer != null) {
+            exoPlayer.setVolume(1.0f);
+        }
     }
 
     private void attachPlayerToHost(FrameLayout targetHost) {
@@ -493,7 +530,7 @@ public class MainActivity extends Activity {
     }
 
     private void setupDrawer() {
-        List<Category> drawerCats = new ArrayList<>();
+        drawerCats.clear();
         drawerCats.add(new Category("ALL", "Todos"));
         drawerCats.add(new Category("open_tv", "Abertos"));
         drawerCats.add(new Category("sports", "Esportes"));
@@ -503,10 +540,43 @@ public class MainActivity extends Activity {
         drawerCats.add(new Category("channels_24h", "24 Horas"));
 
         drawerCatsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
-        drawerCatsRecycler.setAdapter(new CategoryPillAdapter(drawerCats, cat -> filterDrawerChannels(cat.category_id)));
+        drawerCatsAdapter = new CategoryPillAdapter(drawerCats, cat -> {
+            int idx = drawerCats.indexOf(cat);
+            if (idx >= 0) selectedDrawerCatIdx = idx;
+            filterDrawerChannels(cat.category_id);
+            resetDrawerTimeout();
+        });
+        drawerCatsRecycler.setAdapter(drawerCatsAdapter);
 
         drawerChannelsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
         filterDrawerChannels("ALL");
+    }
+
+    private void switchDrawerCategory(int delta) {
+        if (drawerCats.isEmpty()) return;
+        selectedDrawerCatIdx = (selectedDrawerCatIdx + delta + drawerCats.size()) % drawerCats.size();
+        selectDrawerCategory(selectedDrawerCatIdx);
+    }
+
+    private void selectDrawerCategory(int index) {
+        if (index < 0 || index >= drawerCats.size()) return;
+        selectedDrawerCatIdx = index;
+        Category cat = drawerCats.get(selectedDrawerCatIdx);
+        if (drawerCatsAdapter != null) {
+            drawerCatsAdapter.setSelectedId(cat.category_id);
+        }
+        if (drawerCatsRecycler != null) {
+            drawerCatsRecycler.smoothScrollToPosition(selectedDrawerCatIdx);
+        }
+        filterDrawerChannels(cat.category_id);
+        resetDrawerTimeout();
+    }
+
+    private void resetDrawerTimeout() {
+        drawerHandler.removeCallbacks(drawerHideRunnable);
+        if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
+            drawerHandler.postDelayed(drawerHideRunnable, 8000);
+        }
     }
 
     private void filterDrawerChannels(String catId) {
@@ -521,18 +591,25 @@ public class MainActivity extends Activity {
             int targetIdx = realIdx >= 0 ? realIdx : idx;
             // Se for o mesmo canal que já está tocando, apenas fecha a gaveta e garante tela cheia
             if (targetIdx == currentChannelIdx && (currentActiveStreamUrl != null && !currentActiveStreamUrl.isEmpty())) {
-                epgDrawer.setVisibility(View.GONE);
+                closeDrawer();
                 setScreenMode(ScreenMode.FULLSCREEN);
                 return;
             }
             // Canal diferente: destrói conexões anteriores e sintoniza
             destroyCurrentStream();
             tuneChannel(targetIdx, true);
-            epgDrawer.setVisibility(View.GONE);
+            closeDrawer();
             setScreenMode(ScreenMode.FULLSCREEN);
         });
         adapter.setCurrentPlayingIdx(currentChannelIdx);
         drawerChannelsRecycler.setAdapter(adapter);
+
+        drawerChannelsRecycler.post(() -> {
+            if (drawerChannelsRecycler.getChildCount() > 0) {
+                View first = drawerChannelsRecycler.getChildAt(0);
+                if (first != null) first.requestFocus();
+            }
+        });
     }
 
     public void tuneChannel(int idx, boolean showOsd) {
@@ -548,7 +625,7 @@ public class MainActivity extends Activity {
         pipProgramTitle.setText("🔴 No Ar: " + (epg != null ? epg.nowTitle : (ch.now != null ? ch.now : "Ao Vivo")));
 
         // Atualiza OSD
-        updateOsd(ch, epg);
+        updateOsd(ch, currentChannelIdx, epg);
 
         // Carrega transmissão
         List<Channel.StreamFallback> fallbacks = ch.getFallbacks();
@@ -558,13 +635,51 @@ public class MainActivity extends Activity {
         }
 
         if (showOsd && currentMode == ScreenMode.FULLSCREEN) {
-            showOsdBanner(6000);
+            showOsdBanner(5000);
         }
+    }
+
+    private void stepZapChannel(int step) {
+        if (allChannels.isEmpty()) return;
+        if (pendingZapChannelIdx < 0) {
+            pendingZapChannelIdx = currentChannelIdx;
+        }
+        // Ordem crescente no dpad cima (+1), decrescente no dpad baixo (-1)
+        pendingZapChannelIdx = (pendingZapChannelIdx + step + allChannels.size()) % allChannels.size();
+
+        Channel previewCh = allChannels.get(pendingZapChannelIdx);
+        LiveSchedule epg = EpgEngine.getLiveSchedule(previewCh);
+        updateOsd(previewCh, pendingZapChannelIdx, epg);
+        showOsdBanner(5000);
+
+        zapHandler.removeCallbacks(zapConfirmRunnable);
+        zapHandler.postDelayed(zapConfirmRunnable, 3000);
+    }
+
+    private void confirmPendingZapChannel() {
+        zapHandler.removeCallbacks(zapConfirmRunnable);
+        if (pendingZapChannelIdx >= 0) {
+            int target = pendingZapChannelIdx;
+            pendingZapChannelIdx = -1;
+            if (target != currentChannelIdx) {
+                destroyCurrentStream();
+                tuneChannel(target, true);
+            } else {
+                showOsdBanner(3000);
+            }
+        }
+    }
+
+    private void cancelPendingZap() {
+        zapHandler.removeCallbacks(zapConfirmRunnable);
+        pendingZapChannelIdx = -1;
+        hideOsdBanner();
     }
 
     private void playStream(String url, boolean isEmbed) {
         currentActiveStreamUrl = url;
         isPlayingEmbed = isEmbed;
+        enforceMaxVolume();
 
         if (isEmbed) {
             if (exoPlayer != null) {
@@ -662,11 +777,12 @@ public class MainActivity extends Activity {
         showOsdBanner(5000);
     }
 
-    private void updateOsd(Channel ch, LiveSchedule epg) {
-        topChNum.setText(String.format("CH %03d", currentChannelIdx + 1));
+    private void updateOsd(Channel ch, int chIdx, LiveSchedule epg) {
+        if (ch == null) return;
+        topChNum.setText(String.format("CH %03d", chIdx + 1));
         topChName.setText(ch.name);
 
-        osdChNum.setText(String.format("%03d", currentChannelIdx + 1));
+        osdChNum.setText(String.format("%03d", chIdx + 1));
         osdChName.setText(ch.name);
 
         if (epg != null) {
@@ -686,19 +802,26 @@ public class MainActivity extends Activity {
 
     public void showOsdBanner(int durationMs) {
         osdHandler.removeCallbacks(osdHideRunnable);
-        osdBanner.setVisibility(View.VISIBLE);
+        if (floatingBackBtn != null) floatingBackBtn.setVisibility(View.VISIBLE);
+        if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
+        if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
         osdHandler.postDelayed(osdHideRunnable, durationMs);
     }
 
-    public void toggleDrawer() {
-        drawerHandler.removeCallbacks(drawerHideRunnable);
-        if (epgDrawer.getVisibility() == View.VISIBLE) {
-            epgDrawer.setVisibility(View.GONE);
-        } else {
-            epgDrawer.setVisibility(View.VISIBLE);
-            drawerHandler.postDelayed(drawerHideRunnable, 8000);
+    public void hideOsdBanner() {
+        osdHandler.removeCallbacks(osdHideRunnable);
+        if (floatingBackBtn != null) floatingBackBtn.setVisibility(View.GONE);
+        if (topChannelBadge != null) topChannelBadge.setVisibility(View.GONE);
+        if (osdBanner != null) osdBanner.setVisibility(View.GONE);
+    }
 
-            // Garante foco suave na lista de canais
+    public void openDrawer() {
+        drawerHandler.removeCallbacks(drawerHideRunnable);
+        if (epgDrawer != null) {
+            epgDrawer.setVisibility(View.VISIBLE);
+            hideOsdBanner();
+            resetDrawerTimeout();
+
             drawerChannelsRecycler.post(() -> {
                 int pos = Math.max(0, currentChannelIdx);
                 drawerChannelsRecycler.scrollToPosition(pos);
@@ -715,6 +838,21 @@ public class MainActivity extends Activity {
         }
     }
 
+    public void closeDrawer() {
+        drawerHandler.removeCallbacks(drawerHideRunnable);
+        if (epgDrawer != null) {
+            epgDrawer.setVisibility(View.GONE);
+        }
+    }
+
+    public void toggleDrawer() {
+        if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
+            closeDrawer();
+        } else {
+            openDrawer();
+        }
+    }
+
     public void setScreenMode(ScreenMode mode) {
         previousMode = currentMode;
         currentMode = mode;
@@ -727,14 +865,17 @@ public class MainActivity extends Activity {
         if (mode == ScreenMode.FULLSCREEN) {
             // Reanexa o player unificado no host de tela cheia sem recarregar o vídeo
             attachPlayerToHost(fullscreenPlayerHost);
+            enforceMaxVolume();
             showOsdBanner(5000);
         } else if (mode == ScreenMode.CENTRAL) {
             // Reanexa o player unificado no host do PiP sem recarregar o vídeo
-            if (epgDrawer != null) epgDrawer.setVisibility(View.GONE);
+            closeDrawer();
+            hideOsdBanner();
             attachPlayerToHost(pipPlayerHost);
             pipContainer.requestFocus();
         } else if (mode == ScreenMode.VOD) {
-            if (epgDrawer != null) epgDrawer.setVisibility(View.GONE);
+            closeDrawer();
+            hideOsdBanner();
             if (exoPlayer != null && !isPlayingVod) exoPlayer.pause();
             vodBackBtn.requestFocus();
         }
@@ -1019,18 +1160,20 @@ public class MainActivity extends Activity {
         if (action == KeyEvent.ACTION_DOWN) {
             // Teclas de controle de TV por Assinatura / Receptor
             if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
-                if (currentMode == ScreenMode.FULLSCREEN) {
-                    tuneChannel(currentChannelIdx - 1, true);
+                if (currentMode == ScreenMode.FULLSCREEN && !isPlayingVod) {
+                    stepZapChannel(1);
                     return true;
                 }
             } else if (keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
-                if (currentMode == ScreenMode.FULLSCREEN) {
-                    tuneChannel(currentChannelIdx + 1, true);
+                if (currentMode == ScreenMode.FULLSCREEN && !isPlayingVod) {
+                    stepZapChannel(-1);
                     return true;
                 }
             } else if (keyCode == KeyEvent.KEYCODE_GUIDE || keyCode == KeyEvent.KEYCODE_INFO || keyCode == KeyEvent.KEYCODE_MENU) {
-                toggleDrawer();
-                return true;
+                if (currentMode == ScreenMode.FULLSCREEN) {
+                    toggleDrawer();
+                    return true;
+                }
             } else if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
                 if (exoPlayer != null) {
                     if (exoPlayer.isPlaying()) exoPlayer.pause();
@@ -1040,27 +1183,71 @@ public class MainActivity extends Activity {
                 }
             }
 
-            // Em tela cheia: DPAD_RIGHT ou ENTER quando o OSD está visível abre a gaveta EPG
+            // Em tela cheia:
             if (currentMode == ScreenMode.FULLSCREEN) {
-                if (epgDrawer.getVisibility() == View.VISIBLE) {
+                // CENÁRIO 1: GAVETA LATERAL ESTÁ ABERTA
+                if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
+                    resetDrawerTimeout();
+
+                    // D-pad Esquerdo e Direito alternam entre grupos/categorias de canais (sem fechar a gaveta)
                     if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                        epgDrawer.setVisibility(View.GONE);
+                        switchDrawerCategory(-1);
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                        switchDrawerCategory(1);
                         return true;
                     }
-                    drawerHandler.removeCallbacks(drawerHideRunnable);
-                    drawerHandler.postDelayed(drawerHideRunnable, 8000);
-                } else {
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                        if (osdBanner.getVisibility() == View.VISIBLE) {
-                            toggleDrawer();
-                            return true;
-                        } else {
-                            showOsdBanner(6000);
+                    // UP e DOWN navegam normalmente pelos canais do RecyclerView
+                }
+                // CENÁRIO 2: GAVETA LATERAL ESTÁ FECHADA
+                else {
+                    if (!isPlayingVod) {
+                        // D-pad Esquerdo abre a gaveta lateral
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                            if (pendingZapChannelIdx >= 0) {
+                                cancelPendingZap();
+                            }
+                            openDrawer();
                             return true;
                         }
-                    }
-                    if (osdBanner.getVisibility() == View.VISIBLE) {
-                        showOsdBanner(6000);
+
+                        // D-pad Cima (+) alterna canais em ordem crescente (+1) com confirmação após 3s
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                            stepZapChannel(1);
+                            return true;
+                        }
+
+                        // D-pad Baixo (-) alterna canais em ordem decrescente (-1) com confirmação após 3s
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                            stepZapChannel(-1);
+                            return true;
+                        }
+
+                        // ENTER / OK confirma a troca imediata se estiver zapeando, ou exibe o OSD se oculto
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                            if (pendingZapChannelIdx >= 0) {
+                                confirmPendingZapChannel();
+                                return true;
+                            } else if (osdBanner != null && osdBanner.getVisibility() != View.VISIBLE) {
+                                showOsdBanner(5000);
+                                return true;
+                            } else {
+                                showOsdBanner(5000);
+                                return true;
+                            }
+                        }
+
+                        // Prolonga o OSD se estiver visível
+                        if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
+                            showOsdBanner(5000);
+                        }
+                    } else {
+                        // Em VOD (Filme ou Série), teclas mostram o banner de informações
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
+                                || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                            showOsdBanner(5000);
+                            return true;
+                        }
                     }
                 }
             }
@@ -1076,11 +1263,19 @@ public class MainActivity extends Activity {
 
     private boolean handleBack() {
         if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
-            epgDrawer.setVisibility(View.GONE);
+            closeDrawer();
             return true;
         }
 
         if (currentMode == ScreenMode.FULLSCREEN) {
+            if (pendingZapChannelIdx >= 0) {
+                cancelPendingZap();
+                return true;
+            }
+            if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
+                hideOsdBanner();
+                return true;
+            }
             if (isPlayingVod) {
                 setScreenMode(previousMode == ScreenMode.SERIES_DETAIL ? ScreenMode.SERIES_DETAIL : ScreenMode.VOD);
                 return true;
@@ -1119,6 +1314,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         hideSystemUI();
+        enforceMaxVolume();
         if (exoPlayer != null && !isPlayingEmbed) exoPlayer.play();
     }
 

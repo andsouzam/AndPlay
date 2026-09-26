@@ -399,7 +399,8 @@
             android:text="⬅ VOLTAR À CENTRAL"
             android:textColor="#FFC107"
             android:textSize="12sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:visibility="gone" />
 
         <!-- BADGE DO CANAL NO CANTO SUPERIOR DIREITO -->
         <LinearLayout
@@ -414,7 +415,8 @@
             android:paddingStart="12dp"
             android:paddingTop="6dp"
             android:paddingEnd="12dp"
-            android:paddingBottom="6dp">
+            android:paddingBottom="6dp"
+            android:visibility="gone">
 
             <TextView
                 android:id="@+id/topChNum"
@@ -555,15 +557,17 @@
 
 
     <!-- ======================================================== -->
-    <!-- GAVETA LATERAL EPG (SLIDE DIREITO - FLUTUANTE EM QUALQUER TELA) -->
+    <!-- GAVETA LATERAL EPG (SLIDE ESQUERDO - FLUTUANTE EM QUALQUER TELA) -->
     <!-- ======================================================== -->
     <LinearLayout
         android:id="@+id/epgDrawer"
-        android:layout_width="390dp"
+        android:layout_width="410dp"
         android:layout_height="match_parent"
-        android:layout_gravity="end"
-        android:background="#FB080E1C"
+        android:layout_gravity="start"
+        android:background="#F8080E1C"
         android:clickable="true"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:elevation="30dp"
         android:focusable="true"
         android:orientation="vertical"
@@ -582,18 +586,23 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:text="Categorias: Esq/Dir  |  Canais: Cima/Baixo  |  OK: Sintonizar"
+            android:text="◄ ► Grupos  |  ▲ ▼ Canais  |  OK: Sintonizar"
             android:textColor="#888888"
-            android:textSize="10sp" />
+            android:textSize="11sp" />
 
         <!-- PILLS DE CATEGORIAS DA GAVETA -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/drawerCatsRecycler"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:layout_marginBottom="10dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:clipChildren="false"
             android:clipToPadding="false"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
             android:orientation="horizontal" />
 
         <!-- LISTA DE CANAIS DA GAVETA -->
@@ -601,7 +610,13 @@
             android:id="@+id/drawerChannelsRecycler"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="12dp" />
     </LinearLayout>
 
 
