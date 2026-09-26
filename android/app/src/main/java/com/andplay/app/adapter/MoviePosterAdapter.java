@@ -66,6 +66,7 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
         if (poster != null && !poster.isEmpty()) {
             Glide.with(context)
                     .load(poster)
+                    .override(220, 300)
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
                     .placeholder(R.drawable.card_focus_bg)
                     .into(holder.poster);

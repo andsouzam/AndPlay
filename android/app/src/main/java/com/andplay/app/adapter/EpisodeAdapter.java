@@ -77,6 +77,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         if (thumb != null && !thumb.isEmpty()) {
             Glide.with(context)
                     .load(thumb)
+                    .override(320, 180)
                     .diskCacheStrategy(DiskCacheStrategy.ALL)
                     .into(holder.thumb);
         } else {

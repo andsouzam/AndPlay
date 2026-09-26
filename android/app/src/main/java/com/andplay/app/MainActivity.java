@@ -734,15 +734,6 @@ public class MainActivity extends Activity {
     }
 
     private void enforceMaxVolume() {
-        try {
-            AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            if (am != null) {
-                int maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
-                am.setStreamVolume(AudioManager.STREAM_MUSIC, maxVol, 0);
-            }
-        } catch (Exception e) {
-            Log.w("EPlay", "Ajuste de volume maximo: " + e.getMessage());
-        }
         if (exoPlayer != null) {
             exoPlayer.setVolume(1.0f);
         }
@@ -967,15 +958,15 @@ public class MainActivity extends Activity {
                 movieCategories = ApiClient.getMovieCategories();
                 cachedMovies = ApiClient.getMovies();
                 mainHandler.post(this::setupMoviesRail);
-            } catch (Exception e) {
-                e.printStackTrace();
+            } catch (Throwable t) {
+                Log.e("EPlay", "Erro ao pré-carregar filmes", t);
             }
             try {
                 seriesCategories = ApiClient.getSeriesCategories();
                 cachedSeries = ApiClient.getSeries();
                 mainHandler.post(this::setupSeriesRail);
-            } catch (Exception e) {
-                e.printStackTrace();
+            } catch (Throwable t) {
+                Log.e("EPlay", "Erro ao pré-carregar séries", t);
             }
         });
     }
@@ -1891,6 +1882,9 @@ public class MainActivity extends Activity {
     }
 
     public void openDrawer() {
+        if (fullGuideLayout != null && fullGuideLayout.getVisibility() == View.VISIBLE) {
+            closeFullGuide();
+        }
         drawerHandler.removeCallbacks(drawerHideRunnable);
         if (epgDrawer != null) {
             epgDrawer.setVisibility(View.VISIBLE);
@@ -2372,7 +2366,9 @@ public class MainActivity extends Activity {
                     closeFullGuide();
                     return true;
                 }
-                // LEFT e RIGHT navegam normalmente pela timeline horizontal
+                // LEFT e RIGHT navegam normalmente pela timeline horizontal do guia
+                // Nunca propaga para os outros cenários (evita abrir gaveta lateral)
+                return super.dispatchKeyEvent(event);
             }
 
             // CENÁRIO 1: GAVETA LATERAL ESTÁ ABERTA (qualquer modo de tela)
@@ -2457,8 +2453,13 @@ public class MainActivity extends Activity {
                             return true;
                         }
 
-                        // D-pad Esquerdo abre a gaveta lateral
+                        // D-pad Esquerdo abre a gaveta lateral apenas se o overlay NÃO estiver visível
                         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                            if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
+                                // Dentro do overlay de informações, DPAD_LEFT não aciona o menu gaveta
+                                scheduleOsdHide(5000);
+                                return true;
+                            }
                             if (pendingZapChannelIdx >= 0) {
                                 cancelPendingZap();
                             }
@@ -2504,8 +2505,17 @@ public class MainActivity extends Activity {
                         }
                     } else {
                         // Em VOD (Filme ou Série):
-                        // D-pad Esquerdo abre a gaveta lateral com episódios da série ou lista de filmes!
+                        // D-pad Esquerdo abre a gaveta lateral apenas se o overlay NÃO estiver visível; no overlay, retrocede 15s
                         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                            if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
+                                if (exoPlayer != null && exoPlayer.getDuration() > 0) {
+                                    long target = Math.max(0, exoPlayer.getCurrentPosition() - 15000);
+                                    exoPlayer.seekTo(target);
+                                    updateVodProgress();
+                                    showOsdBanner(5000);
+                                }
+                                return true;
+                            }
                             openDrawer();
                             return true;
                         }
@@ -2853,14 +2863,14 @@ public class MainActivity extends Activity {
         List<String> currentPriority = ProviderManager.getPriorityList(this);
 
         String[] options = new String[] {
-                "⭐ 1º StreamVerde | 2º RDCanais | 3º RDEmbed",
-                "⚡ 1º RDCanais | 2º RDEmbed | 3º StreamVerde (Padrão)",
+                "⭐ 1º StreamVerde | 2º RDCanais | 3º RDEmbed (Padrão)",
+                "⚡ 1º RDCanais | 2º RDEmbed | 3º StreamVerde",
                 "🚀 1º RDEmbed | 2º StreamVerde | 3º RDCanais",
                 "🟢 1º StreamVerde | 2º RDEmbed | 3º RDCanais",
                 "🛠️ Escolher Provedor Primário (1º Lugar)..."
         };
 
-        int selectedIndex = 1;
+        int selectedIndex = 0;
         if (currentPriority.size() >= 2) {
             String p0 = currentPriority.get(0);
             String p1 = currentPriority.get(1);

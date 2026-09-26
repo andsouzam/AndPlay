@@ -54,9 +54,9 @@ public class Channel implements Serializable {
 
         if (priorityOrder == null || priorityOrder.isEmpty()) {
             priorityOrder = java.util.Arrays.asList(
+                    com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE,
                     com.andplay.app.provider.ProviderManager.PROVIDER_RDCANAIS,
-                    com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED,
-                    com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE
+                    com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED
             );
         }
 

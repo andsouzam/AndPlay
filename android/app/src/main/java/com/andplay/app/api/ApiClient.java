@@ -13,6 +13,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -110,21 +112,237 @@ public class ApiClient {
         }
     }
 
+    private static String nextStringValue(JsonReader reader) {
+        try {
+            JsonToken token = reader.peek();
+            if (token == JsonToken.NULL) {
+                reader.nextNull();
+                return "";
+            } else if (token == JsonToken.STRING || token == JsonToken.NUMBER || token == JsonToken.BOOLEAN) {
+                return reader.nextString();
+            } else {
+                reader.skipValue();
+                return "";
+            }
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static int nextIntValue(JsonReader reader) {
+        try {
+            JsonToken token = reader.peek();
+            if (token == JsonToken.NULL) {
+                reader.nextNull();
+                return 0;
+            } else if (token == JsonToken.NUMBER) {
+                return reader.nextInt();
+            } else if (token == JsonToken.STRING) {
+                String str = reader.nextString();
+                try {
+                    return Integer.parseInt(str);
+                } catch (Exception ignored) {
+                    return 0;
+                }
+            } else {
+                reader.skipValue();
+                return 0;
+            }
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private static Category readCategory(JsonReader reader) throws Exception {
+        reader.beginObject();
+        String catId = "";
+        String catName = "";
+        while (reader.hasNext()) {
+            String key = reader.nextName();
+            if ("category_id".equals(key)) {
+                catId = nextStringValue(reader);
+            } else if ("category_name".equals(key)) {
+                catName = nextStringValue(reader);
+            } else {
+                reader.skipValue();
+            }
+        }
+        reader.endObject();
+        return new Category(catId, catName);
+    }
+
+    private static Movie readMovie(JsonReader reader) throws Exception {
+        reader.beginObject();
+        Movie m = new Movie();
+        m.stream_type = "movie";
+        m.container_extension = "mp4";
+        while (reader.hasNext()) {
+            String key = reader.nextName();
+            if (reader.peek() == JsonToken.NULL) {
+                reader.nextNull();
+                continue;
+            }
+            switch (key) {
+                case "num":
+                    m.num = nextIntValue(reader);
+                    break;
+                case "name":
+                    m.name = nextStringValue(reader);
+                    break;
+                case "title":
+                    m.title = nextStringValue(reader);
+                    break;
+                case "year":
+                    m.year = nextStringValue(reader);
+                    break;
+                case "stream_type":
+                    m.stream_type = nextStringValue(reader);
+                    break;
+                case "stream_id":
+                    m.stream_id = nextStringValue(reader);
+                    break;
+                case "stream_icon":
+                    m.stream_icon = nextStringValue(reader);
+                    break;
+                case "rating":
+                    m.rating = nextStringValue(reader);
+                    break;
+                case "rating_5based":
+                    m.rating_5based = nextStringValue(reader);
+                    break;
+                case "added":
+                    m.added = nextStringValue(reader);
+                    break;
+                case "category_id":
+                    m.category_id = nextStringValue(reader);
+                    break;
+                case "container_extension":
+                    m.container_extension = nextStringValue(reader);
+                    break;
+                case "custom_sid":
+                    m.custom_sid = nextStringValue(reader);
+                    break;
+                case "direct_source":
+                    m.direct_source = nextStringValue(reader);
+                    break;
+                case "plot":
+                    m.plot = nextStringValue(reader);
+                    break;
+                case "cast":
+                    m.cast = nextStringValue(reader);
+                    break;
+                case "director":
+                    m.director = nextStringValue(reader);
+                    break;
+                case "genre":
+                    m.genre = nextStringValue(reader);
+                    break;
+                case "release_date":
+                    m.release_date = nextStringValue(reader);
+                    break;
+                case "duration":
+                    m.duration = nextStringValue(reader);
+                    break;
+                default:
+                    reader.skipValue();
+                    break;
+            }
+        }
+        reader.endObject();
+        return m;
+    }
+
+    private static Series readSeries(JsonReader reader) throws Exception {
+        reader.beginObject();
+        Series s = new Series();
+        while (reader.hasNext()) {
+            String key = reader.nextName();
+            if (reader.peek() == JsonToken.NULL) {
+                reader.nextNull();
+                continue;
+            }
+            switch (key) {
+                case "num":
+                    s.num = nextIntValue(reader);
+                    break;
+                case "name":
+                    s.name = nextStringValue(reader);
+                    break;
+                case "title":
+                    s.title = nextStringValue(reader);
+                    break;
+                case "series_id":
+                    s.series_id = nextStringValue(reader);
+                    break;
+                case "cover":
+                    s.cover = nextStringValue(reader);
+                    break;
+                case "plot":
+                    s.plot = nextStringValue(reader);
+                    break;
+                case "cast":
+                    s.cast = nextStringValue(reader);
+                    break;
+                case "director":
+                    s.director = nextStringValue(reader);
+                    break;
+                case "genre":
+                    s.genre = nextStringValue(reader);
+                    break;
+                case "releaseDate":
+                case "release_date":
+                    s.releaseDate = nextStringValue(reader);
+                    break;
+                case "last_modified":
+                    s.last_modified = nextStringValue(reader);
+                    break;
+                case "rating":
+                    s.rating = nextStringValue(reader);
+                    break;
+                case "rating_5based":
+                    s.rating_5based = nextStringValue(reader);
+                    break;
+                case "category_id":
+                    s.category_id = nextStringValue(reader);
+                    break;
+                default:
+                    reader.skipValue();
+                    break;
+            }
+        }
+        reader.endObject();
+        return s;
+    }
+
     public static List<Category> getMovieCategories() throws Exception {
         String url = SERVER + "/player_api.php?username=" + USER + "&password=" + PASS + "&action=get_vod_categories";
-        String json = httpGet(url);
-        JsonElement root = JsonParser.parseString(json);
+        Request request = new Request.Builder()
+                .url(url)
+                .header("User-Agent", "AndPlay Native Android TV 2.0")
+                .build();
+
         List<Category> list = new ArrayList<>();
-        if (root != null && root.isJsonArray()) {
-            for (JsonElement el : root.getAsJsonArray()) {
-                if (!el.isJsonObject()) continue;
-                JsonObject o = el.getAsJsonObject();
-                String catId = optString(o, "category_id", "");
-                String catName = optString(o, "category_name", "");
-                if (catName != null && catName.toLowerCase().contains("demo")) {
-                    continue;
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) throw new Exception("HTTP " + response.code());
+            ResponseBody body = response.body();
+            if (body == null) return list;
+
+            try (JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8)))) {
+                reader.setLenient(true);
+                if (reader.peek() == JsonToken.BEGIN_ARRAY) {
+                    reader.beginArray();
+                    while (reader.hasNext()) {
+                        if (reader.peek() == JsonToken.BEGIN_OBJECT) {
+                            Category c = readCategory(reader);
+                            if (c != null && c.category_name != null && !c.category_name.toLowerCase().contains("demo")) {
+                                list.add(c);
+                            }
+                        } else {
+                            reader.skipValue();
+                        }
+                    }
+                    reader.endArray();
                 }
-                list.add(new Category(catId, catName));
             }
         }
         return list;
@@ -132,44 +350,37 @@ public class ApiClient {
 
     public static List<Movie> getMovies() throws Exception {
         String url = SERVER + "/player_api.php?username=" + USER + "&password=" + PASS + "&action=get_vod_streams";
-        String json = httpGet(url);
-        JsonElement root = JsonParser.parseString(json);
+        Request request = new Request.Builder()
+                .url(url)
+                .header("User-Agent", "AndPlay Native Android TV 2.0")
+                .build();
+
         List<Movie> clean = new ArrayList<>();
-        if (root != null && root.isJsonArray()) {
-            for (JsonElement el : root.getAsJsonArray()) {
-                if (!el.isJsonObject()) continue;
-                JsonObject o = el.getAsJsonObject();
-                String name = optString(o, "name", "");
-                String title = optString(o, "title", "");
-                String nameLow = name.toLowerCase();
-                String titleLow = title.toLowerCase();
-                if (nameLow.contains("demo") || titleLow.contains("demo")) {
-                    continue;
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) throw new Exception("HTTP " + response.code());
+            ResponseBody body = response.body();
+            if (body == null) return clean;
+
+            try (JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8)))) {
+                reader.setLenient(true);
+                if (reader.peek() == JsonToken.BEGIN_ARRAY) {
+                    reader.beginArray();
+                    while (reader.hasNext()) {
+                        if (reader.peek() == JsonToken.BEGIN_OBJECT) {
+                            Movie m = readMovie(reader);
+                            if (m != null) {
+                                String nameLow = m.name != null ? m.name.toLowerCase() : "";
+                                String titleLow = m.title != null ? m.title.toLowerCase() : "";
+                                if (!nameLow.contains("demo") && !titleLow.contains("demo")) {
+                                    clean.add(m);
+                                }
+                            }
+                        } else {
+                            reader.skipValue();
+                        }
+                    }
+                    reader.endArray();
                 }
-
-                Movie m = new Movie();
-                m.num = optInt(o, "num", 0);
-                m.name = name;
-                m.title = title;
-                m.year = optString(o, "year", "");
-                m.stream_type = optString(o, "stream_type", "movie");
-                m.stream_id = optString(o, "stream_id", "");
-                m.stream_icon = optString(o, "stream_icon", "");
-                m.rating = optString(o, "rating", "");
-                m.rating_5based = optString(o, "rating_5based", "");
-                m.added = optString(o, "added", "");
-                m.category_id = optString(o, "category_id", "");
-                m.container_extension = optString(o, "container_extension", "mp4");
-                m.custom_sid = optString(o, "custom_sid", "");
-                m.direct_source = optString(o, "direct_source", "");
-                m.plot = optString(o, "plot", "");
-                m.cast = optString(o, "cast", "");
-                m.director = optString(o, "director", "");
-                m.genre = optString(o, "genre", "");
-                m.release_date = optString(o, "release_date", "");
-                m.duration = optString(o, "duration", "");
-
-                clean.add(m);
             }
         }
         return clean;
@@ -177,19 +388,33 @@ public class ApiClient {
 
     public static List<Category> getSeriesCategories() throws Exception {
         String url = SERVER + "/player_api.php?username=" + USER + "&password=" + PASS + "&action=get_series_categories";
-        String json = httpGet(url);
-        JsonElement root = JsonParser.parseString(json);
+        Request request = new Request.Builder()
+                .url(url)
+                .header("User-Agent", "AndPlay Native Android TV 2.0")
+                .build();
+
         List<Category> list = new ArrayList<>();
-        if (root != null && root.isJsonArray()) {
-            for (JsonElement el : root.getAsJsonArray()) {
-                if (!el.isJsonObject()) continue;
-                JsonObject o = el.getAsJsonObject();
-                String catId = optString(o, "category_id", "");
-                String catName = optString(o, "category_name", "");
-                if (catName != null && catName.toLowerCase().contains("demo")) {
-                    continue;
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) throw new Exception("HTTP " + response.code());
+            ResponseBody body = response.body();
+            if (body == null) return list;
+
+            try (JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8)))) {
+                reader.setLenient(true);
+                if (reader.peek() == JsonToken.BEGIN_ARRAY) {
+                    reader.beginArray();
+                    while (reader.hasNext()) {
+                        if (reader.peek() == JsonToken.BEGIN_OBJECT) {
+                            Category c = readCategory(reader);
+                            if (c != null && c.category_name != null && !c.category_name.toLowerCase().contains("demo")) {
+                                list.add(c);
+                            }
+                        } else {
+                            reader.skipValue();
+                        }
+                    }
+                    reader.endArray();
                 }
-                list.add(new Category(catId, catName));
             }
         }
         return list;
@@ -197,37 +422,37 @@ public class ApiClient {
 
     public static List<Series> getSeries() throws Exception {
         String url = SERVER + "/player_api.php?username=" + USER + "&password=" + PASS + "&action=get_series";
-        String json = httpGet(url);
-        JsonElement root = JsonParser.parseString(json);
+        Request request = new Request.Builder()
+                .url(url)
+                .header("User-Agent", "AndPlay Native Android TV 2.0")
+                .build();
+
         List<Series> list = new ArrayList<>();
-        if (root != null && root.isJsonArray()) {
-            for (JsonElement el : root.getAsJsonArray()) {
-                if (!el.isJsonObject()) continue;
-                JsonObject o = el.getAsJsonObject();
-                Series s = new Series();
-                s.num = optInt(o, "num", 0);
-                s.name = optString(o, "name", "");
-                s.title = optString(o, "title", "");
-                s.series_id = optString(o, "series_id", "");
-                s.cover = optString(o, "cover", "");
-                s.plot = optString(o, "plot", "");
-                s.cast = optString(o, "cast", "");
-                s.director = optString(o, "director", "");
-                s.genre = optString(o, "genre", "");
-                s.releaseDate = optString(o, "releaseDate", optString(o, "release_date", ""));
-                s.last_modified = optString(o, "last_modified", "");
-                s.rating = optString(o, "rating", "");
-                s.rating_5based = optString(o, "rating_5based", "");
-                s.category_id = optString(o, "category_id", "");
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) throw new Exception("HTTP " + response.code());
+            ResponseBody body = response.body();
+            if (body == null) return list;
 
-                // Ignora série de demonstração "DEMO"
-                String nameLow = s.name != null ? s.name.toLowerCase() : "";
-                String titleLow = s.title != null ? s.title.toLowerCase() : "";
-                if (nameLow.contains("demo") || titleLow.contains("demo")) {
-                    continue;
+            try (JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8)))) {
+                reader.setLenient(true);
+                if (reader.peek() == JsonToken.BEGIN_ARRAY) {
+                    reader.beginArray();
+                    while (reader.hasNext()) {
+                        if (reader.peek() == JsonToken.BEGIN_OBJECT) {
+                            Series s = readSeries(reader);
+                            if (s != null) {
+                                String nameLow = s.name != null ? s.name.toLowerCase() : "";
+                                String titleLow = s.title != null ? s.title.toLowerCase() : "";
+                                if (!nameLow.contains("demo") && !titleLow.contains("demo")) {
+                                    list.add(s);
+                                }
+                            }
+                        } else {
+                            reader.skipValue();
+                        }
+                    }
+                    reader.endArray();
                 }
-
-                list.add(s);
             }
         }
         return list;
@@ -235,22 +460,33 @@ public class ApiClient {
 
     public static Map<String, List<Episode>> getSeriesEpisodes(String seriesId) throws Exception {
         String url = SERVER + "/player_api.php?username=" + USER + "&password=" + PASS + "&action=get_series_info&series_id=" + seriesId;
-        String json = httpGet(url);
-        JsonElement root = JsonParser.parseString(json);
-        Map<String, List<Episode>> result = new HashMap<>();
+        Request request = new Request.Builder()
+                .url(url)
+                .header("User-Agent", "AndPlay Native Android TV 2.0")
+                .build();
 
-        if (root != null && root.isJsonObject()) {
-            JsonObject obj = root.getAsJsonObject();
-            if (obj.has("episodes")) {
-                JsonElement epElem = obj.get("episodes");
-                if (epElem != null && epElem.isJsonObject()) {
-                    JsonObject epsObj = epElem.getAsJsonObject();
-                    for (String seasonKey : epsObj.keySet()) {
-                        JsonElement elem = epsObj.get(seasonKey);
-                        if (elem != null && elem.isJsonArray()) {
-                            Type listType = new TypeToken<List<Episode>>() {}.getType();
-                            List<Episode> epList = gson.fromJson(elem, listType);
-                            result.put(seasonKey, epList != null ? epList : new ArrayList<>());
+        Map<String, List<Episode>> result = new HashMap<>();
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) throw new Exception("HTTP " + response.code());
+            ResponseBody body = response.body();
+            if (body == null) return result;
+
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8))) {
+                JsonElement root = JsonParser.parseReader(br);
+                if (root != null && root.isJsonObject()) {
+                    JsonObject obj = root.getAsJsonObject();
+                    if (obj.has("episodes")) {
+                        JsonElement epElem = obj.get("episodes");
+                        if (epElem != null && epElem.isJsonObject()) {
+                            JsonObject epsObj = epElem.getAsJsonObject();
+                            for (String seasonKey : epsObj.keySet()) {
+                                JsonElement elem = epsObj.get(seasonKey);
+                                if (elem != null && elem.isJsonArray()) {
+                                    Type listType = new TypeToken<List<Episode>>() {}.getType();
+                                    List<Episode> epList = gson.fromJson(elem, listType);
+                                    result.put(seasonKey, epList != null ? epList : new ArrayList<>());
+                                }
+                            }
                         }
                     }
                 }
