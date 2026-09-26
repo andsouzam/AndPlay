@@ -22,6 +22,7 @@ import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.ConsoleMessage;
 import android.webkit.RenderProcessGoneDetail;
+import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -39,13 +40,29 @@ import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
 import androidx.core.widget.NestedScrollView;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.datasource.okhttp.OkHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import okhttp3.Dns;
+import okhttp3.OkHttpClient;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.URL;
+import java.net.UnknownHostException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 import com.andplay.app.adapter.CategoryPillAdapter;
 import com.andplay.app.adapter.ChannelRailAdapter;
@@ -108,7 +125,6 @@ public class MainActivity extends Activity {
 
     // Fullscreen Views
     private FrameLayout fullscreenLayout;
-    private TextView floatingBackBtn;
     private LinearLayout topChannelBadge;
     private TextView topChNum, topChName;
     private LinearLayout osdBanner;
@@ -154,6 +170,8 @@ public class MainActivity extends Activity {
     private boolean isPlayingEmbed = false;
     private boolean isPlayingVod = false;
     private boolean isVideoPlaybackActive = false;
+    private List<Channel.StreamFallback> currentChannelFallbacks = new ArrayList<>();
+    private int currentFallbackIdx = 0;
 
     private Movie activeVodMovie = null;
     private Series activeVodSeries = null;
@@ -223,7 +241,6 @@ public class MainActivity extends Activity {
 
         // Fullscreen
         fullscreenLayout = findViewById(R.id.fullscreenLayout);
-        floatingBackBtn = findViewById(R.id.floatingBackBtn);
         topChannelBadge = findViewById(R.id.topChannelBadge);
         topChNum = findViewById(R.id.topChNum);
         topChName = findViewById(R.id.topChName);
@@ -270,6 +287,76 @@ public class MainActivity extends Activity {
         loadingText = findViewById(R.id.loadingText);
     }
 
+    public static class StreamDns implements Dns {
+        private static final Map<String, List<InetAddress>> CACHE = new ConcurrentHashMap<>();
+
+        static {
+            try {
+                CACHE.put("svd.cazetv.shop", Arrays.asList(
+                        InetAddress.getByName("172.67.135.64"),
+                        InetAddress.getByName("104.21.6.203")
+                ));
+                CACHE.put("cdn1.s22-cloudfront-net.lat", Arrays.asList(
+                        InetAddress.getByName("104.21.96.54"),
+                        InetAddress.getByName("172.67.173.73")
+                ));
+            } catch (Exception ignored) {}
+        }
+
+        @NonNull
+        @Override
+        public List<InetAddress> lookup(@NonNull String hostname) throws UnknownHostException {
+            if (CACHE.containsKey(hostname)) {
+                return CACHE.get(hostname);
+            }
+            try {
+                List<InetAddress> sys = Dns.SYSTEM.lookup(hostname);
+                if (sys != null && !sys.isEmpty()) return sys;
+            } catch (UnknownHostException ignored) {}
+
+            try {
+                URL url = new URL("https://1.1.1.1/dns-query?name=" + hostname + "&type=A");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestProperty("Accept", "application/dns-json");
+                conn.setConnectTimeout(3000);
+                conn.setReadTimeout(3000);
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String l;
+                    while ((l = r.readLine()) != null) sb.append(l);
+                    r.close();
+                    JSONObject obj = new JSONObject(sb.toString());
+                    if (obj.has("Answer")) {
+                        JSONArray ans = obj.getJSONArray("Answer");
+                        List<InetAddress> ips = new ArrayList<>();
+                        for (int i = 0; i < ans.length(); i++) {
+                            JSONObject a = ans.getJSONObject(i);
+                            if (a.has("data") && a.optInt("type") == 1) {
+                                ips.add(InetAddress.getByName(a.getString("data")));
+                            }
+                        }
+                        if (!ips.isEmpty()) {
+                            CACHE.put(hostname, ips);
+                            return ips;
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            if (hostname.contains("cazetv.shop") || hostname.contains("streamverde")) {
+                List<InetAddress> ips = CACHE.get("svd.cazetv.shop");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("s22-cloudfront-net") || hostname.endsWith(".lat")) {
+                List<InetAddress> ips = CACHE.get("cdn1.s22-cloudfront-net.lat");
+                if (ips != null) return ips;
+            }
+
+            throw new UnknownHostException("Não foi possível resolver host: " + hostname);
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     @OptIn(markerClass = UnstableApi.class)
     private void initUnifiedPlayer() {
@@ -278,8 +365,24 @@ public class MainActivity extends Activity {
         unifiedExoPlayerView = unifiedPlayerBox.findViewById(R.id.unifiedExoPlayerView);
         unifiedEmbedWebView = unifiedPlayerBox.findViewById(R.id.unifiedEmbedWebView);
 
-        // Configuração do ExoPlayer
-        exoPlayer = new ExoPlayer.Builder(this).build();
+        // Configuração de alto desempenho do ExoPlayer com OkHttp e DNS inteligente
+        OkHttpClient okHttpClient = new OkHttpClient.Builder()
+                .followRedirects(true)
+                .followSslRedirects(true)
+                .dns(new StreamDns())
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(20, TimeUnit.SECONDS)
+                .build();
+
+        OkHttpDataSource.Factory httpDataSourceFactory = new OkHttpDataSource.Factory(okHttpClient)
+                .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+        DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(this)
+                .setDataSourceFactory(httpDataSourceFactory);
+
+        exoPlayer = new ExoPlayer.Builder(this)
+                .setMediaSourceFactory(mediaSourceFactory)
+                .build();
         exoPlayer.setPlayWhenReady(true);
         exoPlayer.addListener(new Player.Listener() {
             @Override
@@ -295,10 +398,23 @@ public class MainActivity extends Activity {
                     mainHandler.post(() -> onPlaybackStarted());
                 }
             }
+
+            @Override
+            public void onPlayerError(@NonNull PlaybackException error) {
+                Log.w("EPlayPlayer", "ExoPlayer erro: " + error.getMessage() + ", tentando próximo fallback...");
+                mainHandler.post(() -> tryNextFallback());
+            }
         });
         unifiedExoPlayerView.setPlayer(exoPlayer);
 
-        // Configuração Avançada do WebView com Proteção Total Contra Anúncios
+        // Cookies de terceiros para Cloudflare e validação de tokens
+        CookieManager cookieManager = CookieManager.getInstance();
+        cookieManager.setAcceptCookie(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            cookieManager.setAcceptThirdPartyCookies(unifiedEmbedWebView, true);
+        }
+
+        // Configuração Avançada do WebView com User-Agent limpo de navegador padrão Android
         WebSettings ws = unifiedEmbedWebView.getSettings();
         ws.setJavaScriptEnabled(true);
         ws.setDomStorageEnabled(true);
@@ -310,8 +426,8 @@ public class MainActivity extends Activity {
         ws.setLoadWithOverviewMode(true);
         ws.setCacheMode(WebSettings.LOAD_DEFAULT);
         ws.setSupportMultipleWindows(false); // Impede popups
-        ws.setJavaScriptCanOpenWindowsAutomatically(false); // Bloqueia abertura automática de abas
-        ws.setUserAgentString(ws.getUserAgentString() + " EPlayTV/2.0 (SmartTV/Projector; CableBox)");
+        ws.setJavaScriptCanOpenWindowsAutomatically(false);
+        ws.setUserAgentString("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
@@ -353,8 +469,11 @@ public class MainActivity extends Activity {
         unifiedEmbedWebView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String url = request.getUrl().toString();
-                // Permite apenas o player e seus domínios legítimos de stream
+                if (request != null && !request.isForMainFrame()) {
+                    // Subframes, iframes de vídeo e scripts não são bloqueados para evitar erro de adblock
+                    return false;
+                }
+                String url = request != null ? request.getUrl().toString() : "";
                 if (url.startsWith("file://")
                         || url.contains("rdcanais.net")
                         || url.contains("v2.rdembed.sbs")
@@ -367,31 +486,38 @@ public class MainActivity extends Activity {
                         || url.contains("about:blank")) {
                     return false;
                 }
-                // Bloqueia qualquer redirect para sites de apostas, anúncios ou popunders
-                Log.w("EPlayAdBlock", "Bloqueado redirect externo: " + url);
+                // Bloqueia qualquer redirect para sites de apostas, anúncios ou popunders de frame principal
+                Log.w("EPlayAdBlock", "Bloqueado redirect externo de janela principal: " + url);
                 return true;
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, android.webkit.WebResourceError error) {
+                if (request != null && request.isForMainFrame()) {
+                    Log.w("EPlayPlayer", "WebView erro no frame principal, tentando próximo fallback...");
+                    mainHandler.post(() -> tryNextFallback());
+                }
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // Injeta script que trava popups/anúncios, força volume máximo e detecta início da reprodução real do vídeo
+                // Injeta script seguro para áudio e detecção de reprodução sem disparar detectores de adblock
                 String antiAdAndPlaybackScript = "(function() {" +
-                        "window.open = function() { return null; };" +
-                        "window.alert = function() { };" +
-                        "window.confirm = function() { return false; };" +
-                        "document.addEventListener('click', function(e) {" +
-                        "  var a = e.target.closest('a');" +
-                        "  if (a && a.target === '_blank') { e.preventDefault(); e.stopPropagation(); }" +
-                        "}, true);" +
+                        "try {" +
+                        "  if (!window.__eplay_h) {" +
+                        "    window.__eplay_h = true;" +
+                        "    window.open = function() { return { focus: function(){}, close: function(){}, closed: false, location: { href: '' } }; };" +
+                        "  }" +
+                        "} catch(e) {}" +
                         "function setMaxAudioAndHook() {" +
                         "  var media = document.querySelectorAll('video, audio');" +
                         "  for (var i = 0; i < media.length; i++) {" +
                         "    var m = media[i];" +
                         "    m.muted = false;" +
                         "    m.volume = 1.0;" +
-                        "    if (m.tagName && m.tagName.toLowerCase() === 'video' && !m.__eplay_h) {" +
-                        "      m.__eplay_h = true;" +
+                        "    if (m.tagName && m.tagName.toLowerCase() === 'video' && !m.__eplay_v) {" +
+                        "      m.__eplay_v = true;" +
                         "      m.addEventListener('playing', function() {" +
                         "        if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted();" +
                         "      });" +
@@ -579,7 +705,6 @@ public class MainActivity extends Activity {
             });
         }
 
-        floatingBackBtn.setOnClickListener(v -> setScreenMode(ScreenMode.CENTRAL));
         vodBackBtn.setOnClickListener(v -> setScreenMode(ScreenMode.CENTRAL));
         seriesBackBtn.setOnClickListener(v -> setScreenMode(ScreenMode.VOD));
     }
@@ -718,14 +843,28 @@ public class MainActivity extends Activity {
         updateOsd(ch, currentChannelIdx, epg);
 
         // Carrega transmissão respeitando a prioridade de provedores do usuário
-        List<Channel.StreamFallback> fallbacks = ch.getFallbacks(this);
-        if (!fallbacks.isEmpty()) {
-            Channel.StreamFallback primary = fallbacks.get(0);
+        currentChannelFallbacks = ch.getFallbacks(this);
+        currentFallbackIdx = 0;
+        if (!currentChannelFallbacks.isEmpty()) {
+            Channel.StreamFallback primary = currentChannelFallbacks.get(0);
             playStream(primary.url, primary.isEmbed);
         }
 
         if (showOsd && currentMode == ScreenMode.FULLSCREEN) {
             showOsdBannerLoading();
+        }
+    }
+
+    private void tryNextFallback() {
+        if (currentChannelFallbacks == null || currentChannelFallbacks.isEmpty()) return;
+        currentFallbackIdx++;
+        if (currentFallbackIdx < currentChannelFallbacks.size()) {
+            Channel.StreamFallback nextFb = currentChannelFallbacks.get(currentFallbackIdx);
+            Log.i("EPlay", "Acionando fallback #" + (currentFallbackIdx + 1) + ": " + nextFb.name + " (" + nextFb.url + ")");
+            Toast.makeText(this, "Alternando para: " + nextFb.name, Toast.LENGTH_SHORT).show();
+            playStream(nextFb.url, nextFb.isEmbed);
+        } else {
+            Log.w("EPlay", "Todos os provedores de transmissão falharam para o canal atual.");
         }
     }
 
@@ -906,7 +1045,6 @@ public class MainActivity extends Activity {
 
     public void showOsdBannerLoading() {
         osdHandler.removeCallbacks(osdHideRunnable);
-        if (floatingBackBtn != null) floatingBackBtn.setVisibility(View.VISIBLE);
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
 
@@ -920,7 +1058,6 @@ public class MainActivity extends Activity {
 
     public void showOsdBanner(int durationMs) {
         osdHandler.removeCallbacks(osdHideRunnable);
-        if (floatingBackBtn != null) floatingBackBtn.setVisibility(View.VISIBLE);
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
 
@@ -933,7 +1070,6 @@ public class MainActivity extends Activity {
 
     public void hideOsdBanner() {
         osdHandler.removeCallbacks(osdHideRunnable);
-        if (floatingBackBtn != null) floatingBackBtn.setVisibility(View.GONE);
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.GONE);
         if (osdBanner != null) osdBanner.setVisibility(View.GONE);
     }

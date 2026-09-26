@@ -403,27 +403,6 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <!-- BOTÃO VOLTAR FLUTUANTE (CANTO SUPERIOR ESQUERDO) -->
-        <TextView
-            android:id="@+id/floatingBackBtn"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|start"
-            android:layout_margin="16dp"
-            android:background="@drawable/pill_focus_bg"
-            android:clickable="true"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:paddingStart="16dp"
-            android:paddingTop="8dp"
-            android:paddingEnd="16dp"
-            android:paddingBottom="8dp"
-            android:text="⬅ VOLTAR À CENTRAL"
-            android:textColor="#FFC107"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:visibility="gone" />
-
         <!-- BADGE DO CANAL NO CANTO SUPERIOR DIREITO -->
         <LinearLayout
             android:id="@+id/topChannelBadge"

@@ -18,6 +18,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
@@ -28,7 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Calendar;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -43,12 +44,12 @@ public class EpgEngine {
 
     private static final String TAG = "EPlayEPG";
     private static final String[] EPG_URLS = {
-            "https://raw.githubusercontent.com/limaalef/BrazilTVEPG/main/epg.xml",
-            "https://iptv-epg.org/files/epg-br.xml"
+            "https://iptv-epg.org/files/epg-br.xml",
+            "https://raw.githubusercontent.com/limaalef/BrazilTVEPG/main/epg.xml"
     };
     private static final String PREF_NAME = "epg_prefs";
     private static final String KEY_LAST_SYNC = "last_sync_time";
-    private static final String CACHE_FILE = "epg_cache.json";
+    private static final String CACHE_FILE = "epg_cache_v2.json";
 
     public interface OnEpgUpdatedListener {
         void onEpgUpdated();
@@ -70,19 +71,7 @@ public class EpgEngine {
         }
     }
 
-    public static class ChannelSchedule {
-        public ProgramInfo current;
-        public ProgramInfo next;
-
-        public ChannelSchedule() {}
-
-        public ChannelSchedule(ProgramInfo current, ProgramInfo next) {
-            this.current = current;
-            this.next = next;
-        }
-    }
-
-    private static final Map<String, ChannelSchedule> liveEpgMap = new ConcurrentHashMap<>();
+    private static final Map<String, List<ProgramInfo>> liveEpgMap = new ConcurrentHashMap<>();
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
     private static OnEpgUpdatedListener updateListener;
@@ -110,6 +99,40 @@ public class EpgEngine {
         }
     }
 
+    private static InputStream openStreamWithRedirects(String initialUrl) throws IOException {
+        String currentUrl = initialUrl;
+        for (int redirects = 0; redirects < 6; redirects++) {
+            URL url = new URL(currentUrl);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(45000);
+            conn.setInstanceFollowRedirects(true);
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0");
+            conn.setRequestProperty("Accept", "text/xml,application/xml,*/*");
+
+            int code = conn.getResponseCode();
+            if (code == HttpURLConnection.HTTP_MOVED_TEMP || code == HttpURLConnection.HTTP_MOVED_PERM || code == 307 || code == 308) {
+                String loc = conn.getHeaderField("Location");
+                conn.disconnect();
+                if (loc != null) {
+                    if (loc.startsWith("/")) {
+                        currentUrl = url.getProtocol() + "://" + url.getHost() + loc;
+                    } else {
+                        currentUrl = loc;
+                    }
+                    continue;
+                }
+            }
+            if (code == HttpURLConnection.HTTP_OK) {
+                return conn.getInputStream();
+            }
+            conn.disconnect();
+            throw new IOException("HTTP " + code + " ao acessar " + currentUrl);
+        }
+        throw new IOException("Muitos redirecionamentos em " + initialUrl);
+    }
+
     public static void syncFromNetwork(Context context) {
         if (isSyncing) return;
         isSyncing = true;
@@ -121,30 +144,20 @@ public class EpgEngine {
                 boolean downloaded = false;
 
                 for (String epgUrl : EPG_URLS) {
+                    InputStream is = null;
                     try {
                         Log.d(TAG, "Tentando baixar EPG da URL: " + epgUrl);
-                        URL url = new URL(epgUrl);
-                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                        conn.setRequestMethod("GET");
-                        conn.setConnectTimeout(10000);
-                        conn.setReadTimeout(30000);
-                        conn.setRequestProperty("User-Agent", "EPlay Native Android TV 2.0");
-
-                        int code = conn.getResponseCode();
-                        if (code == 200) {
-                            InputStream is = conn.getInputStream();
-                            parseXmltv(is);
-                            is.close();
-                            conn.disconnect();
-                            downloaded = true;
-                            Log.i(TAG, "EPG sincronizado com sucesso a partir de " + epgUrl + "! Canais mapeados: " + liveEpgMap.size());
-                            break;
-                        } else {
-                            Log.w(TAG, "HTTP " + code + " ao tentar " + epgUrl);
-                            conn.disconnect();
-                        }
+                        is = openStreamWithRedirects(epgUrl);
+                        parseXmltv(is);
+                        downloaded = true;
+                        Log.i(TAG, "EPG sincronizado com sucesso a partir de " + epgUrl + "! Canais mapeados: " + liveEpgMap.size());
+                        break;
                     } catch (Exception e) {
                         Log.w(TAG, "Falha ao baixar EPG de " + epgUrl + ": " + e.getMessage());
+                    } finally {
+                        if (is != null) {
+                            try { is.close(); } catch (Exception ignored) {}
+                        }
                     }
                 }
 
@@ -213,8 +226,8 @@ public class EpgEngine {
                             long startMs = parseXmltvDate(currentStart);
                             long stopMs = parseXmltvDate(currentStop);
 
-                            // Descarta programas antigos (> 1 hora atrás) ou distantes no futuro (> 18h)
-                            if (stopMs >= (now - 3600000L) && startMs <= (now + 18 * 3600000L)) {
+                            // Mantém programação de 2h atrás até 36h no futuro
+                            if (stopMs >= (now - 2 * 3600000L) && startMs <= (now + 36 * 3600000L)) {
                                 String key = normalizeKey(currentChannel);
                                 if (!key.isEmpty()) {
                                     List<ProgramInfo> list = tempMap.computeIfAbsent(key, k -> new ArrayList<>());
@@ -233,26 +246,11 @@ public class EpgEngine {
                 eventType = parser.next();
             }
 
-            // Agora constrói o mapa final com current e next
+            // Ordena cada lista por horário de início e transfere para o mapa global
             for (Map.Entry<String, List<ProgramInfo>> entry : tempMap.entrySet()) {
-                String key = entry.getKey();
                 List<ProgramInfo> progs = entry.getValue();
-                ProgramInfo current = null;
-                ProgramInfo next = null;
-
-                for (ProgramInfo p : progs) {
-                    if (p.startMs <= now && now < p.stopMs) {
-                        current = p;
-                    } else if (p.startMs >= now) {
-                        if (next == null || p.startMs < next.startMs) {
-                            next = p;
-                        }
-                    }
-                }
-
-                if (current != null || next != null) {
-                    liveEpgMap.put(key, new ChannelSchedule(current, next));
-                }
+                Collections.sort(progs, (a, b) -> Long.compare(a.startMs, b.startMs));
+                liveEpgMap.put(entry.getKey(), progs);
             }
 
         } catch (Exception e) {
@@ -260,12 +258,24 @@ public class EpgEngine {
         }
     }
 
-    private static long parseXmltvDate(String str) {
+    public static long parseXmltvDate(String str) {
         if (str == null || str.length() < 14) return 0;
         try {
             String trimmed = str.trim();
             if (trimmed.length() >= 20 && (trimmed.contains("+") || trimmed.contains("-"))) {
+                int signIdx = Math.max(trimmed.lastIndexOf('+'), trimmed.lastIndexOf('-'));
+                if (signIdx > 0) {
+                    String datePart = trimmed.substring(0, signIdx).trim();
+                    String tzPart = trimmed.substring(signIdx).replace(":", "");
+                    trimmed = datePart + " " + tzPart;
+                }
                 SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss Z", Locale.US);
+                Date d = sdf.parse(trimmed);
+                if (d != null) return d.getTime();
+            }
+            if (trimmed.endsWith("Z") || trimmed.endsWith("z")) {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss'Z'", Locale.US);
+                sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
                 Date d = sdf.parse(trimmed);
                 if (d != null) return d.getTime();
             }
@@ -282,14 +292,15 @@ public class EpgEngine {
         if (raw == null) return "";
         String s = raw.toLowerCase(Locale.ROOT);
         s = Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
-        s = s.replaceAll("_local", "")
+        s = s.replaceAll("&", "and")
+                .replaceAll("\\+", "plus")
+                .replaceAll("_local", "")
                 .replaceAll("\\.br$", "")
                 .replaceAll("br$", "")
                 .replaceAll("\\bhd\\b", "")
                 .replaceAll("\\buhd\\b", "")
                 .replaceAll("\\b4k\\b", "")
                 .replaceAll("\\bfast\\b", "")
-                .replaceAll("\\+", "")
                 .replaceAll("[^a-z0-9]", "");
         return s;
     }
@@ -311,38 +322,65 @@ public class EpgEngine {
         String idKey = normalizeKey(ch.id);
         String nameKey = normalizeKey(ch.name);
 
-        ChannelSchedule sched = liveEpgMap.get(idKey);
-        if (sched == null) sched = liveEpgMap.get(nameKey);
+        List<ProgramInfo> progs = liveEpgMap.get(idKey);
+        if (progs == null || progs.isEmpty()) progs = liveEpgMap.get(nameKey);
 
-        if (sched == null) {
-            for (Map.Entry<String, ChannelSchedule> entry : liveEpgMap.entrySet()) {
+        if (progs == null || progs.isEmpty()) {
+            for (Map.Entry<String, List<ProgramInfo>> entry : liveEpgMap.entrySet()) {
                 String k = entry.getKey();
                 if ((!idKey.isEmpty() && (k.contains(idKey) || idKey.contains(k)))
                         || (!nameKey.isEmpty() && (k.contains(nameKey) || nameKey.contains(k)))) {
-                    sched = entry.getValue();
+                    progs = entry.getValue();
                     break;
                 }
             }
         }
 
-        SimpleDateFormat tf = new SimpleDateFormat("HH:mm", Locale.getDefault());
+        if (progs != null && !progs.isEmpty()) {
+            ProgramInfo cur = null;
+            ProgramInfo nxt = null;
 
-        if (sched != null && sched.current != null && sched.current.startMs <= now && now <= sched.current.stopMs) {
-            ProgramInfo cur = sched.current;
-            ProgramInfo nxt = sched.next;
+            for (ProgramInfo p : progs) {
+                if (p.startMs <= now && now < p.stopMs) {
+                    cur = p;
+                } else if (p.startMs >= now) {
+                    if (nxt == null || p.startMs < nxt.startMs) {
+                        nxt = p;
+                    }
+                }
+            }
 
-            long dur = Math.max(60000, cur.stopMs - cur.startMs);
-            long elapsed = Math.max(0, now - cur.startMs);
-            int progress = (int) Math.min(99, Math.max(2, (elapsed * 100) / dur));
-            int remainingMin = (int) Math.max(1, (cur.stopMs - now) / 60000);
+            SimpleDateFormat tf = new SimpleDateFormat("HH:mm", Locale.getDefault());
 
-            String startStr = tf.format(new Date(cur.startMs));
-            String endStr = tf.format(new Date(cur.stopMs));
-            String nextTitle = (nxt != null && nxt.title != null) ? nxt.title : "SEM DADOS DE PROGRAMAÇÃO";
-            String nextStart = (nxt != null && nxt.startMs > 0) ? tf.format(new Date(nxt.startMs)) : "--:--";
-            String synopsis = (cur.desc != null && !cur.desc.isEmpty()) ? cur.desc : "Transmissão digital oficial ao vivo em alta definição.";
+            if (cur != null) {
+                long dur = Math.max(60000, cur.stopMs - cur.startMs);
+                long elapsed = Math.max(0, now - cur.startMs);
+                int progress = (int) Math.min(99, Math.max(2, (elapsed * 100) / dur));
+                int remainingMin = (int) Math.max(1, (cur.stopMs - now) / 60000);
 
-            return new LiveSchedule(cur.title, synopsis, startStr, endStr, progress, remainingMin, nextTitle, nextStart);
+                String startStr = tf.format(new Date(cur.startMs));
+                String endStr = tf.format(new Date(cur.stopMs));
+                String nextTitle = (nxt != null && nxt.title != null) ? nxt.title : "SEM DADOS DE PROGRAMAÇÃO";
+                String nextStart = (nxt != null && nxt.startMs > 0) ? tf.format(new Date(nxt.startMs)) : "--:--";
+                String synopsis = (cur.desc != null && !cur.desc.isEmpty()) ? cur.desc : "Transmissão digital oficial ao vivo em alta definição.";
+
+                return new LiveSchedule(cur.title, synopsis, startStr, endStr, progress, remainingMin, nextTitle, nextStart);
+            } else if (nxt != null && (nxt.startMs - now) <= 30 * 60000L) {
+                // Intervalo curto antes do próximo programa
+                String nextStart = tf.format(new Date(nxt.startMs));
+                String nextEnd = tf.format(new Date(nxt.stopMs));
+                int minUntil = (int) Math.max(1, (nxt.startMs - now) / 60000);
+                return new LiveSchedule(
+                        "A Seguir: " + nxt.title,
+                        (nxt.desc != null && !nxt.desc.isEmpty()) ? nxt.desc : "Em instantes na programação.",
+                        nextStart,
+                        nextEnd,
+                        0,
+                        minUntil,
+                        nxt.title,
+                        nextStart
+                );
+            }
         }
 
         // Sem dados reais no XMLTV: NUNCA usar valores falsos!
@@ -378,8 +416,8 @@ public class EpgEngine {
             if (file.exists()) {
                 FileInputStream fis = new FileInputStream(file);
                 BufferedReader reader = new BufferedReader(new InputStreamReader(fis, StandardCharsets.UTF_8));
-                Type type = new TypeToken<Map<String, ChannelSchedule>>() {}.getType();
-                Map<String, ChannelSchedule> map = gson.fromJson(reader, type);
+                Type type = new TypeToken<Map<String, List<ProgramInfo>>>() {}.getType();
+                Map<String, List<ProgramInfo>> map = gson.fromJson(reader, type);
                 reader.close();
                 fis.close();
                 if (map != null && !map.isEmpty()) {

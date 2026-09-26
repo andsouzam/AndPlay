@@ -73,7 +73,8 @@ public class Channel implements Serializable {
                 }
                 serverNum++;
             } else if (com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE.equals(prov)) {
-                list.add(new StreamFallback("StreamVerde (HD " + serverNum + ")", "https://streamverde.net/canais/" + cleanSlug + "/embed", true));
+                String svSlug = cleanSlug.replace("-", "").toLowerCase();
+                list.add(new StreamFallback("StreamVerde (HLS Direto)", "https://svd.cazetv.shop/streamverde/" + svSlug + ".m3u8", false));
                 serverNum++;
             }
         }
