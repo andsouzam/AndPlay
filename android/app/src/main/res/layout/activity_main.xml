@@ -135,6 +135,8 @@
                         android:focusableInTouchMode="true"
                         android:padding="3dp">
 
+                        <requestFocus />
+
                         <!-- CONTAINER ONDE O REPRODUTOR UNIFICADO FICA NO MODO PIP -->
                         <FrameLayout
                             android:id="@+id/pipPlayerHost"
@@ -566,11 +568,11 @@
         android:layout_height="match_parent"
         android:layout_gravity="start"
         android:background="#F8080E1C"
-        android:clickable="true"
+        android:clickable="false"
         android:clipChildren="true"
         android:clipToPadding="true"
         android:elevation="30dp"
-        android:focusable="true"
+        android:focusable="false"
         android:orientation="vertical"
         android:padding="16dp"
         android:visibility="gone">
@@ -629,7 +631,8 @@
             android:paddingEnd="2dp"
             android:paddingTop="4dp"
             android:paddingBottom="4dp"
-            android:orientation="horizontal" />
+            android:orientation="horizontal"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
         <!-- LISTA DE CANAIS DA GAVETA -->
         <androidx.recyclerview.widget.RecyclerView
@@ -642,7 +645,8 @@
             android:paddingStart="4dp"
             android:paddingEnd="4dp"
             android:paddingTop="2dp"
-            android:paddingBottom="12dp" />
+            android:paddingBottom="12dp"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
     </LinearLayout>
 
 

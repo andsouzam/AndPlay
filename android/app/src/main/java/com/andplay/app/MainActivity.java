@@ -277,6 +277,8 @@ public class MainActivity extends Activity {
         btnDrawerOptions = findViewById(R.id.btnDrawerOptions);
         drawerCatsRecycler = findViewById(R.id.drawerCatsRecycler);
         drawerChannelsRecycler = findViewById(R.id.drawerChannelsRecycler);
+        drawerCatsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        drawerChannelsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
 
         // VOD
         vodLayout = findViewById(R.id.vodLayout);
@@ -908,6 +910,12 @@ public class MainActivity extends Activity {
                 if (!allChannels.isEmpty()) {
                     tuneChannel(0, false);
                 }
+
+                if (pipContainer != null) {
+                    pipContainer.setFocusable(true);
+                    pipContainer.setFocusableInTouchMode(true);
+                    pipContainer.postDelayed(() -> pipContainer.requestFocus(), 250);
+                }
             });
 
             // Pré-carrega filmes em segundo plano
@@ -1009,9 +1017,21 @@ public class MainActivity extends Activity {
         sportsRail.setAdapter(new SportsRailAdapter(this, allSports, ev -> playSportsEvent(ev)));
     }
 
+    private static boolean isDemoMovie(Movie m) {
+        if (m == null) return false;
+        String n = m.name != null ? m.name.toLowerCase() : "";
+        String t = m.title != null ? m.title.toLowerCase() : "";
+        return n.contains("demo") || t.contains("demo");
+    }
+
     private void setupMoviesRail() {
         if (cachedMovies == null || cachedMovies.isEmpty()) return;
-        List<Movie> subList = cachedMovies.subList(0, Math.min(25, cachedMovies.size()));
+        List<Movie> subList = new ArrayList<>();
+        for (Movie m : cachedMovies) {
+            if (isDemoMovie(m)) continue;
+            subList.add(m);
+            if (subList.size() >= 25) break;
+        }
         moviesRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         moviesRail.setAdapter(new MoviePosterAdapter(this, subList, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
@@ -1226,6 +1246,7 @@ public class MainActivity extends Activity {
         List<Movie> filtered = new ArrayList<>();
         if (cachedMovies != null) {
             for (Movie m : cachedMovies) {
+                if (isDemoMovie(m)) continue;
                 if ("ALL".equals(catId) || (m.category_id != null && m.category_id.equals(catId))) {
                     filtered.add(m);
                     if (filtered.size() >= 100) break;
@@ -1796,7 +1817,12 @@ public class MainActivity extends Activity {
             closeDrawer();
             hideOsdBanner();
             attachPlayerToHost(pipPlayerHost);
-            pipContainer.requestFocus();
+            if (pipContainer != null) {
+                pipContainer.postDelayed(() -> {
+                    pipContainer.setFocusable(true);
+                    pipContainer.requestFocus();
+                }, 100);
+            }
             if ((currentActiveStreamUrl == null || currentActiveStreamUrl.isEmpty()) && !allChannels.isEmpty()) {
                 tuneChannel(currentChannelIdx, false);
             }
@@ -1895,6 +1921,7 @@ public class MainActivity extends Activity {
     private void filterMoviesByCat(String catId, List<Movie> all) {
         List<Movie> filtered = new ArrayList<>();
         for (Movie m : all) {
+            if (isDemoMovie(m)) continue;
             if ("ALL".equals(catId) || (m.category_id != null && m.category_id.equals(catId))) {
                 filtered.add(m);
                 if (filtered.size() >= 120) break;
@@ -1940,6 +1967,9 @@ public class MainActivity extends Activity {
         List<Movie> converted = new ArrayList<>();
         List<Series> rawFiltered = new ArrayList<>();
         for (Series s : all) {
+            String nameLow = s.name != null ? s.name.toLowerCase() : "";
+            String titleLow = s.title != null ? s.title.toLowerCase() : "";
+            if (nameLow.contains("demo") || titleLow.contains("demo")) continue;
             if ("ALL".equals(catId) || (s.category_id != null && s.category_id.equals(catId))) {
                 rawFiltered.add(s);
                 Movie pseudo = new Movie();
@@ -2149,25 +2179,22 @@ public class MainActivity extends Activity {
                 }
             }
 
-            // Em tela cheia:
-            if (currentMode == ScreenMode.FULLSCREEN) {
-                // CENÁRIO 1: GAVETA LATERAL ESTÁ ABERTA
-                if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
-                    resetDrawerTimeout();
+            // CENÁRIO 1: GAVETA LATERAL ESTÁ ABERTA (qualquer modo de tela)
+            if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
+                resetDrawerTimeout();
 
-                    // D-pad Esquerdo e Direito alternam entre grupos/categorias de canais (sem fechar a gaveta)
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                        switchDrawerCategory(-1);
-                        return true;
-                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                        switchDrawerCategory(1);
-                        return true;
-                    }
-                    // UP e DOWN navegam normalmente pelos canais do RecyclerView
+                // D-pad Esquerdo e Direito alternam entre grupos/categorias de canais (sem fechar a gaveta)
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    switchDrawerCategory(-1);
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    switchDrawerCategory(1);
+                    return true;
                 }
-                // CENÁRIO 2: GAVETA LATERAL ESTÁ FECHADA
-                else {
-                    if (!isPlayingVod) {
+                // UP e DOWN navegam normalmente pelos itens do RecyclerView
+            } else if (currentMode == ScreenMode.FULLSCREEN) {
+                // CENÁRIO 2: GAVETA LATERAL ESTÁ FECHADA EM TELA CHEIA
+                if (!isPlayingVod) {
                         // D-pad Esquerdo abre a gaveta lateral
                         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                             if (pendingZapChannelIdx >= 0) {
@@ -2236,7 +2263,6 @@ public class MainActivity extends Activity {
                     }
                 }
             }
-        }
 
         // Botão Voltar (Back) com pilha inteligente
         if (keyCode == KeyEvent.KEYCODE_BACK && action == KeyEvent.ACTION_UP) {

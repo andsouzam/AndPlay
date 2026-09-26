@@ -16,9 +16,6 @@ public class Series implements Serializable {
     public String last_modified;
     public String rating;
     public String rating_5based;
-    public String backdrop_path;
-    public String youtube_trailer;
-    public String episode_run_time;
     public String category_id;
 
     public String getDisplayTitle() {
