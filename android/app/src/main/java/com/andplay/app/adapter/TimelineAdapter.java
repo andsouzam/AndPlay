@@ -8,6 +8,7 @@ import android.view.ViewGroup;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 import com.andplay.app.R;
 import com.andplay.app.epg.EpgEngine.TimelineProgram;
@@ -23,12 +24,18 @@ public class TimelineAdapter extends RecyclerView.Adapter<TimelineAdapter.ViewHo
 
     private final Context context;
     private final List<TimelineProgram> programs;
+    private final boolean isSelectable;
     private final OnTimelineActionListener listener;
 
-    public TimelineAdapter(Context context, List<TimelineProgram> programs, OnTimelineActionListener listener) {
+    public TimelineAdapter(Context context, List<TimelineProgram> programs, boolean isSelectable, OnTimelineActionListener listener) {
         this.context = context;
         this.programs = programs;
+        this.isSelectable = isSelectable;
         this.listener = listener;
+    }
+
+    public TimelineAdapter(Context context, List<TimelineProgram> programs, OnTimelineActionListener listener) {
+        this(context, programs, true, listener);
     }
 
     @NonNull
@@ -66,19 +73,33 @@ public class TimelineAdapter extends RecyclerView.Adapter<TimelineAdapter.ViewHo
             holder.remaining.setVisibility(View.GONE);
         }
 
-        holder.itemView.setOnClickListener(v -> {
-            if (listener != null) listener.onProgramClick(prog);
-        });
+        if (isSelectable) {
+            holder.itemView.setFocusable(true);
+            holder.itemView.setClickable(true);
+            holder.itemView.setFocusableInTouchMode(true);
+            holder.itemView.setForeground(ContextCompat.getDrawable(context, R.drawable.card_focus_fg));
 
-        holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
-            v.setSelected(hasFocus);
-            v.setScaleX(1.0f);
-            v.setScaleY(1.0f);
-            v.setElevation(hasFocus ? 6f : 0f);
-            if (hasFocus && listener != null) {
-                listener.onProgramFocus(prog, holder.getAdapterPosition());
-            }
-        });
+            holder.itemView.setOnClickListener(v -> {
+                if (listener != null) listener.onProgramClick(prog);
+            });
+
+            holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
+                v.setSelected(hasFocus);
+                v.setScaleX(1.0f);
+                v.setScaleY(1.0f);
+                v.setElevation(hasFocus ? 6f : 0f);
+                if (hasFocus && listener != null) {
+                    listener.onProgramFocus(prog, holder.getAdapterPosition());
+                }
+            });
+        } else {
+            holder.itemView.setFocusable(false);
+            holder.itemView.setClickable(false);
+            holder.itemView.setFocusableInTouchMode(false);
+            holder.itemView.setForeground(null);
+            holder.itemView.setOnClickListener(null);
+            holder.itemView.setOnFocusChangeListener(null);
+        }
     }
 
     @Override

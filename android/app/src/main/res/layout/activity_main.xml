@@ -136,6 +136,7 @@
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
+                        android:nextFocusRight="@+id/btnNavMovies"
                         android:padding="3dp">
 
                         <requestFocus />
@@ -211,6 +212,9 @@
                                 android:clickable="true"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
+                                android:nextFocusLeft="@+id/pipContainer"
+                                android:nextFocusRight="@+id/btnNavSeries"
+                                android:nextFocusDown="@+id/btnNavSports"
                                 android:gravity="center"
                                 android:orientation="vertical">
 
@@ -239,6 +243,8 @@
                                 android:clickable="true"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
+                                android:nextFocusLeft="@+id/btnNavMovies"
+                                android:nextFocusDown="@+id/btnNavEpg"
                                 android:gravity="center"
                                 android:orientation="vertical">
 
@@ -279,6 +285,9 @@
                                 android:clickable="true"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
+                                android:nextFocusLeft="@+id/pipContainer"
+                                android:nextFocusUp="@+id/btnNavMovies"
+                                android:nextFocusRight="@+id/btnNavEpg"
                                 android:gravity="center"
                                 android:orientation="vertical">
 
@@ -1104,12 +1113,37 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- LINHA DO TEMPO HORIZONTAL (RECYCLERVIEW) -->
+        <!-- LINHA DO TEMPO HORIZONTAL DO CANAL ATUAL (INTERATIVA) -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/guideTimelineRecycler"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:orientation="horizontal"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
+        <!-- PRÓXIMO CANAL: PREVIEW DA LINHA DO TEMPO (APENAS VISÍVEL, NÃO SELECIONÁVEL) -->
+        <TextView
+            android:id="@+id/guideNextChannelPreviewLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
+            android:text="▼ A SEGUIR NO PRÓXIMO CANAL: 002 • SBT HD"
+            android:textColor="#8899AA"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/guideNextTimelineRecycler"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:alpha="0.75"
+            android:clickable="false"
+            android:focusable="false"
+            android:focusableInTouchMode="false"
             android:clipChildren="false"
             android:clipToPadding="false"
             android:orientation="horizontal"
@@ -1119,7 +1153,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="14dp"
             android:gravity="center"
             android:text="▲ ▼ Alternar Canal  |  ◄ ► Explorar Linha do Tempo  |  OK: Assistir Canal  |  VOLTAR: Fechar"
             android:textColor="#888888"

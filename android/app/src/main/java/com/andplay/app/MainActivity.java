@@ -170,10 +170,18 @@ public class MainActivity extends Activity {
     private ProgressBar guideHeroProgress;
     private TextView guidePrevChannelHint, guideChannelTitle, guideNextChannelHint;
     private RecyclerView guideTimelineRecycler;
+    private TextView guideNextChannelPreviewLabel;
+    private RecyclerView guideNextTimelineRecycler;
     private TimelineAdapter guideTimelineAdapter;
     private int guideSelectedChannelIdx = 0;
     private List<TimelineProgram> guideCurrentTimeline = new ArrayList<>();
     private boolean suppressNextEnterUp = false;
+    private ScreenMode previousGuideMode = null;
+
+    // Direct Channel Number Tuning
+    private final StringBuilder channelNumberBuffer = new StringBuilder();
+    private final Handler channelNumberHandler = new Handler(Looper.getMainLooper());
+    private final Runnable channelNumberCommitRunnable = this::commitChannelNumberInput;
 
     // Loading Overlay
     private LinearLayout loadingLayout;
@@ -333,6 +341,9 @@ public class MainActivity extends Activity {
         guideNextChannelHint = findViewById(R.id.guideNextChannelHint);
         guideTimelineRecycler = findViewById(R.id.guideTimelineRecycler);
         guideTimelineRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        guideNextChannelPreviewLabel = findViewById(R.id.guideNextChannelPreviewLabel);
+        guideNextTimelineRecycler = findViewById(R.id.guideNextTimelineRecycler);
+        guideNextTimelineRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 
         // Loading
         loadingLayout = findViewById(R.id.loadingLayout);
@@ -1478,10 +1489,10 @@ public class MainActivity extends Activity {
         ChannelRailAdapter adapter = new ChannelRailAdapter(this, filtered, true, (ch, idx) -> {
             int realIdx = allChannels.indexOf(ch);
             int targetIdx = realIdx >= 0 ? realIdx : idx;
-            // Se for o mesmo canal que já está tocando, apenas fecha a gaveta e garante tela cheia
+            // Se for o mesmo canal que já está tocando, abre o guia completo de programação
             if (targetIdx == currentChannelIdx && (currentActiveStreamUrl != null && !currentActiveStreamUrl.isEmpty())) {
                 closeDrawer();
-                setScreenMode(ScreenMode.FULLSCREEN);
+                openFullGuide();
                 return;
             }
             // Canal diferente: destrói conexões anteriores e sintoniza
@@ -2070,7 +2081,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 6));
+        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
         vodGridRecycler.setAdapter(new MoviePosterAdapter(this, filtered, true, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
             public void onMovieClick(Movie movie) {
@@ -2127,7 +2138,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 6));
+        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
         vodGridRecycler.setAdapter(new MoviePosterAdapter(this, converted, true, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
             public void onMovieClick(Movie m) {
@@ -2368,6 +2379,11 @@ public class MainActivity extends Activity {
             if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
                 resetDrawerTimeout();
 
+                // Se o foco estiver no cabeçalho/categorias da gaveta, permite navegação padrão do D-Pad entre as pills
+                if (drawerCatsRecycler != null && drawerCatsRecycler.hasFocus()) {
+                    return super.dispatchKeyEvent(event);
+                }
+
                 if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     RecyclerView.LayoutManager lm = drawerChannelsRecycler != null ? drawerChannelsRecycler.getLayoutManager() : null;
                     if (lm instanceof GridLayoutManager) {
@@ -2409,17 +2425,38 @@ public class MainActivity extends Activity {
                 }
                 // UP e DOWN navegam normalmente pelos itens do RecyclerView
             } else if (currentMode == ScreenMode.SERIES_DETAIL) {
-                // CENÁRIO 2: DETALHES DA SÉRIE - D-pad Esquerdo e Direito alternam temporadas
-                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    switchSeriesSeason(-1);
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    switchSeriesSeason(1);
-                    return true;
+                // CENÁRIO 2: DETALHES DA SÉRIE
+                // DPAD esquerda/direita só alterna temporada se o foco NÃO estiver no seletor de temporadas!
+                // Se o foco estiver nas pills de temporadas, permite navegar e selecionar normalmente.
+                boolean isFocusOnSeasons = (seriesSeasonsRecycler != null && seriesSeasonsRecycler.hasFocus());
+                if (!isFocusOnSeasons) {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                        switchSeriesSeason(-1);
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                        switchSeriesSeason(1);
+                        return true;
+                    }
                 }
             } else if (currentMode == ScreenMode.FULLSCREEN) {
                 // CENÁRIO 3: GAVETA LATERAL ESTÁ FECHADA EM TELA CHEIA
                 if (!isPlayingVod) {
+                        // Entrada direta de canal por número (ex: 1 -> 001, 10 -> 010) com debounce de 2s
+                        boolean isDigit = (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9)
+                                || (keyCode >= KeyEvent.KEYCODE_NUMPAD_0 && keyCode <= KeyEvent.KEYCODE_NUMPAD_9);
+                        if (isDigit) {
+                            int digit = (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9)
+                                    ? (keyCode - KeyEvent.KEYCODE_0)
+                                    : (keyCode - KeyEvent.KEYCODE_NUMPAD_0);
+                            handleDirectChannelDigit(digit);
+                            return true;
+                        }
+                        if (channelNumberBuffer.length() > 0 && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                            channelNumberHandler.removeCallbacks(channelNumberCommitRunnable);
+                            commitChannelNumberInput();
+                            return true;
+                        }
+
                         // D-pad Esquerdo abre a gaveta lateral
                         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                             if (pendingZapChannelIdx >= 0) {
@@ -2576,6 +2613,10 @@ public class MainActivity extends Activity {
         }
         hideOsdBanner();
         if (fullGuideLayout != null) {
+            previousGuideMode = currentMode;
+            if (currentMode == ScreenMode.CENTRAL) {
+                setScreenMode(ScreenMode.FULLSCREEN);
+            }
             fullGuideLayout.setVisibility(View.VISIBLE);
             guideSelectedChannelIdx = (currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) ? currentChannelIdx : 0;
             if (guideClock != null) {
@@ -2589,11 +2630,9 @@ public class MainActivity extends Activity {
     public void closeFullGuide() {
         if (fullGuideLayout != null) {
             fullGuideLayout.setVisibility(View.GONE);
-            if (currentMode == ScreenMode.CENTRAL && pipContainer != null) {
-                pipContainer.postDelayed(() -> {
-                    pipContainer.setFocusable(true);
-                    pipContainer.requestFocus();
-                }, 80);
+            if (previousGuideMode == ScreenMode.CENTRAL) {
+                previousGuideMode = null;
+                setScreenMode(ScreenMode.CENTRAL);
             } else if (currentMode == ScreenMode.FULLSCREEN) {
                 showOsdBanner(3000);
             }
@@ -2616,6 +2655,7 @@ public class MainActivity extends Activity {
 
     private void guideTuneSelectedChannel() {
         int targetIdx = guideSelectedChannelIdx;
+        previousGuideMode = null;
         closeFullGuide();
         if (targetIdx == currentChannelIdx && (currentActiveStreamUrl != null && !currentActiveStreamUrl.isEmpty())) {
             setScreenMode(ScreenMode.FULLSCREEN);
@@ -2655,7 +2695,7 @@ public class MainActivity extends Activity {
             updateGuideHero(guideCurrentTimeline.get(nowIdx), ch, guideSelectedChannelIdx);
         }
 
-        guideTimelineAdapter = new TimelineAdapter(this, guideCurrentTimeline, new TimelineAdapter.OnTimelineActionListener() {
+        guideTimelineAdapter = new TimelineAdapter(this, guideCurrentTimeline, true, new TimelineAdapter.OnTimelineActionListener() {
             @Override
             public void onProgramClick(TimelineProgram program) {
                 guideTuneSelectedChannel();
@@ -2679,6 +2719,25 @@ public class MainActivity extends Activity {
                 if (first != null) first.requestFocus();
             }
         }, 80);
+
+        // LINHA INFERIOR: Preview do próximo canal (somente visível, não selecionável)
+        int nextChIdx = (guideSelectedChannelIdx + 1) % allChannels.size();
+        Channel nextCh = allChannels.get(nextChIdx);
+        if (guideNextChannelPreviewLabel != null) {
+            guideNextChannelPreviewLabel.setText(String.format(Locale.getDefault(), "▼ A SEGUIR NO PRÓXIMO CANAL: %03d • %s", nextChIdx + 1, nextCh.name));
+        }
+        if (guideNextTimelineRecycler != null) {
+            List<TimelineProgram> nextTimeline = EpgEngine.getChannelTimeline(nextCh);
+            guideNextTimelineRecycler.setAdapter(new TimelineAdapter(this, nextTimeline, false, null));
+            int nextNowIdx = 0;
+            for (int i = 0; i < nextTimeline.size(); i++) {
+                if (nextTimeline.get(i).isCurrent) {
+                    nextNowIdx = i;
+                    break;
+                }
+            }
+            guideNextTimelineRecycler.scrollToPosition(nextNowIdx);
+        }
     }
 
     private void updateGuideHero(TimelineProgram prog, Channel ch, int chIdx) {
@@ -2726,6 +2785,68 @@ public class MainActivity extends Activity {
         if (guideHeroSynopsis != null) {
             guideHeroSynopsis.setText(prog.synopsis != null && !prog.synopsis.isEmpty() ? prog.synopsis : "Transmissão digital oficial ao vivo em alta definição.");
         }
+    }
+
+    private void handleDirectChannelDigit(int digit) {
+        channelNumberHandler.removeCallbacks(channelNumberCommitRunnable);
+        if (channelNumberBuffer.length() >= 4) {
+            channelNumberBuffer.setLength(0);
+        }
+        channelNumberBuffer.append(digit);
+        String currentInput = channelNumberBuffer.toString();
+
+        if (topChannelBadge != null) {
+            topChannelBadge.setVisibility(View.VISIBLE);
+        }
+        if (topChNum != null) {
+            topChNum.setText("CH " + currentInput);
+        }
+        if (topChName != null) {
+            topChName.setText("Sintonizando...");
+        }
+        if (osdChNum != null) {
+            osdChNum.setText(currentInput);
+        }
+        showOsdBanner(3000);
+
+        channelNumberHandler.postDelayed(channelNumberCommitRunnable, 2000);
+    }
+
+    private void commitChannelNumberInput() {
+        if (channelNumberBuffer.length() == 0 || allChannels.isEmpty()) return;
+        String inputStr = channelNumberBuffer.toString().trim();
+        channelNumberBuffer.setLength(0);
+        int targetNum = -1;
+        try {
+            targetNum = Integer.parseInt(inputStr);
+        } catch (Exception ignored) {}
+
+        if (targetNum <= 0) return;
+
+        // 1. Prioridade: índice sequencial 1-based (Canal 1 = index 0, Canal 10 = index 9)
+        int targetIdx = targetNum - 1;
+        if (targetIdx >= 0 && targetIdx < allChannels.size()) {
+            destroyCurrentStream();
+            tuneChannel(targetIdx, true);
+            return;
+        }
+
+        // 2. Busca por prefixo numérico no nome do canal (ex: "010 Globo", "12 SBT")
+        for (int i = 0; i < allChannels.size(); i++) {
+            Channel ch = allChannels.get(i);
+            if (ch.name != null) {
+                String digitsOnly = ch.name.replaceAll("^[^0-9]*([0-9]+).*", "$1");
+                try {
+                    if (!digitsOnly.isEmpty() && Integer.parseInt(digitsOnly) == targetNum) {
+                        destroyCurrentStream();
+                        tuneChannel(i, true);
+                        return;
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+
+        Toast.makeText(this, "Canal " + targetNum + " não encontrado", Toast.LENGTH_SHORT).show();
     }
 
     private void showProviderOptionsDialog() {
