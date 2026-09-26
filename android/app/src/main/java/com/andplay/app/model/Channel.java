@@ -43,9 +43,21 @@ public class Channel implements Serializable {
         String cleanSlug = (id != null) ? id.replaceFirst("^canal/", "").replaceFirst("\\.html$", "") : "";
         String rdSlug = cleanSlug.replaceFirst("^telecine-", "telecine").replaceFirst("^hbo-", "hbo");
 
-        // Native stream overrides (YouTube, direct HLS)
+        // Native stream overrides (direct official CDN HLS streams from tvacabo.top)
         if ("recordnews".equals(id)) {
-            list.add(new StreamFallback("HLS Nativo 1080p", "https://jmp2.uk/plu-6102e04e9ab1db0007a980a1.m3u8", false));
+            list.add(new StreamFallback("Record News (HLS Nativo)", "https://rnw-rn-samsungtvplus.otteravision.com/rnw/rn/rnw_rn.m3u8", false));
+        } else if ("sbt".equals(id)) {
+            list.add(new StreamFallback("MaisSBT (HLS Direto)", "https://aovivo.maissbt.com/indexMobile.m3u8", false));
+        } else if ("sbtnews".equals(id)) {
+            list.add(new StreamFallback("SBT News (HLS Direto)", "https://sbtnews.maissbt.com/index.m3u8", false));
+        } else if ("globoba".equals(id) || "tvbahia".equals(id)) {
+            list.add(new StreamFallback("TV Bahia HD (HLS Direto)", "http://hls1.sua.tv/live/globotvbahiafhdbr2/s.m3u8", false));
+        } else if ("tvbrasil".equals(id)) {
+            list.add(new StreamFallback("TV Brasil (HLS Direto)", "https://tvbrasil-stream.ebc.com.br/index.m3u8", false));
+        } else if ("cultura".equals(id) || "tvcultura".equals(id)) {
+            list.add(new StreamFallback("TV Cultura (HLS Direto)", "https://player-tvcultura.stream.uol.com.br/live/tvcultura.m3u8", false));
+        } else if ("nicktoons".equals(id)) {
+            list.add(new StreamFallback("Nicktoons (HLS Direto)", "https://stmv2.srvif.com/nicktoons/nicktoons/playlist.m3u8", false));
         } else if ("bobesponja".equals(id)) {
             list.add(new StreamFallback("HLS Nativo 1080p", "https://jmp2.uk/plu-62545c0b002f4b0007688b61.m3u8", false));
         } else if ("avatar".equals(id)) {
@@ -78,6 +90,9 @@ public class Channel implements Serializable {
                 serverNum++;
             }
         }
+
+        // TV a Cabo secondary embed fallback
+        list.add(new StreamFallback("TVaCabo (HD)", "https://redecanaistv.af/player3/ch.php?canal=" + rdSlug, true));
         return list;
     }
 

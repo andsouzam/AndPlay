@@ -696,7 +696,7 @@ public class ApiClient {
                             ev.homeLogo = homeLogo;
                             ev.awayLogo = awayLogo;
 
-                            // 1. Mapeia canais StreamVerde para as transmissões oficiais da partida
+                            // 1. Mapeia canais StreamVerde e lista de canais candidatos para as transmissões oficiais da partida
                             List<String> detectedSvSlugs = new ArrayList<>();
                             JsonArray embeds = item.has("embeds") && item.get("embeds").isJsonArray() ? item.getAsJsonArray("embeds") : null;
                             if (embeds != null) {
@@ -705,6 +705,9 @@ public class ApiClient {
                                     if (!embEl.isJsonObject()) continue;
                                     JsonObject emb = embEl.getAsJsonObject();
                                     String provider = optString(emb, "provider", "");
+                                    if (!provider.isEmpty() && !ev.candidateChannels.contains(provider)) {
+                                        ev.candidateChannels.add(provider);
+                                    }
 
                                     String provLow = provider.toLowerCase(Locale.ROOT);
                                     if (provLow.contains("sportv 2") || provLow.contains("sportv2")) {
@@ -755,20 +758,6 @@ public class ApiClient {
                                 }
                             }
 
-                            // Inteligência de contingência StreamVerde com base na competição/título
-                            if (detectedSvSlugs.isEmpty()) {
-                                String compLow = (competition + " " + title).toLowerCase(Locale.ROOT);
-                                if (compLow.contains("ufc") || compLow.contains("mma") || compLow.contains("luta") || compLow.contains("boxe")) {
-                                    detectedSvSlugs.add("combate");
-                                } else if (compLow.contains("premier") || compLow.contains("champions") || compLow.contains("europa") || compLow.contains("la liga") || compLow.contains("espanh") || compLow.contains("ingl") || compLow.contains("nations")) {
-                                    detectedSvSlugs.add("espn");
-                                    detectedSvSlugs.add("sportv");
-                                } else {
-                                    detectedSvSlugs.add("premiereclubes");
-                                    detectedSvSlugs.add("sportv");
-                                }
-                            }
-
                             // 1. Adiciona transmissões diretas em HLS do provedor StreamVerde (0 delay, nativo)
                             for (String svSlug : detectedSvSlugs) {
                                 ev.fallbacks.add(new Channel.StreamFallback(
@@ -794,18 +783,6 @@ public class ApiClient {
                                         ));
                                     }
                                 }
-                            }
-
-                            // 3. Fallback de contingência RDCanais HD
-                            String compLow = (competition + " " + title).toLowerCase(Locale.ROOT);
-                            if (compLow.contains("ufc") || compLow.contains("mma")) {
-                                ev.fallbacks.add(new Channel.StreamFallback("RDCanais (Combate)", "https://rdcanais.net/combate", true));
-                            } else if (compLow.contains("nations") || compLow.contains("premier") || compLow.contains("espn")) {
-                                ev.fallbacks.add(new Channel.StreamFallback("RDCanais (ESPN HD)", "https://rdcanais.net/espn", true));
-                                ev.fallbacks.add(new Channel.StreamFallback("RDCanais (SporTV HD)", "https://rdcanais.net/sportv", true));
-                            } else {
-                                ev.fallbacks.add(new Channel.StreamFallback("RDCanais (Premiere HD)", "https://rdcanais.net/premiere", true));
-                                ev.fallbacks.add(new Channel.StreamFallback("RDCanais (SporTV HD)", "https://rdcanais.net/sportv", true));
                             }
 
                             events.add(ev);

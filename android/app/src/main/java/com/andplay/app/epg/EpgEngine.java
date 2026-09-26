@@ -813,4 +813,63 @@ public class EpgEngine {
             Log.w(TAG, "Erro ao ler cache EPG local: " + e.getMessage());
         }
     }
+
+    public static String normalizeForMatch(String s) {
+        if (s == null) return "";
+        String norm = java.text.Normalizer.normalize(s.toLowerCase(Locale.ROOT), java.text.Normalizer.Form.NFD);
+        return norm.replaceAll("[\\p{InCombiningDiacriticalMarks}]", "");
+    }
+
+    public static boolean channelEpgMatchesEvent(Channel ch, com.andplay.app.model.SportsEvent ev) {
+        if (ch == null || ev == null) return false;
+        String evName = normalizeForMatch(ev.name);
+        if (evName.isEmpty()) return false;
+
+        String teamA = "";
+        String teamB = "";
+        String[] parts = evName.split(" (x|vs|v|-) ");
+        if (parts.length >= 2) {
+            teamA = parts[0].replaceAll("[0-9]", "").replace("fc", "").replace("ec", "").replace("cr", "").trim();
+            teamB = parts[1].replaceAll("[0-9]", "").replace("fc", "").replace("ec", "").replace("cr", "").trim();
+        }
+
+        // 1. Verifica no LiveSchedule atual do canal
+        LiveSchedule live = getLiveSchedule(ch);
+        if (live != null) {
+            String schedText = normalizeForMatch(live.nowTitle + " " + live.synopsis + " " + live.nextTitle);
+            if (!teamA.isEmpty() && teamA.length() >= 4 && schedText.contains(teamA)) return true;
+            if (!teamB.isEmpty() && teamB.length() >= 4 && schedText.contains(teamB)) return true;
+        }
+
+        // 2. Verifica na grade completa de programas
+        List<String> candidates = getSearchAliases(ch);
+        List<ProgramInfo> progs = null;
+        for (String cand : candidates) {
+            if (cand.isEmpty()) continue;
+            progs = liveEpgMap.get(cand);
+            if (progs != null && !progs.isEmpty()) break;
+        }
+
+        if (progs != null) {
+            long now = System.currentTimeMillis();
+            long windowStart = now - (3 * 3600 * 1000L);
+            long windowEnd = now + (6 * 3600 * 1000L);
+
+            for (ProgramInfo p : progs) {
+                if (p.stopMs < windowStart || p.startMs > windowEnd) continue;
+                String pText = normalizeForMatch(p.title + " " + (p.desc != null ? p.desc : ""));
+                if (!teamA.isEmpty() && teamA.length() >= 4 && pText.contains(teamA)) return true;
+                if (!teamB.isEmpty() && teamB.length() >= 4 && pText.contains(teamB)) return true;
+            }
+        }
+
+        // 3. Verifica dados embutidos (ch.now)
+        if (ch.now != null) {
+            String chNow = normalizeForMatch(ch.now);
+            if (!teamA.isEmpty() && teamA.length() >= 4 && chNow.contains(teamA)) return true;
+            if (!teamB.isEmpty() && teamB.length() >= 4 && chNow.contains(teamB)) return true;
+        }
+
+        return false;
+    }
 }

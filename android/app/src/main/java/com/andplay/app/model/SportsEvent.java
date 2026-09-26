@@ -14,6 +14,7 @@ public class SportsEvent implements Serializable {
     public String awayLogo;
     public String embedUrl;
     public String hlsUrl;
+    public List<String> candidateChannels = new ArrayList<>();
     public List<Channel.StreamFallback> fallbacks = new ArrayList<>();
 
     public String getDisplayName() {

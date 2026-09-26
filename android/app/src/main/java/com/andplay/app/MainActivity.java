@@ -31,6 +31,9 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebResourceError;
+import android.widget.EditText;
+import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -152,6 +155,8 @@ public class MainActivity extends Activity {
     // VOD Views
     private LinearLayout vodLayout;
     private TextView vodHeroTitle, vodHeroRating, vodHeroYear, vodHeroGenre, vodHeroPlot;
+    private TextView btnVodSearch;
+    private boolean isViewingSeries = false;
     private RecyclerView vodCatsRecycler;
     private RecyclerView vodGridRecycler;
 
@@ -264,6 +269,8 @@ public class MainActivity extends Activity {
         ExoPlayer exoPlayer;
         PlayerView playerView;
         boolean isPlayingEmbed;
+        List<Channel.StreamFallback> fallbacks;
+        int currentFallbackIdx = 0;
     }
     private final MosaicSlotItem[] mosaicSlots = new MosaicSlotItem[4];
 
@@ -342,6 +349,13 @@ public class MainActivity extends Activity {
         vodHeroPlot = findViewById(R.id.vodHeroPlot);
         vodCatsRecycler = findViewById(R.id.vodCatsRecycler);
         vodGridRecycler = findViewById(R.id.vodGridRecycler);
+        btnVodSearch = findViewById(R.id.btnVodSearch);
+        if (btnVodSearch != null) {
+            btnVodSearch.setOnClickListener(v -> showVodSearchDialog());
+            btnVodSearch.setOnFocusChangeListener((v, hasFocus) -> {
+                btnVodSearch.setTextColor(hasFocus ? android.graphics.Color.BLACK : android.graphics.Color.WHITE);
+            });
+        }
 
         // Series Detail
         seriesDetailLayout = findViewById(R.id.seriesDetailLayout);
@@ -562,19 +576,63 @@ public class MainActivity extends Activity {
         MosaicSlotItem slot = mosaicSlots[slotIdx];
         clearMosaicSlot(slot);
         slot.channel = ch;
+        slot.fallbacks = ch.getFallbacks(this);
+        slot.currentFallbackIdx = 0;
+
+        playMosaicSlotFallback(slotIdx);
+    }
+
+    private void tryNextMosaicFallback(int slotIdx) {
+        if (slotIdx < 0 || slotIdx >= 4) return;
+        MosaicSlotItem slot = mosaicSlots[slotIdx];
+        if (slot == null || slot.fallbacks == null) return;
+        slot.currentFallbackIdx++;
+        if (slot.currentFallbackIdx < slot.fallbacks.size()) {
+            Log.i("Mosaic", "Slot " + slotIdx + " alternando para fallback " + slot.currentFallbackIdx + ": " + slot.fallbacks.get(slot.currentFallbackIdx).name);
+            playMosaicSlotFallback(slotIdx);
+        } else {
+            Log.w("Mosaic", "Slot " + slotIdx + ": Todos os servidores e fallbacks falharam.");
+            if (slot.titleView != null) {
+                int chNum = allChannels.indexOf(slot.channel) + 1;
+                slot.titleView.setText(String.format(Locale.getDefault(), "TELA %d - %03d %s (Sem Sinal)", slotIdx + 1, chNum, slot.channel != null ? slot.channel.name : ""));
+            }
+        }
+    }
+
+    private void playMosaicSlotFallback(int slotIdx) {
+        if (slotIdx < 0 || slotIdx >= 4) return;
+        MosaicSlotItem slot = mosaicSlots[slotIdx];
+        if (slot == null || slot.channel == null || slot.fallbacks == null || slot.currentFallbackIdx >= slot.fallbacks.size()) return;
+
+        Channel ch = slot.channel;
+        Channel.StreamFallback fb = slot.fallbacks.get(slot.currentFallbackIdx);
+
+        // Limpa visualização anterior do player no slot mantendo canal e fallbacks
+        if (slot.exoPlayer != null) {
+            slot.exoPlayer.stop();
+            slot.exoPlayer.release();
+            slot.exoPlayer = null;
+        }
+        if (slot.webView != null) {
+            slot.webView.stopLoading();
+            slot.webView.loadUrl("about:blank");
+            slot.webView.clearHistory();
+            slot.webView.destroy();
+            slot.webView = null;
+        }
+        if (slot.playerHost != null) {
+            slot.playerHost.removeAllViews();
+        }
+        slot.playerView = null;
 
         int chNum = allChannels.indexOf(ch) + 1;
         if (slot.titleView != null) {
             slot.titleView.setText(String.format(Locale.getDefault(), "TELA %d - %03d %s", slotIdx + 1, chNum, ch.name));
         }
 
-        List<Channel.StreamFallback> fallbacks = ch.getFallbacks(this);
-        if (fallbacks.isEmpty()) return;
-        Channel.StreamFallback primary = fallbacks.get(0);
-
         boolean isSlotFocused = (slot.slotView != null && slot.slotView.isFocused());
 
-        if (primary.isEmbed) {
+        if (fb.isEmbed) {
             slot.isPlayingEmbed = true;
             WebView wv = new WebView(this);
             slot.webView = wv;
@@ -613,10 +671,20 @@ public class MainActivity extends Activity {
                             || url.contains("streamverde.net")
                             || url.contains("cazetv.shop")
                             || url.contains("tvacabo.top")
+                            || url.contains("redecanaistv.af")
                             || url.contains("about:blank")) {
                         return false;
                     }
                     return true;
+                }
+
+                @Override
+                public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                    super.onReceivedError(view, request, error);
+                    if (request != null && request.isForMainFrame()) {
+                        Log.w("Mosaic", "Slot " + slotIdx + " WebView error, tentando próximo fallback");
+                        mainHandler.post(() -> tryNextMosaicFallback(slotIdx));
+                    }
                 }
 
                 @Override
@@ -649,7 +717,7 @@ public class MainActivity extends Activity {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
             ));
 
-            String autoplayUrl = primary.url + (primary.url.contains("?") ? "&" : "?") + "autoplay=1";
+            String autoplayUrl = fb.url + (fb.url.contains("?") ? "&" : "?") + "autoplay=1";
             wv.loadUrl(autoplayUrl);
 
         } else {
@@ -670,8 +738,16 @@ public class MainActivity extends Activity {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
             ));
 
+            ep.addListener(new Player.Listener() {
+                @Override
+                public void onPlayerError(PlaybackException error) {
+                    Log.w("Mosaic", "Slot " + slotIdx + " ExoPlayer error: " + error.getMessage() + ", tentando próximo fallback");
+                    mainHandler.post(() -> tryNextMosaicFallback(slotIdx));
+                }
+            });
+
             ep.setVolume(isSlotFocused ? 1.0f : 0.0f);
-            ep.setMediaItem(MediaItem.fromUri(primary.url));
+            ep.setMediaItem(MediaItem.fromUri(fb.url));
             ep.prepare();
             ep.play();
         }
@@ -696,6 +772,8 @@ public class MainActivity extends Activity {
         }
         slot.playerView = null;
         slot.channel = null;
+        slot.fallbacks = null;
+        slot.currentFallbackIdx = 0;
     }
 
     private void exitMosaicMode(boolean restorePrevious) {
@@ -2471,7 +2549,7 @@ public class MainActivity extends Activity {
         playStream(streamUrl, false, startPos);
 
         // Preenche OSD com dados do filme
-        topChNum.setText("VOD");
+        topChNum.setText("FILME");
         topChName.setText(movie.getDisplayTitle());
         osdChNum.setText("FILME");
         osdChName.setText(movie.getDisplayTitle());
@@ -2550,33 +2628,98 @@ public class MainActivity extends Activity {
         showOsdBannerLoading();
     }
 
+    private Channel findChannelByCandidate(String cand) {
+        if (cand == null || cand.trim().isEmpty()) return null;
+        String cNorm = EpgEngine.normalizeForMatch(cand).replace(" ", "");
+        for (Channel ch : allChannels) {
+            if (ch.name != null) {
+                String chNorm = EpgEngine.normalizeForMatch(ch.name).replace(" ", "");
+                if (chNorm.equals(cNorm) || chNorm.contains(cNorm) || cNorm.contains(chNorm)) {
+                    return ch;
+                }
+            }
+            if (ch.id != null) {
+                String idNorm = EpgEngine.normalizeForMatch(ch.id).replace("-", "");
+                if (idNorm.equals(cNorm) || idNorm.contains(cNorm) || cNorm.contains(idNorm)) {
+                    return ch;
+                }
+            }
+        }
+        return null;
+    }
+
     public void playSportsEvent(SportsEvent ev) {
         if (ev == null) return;
+
+        // 1. Verifica candidatos específicos da partida contra o EPG
+        if (ev.candidateChannels != null && !ev.candidateChannels.isEmpty()) {
+            for (String candName : ev.candidateChannels) {
+                Channel candCh = findChannelByCandidate(candName);
+                if (candCh != null && EpgEngine.channelEpgMatchesEvent(candCh, ev)) {
+                    int chIdx = allChannels.indexOf(candCh);
+                    if (chIdx >= 0) {
+                        Toast.makeText(this, "⚽ " + candCh.name + " confirmado no Guia EPG", Toast.LENGTH_SHORT).show();
+                        tuneChannel(chIdx, true);
+                        setScreenMode(ScreenMode.FULLSCREEN);
+                        return;
+                    }
+                }
+            }
+        }
+
+        // 2. Busca na grade de canais esportivos e abertos pelo evento no EPG
+        for (int i = 0; i < allChannels.size(); i++) {
+            Channel ch = allChannels.get(i);
+            String cat = ch.cat != null ? ch.cat.toLowerCase(Locale.ROOT) : "";
+            if (cat.contains("esport") || cat.contains("sport") || cat.contains("abert")) {
+                if (EpgEngine.channelEpgMatchesEvent(ch, ev)) {
+                    Toast.makeText(this, "⚽ " + ch.name + " confirmado no Guia EPG", Toast.LENGTH_SHORT).show();
+                    tuneChannel(i, true);
+                    setScreenMode(ScreenMode.FULLSCREEN);
+                    return;
+                }
+            }
+        }
+
+        // 3. Se não houver confirmação no EPG, mas o primeiro canal candidato existir na grade, sintoniza direto
+        if (ev.candidateChannels != null && !ev.candidateChannels.isEmpty()) {
+            Channel candCh = findChannelByCandidate(ev.candidateChannels.get(0));
+            if (candCh != null) {
+                int chIdx = allChannels.indexOf(candCh);
+                if (chIdx >= 0) {
+                    Toast.makeText(this, "📺 Sintonizando " + candCh.name + " para a partida", Toast.LENGTH_SHORT).show();
+                    tuneChannel(chIdx, true);
+                    setScreenMode(ScreenMode.FULLSCREEN);
+                    return;
+                }
+            }
+        }
+
+        // 4. Se houver transmissões/fallbacks diretos salvos no evento
         List<Channel.StreamFallback> options = ev.fallbacks;
-        if (options == null || options.isEmpty()) {
-            Toast.makeText(this, "Nenhuma transmissão disponível para esta partida no momento.", Toast.LENGTH_SHORT).show();
+        if (options != null && !options.isEmpty()) {
+            if (options.size() == 1) {
+                startSportsPlayback(ev, 0);
+            } else {
+                String[] names = new String[options.size()];
+                for (int i = 0; i < options.size(); i++) {
+                    Channel.StreamFallback fb = options.get(i);
+                    names[i] = "📺 " + fb.name;
+                }
+
+                new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle("⚽ " + ev.getDisplayName() + "\nEscolha a transmissão:")
+                        .setItems(names, (dialog, which) -> {
+                            dialog.dismiss();
+                            startSportsPlayback(ev, which);
+                        })
+                        .setNegativeButton("Cancelar", null)
+                        .show();
+            }
             return;
         }
 
-        // Se houver mais de um canal/opção disponível, apresenta diálogo para o usuário escolher qual canal assistir
-        if (options.size() > 1) {
-            String[] names = new String[options.size()];
-            for (int i = 0; i < options.size(); i++) {
-                Channel.StreamFallback fb = options.get(i);
-                names[i] = "📺 " + fb.name;
-            }
-
-            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                    .setTitle("⚽ " + ev.getDisplayName() + "\nEscolha o canal de transmissão:")
-                    .setItems(names, (dialog, which) -> {
-                        dialog.dismiss();
-                        startSportsPlayback(ev, which);
-                    })
-                    .setNegativeButton("Cancelar", null)
-                    .show();
-        } else {
-            startSportsPlayback(ev, 0);
-        }
+        Toast.makeText(this, "Nenhuma transmissão confirmada para esta partida no momento.", Toast.LENGTH_SHORT).show();
     }
 
     private void startSportsPlayback(SportsEvent ev, int fallbackIndex) {
@@ -2839,6 +2982,7 @@ public class MainActivity extends Activity {
     }
 
     private void renderVodContent(List<Category> categories, List<Movie> movies) {
+        isViewingSeries = false;
         List<Category> pills = new ArrayList<>();
         pills.add(new Category("ALL", "🌟 Todas as Categorias"));
         if (categories != null) {
@@ -2861,7 +3005,6 @@ public class MainActivity extends Activity {
             if (isDemoMovie(m)) continue;
             if ("ALL".equals(catId) || (m.category_id != null && m.category_id.equals(catId))) {
                 filtered.add(m);
-                if (filtered.size() >= 120) break;
             }
         }
 
@@ -2884,6 +3027,7 @@ public class MainActivity extends Activity {
     }
 
     private void renderSeriesContent(List<Category> categories, List<Series> seriesList) {
+        isViewingSeries = true;
         List<Category> pills = new ArrayList<>();
         pills.add(new Category("ALL", "🌟 Todas as Categorias"));
         if (categories != null) {
@@ -2918,7 +3062,6 @@ public class MainActivity extends Activity {
                 pseudo.rating = s.rating;
                 pseudo.genre = s.genre;
                 converted.add(pseudo);
-                if (converted.size() >= 120) break;
             }
         }
 
@@ -2942,6 +3085,165 @@ public class MainActivity extends Activity {
 
         if (!converted.isEmpty()) {
             updateVodHero(converted.get(0));
+        }
+    }
+
+    private void showVodSearchDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        builder.setTitle(isViewingSeries ? "🔍 Buscar Séries" : "🔍 Buscar Filmes");
+
+        final EditText input = new EditText(this);
+        input.setHint(isViewingSeries ? "Digite o nome da série, gênero ou ator..." : "Digite o nome do filme, gênero ou ator...");
+        input.setTextColor(android.graphics.Color.WHITE);
+        input.setHintTextColor(android.graphics.Color.GRAY);
+        input.setSingleLine(true);
+        input.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
+
+        FrameLayout container = new FrameLayout(this);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        int pad = (int) (24 * getResources().getDisplayMetrics().density);
+        params.leftMargin = pad;
+        params.rightMargin = pad;
+        params.topMargin = pad / 2;
+        params.bottomMargin = pad / 2;
+        input.setLayoutParams(params);
+        container.addView(input);
+        builder.setView(container);
+
+        builder.setPositiveButton("🔍 Buscar", (dialog, which) -> {
+            String query = input.getText().toString().trim();
+            executeVodSearch(query);
+        });
+
+        builder.setNeutralButton("❌ Limpar Filtro", (dialog, which) -> {
+            if (isViewingSeries) {
+                filterSeriesByCat("ALL", cachedSeries);
+            } else {
+                filterMoviesByCat("ALL", cachedMovies);
+            }
+        });
+
+        builder.setNegativeButton("Cancelar", null);
+
+        AlertDialog dialog = builder.create();
+        input.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE
+                    || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_DOWN)) {
+                dialog.dismiss();
+                String query = input.getText().toString().trim();
+                executeVodSearch(query);
+                return true;
+            }
+            return false;
+        });
+
+        dialog.show();
+        input.requestFocus();
+    }
+
+    private void executeVodSearch(String query) {
+        if (query == null || query.trim().isEmpty()) {
+            if (isViewingSeries) {
+                filterSeriesByCat("ALL", cachedSeries);
+            } else {
+                filterMoviesByCat("ALL", cachedMovies);
+            }
+            return;
+        }
+
+        String qNorm = EpgEngine.normalizeForMatch(query);
+
+        if (isViewingSeries) {
+            if (cachedSeries == null || cachedSeries.isEmpty()) return;
+            List<Movie> converted = new ArrayList<>();
+            List<Series> rawFiltered = new ArrayList<>();
+            for (Series s : cachedSeries) {
+                String searchTarget = (s.name != null ? s.name : "") + " "
+                        + (s.title != null ? s.title : "") + " "
+                        + (s.genre != null ? s.genre : "") + " "
+                        + (s.cast != null ? s.cast : "") + " "
+                        + (s.director != null ? s.director : "") + " "
+                        + (s.plot != null ? s.plot : "");
+                if (EpgEngine.normalizeForMatch(searchTarget).contains(qNorm)) {
+                    rawFiltered.add(s);
+                    Movie pseudo = new Movie();
+                    pseudo.stream_id = s.series_id;
+                    pseudo.name = s.name;
+                    pseudo.title = s.title;
+                    pseudo.stream_icon = s.cover;
+                    pseudo.plot = s.plot;
+                    pseudo.rating = s.rating;
+                    pseudo.genre = s.genre;
+                    converted.add(pseudo);
+                }
+            }
+
+            if (converted.isEmpty()) {
+                Toast.makeText(this, "Nenhuma série encontrada para \"" + query + "\"", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            vodHeroTitle.setText("🔍 Séries: \"" + query + "\" (" + converted.size() + " encontradas)");
+            vodHeroPlot.setText("Resultados da pesquisa por \"" + query + "\". Selecione para assistir.");
+
+            vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+            vodGridRecycler.setAdapter(new MoviePosterAdapter(this, converted, true, new MoviePosterAdapter.OnMovieActionListener() {
+                @Override
+                public void onMovieClick(Movie m) {
+                    for (Series s : rawFiltered) {
+                        if (s.series_id != null && s.series_id.equals(m.stream_id)) {
+                            openSeriesDetail(s);
+                            break;
+                        }
+                    }
+                }
+
+                @Override
+                public void onMovieFocus(Movie movie) {
+                    updateVodHero(movie);
+                }
+            }));
+            vodGridRecycler.requestFocus();
+
+        } else {
+            if (cachedMovies == null || cachedMovies.isEmpty()) return;
+            List<Movie> filtered = new ArrayList<>();
+            for (Movie m : cachedMovies) {
+                if (isDemoMovie(m)) continue;
+                String searchTarget = (m.name != null ? m.name : "") + " "
+                        + (m.title != null ? m.title : "") + " "
+                        + (m.genre != null ? m.genre : "") + " "
+                        + (m.cast != null ? m.cast : "") + " "
+                        + (m.director != null ? m.director : "") + " "
+                        + (m.plot != null ? m.plot : "");
+                if (EpgEngine.normalizeForMatch(searchTarget).contains(qNorm)) {
+                    filtered.add(m);
+                }
+            }
+
+            if (filtered.isEmpty()) {
+                Toast.makeText(this, "Nenhum filme encontrado para \"" + query + "\"", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            vodHeroTitle.setText("🔍 Filmes: \"" + query + "\" (" + filtered.size() + " encontrados)");
+            vodHeroPlot.setText("Resultados da pesquisa por \"" + query + "\". Selecione para assistir.");
+
+            vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+            vodGridRecycler.setAdapter(new MoviePosterAdapter(this, filtered, true, new MoviePosterAdapter.OnMovieActionListener() {
+                @Override
+                public void onMovieClick(Movie movie) {
+                    playMovie(movie);
+                }
+
+                @Override
+                public void onMovieFocus(Movie movie) {
+                    updateVodHero(movie);
+                }
+            }));
+            vodGridRecycler.requestFocus();
         }
     }
 
