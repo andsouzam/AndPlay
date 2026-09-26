@@ -29,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -72,6 +73,55 @@ public class EpgEngine {
     }
 
     private static final Map<String, List<ProgramInfo>> liveEpgMap = new ConcurrentHashMap<>();
+    private static final Map<String, List<String>> REGIONAL_ALIASES = new HashMap<>();
+
+    static {
+        // Globo Regionais (Mapeamento de Afiliadas das Capitais + Fallback para Rede Nacional)
+        REGIONAL_ALIASES.put("globoba", Arrays.asList("tvbahia", "globobahia", "redebugbahia", "globoba", "globobrasil", "tvglobo", "globosp", "globorj"));
+        REGIONAL_ALIASES.put("globoal", Arrays.asList("tvgazetaalagoas", "tvgazetaal", "tvgazetamaceio", "globoalagoas", "globoal", "globobrasil", "tvglobo", "globosp"));
+        REGIONAL_ALIASES.put("globoam", Arrays.asList("redeamazonica", "tvamazonas", "redeamazonicamanaus", "globoam", "globoamazonas", "globobrasil", "tvglobo", "globosp"));
+        REGIONAL_ALIASES.put("globodf", Arrays.asList("globobrasilia", "tvglobobrasilia", "globodf", "globobrasil", "tvglobo", "globosp"));
+        REGIONAL_ALIASES.put("globogo", Arrays.asList("globoanhanguera", "tvanhanguera", "tvanhangueragoiania", "globogoias", "globogo", "globobrasil", "tvglobo", "globosp"));
+        REGIONAL_ALIASES.put("globomg", Arrays.asList("globominas", "tvglobominas", "globomg", "globobrasil", "tvglobo", "globosp"));
+        REGIONAL_ALIASES.put("globoms", Arrays.asList("tvmorena", "tvmorenams", "tvmorenacampogrande", "globoms", "globobrasil", "tvglobo", "globosp"));
+        REGIONAL_ALIASES.put("globorj", Arrays.asList("globorj", "tvgloborj", "globobrasil", "tvglobo", "globosp"));
+        REGIONAL_ALIASES.put("globors", Arrays.asList("rbstvportoalegre", "rbstv", "rbstvrs", "globors", "globobrasil", "tvglobo", "globosp"));
+        REGIONAL_ALIASES.put("globosp", Arrays.asList("globosp", "tvglobosp", "globobrasil", "tvglobo"));
+        REGIONAL_ALIASES.put("globonews", Arrays.asList("globonews"));
+        REGIONAL_ALIASES.put("globoplaynovelas", Arrays.asList("globoplaynovelas", "viva"));
+
+        // Band Regionais (Mapeamento de Afiliadas + Fallback Nacional)
+        REGIONAL_ALIASES.put("bandba", Arrays.asList("bandbahia", "tvbandbahia", "bandba", "bandbrasil", "bandsp", "bandrj", "band"));
+        REGIONAL_ALIASES.put("bandmg", Arrays.asList("bandminas", "tvbandminas", "bandmg", "bandbrasil", "bandsp", "band"));
+        REGIONAL_ALIASES.put("bandpa", Arrays.asList("bandpara", "bandbelem", "rbatv", "tvbandpara", "bandpa", "bandbrasil", "bandsp", "band"));
+        REGIONAL_ALIASES.put("bandpb", Arrays.asList("tvmanaira", "bandmanaira", "bandpb", "bandparaiba", "bandbrasil", "bandsp", "band"));
+        REGIONAL_ALIASES.put("bandpe", Arrays.asList("tvtribunape", "bandpernambuco", "bandpe", "tvtribunarecife", "tvtribuna", "bandbrasil", "bandsp", "band"));
+        REGIONAL_ALIASES.put("bandsp", Arrays.asList("bandsp", "tvbandsp", "bandcampinas", "bandbrasil", "band"));
+        REGIONAL_ALIASES.put("bandnews", Arrays.asList("bandnews"));
+        REGIONAL_ALIASES.put("bandsports", Arrays.asList("bandsports"));
+
+        // Record Regionais (Mapeamento de Afiliadas + Fallback Nacional)
+        REGIONAL_ALIASES.put("recordsp", Arrays.asList("recordtvsp", "recordsp", "recordtvbrasil", "recordbrasil", "record"));
+        REGIONAL_ALIASES.put("recordpb", Arrays.asList("tvcorreio", "recordpb", "recordparaiba", "recordtvbrasil", "recordtvsp", "recordbrasil", "record"));
+        REGIONAL_ALIASES.put("recordro", Arrays.asList("sictv", "recordro", "recordsictv", "recordtvbrasil", "recordtvsp", "recordbrasil", "record"));
+        REGIONAL_ALIASES.put("recordrn", Arrays.asList("tvtropical", "recordrn", "recordtropical", "recordtvbrasil", "recordtvsp", "recordbrasil", "record"));
+        REGIONAL_ALIASES.put("recordmt", Arrays.asList("tvvilareal", "recordmt", "recordtvbrasil", "recordtvsp", "recordbrasil", "record"));
+        REGIONAL_ALIASES.put("recordnews", Arrays.asList("recordnews"));
+
+        // SBT Regionais (Mapeamento de Afiliadas + Fallback Nacional)
+        REGIONAL_ALIASES.put("sbt", Arrays.asList("sbtbrasil", "sbtsp", "sbt", "sbtrj"));
+        REGIONAL_ALIASES.put("sbtpi", Arrays.asList("tvcidadeverde", "sbtpi", "sbtpiaui", "sbtbrasil", "sbtsp", "sbt"));
+
+        // Outros canais abertos com variações comuns
+        REGIONAL_ALIASES.put("culturabrasil", Arrays.asList("cultura", "tvcultura", "culturabrasil"));
+        REGIONAL_ALIASES.put("cancaonova", Arrays.asList("cancaonova", "tvfcanconova"));
+        REGIONAL_ALIASES.put("gazeta", Arrays.asList("tvgazeta", "gazeta"));
+        REGIONAL_ALIASES.put("tvbrasil", Arrays.asList("tvbrasil", "ebc"));
+        REGIONAL_ALIASES.put("redetv", Arrays.asList("redetv", "redetvsp", "redetvrj"));
+        REGIONAL_ALIASES.put("redevida", Arrays.asList("redevida"));
+        REGIONAL_ALIASES.put("redegospel", Arrays.asList("redegospel"));
+    }
+
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
     private static OnEpgUpdatedListener updateListener;
@@ -305,6 +355,32 @@ public class EpgEngine {
         return s;
     }
 
+    public static List<String> getSearchAliases(Channel ch) {
+        List<String> list = new ArrayList<>();
+        if (ch == null) return list;
+
+        String idNorm = normalizeKey(ch.id);
+        String nameNorm = normalizeKey(ch.name);
+
+        // 1. Adiciona aliases mapeados explicitamente para o id ou para o nome
+        if (!idNorm.isEmpty() && REGIONAL_ALIASES.containsKey(idNorm)) {
+            for (String a : REGIONAL_ALIASES.get(idNorm)) {
+                if (!list.contains(a)) list.add(a);
+            }
+        }
+        if (!nameNorm.isEmpty() && !nameNorm.equals(idNorm) && REGIONAL_ALIASES.containsKey(nameNorm)) {
+            for (String a : REGIONAL_ALIASES.get(nameNorm)) {
+                if (!list.contains(a)) list.add(a);
+            }
+        }
+
+        // 2. Adiciona o id e o nome normalizados como alternativas padrão
+        if (!idNorm.isEmpty() && !list.contains(idNorm)) list.add(idNorm);
+        if (!nameNorm.isEmpty() && !list.contains(nameNorm)) list.add(nameNorm);
+
+        return list;
+    }
+
     public static LiveSchedule getLiveSchedule(Channel ch) {
         if (ch == null) {
             return new LiveSchedule(
@@ -319,20 +395,30 @@ public class EpgEngine {
             );
         }
         long now = System.currentTimeMillis();
-        String idKey = normalizeKey(ch.id);
-        String nameKey = normalizeKey(ch.name);
+        List<String> candidates = getSearchAliases(ch);
+        List<ProgramInfo> progs = null;
 
-        List<ProgramInfo> progs = liveEpgMap.get(idKey);
-        if (progs == null || progs.isEmpty()) progs = liveEpgMap.get(nameKey);
+        // 1. Busca exata por candidato na ordem de prioridade (afiliada local -> rede nacional)
+        for (String cand : candidates) {
+            if (cand.isEmpty()) continue;
+            progs = liveEpgMap.get(cand);
+            if (progs != null && !progs.isEmpty()) break;
+        }
 
+        // 2. Se não encontrou exato, busca parcial por candidato na ordem de prioridade
         if (progs == null || progs.isEmpty()) {
-            for (Map.Entry<String, List<ProgramInfo>> entry : liveEpgMap.entrySet()) {
-                String k = entry.getKey();
-                if ((!idKey.isEmpty() && (k.contains(idKey) || idKey.contains(k)))
-                        || (!nameKey.isEmpty() && (k.contains(nameKey) || nameKey.contains(k)))) {
-                    progs = entry.getValue();
-                    break;
+            for (String cand : candidates) {
+                if (cand.length() < 3) continue;
+                for (Map.Entry<String, List<ProgramInfo>> entry : liveEpgMap.entrySet()) {
+                    String k = entry.getKey();
+                    if (k.equals(cand) || k.startsWith(cand) || cand.startsWith(k)
+                            || (k.length() >= 4 && cand.contains(k))
+                            || (cand.length() >= 4 && k.contains(cand))) {
+                        progs = entry.getValue();
+                        break;
+                    }
                 }
+                if (progs != null && !progs.isEmpty()) break;
             }
         }
 

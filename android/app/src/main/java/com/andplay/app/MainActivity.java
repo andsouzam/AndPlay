@@ -714,7 +714,63 @@ public class MainActivity extends Activity {
         }
     }
 
+    private final Handler vodProgressHandler = new Handler(Looper.getMainLooper());
+    private final Runnable vodProgressRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (isPlayingVod && exoPlayer != null && currentMode == ScreenMode.FULLSCREEN) {
+                updateVodProgress();
+                vodProgressHandler.postDelayed(this, 1000);
+            }
+        }
+    };
+
+    private void startVodProgressTicker() {
+        vodProgressHandler.removeCallbacks(vodProgressRunnable);
+        vodProgressHandler.post(vodProgressRunnable);
+    }
+
+    private void stopVodProgressTicker() {
+        vodProgressHandler.removeCallbacks(vodProgressRunnable);
+    }
+
+    private String formatDuration(long ms) {
+        if (ms <= 0) return "00:00:00";
+        long totalSec = ms / 1000;
+        long hours = totalSec / 3600;
+        long minutes = (totalSec % 3600) / 60;
+        long seconds = totalSec % 60;
+        return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds);
+    }
+
+    private void updateVodProgress() {
+        if (!isPlayingVod || exoPlayer == null) return;
+        long pos = exoPlayer.getCurrentPosition();
+        long dur = exoPlayer.getDuration();
+        if (dur > 0) {
+            long remaining = Math.max(0, dur - pos);
+            int prog = (int) Math.min(100, Math.max(0, (pos * 100) / dur));
+            String posStr = formatDuration(pos);
+            String durStr = formatDuration(dur);
+            String remStr = formatDuration(remaining);
+            if (osdRemaining != null) {
+                osdRemaining.setText(posStr + " / " + durStr + " (Restam " + remStr + ")");
+            }
+            if (osdProgressBar != null) {
+                osdProgressBar.setProgress(prog);
+            }
+        } else if (pos > 0) {
+            if (osdRemaining != null) {
+                osdRemaining.setText(formatDuration(pos) + " / --:--:--");
+            }
+            if (osdProgressBar != null) {
+                osdProgressBar.setProgress(0);
+            }
+        }
+    }
+
     private void destroyCurrentStream() {
+        stopVodProgressTicker();
         if (exoPlayer != null) {
             exoPlayer.stop();
             exoPlayer.clearMediaItems();
@@ -804,9 +860,19 @@ public class MainActivity extends Activity {
         });
 
         // 4 Botões Diretos: Cima (Filmes / Séries) >> Baixo (Jogos / Guia)
-        btnNavMovies.setOnClickListener(v -> openVodExplorer("movies"));
-        btnNavSeries.setOnClickListener(v -> openVodExplorer("series"));
+        btnNavMovies.setOnClickListener(v -> {
+            destroyCurrentStream();
+            isPlayingVod = false;
+            openVodExplorer("movies");
+        });
+        btnNavSeries.setOnClickListener(v -> {
+            destroyCurrentStream();
+            isPlayingVod = false;
+            openVodExplorer("series");
+        });
         btnNavSports.setOnClickListener(v -> {
+            destroyCurrentStream();
+            isPlayingVod = false;
             if (centralScroll != null && sportsRail != null) {
                 centralScroll.smoothScrollTo(0, sportsRail.getTop() - 100);
                 sportsRail.requestFocus();
@@ -838,8 +904,16 @@ public class MainActivity extends Activity {
             });
         }
 
-        vodBackBtn.setOnClickListener(v -> setScreenMode(ScreenMode.CENTRAL));
-        seriesBackBtn.setOnClickListener(v -> setScreenMode(ScreenMode.VOD));
+        vodBackBtn.setOnClickListener(v -> {
+            destroyCurrentStream();
+            isPlayingVod = false;
+            setScreenMode(ScreenMode.CENTRAL);
+        });
+        seriesBackBtn.setOnClickListener(v -> {
+            destroyCurrentStream();
+            isPlayingVod = false;
+            setScreenMode(ScreenMode.VOD);
+        });
     }
 
     private void setupChannelsRail() {
@@ -1376,11 +1450,12 @@ public class MainActivity extends Activity {
         osdChNum.setText("FILME");
         osdChName.setText(movie.getDisplayTitle());
         osdNowTitle.setText("🎬 " + movie.getDisplayTitle());
-        osdRemaining.setText(movie.year != null ? movie.year : "");
-        osdSynopsis.setText(movie.plot != null ? movie.plot : "Filme sob demanda em alta definição.");
-        osdNextProgram.setText("Áudio Original / Dublado");
-        osdProgressBar.setProgress(100);
+        osdRemaining.setText("00:00:00 / Carregando...");
+        osdSynopsis.setText(movie.plot != null && !movie.plot.isEmpty() ? movie.plot : "Filme sob demanda em alta definição.");
+        osdNextProgram.setText(movie.genre != null && !movie.genre.isEmpty() ? "Gênero: " + movie.genre : "Áudio Original / Dublado");
+        osdProgressBar.setProgress(0);
 
+        startVodProgressTicker();
         showOsdBannerLoading();
     }
 
@@ -1403,11 +1478,12 @@ public class MainActivity extends Activity {
         osdChNum.setText("T" + seasonNum);
         osdChName.setText(fullTitle);
         osdNowTitle.setText("🍿 " + ep.getDisplayTitle());
-        osdRemaining.setText(ep.getDurationText());
-        osdSynopsis.setText(ep.info != null && ep.info.plot != null ? ep.info.plot : series.plot);
+        osdRemaining.setText("00:00:00 / Carregando...");
+        osdSynopsis.setText(ep.info != null && ep.info.plot != null && !ep.info.plot.isEmpty() ? ep.info.plot : series.plot);
         osdNextProgram.setText("Próximo episódio disponível na lista.");
-        osdProgressBar.setProgress(100);
+        osdProgressBar.setProgress(0);
 
+        startVodProgressTicker();
         showOsdBannerLoading();
     }
 
@@ -1461,6 +1537,10 @@ public class MainActivity extends Activity {
     public void onPlaybackStarted() {
         isVideoPlaybackActive = true;
         enforceMaxVolume();
+        if (isPlayingVod) {
+            startVodProgressTicker();
+            updateVodProgress();
+        }
         if (currentMode == ScreenMode.FULLSCREEN && osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
             scheduleOsdHide(5000);
         }
@@ -1541,6 +1621,17 @@ public class MainActivity extends Activity {
     }
 
     public void setScreenMode(ScreenMode mode) {
+        if (currentMode == ScreenMode.FULLSCREEN && mode != ScreenMode.FULLSCREEN) {
+            if (isPlayingVod) {
+                stopVodProgressTicker();
+                destroyCurrentStream();
+                isPlayingVod = false;
+                activeVodMovie = null;
+                activeVodEpisode = null;
+                activeVodSeries = null;
+            }
+        }
+
         previousMode = currentMode;
         currentMode = mode;
 
@@ -1563,15 +1654,25 @@ public class MainActivity extends Activity {
             hideOsdBanner();
             attachPlayerToHost(pipPlayerHost);
             pipContainer.requestFocus();
+            if ((currentActiveStreamUrl == null || currentActiveStreamUrl.isEmpty()) && !allChannels.isEmpty()) {
+                tuneChannel(currentChannelIdx, false);
+            }
         } else if (mode == ScreenMode.VOD) {
             closeDrawer();
             hideOsdBanner();
-            if (exoPlayer != null && !isPlayingVod) exoPlayer.pause();
-            vodBackBtn.requestFocus();
+            destroyCurrentStream();
+            if (vodBackBtn != null) vodBackBtn.requestFocus();
+        } else if (mode == ScreenMode.SERIES_DETAIL) {
+            closeDrawer();
+            hideOsdBanner();
+            destroyCurrentStream();
+            if (seriesBackBtn != null) seriesBackBtn.requestFocus();
         }
     }
 
     private void openVodExplorer(String type) {
+        destroyCurrentStream();
+        isPlayingVod = false;
         currentVodType = type;
         setScreenMode(ScreenMode.VOD);
         vodSectionTitle.setText("movies".equals(type) ? "🎬 Filmes" : "📺 Séries");
@@ -1868,11 +1969,29 @@ public class MainActivity extends Activity {
             } else if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_SETTINGS) {
                 showProviderOptionsDialog();
                 return true;
-            } else if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
+            } else if (keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY || keyCode == KeyEvent.KEYCODE_MEDIA_PAUSE) {
                 if (exoPlayer != null) {
                     if (exoPlayer.isPlaying()) exoPlayer.pause();
                     else exoPlayer.play();
+                    if (isPlayingVod) updateVodProgress();
                     showOsdBanner(3000);
+                    return true;
+                }
+            } else if (keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD) {
+                if (isPlayingVod && exoPlayer != null) {
+                    long dur = exoPlayer.getDuration();
+                    long target = dur > 0 ? Math.min(dur, exoPlayer.getCurrentPosition() + 15000) : exoPlayer.getCurrentPosition() + 15000;
+                    exoPlayer.seekTo(target);
+                    updateVodProgress();
+                    showOsdBanner(5000);
+                    return true;
+                }
+            } else if (keyCode == KeyEvent.KEYCODE_MEDIA_REWIND) {
+                if (isPlayingVod && exoPlayer != null) {
+                    long target = Math.max(0, exoPlayer.getCurrentPosition() - 15000);
+                    exoPlayer.seekTo(target);
+                    updateVodProgress();
+                    showOsdBanner(5000);
                     return true;
                 }
             }
@@ -1944,9 +2063,20 @@ public class MainActivity extends Activity {
                             openDrawer();
                             return true;
                         }
+                        // D-pad Direito avança 30s
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                            if (exoPlayer != null && exoPlayer.getDuration() > 0) {
+                                long target = Math.min(exoPlayer.getDuration(), exoPlayer.getCurrentPosition() + 30000);
+                                exoPlayer.seekTo(target);
+                                updateVodProgress();
+                                showOsdBanner(5000);
+                                return true;
+                            }
+                        }
                         // Teclas mostram o banner de informações
                         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
                                 || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                            updateVodProgress();
                             showOsdBanner(5000);
                             return true;
                         }
@@ -1979,7 +2109,13 @@ public class MainActivity extends Activity {
                 return true;
             }
             if (isPlayingVod) {
-                setScreenMode(previousMode == ScreenMode.SERIES_DETAIL ? ScreenMode.SERIES_DETAIL : ScreenMode.VOD);
+                stopVodProgressTicker();
+                destroyCurrentStream();
+                isPlayingVod = false;
+                ScreenMode target = (previousMode == ScreenMode.SERIES_DETAIL ? ScreenMode.SERIES_DETAIL : ScreenMode.VOD);
+                activeVodMovie = null;
+                activeVodEpisode = null;
+                setScreenMode(target);
                 return true;
             }
             setScreenMode(ScreenMode.CENTRAL);
@@ -1987,11 +2123,15 @@ public class MainActivity extends Activity {
         }
 
         if (currentMode == ScreenMode.SERIES_DETAIL) {
+            destroyCurrentStream();
+            isPlayingVod = false;
             setScreenMode(ScreenMode.VOD);
             return true;
         }
 
         if (currentMode == ScreenMode.VOD) {
+            destroyCurrentStream();
+            isPlayingVod = false;
             setScreenMode(ScreenMode.CENTRAL);
             return true;
         }
