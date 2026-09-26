@@ -75,7 +75,10 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         }
 
         holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
-            v.animate().scaleX(hasFocus ? 1.04f : 1.0f).scaleY(hasFocus ? 1.04f : 1.0f).setDuration(150).start();
+            v.setSelected(hasFocus);
+            v.setScaleX(1.0f);
+            v.setScaleY(1.0f);
+            v.setElevation(hasFocus ? 4f : 0f);
         });
     }
 

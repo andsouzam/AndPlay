@@ -6,9 +6,9 @@
         android:topRightRadius="16dp" />
     <gradient
         android:angle="90"
-        android:startColor="#F0050810"
-        android:centerColor="#EA080E1C"
-        android:endColor="#D50C152B" />
+        android:startColor="#D2050810"
+        android:centerColor="#CC080E1C"
+        android:endColor="#B80C152B" />
     <stroke
         android:width="1dp"
         android:color="#30FFC107" />

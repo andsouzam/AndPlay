@@ -268,8 +268,8 @@ public class ApiClient {
         ev1.league = "Brasileirão Série A";
         ev1.matchTime = "16:00";
         ev1.isLive = true;
-        ev1.homeLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/9773.png";
-        ev1.awayLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/9772.png";
+        ev1.homeLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/9770.png";
+        ev1.awayLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/10283.png";
         ev1.fallbacks.add(new Channel.StreamFallback("Premiere HD", "https://rdcanais.net/premiere", true));
         ev1.fallbacks.add(new Channel.StreamFallback("SporTV HD", "https://rdcanais.net/sportv", true));
         list.add(ev1);
@@ -280,8 +280,8 @@ public class ApiClient {
         ev2.league = "Brasileirão Série A (Majestoso)";
         ev2.matchTime = "18:30";
         ev2.isLive = true;
-        ev2.homeLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/9769.png";
-        ev2.awayLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/9777.png";
+        ev2.homeLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/9808.png";
+        ev2.awayLogo = "https://images.fotmob.com/image_resources/logo/teamlogo/10277.png";
         ev2.fallbacks.add(new Channel.StreamFallback("Premiere HD", "https://rdcanais.net/premiere", true));
         ev2.fallbacks.add(new Channel.StreamFallback("Globo SP", "https://rdcanais.net/globosp", true));
         list.add(ev2);

@@ -2,37 +2,43 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/epCardRoot"
     android:layout_width="match_parent"
-    android:layout_height="72dp"
-    android:layout_marginBottom="8dp"
+    android:layout_height="68dp"
+    android:layout_marginStart="6dp"
+    android:layout_marginEnd="6dp"
+    android:layout_marginTop="2dp"
+    android:layout_marginBottom="4dp"
     android:background="@drawable/card_focus_bg"
     android:clickable="true"
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:padding="8dp">
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp">
 
     <TextView
         android:id="@+id/epNum"
-        android:layout_width="40dp"
+        android:layout_width="38dp"
         android:layout_height="wrap_content"
         android:gravity="center"
         android:text="E01"
         android:textColor="#FFC107"
-        android:textSize="14sp"
+        android:textSize="13sp"
         android:textStyle="bold" />
 
     <ImageView
         android:id="@+id/epThumb"
-        android:layout_width="85dp"
-        android:layout_height="56dp"
-        android:layout_marginStart="6dp"
+        android:layout_width="80dp"
+        android:layout_height="52dp"
+        android:layout_marginStart="4dp"
         android:scaleType="centerCrop" />
 
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginStart="12dp"
+        android:layout_marginStart="10dp"
         android:layout_weight="1"
         android:orientation="vertical">
 
@@ -62,10 +68,10 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:background="@drawable/badge_gold"
-        android:paddingStart="10dp"
-        android:paddingTop="6dp"
-        android:paddingEnd="10dp"
-        android:paddingBottom="6dp"
+        android:paddingStart="8dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="4dp"
         android:text="▶ ASSISTIR"
         android:textColor="#000000"
         android:textSize="10sp"

@@ -25,18 +25,31 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
 
     private final Context context;
     private final List<Movie> movies;
+    private final boolean isGrid;
     private final OnMovieActionListener listener;
 
-    public MoviePosterAdapter(Context context, List<Movie> movies, OnMovieActionListener listener) {
+    public MoviePosterAdapter(Context context, List<Movie> movies, boolean isGrid, OnMovieActionListener listener) {
         this.context = context;
         this.movies = movies;
+        this.isGrid = isGrid;
         this.listener = listener;
+    }
+
+    public MoviePosterAdapter(Context context, List<Movie> movies, OnMovieActionListener listener) {
+        this(context, movies, false, listener);
     }
 
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(context).inflate(R.layout.item_movie_card, parent, false);
+        if (isGrid) {
+            ViewGroup.LayoutParams lp = view.getLayoutParams();
+            if (lp != null) {
+                lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                view.setLayoutParams(lp);
+            }
+        }
         return new ViewHolder(view);
     }
 
