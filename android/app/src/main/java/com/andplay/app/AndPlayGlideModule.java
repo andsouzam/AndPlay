@@ -15,15 +15,15 @@ public final class AndPlayGlideModule extends AppGlideModule {
 
     @Override
     public void applyOptions(@NonNull Context context, @NonNull GlideBuilder builder) {
-        // Limita o cache de disco em 100 MB para evitar lotar o armazenamento interno de TVs e Projetores
-        int diskCacheSizeBytes = 100 * 1024 * 1024; // 100 MB
+        // Limita o cache de disco em 300 MB para cache de capas
+        int diskCacheSizeBytes = 300 * 1024 * 1024; // 300 MB
         builder.setDiskCache(new InternalCacheDiskCacheFactory(context, "image_cache", diskCacheSizeBytes));
 
-        // Limita o consumo de memória RAM para cache de imagens (máx 30 MB)
+        // Limita o consumo de memória RAM para cache de imagens (100 MB)
         MemorySizeCalculator calculator = new MemorySizeCalculator.Builder(context)
-                .setMemoryCacheScreens(1.5f)
+                .setMemoryCacheScreens(2.0f)
                 .build();
-        builder.setMemoryCache(new LruResourceCache(Math.min(calculator.getMemoryCacheSize() / 2, 30 * 1024 * 1024)));
+        builder.setMemoryCache(new LruResourceCache(Math.min(calculator.getMemoryCacheSize(), 100 * 1024 * 1024)));
     }
 
     @Override

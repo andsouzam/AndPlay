@@ -7,6 +7,7 @@ import android.os.Looper;
 import android.util.Log;
 import android.util.Xml;
 
+import com.andplay.app.api.ApiClient;
 import com.andplay.app.model.Channel;
 import com.andplay.app.model.LiveSchedule;
 import com.google.gson.Gson;
@@ -305,7 +306,7 @@ public class EpgEngine {
     private static void parseXmltv(InputStream is) {
         try {
             XmlPullParser parser = Xml.newPullParser();
-            parser.setInput(is, "UTF-8");
+            parser.setInput(is, null);
 
             long now = System.currentTimeMillis();
             Map<String, List<ProgramInfo>> tempMap = new HashMap<>();
@@ -333,9 +334,9 @@ public class EpgEngine {
                         String text = parser.getText();
                         if (text != null && !text.trim().isEmpty()) {
                             if ("title".equals(currentTag) && currentTitle == null) {
-                                currentTitle = text.trim();
+                                currentTitle = ApiClient.sanitizeText(text.trim());
                             } else if ("desc".equals(currentTag) && currentDesc == null) {
-                                currentDesc = text.trim();
+                                currentDesc = ApiClient.sanitizeText(text.trim());
                             }
                         }
                     }
@@ -544,12 +545,12 @@ public class EpgEngine {
             String nextTitle = "Programação Contínua";
             String nextStart = "A Seguir";
             if (ch.next != null && !ch.next.isEmpty() && ch.next.get(0) != null) {
-                if (ch.next.get(0).t != null && !ch.next.get(0).t.isEmpty()) nextTitle = ch.next.get(0).t;
+                if (ch.next.get(0).t != null && !ch.next.get(0).t.isEmpty()) nextTitle = ApiClient.sanitizeText(ch.next.get(0).t);
                 if (ch.next.get(0).s != null && !ch.next.get(0).s.isEmpty()) nextStart = ch.next.get(0).s;
             }
             int prog = ch.prog > 0 ? ch.prog : 50;
             return new LiveSchedule(
-                    ch.now,
+                    ApiClient.sanitizeText(ch.now),
                     "Transmissão oficial ao vivo em tempo real.",
                     "Ao Vivo",
                     nextStart,

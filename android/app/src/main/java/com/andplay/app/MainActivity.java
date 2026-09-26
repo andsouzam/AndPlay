@@ -941,7 +941,7 @@ public class MainActivity extends Activity {
     private static final String KEY_LAST_CHANNEL_INDEX = "last_channel_idx";
 
     private int getChannelGroupRank(Channel ch) {
-        if (ch == null) return 7;
+        if (ch == null) return 6;
         String k = ch.key != null ? ch.key.toLowerCase(Locale.ROOT) : "";
         String c = ch.cat != null ? ch.cat.toLowerCase(Locale.ROOT) : "";
 
@@ -951,26 +951,84 @@ public class MainActivity extends Activity {
         // 2. Esportes
         if ("sports".equals(k) || c.contains("esporte")) return 2;
 
-        // 4. Filmes
-        if ("movies".equals(k) || c.contains("filme")) return 4;
-
-        // 5. Infantil
-        if ("kids".equals(k) || c.contains("infantil") || c.contains("desenho")) return 5;
-
-        // 6. 24hrs
-        if ("channels_24h".equals(k) || c.contains("24")) return 6;
-
-        // 3. Variedades (Variedades, Notícias, Documentários, Séries, Realitys, Geral, etc.)
-        if ("variety".equals(k) || "reality".equals(k)
+        // 3. Variedades (Agora unificado com Filmes / Séries / Realitys)
+        if ("variety".equals(k) || "reality".equals(k) || "movies".equals(k)
                 || c.contains("variedade") || c.contains("not") || c.contains("doc")
                 || c.contains("rie") || c.contains("serie")
-                || c.contains("reality") || c.contains("geral")
-                || c.contains("ing") || c.contains("miami")) {
+                || c.contains("reality") || c.contains("filme")
+                || c.contains("geral") || c.contains("ing") || c.contains("miami")) {
             return 3;
         }
 
-        // 7. Outros
-        return 7;
+        // 4. Infantil
+        if ("kids".equals(k) || c.contains("infantil") || c.contains("desenho")) return 4;
+
+        // 5. 24hrs
+        if ("channels_24h".equals(k) || c.contains("24")) return 5;
+
+        // 6. Outros
+        return 6;
+    }
+
+    private int extractTrailingNumber(String s) {
+        if (s == null) return -1;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d+").matcher(s);
+        int last = -1;
+        while (m.find()) {
+            try {
+                last = Integer.parseInt(m.group());
+            } catch (Exception ignored) {}
+        }
+        return last;
+    }
+
+    private int getChannelSubRank(Channel ch, int groupRank) {
+        if (ch == null) return 0;
+        String id = ch.id != null ? ch.id.toLowerCase(Locale.ROOT) : "";
+        String name = ch.name != null ? ch.name.toLowerCase(Locale.ROOT) : "";
+
+        if (groupRank == 1) {
+            // Globo SP como primeiro canal absoluto (Canal 001)
+            if ("globosp".equals(id) || name.startsWith("globo sp")) {
+                return 0;
+            }
+            return 1;
+        }
+
+        if (groupRank == 2) {
+            // 1. ESPN (ESPN, ESPN 2..6)
+            if (id.startsWith("espn") || name.startsWith("espn")) {
+                if ("espn".equals(id) || name.equals("espn")) return 101;
+                int num = extractTrailingNumber(name.isEmpty() ? id : name);
+                return (num > 0) ? (100 + num) : 199;
+            }
+            // 2. SporTV (SporTV, SporTV 2..4)
+            if (id.startsWith("sportv") || name.startsWith("sportv")) {
+                if ("sportv".equals(id) || name.equals("sportv")) return 201;
+                int num = extractTrailingNumber(name.isEmpty() ? id : name);
+                return (num > 0) ? (200 + num) : 299;
+            }
+            // 3. Premiere (Premiere Clubes primeiro, depois 2..8)
+            if (id.startsWith("premiere") || name.startsWith("premiere")) {
+                if (name.contains("clubes") || "premiere".equals(id)) return 301;
+                int num = extractTrailingNumber(name.isEmpty() ? id : name);
+                return (num > 0) ? (300 + num) : 399;
+            }
+            // 4. Demais canais esportivos
+            return 400;
+        }
+
+        if (groupRank == 3) {
+            // A Fazenda vai para o final do grupo Variedades
+            if (id.startsWith("afazenda") || name.startsWith("a fazenda")) {
+                if ("afazenda".equals(id) || name.equals("a fazenda")) return 1001;
+                int num = extractTrailingNumber(name.isEmpty() ? id : name);
+                return (num > 0) ? (1000 + num) : 1099;
+            }
+            return 0;
+        }
+
+        return 0;
     }
 
     private void sortChannelsByGroup(List<Channel> channels) {
@@ -980,6 +1038,11 @@ public class MainActivity extends Activity {
             int r2 = getChannelGroupRank(c2);
             if (r1 != r2) {
                 return Integer.compare(r1, r2);
+            }
+            int sub1 = getChannelSubRank(c1, r1);
+            int sub2 = getChannelSubRank(c2, r2);
+            if (sub1 != sub2) {
+                return Integer.compare(sub1, sub2);
             }
             String n1 = c1.name != null ? c1.name : "";
             String n2 = c2.name != null ? c2.name : "";
@@ -1299,7 +1362,6 @@ public class MainActivity extends Activity {
         drawerCats.add(new Category("open_tv", "Abertos"));
         drawerCats.add(new Category("sports", "Esportes"));
         drawerCats.add(new Category("variety", "Variedades"));
-        drawerCats.add(new Category("movies", "Filmes"));
         drawerCats.add(new Category("kids", "Infantil"));
         drawerCats.add(new Category("channels_24h", "24 Horas"));
         drawerCats.add(new Category("other", "Outros"));
@@ -1325,10 +1387,9 @@ public class MainActivity extends Activity {
                 case 1: targetCatId = "open_tv"; break;
                 case 2: targetCatId = "sports"; break;
                 case 3: targetCatId = "variety"; break;
-                case 4: targetCatId = "movies"; break;
-                case 5: targetCatId = "kids"; break;
-                case 6: targetCatId = "channels_24h"; break;
-                case 7: targetCatId = "other"; break;
+                case 4: targetCatId = "kids"; break;
+                case 5: targetCatId = "channels_24h"; break;
+                case 6: targetCatId = "other"; break;
             }
             for (int i = 0; i < drawerCats.size(); i++) {
                 if (targetCatId.equals(drawerCats.get(i).category_id)) {
@@ -1584,13 +1645,11 @@ public class MainActivity extends Activity {
                 filtered.add(ch);
             } else if ("variety".equals(catId) && getChannelGroupRank(ch) == 3) {
                 filtered.add(ch);
-            } else if ("movies".equals(catId) && getChannelGroupRank(ch) == 4) {
+            } else if ("kids".equals(catId) && getChannelGroupRank(ch) == 4) {
                 filtered.add(ch);
-            } else if ("kids".equals(catId) && getChannelGroupRank(ch) == 5) {
+            } else if ("channels_24h".equals(catId) && getChannelGroupRank(ch) == 5) {
                 filtered.add(ch);
-            } else if ("channels_24h".equals(catId) && getChannelGroupRank(ch) == 6) {
-                filtered.add(ch);
-            } else if ("other".equals(catId) && getChannelGroupRank(ch) == 7) {
+            } else if ("other".equals(catId) && getChannelGroupRank(ch) == 6) {
                 filtered.add(ch);
             }
         }
@@ -1610,29 +1669,41 @@ public class MainActivity extends Activity {
             setScreenMode(ScreenMode.FULLSCREEN);
         });
 
-        int targetPos = 0;
-        if (targetChannel != null) {
-            targetPos = filtered.indexOf(targetChannel);
-            if (targetPos < 0) {
+        int playingIdx = -1;
+        if (!allChannels.isEmpty() && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
+            Channel curr = allChannels.get(currentChannelIdx);
+            playingIdx = filtered.indexOf(curr);
+            if (playingIdx < 0 && curr.id != null) {
                 for (int i = 0; i < filtered.size(); i++) {
-                    if (filtered.get(i).id != null && filtered.get(i).id.equals(targetChannel.id)) {
-                        targetPos = i;
+                    if (curr.id.equals(filtered.get(i).id)) {
+                        playingIdx = i;
                         break;
                     }
                 }
             }
-            if (targetPos < 0) targetPos = 0;
-        } else if (!allChannels.isEmpty() && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
-            Channel curr = allChannels.get(currentChannelIdx);
-            targetPos = filtered.indexOf(curr);
-            if (targetPos < 0) targetPos = 0;
+        }
+
+        int focusPos = 0;
+        if (targetChannel != null) {
+            focusPos = filtered.indexOf(targetChannel);
+            if (focusPos < 0) {
+                for (int i = 0; i < filtered.size(); i++) {
+                    if (filtered.get(i).id != null && filtered.get(i).id.equals(targetChannel.id)) {
+                        focusPos = i;
+                        break;
+                    }
+                }
+            }
+            if (focusPos < 0) focusPos = 0;
+        } else if (playingIdx >= 0) {
+            focusPos = playingIdx;
         }
 
         drawerChannelsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
-        adapter.setCurrentPlayingIdx(targetPos);
+        adapter.setCurrentPlayingIdx(playingIdx);
         drawerChannelsRecycler.setAdapter(adapter);
 
-        final int focusIndex = targetPos;
+        final int focusIndex = focusPos;
         drawerChannelsRecycler.scrollToPosition(focusIndex);
         drawerChannelsRecycler.postDelayed(() -> {
             RecyclerView.ViewHolder vh = drawerChannelsRecycler.findViewHolderForAdapterPosition(focusIndex);

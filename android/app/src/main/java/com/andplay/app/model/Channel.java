@@ -74,6 +74,9 @@ public class Channel implements Serializable {
                 serverNum++;
             } else if (com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE.equals(prov)) {
                 String svSlug = cleanSlug.replace("-", "").toLowerCase();
+                if ("warner".equalsIgnoreCase(cleanSlug) || "warner".equalsIgnoreCase(id)) {
+                    svSlug = "warnerchannel";
+                }
                 list.add(new StreamFallback("StreamVerde (HLS Direto)", "https://svd.cazetv.shop/streamverde/" + svSlug + ".m3u8", false));
                 serverNum++;
             }

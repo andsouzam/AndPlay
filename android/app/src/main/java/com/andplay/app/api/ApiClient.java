@@ -68,6 +68,33 @@ public class ApiClient {
         return def;
     }
 
+    public static String sanitizeText(String text) {
+        if (text == null || text.isEmpty()) return "";
+        return text.replace("\uFFFD", "")
+                .replace("Caz?", "Cazé")
+                .replace("S?rie", "Série")
+                .replace("Not?cia", "Notícia")
+                .replace("Document?rio", "Documentário")
+                .replace("Ingl?s", "Inglês")
+                .replace("Retr?", "Retrô")
+                .replace("Cl?ssico", "Clássico")
+                .replace("C?mara", "Câmara")
+                .replace("Irm?o", "Irmão")
+                .replace("?culos", "Óculos")
+                .replace("M?gico", "Mágico")
+                .replace("Hor?rio", "Horário")
+                .replace("Obrigat?rio", "Obrigatório")
+                .replace("Programa??o", "Programação")
+                .replace("Programa?o", "Programação")
+                .replace("Edi??o", "Edição")
+                .replace("Edi?o", "Edição")
+                .replace("Ambr?sio", "Ambrósio")
+                .replace("Ant?nio", "Antônio")
+                .replace("T? na ?rea", "Tá na Área")
+                .replace("d? jogo", "dá jogo")
+                .replace("Toma L? Da C?", "Toma Lá Dá Cá");
+    }
+
     public static List<Channel> loadLocalChannels(Context context) {
         try {
             InputStream is = context.getAssets().open("channels.json");
@@ -84,8 +111,21 @@ public class ApiClient {
                     if (idLow.contains("appletv") || nameLow.contains("apple tv")) {
                         continue;
                     }
+                    if ("24h-spacetoday".equals(idLow) || "24h-os-jetsons".equals(idLow) || nameLow.contains("spacetoday") || nameLow.contains("jetsons")) {
+                        continue;
+                    }
                     if ("premiere".equals(ch.id) || "premiere 1".equalsIgnoreCase(ch.name)) {
                         ch.name = "Premiere Clubes";
+                    }
+                    ch.name = sanitizeText(ch.name);
+                    ch.cat = sanitizeText(ch.cat);
+                    ch.now = sanitizeText(ch.now);
+                    if (ch.next != null) {
+                        for (Channel.NextProgram np : ch.next) {
+                            if (np != null) {
+                                np.t = sanitizeText(np.t);
+                            }
+                        }
                     }
                     valid.add(ch);
                 }
