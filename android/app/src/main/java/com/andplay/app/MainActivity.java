@@ -288,6 +288,7 @@ public class MainActivity extends Activity {
         ExoPlayer exoPlayer;
         PlayerView playerView;
         boolean isPlayingEmbed;
+        boolean isUnavailable = false;
         List<Channel.StreamFallback> fallbacks;
         int currentFallbackIdx = 0;
     }
@@ -633,11 +634,18 @@ public class MainActivity extends Activity {
         for (int i = 0; i < 4; i++) {
             if (i != focusedIdx) {
                 MosaicSlotItem slot = mosaicSlots[i];
-                if (slot.audioView != null) {
-                    slot.audioView.setText("🔇 MUDO");
-                    slot.audioView.setTextColor(android.graphics.Color.parseColor("#888888"));
+                if (slot.isUnavailable) {
+                    if (slot.audioView != null) {
+                        slot.audioView.setText("⚠️ INDISPONÍVEL");
+                        slot.audioView.setTextColor(android.graphics.Color.parseColor("#FF5555"));
+                    }
+                } else {
+                    if (slot.audioView != null) {
+                        slot.audioView.setText("🔇 MUDO");
+                        slot.audioView.setTextColor(android.graphics.Color.parseColor("#888888"));
+                    }
+                    setSlotAudioMuted(slot, true);
                 }
-                setSlotAudioMuted(slot, true);
                 if (slot.hideOverlayRunnable != null) {
                     mainHandler.removeCallbacks(slot.hideOverlayRunnable);
                 }
@@ -650,17 +658,24 @@ public class MainActivity extends Activity {
         // 2. Desmuta exclusivamente o slot selecionado
         if (focusedIdx >= 0 && focusedIdx < 4) {
             MosaicSlotItem focusedSlot = mosaicSlots[focusedIdx];
-            if (focusedSlot.audioView != null) {
-                focusedSlot.audioView.setText("🔊 ÁUDIO");
-                focusedSlot.audioView.setTextColor(android.graphics.Color.parseColor("#FFD700"));
+            if (focusedSlot.isUnavailable) {
+                if (focusedSlot.audioView != null) {
+                    focusedSlot.audioView.setText("⚠️ INDISPONÍVEL");
+                    focusedSlot.audioView.setTextColor(android.graphics.Color.parseColor("#FF5555"));
+                }
+            } else {
+                if (focusedSlot.audioView != null) {
+                    focusedSlot.audioView.setText("🔊 ÁUDIO");
+                    focusedSlot.audioView.setTextColor(android.graphics.Color.parseColor("#FFD700"));
+                }
+                setSlotAudioMuted(focusedSlot, false);
             }
-            setSlotAudioMuted(focusedSlot, false);
             showMosaicSlotOverlay(focusedIdx);
         }
     }
 
     private void setSlotAudioMuted(MosaicSlotItem slot, boolean muted) {
-        if (slot == null) return;
+        if (slot == null || slot.isUnavailable) return;
         if (slot.exoPlayer != null) {
             slot.exoPlayer.setVolume(muted ? 0.0f : 1.0f);
         }
@@ -744,7 +759,7 @@ public class MainActivity extends Activity {
     private void tryNextMosaicFallback(int slotIdx) {
         if (slotIdx < 0 || slotIdx >= 4) return;
         MosaicSlotItem slot = mosaicSlots[slotIdx];
-        if (slot == null || slot.fallbacks == null) return;
+        if (slot == null || slot.isUnavailable || slot.fallbacks == null) return;
         slot.currentFallbackIdx++;
         if (slot.currentFallbackIdx < slot.fallbacks.size()) {
             Log.i("Mosaic", "Slot " + slotIdx + " alternando para fallback " + slot.currentFallbackIdx + ": " + slot.fallbacks.get(slot.currentFallbackIdx).name);
@@ -756,6 +771,87 @@ public class MainActivity extends Activity {
                 slot.titleView.setText(String.format(Locale.getDefault(), "TELA %d - %03d %s (Sem Sinal)", slotIdx + 1, chNum, slot.channel != null ? slot.channel.name : ""));
             }
         }
+    }
+
+    private void onBitmovinDetectedInMosaic(int slotIdx) {
+        if (!isMosaicActive || slotIdx < 0 || slotIdx >= 4) return;
+        MosaicSlotItem slot = mosaicSlots[slotIdx];
+        if (slot == null || slot.isUnavailable) return;
+        slot.isUnavailable = true;
+        Log.w("Mosaic", "Bitmovin bloqueado no slot " + slotIdx + ". Conexão finalizada e exibindo mensagem de indisponível.");
+
+        // 1. Encerra a conexão imediatamente e destrói o WebView/Player
+        if (slot.webView != null) {
+            try {
+                slot.webView.stopLoading();
+                slot.webView.loadUrl("about:blank");
+                slot.webView.clearHistory();
+                slot.webView.destroy();
+            } catch (Exception ignored) {}
+            slot.webView = null;
+        }
+        if (slot.exoPlayer != null) {
+            try {
+                slot.exoPlayer.stop();
+                slot.exoPlayer.release();
+            } catch (Exception ignored) {}
+            slot.exoPlayer = null;
+        }
+        slot.playerView = null;
+        slot.isPlayingEmbed = false;
+
+        // 2. Exibe mensagem centralizada no grid
+        if (slot.playerHost != null) {
+            slot.playerHost.removeAllViews();
+
+            LinearLayout container = new LinearLayout(this);
+            container.setOrientation(LinearLayout.VERTICAL);
+            container.setGravity(android.view.Gravity.CENTER);
+            container.setLayoutParams(new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+            container.setBackgroundColor(Color.parseColor("#141414"));
+
+            TextView iconView = new TextView(this);
+            iconView.setText("⚠️");
+            iconView.setTextSize(34);
+            iconView.setGravity(android.view.Gravity.CENTER);
+            container.addView(iconView);
+
+            TextView msgView = new TextView(this);
+            msgView.setText("Canal indisponível para Mosaico");
+            msgView.setTextColor(Color.WHITE);
+            msgView.setTextSize(16);
+            msgView.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            msgView.setGravity(android.view.Gravity.CENTER);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+            lp.setMargins(16, 12, 16, 6);
+            msgView.setLayoutParams(lp);
+            container.addView(msgView);
+
+            TextView hintView = new TextView(this);
+            hintView.setText("Pressione OK para trocar de canal");
+            hintView.setTextColor(Color.parseColor("#888888"));
+            hintView.setTextSize(12);
+            hintView.setGravity(android.view.Gravity.CENTER);
+            container.addView(hintView);
+
+            slot.playerHost.addView(container);
+        }
+
+        // 3. Atualiza header do slot
+        if (slot.titleView != null) {
+            String chName = (slot.channel != null && slot.channel.name != null) ? slot.channel.name : "";
+            int chNum = allChannels.indexOf(slot.channel) + 1;
+            slot.titleView.setText(String.format(Locale.getDefault(), "TELA %d - %03d %s (Indisponível no Mosaico)", slotIdx + 1, chNum, chName));
+        }
+        if (slot.audioView != null) {
+            slot.audioView.setText("⚠️ INDISPONÍVEL");
+            slot.audioView.setTextColor(Color.parseColor("#FF5555"));
+        }
+        showMosaicSlotOverlay(slotIdx);
     }
 
     private String decodeBolodechocolateHtml(String html) {
@@ -802,6 +898,15 @@ public class MainActivity extends Activity {
     private WebResourceResponse handleEmbedInterception(WebView view, WebResourceRequest request, boolean isMosaic, int mosaicSlotIdx) {
         if (request == null || request.getUrl() == null) return null;
         String url = request.getUrl().toString();
+
+        // 0. Bloqueia Bitmovin e bolodechocolate no modo Mosaico (incompatível com multi-view simultâneo)
+        if (isMosaic && mosaicSlotIdx >= 0) {
+            if (url.contains("bitmovin") || url.contains("bolodechocolate")) {
+                Log.w("Mosaic", "Slot " + mosaicSlotIdx + " tentou carregar Bitmovin/bolodechocolate (" + url + "). Bloqueando no Mosaico.");
+                mainHandler.post(() -> onBitmovinDetectedInMosaic(mosaicSlotIdx));
+                return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+            }
+        }
 
         // 1. Bloqueia anúncios, rastreadores e popunders conhecidos instantaneamente sem requisição de rede
         if (url.contains("aclib")
@@ -950,6 +1055,11 @@ public class MainActivity extends Activity {
                     Response okRes = sharedOkHttpClient.newCall(okReq).execute();
                     if (okRes.isSuccessful() && okRes.body() != null) {
                         String html = okRes.body().string();
+                        if (isMosaic && mosaicSlotIdx >= 0 && (url.contains("bolodechocolate") || html.contains("bolodechocolate") || html.contains("bitmovin"))) {
+                            Log.w("Mosaic", "Slot " + mosaicSlotIdx + " HTML contém Bitmovin/bolodechocolate. Bloqueando no Mosaico.");
+                            mainHandler.post(() -> onBitmovinDetectedInMosaic(mosaicSlotIdx));
+                            return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+                        }
                         html = decodeBolodechocolateHtml(html);
                         String hideStyle = "<style>" +
                                 ".jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, " +
@@ -970,6 +1080,20 @@ public class MainActivity extends Activity {
                         String autoplayScript = "<script>\n" +
                                 ";(function() {\n" +
                                 "  var isMosaic = " + isMosaic + ";\n" +
+                                "  if (isMosaic) {\n" +
+                                "    function checkBitmovin() {\n" +
+                                "      if (window.bitmovin) {\n" +
+                                "        try {\n" +
+                                "          if (window.AndroidPlayback && window.AndroidPlayback.onBitmovinDetected) {\n" +
+                                "            window.AndroidPlayback.onBitmovinDetected();\n" +
+                                "          }\n" +
+                                "        } catch(e) {}\n" +
+                                "      }\n" +
+                                "    }\n" +
+                                "    checkBitmovin();\n" +
+                                "    setTimeout(checkBitmovin, 200);\n" +
+                                "    setTimeout(checkBitmovin, 500);\n" +
+                                "  }\n" +
                                 "  if (window.__andplay_muted === undefined) {\n" +
                                 "    window.__andplay_muted = " + (isMosaic ? initialMuted : "false") + ";\n" +
                                 "  }\n" +
@@ -1140,8 +1264,18 @@ public class MainActivity extends Activity {
         boolean isSlotFocused = (slot.slotView != null && slot.slotView.isFocused());
 
         if (fb.isEmbed) {
+            if (fb.url != null && (fb.url.contains("bolodechocolate") || fb.url.contains("bitmovin"))) {
+                onBitmovinDetectedInMosaic(slotIdx);
+                return;
+            }
             slot.isPlayingEmbed = true;
             WebView wv = new WebView(this);
+            wv.addJavascriptInterface(new Object() {
+                @android.webkit.JavascriptInterface
+                public void onBitmovinDetected() {
+                    mainHandler.post(() -> onBitmovinDetectedInMosaic(slotIdx));
+                }
+            }, "AndroidPlayback");
             wv.setFocusable(false);
             wv.setFocusableInTouchMode(false);
             wv.setClickable(false);
@@ -1205,6 +1339,7 @@ public class MainActivity extends Activity {
                 @Override
                 public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                     super.onReceivedError(view, request, error);
+                    if (slot.isUnavailable) return;
                     if (request != null && request.isForMainFrame()) {
                         Log.w("Mosaic", "Slot " + slotIdx + " WebView error, tentando próximo fallback");
                         mainHandler.post(() -> tryNextMosaicFallback(slotIdx));
@@ -1214,10 +1349,11 @@ public class MainActivity extends Activity {
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
+                    if (slot.isUnavailable) return;
                     boolean isFocused = (slotIdx == currentMosaicFocusedIdx);
                     setSlotAudioMuted(slot, !isFocused);
                     view.postDelayed(() -> {
-                        if (isMosaicActive && slot.webView == view) {
+                        if (isMosaicActive && slot.webView == view && !slot.isUnavailable) {
                             boolean f = (slotIdx == currentMosaicFocusedIdx);
                             setSlotAudioMuted(slot, !f);
                         }
@@ -1269,6 +1405,7 @@ public class MainActivity extends Activity {
 
     private void clearMosaicSlot(MosaicSlotItem slot) {
         if (slot == null) return;
+        slot.isUnavailable = false;
         if (slot.hideOverlayRunnable != null) {
             mainHandler.removeCallbacks(slot.hideOverlayRunnable);
         }
