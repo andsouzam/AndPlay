@@ -628,22 +628,16 @@ public class MainActivity extends Activity {
 
     private void onMosaicSlotFocused(int focusedIdx) {
         currentMosaicFocusedIdx = focusedIdx;
+
+        // 1. Muta todos os outros slots primeiro para garantir que nunca existam dois fluxos de áudio simultâneos no Chromium
         for (int i = 0; i < 4; i++) {
-            MosaicSlotItem slot = mosaicSlots[i];
-            boolean isFocused = (i == focusedIdx);
-            if (slot.audioView != null) {
-                if (isFocused) {
-                    slot.audioView.setText("🔊 ÁUDIO");
-                    slot.audioView.setTextColor(android.graphics.Color.parseColor("#FFD700"));
-                } else {
+            if (i != focusedIdx) {
+                MosaicSlotItem slot = mosaicSlots[i];
+                if (slot.audioView != null) {
                     slot.audioView.setText("🔇 MUDO");
                     slot.audioView.setTextColor(android.graphics.Color.parseColor("#888888"));
                 }
-            }
-            setSlotAudioMuted(slot, !isFocused);
-            if (isFocused) {
-                showMosaicSlotOverlay(i);
-            } else {
+                setSlotAudioMuted(slot, true);
                 if (slot.hideOverlayRunnable != null) {
                     mainHandler.removeCallbacks(slot.hideOverlayRunnable);
                 }
@@ -651,6 +645,17 @@ public class MainActivity extends Activity {
                     slot.overlayView.setVisibility(View.GONE);
                 }
             }
+        }
+
+        // 2. Desmuta exclusivamente o slot selecionado
+        if (focusedIdx >= 0 && focusedIdx < 4) {
+            MosaicSlotItem focusedSlot = mosaicSlots[focusedIdx];
+            if (focusedSlot.audioView != null) {
+                focusedSlot.audioView.setText("🔊 ÁUDIO");
+                focusedSlot.audioView.setTextColor(android.graphics.Color.parseColor("#FFD700"));
+            }
+            setSlotAudioMuted(focusedSlot, false);
+            showMosaicSlotOverlay(focusedIdx);
         }
     }
 
@@ -661,13 +666,43 @@ public class MainActivity extends Activity {
         }
         if (slot.webView != null) {
             String script = "(function() {" +
-                    "try {" +
-                    "  var media = document.querySelectorAll('video, audio');" +
-                    "  for (var i = 0; i < media.length; i++) {" +
-                    "    media[i].muted = " + (muted ? "true" : "false") + ";" +
-                    (!muted ? "    media[i].volume = 1.0; if (media[i].paused) media[i].play().catch(function(){});" : "") +
+                    "  var m = " + (muted ? "true" : "false") + ";" +
+                    "  window.__andplay_muted = m;" +
+                    "  function apply(win) {" +
+                    "    try {" +
+                    "      var media = win.document.querySelectorAll('video, audio');" +
+                    "      for (var i = 0; i < media.length; i++) {" +
+                    "        var v = media[i];" +
+                    "        v.muted = m;" +
+                    "        v.volume = m ? 0.0 : 1.0;" +
+                    "        if (!m && v.paused) { v.play().catch(function(){}); }" +
+                    "      }" +
+                    "    } catch(e) {}" +
+                    "    try {" +
+                    "      if (typeof win.jwplayer === 'function') {" +
+                    "        var p = win.jwplayer();" +
+                    "        if (p && typeof p.setMute === 'function') {" +
+                    "          p.setMute(m);" +
+                    "          p.setVolume(m ? 0 : 100);" +
+                    "          if (!m) {" +
+                    "            var s = typeof p.getState === 'function' ? p.getState() : '';" +
+                    "            if (s === 'paused' || s === 'idle') p.play();" +
+                    "          }" +
+                    "        }" +
+                    "      }" +
+                    "    } catch(e) {}" +
+                    "    try {" +
+                    "      if (win.frames && win.frames.length > 0) {" +
+                    "        for (var j = 0; j < win.frames.length; j++) {" +
+                    "          try {" +
+                    "            win.frames[j].postMessage({ type: 'ANDPLAY_AUDIO_CONTROL', muted: m }, '*');" +
+                    "            apply(win.frames[j]);" +
+                    "          } catch(err) {}" +
+                    "        }" +
+                    "      }" +
+                    "    } catch(e) {}" +
                     "  }" +
-                    "} catch(e) {}" +
+                    "  apply(window);" +
                     "})();";
             slot.webView.evaluateJavascript(script, null);
         }
@@ -707,7 +742,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private WebResourceResponse handleEmbedInterception(WebView view, WebResourceRequest request, boolean isMosaic) {
+    private WebResourceResponse handleEmbedInterception(WebView view, WebResourceRequest request, boolean isMosaic, int mosaicSlotIdx) {
         if (request == null || request.getUrl() == null) return null;
         String url = request.getUrl().toString();
 
@@ -748,7 +783,7 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) {}
         }
 
-        // 3. Intercepta player.js do localhost.tattoo para garantir autoplay e remover botão de pause
+        // 3. Intercepta player.js do localhost.tattoo para garantir autoplay e controle de áudio
         if (url.contains("localhost.tattoo") && url.contains("player.js")) {
             try {
                 Request okReq = new Request.Builder()
@@ -759,17 +794,25 @@ public class MainActivity extends Activity {
                 Response okRes = sharedOkHttpClient.newCall(okReq).execute();
                 if (okRes.isSuccessful() && okRes.body() != null) {
                     String originalJs = okRes.body().string();
+                    boolean isFocused = (isMosaic && mosaicSlotIdx >= 0 && mosaicSlotIdx == currentMosaicFocusedIdx);
+                    boolean initialMuted = isMosaic ? !isFocused : false;
                     String injection = "\n;(function(){\n" +
                             "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';\n" +
                             "  var st = document.createElement('style');\n" +
                             "  st.textContent = css;\n" +
                             "  (document.head || document.documentElement).appendChild(st);\n" +
+                            "  var isMosaic = " + isMosaic + ";\n" +
+                            "  if (window.__andplay_muted === undefined) {\n" +
+                            "    window.__andplay_muted = " + (isMosaic ? initialMuted : "false") + ";\n" +
+                            "  }\n" +
                             "  function forceStart() {\n" +
+                            "    var m = (window.__andplay_muted !== false);\n" +
                             "    try {\n" +
                             "      if (typeof jwplayer === 'function') {\n" +
                             "        var p = jwplayer();\n" +
                             "        if (p && typeof p.play === 'function') {\n" +
-                            (!isMosaic ? "          p.setMute(false);\n          p.setVolume(100);\n" : "") +
+                            "          if (typeof p.setMute === 'function') p.setMute(m);\n" +
+                            "          if (typeof p.setVolume === 'function') p.setVolume(m ? 0 : 100);\n" +
                             "          var s = typeof p.getState === 'function' ? p.getState() : '';\n" +
                             "          if (s === 'paused' || s === 'idle') { p.play(); }\n" +
                             (!isMosaic ? "          if (s === 'playing') { if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted(); }\n" : "") +
@@ -779,13 +822,28 @@ public class MainActivity extends Activity {
                             "    try {\n" +
                             "      var v = document.querySelector('video');\n" +
                             "      if (v) {\n" +
-                            (!isMosaic ? "        v.muted = false;\n        v.volume = 1.0;\n" : "") +
+                            "        if (v.muted !== m) v.muted = m;\n" +
+                            "        if (m && v.volume > 0) v.volume = 0.0;\n" +
+                            "        else if (!m && v.volume < 1.0) v.volume = 1.0;\n" +
                             "        if (v.paused) { v.play().catch(function(){}); }\n" +
                             (!isMosaic ? "        else if (v.currentTime > 0) { if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted(); }\n" : "") +
                             "      }\n" +
                             "    } catch(e) {}\n" +
                             "  }\n" +
-                            "  setInterval(forceStart, 600);\n" +
+                            "  window.addEventListener('message', function(e) {\n" +
+                            "    if (e.data && e.data.type === 'ANDPLAY_AUDIO_CONTROL') {\n" +
+                            "      window.__andplay_muted = !!e.data.muted;\n" +
+                            "      forceStart();\n" +
+                            "    }\n" +
+                            "  });\n" +
+                            "  if (isMosaic) {\n" +
+                            "    document.addEventListener('pause', function(e) {\n" +
+                            "      if (e.target && (e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO')) {\n" +
+                            "        setTimeout(function() { if (e.target.paused) e.target.play().catch(function(){}); }, 50);\n" +
+                            "      }\n" +
+                            "    }, true);\n" +
+                            "  }\n" +
+                            "  setInterval(forceStart, 400);\n" +
                             "  document.addEventListener('DOMContentLoaded', forceStart);\n" +
                             "  window.addEventListener('load', forceStart);\n" +
                             "})();\n";
@@ -821,9 +879,12 @@ public class MainActivity extends Activity {
             }
         }
 
-        // 5. Intercepta páginas e frames do rdcanais.net, bolodechocolate, rdembed e localhost.tattoo limpando anúncios, controles e garantindo permissões de autoplay
-        if (url.contains("rdcanais.net") || url.contains("rdembed") || url.contains("redecanais") || url.contains("bolodechocolate") || url.contains("localhost.tattoo")) {
-            if (request.isForMainFrame() || url.endsWith(".html") || url.endsWith(".php") || url.contains("/embed/") || url.contains("player") || url.contains("canais") || url.contains("canal")) {
+        // 5. Intercepta páginas e frames do rdcanais.net, bolodechocolate, rdembed, esportesembed e localhost.tattoo limpando anúncios, controles e garantindo permissões de autoplay
+        if (url.contains("rdcanais.net") || url.contains("rdembed") || url.contains("redecanais") || url.contains("bolodechocolate") || url.contains("esportesembed") || url.contains("localhost.tattoo")) {
+            boolean isHtml = request.isForMainFrame()
+                    || (request.getRequestHeaders() != null && String.valueOf(request.getRequestHeaders().get("Accept")).contains("text/html"))
+                    || (!url.contains(".js") && !url.contains(".css") && !url.contains(".png") && !url.contains(".jpg") && !url.contains(".m3u8") && !url.contains(".ts") && !url.contains(".woff") && !url.contains(".svg"));
+            if (isHtml) {
                 try {
                     Request okReq = new Request.Builder()
                             .url(url)
@@ -833,23 +894,35 @@ public class MainActivity extends Activity {
                     if (okRes.isSuccessful() && okRes.body() != null) {
                         String html = okRes.body().string();
                         String hideStyle = "<style>.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], video::-webkit-media-controls { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; } body, html { background: #000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }</style>";
+                        boolean isFocused = (isMosaic && mosaicSlotIdx >= 0 && mosaicSlotIdx == currentMosaicFocusedIdx);
+                        boolean initialMuted = isMosaic ? !isFocused : false;
                         String autoplayScript = "<script>\n" +
                                 ";(function() {\n" +
-                                "  function forcePlay() {\n" +
-                                "    try {\n" +
-                                "      if (typeof jwplayer === 'function') {\n" +
-                                "        var p = jwplayer();\n" +
-                                "        if (p && typeof p.play === 'function') {\n" +
-                                "          var s = typeof p.getState === 'function' ? p.getState() : '';\n" +
-                                "          if (s === 'paused' || s === 'idle') { p.play(); }\n" +
-                                "        }\n" +
-                                "      }\n" +
-                                "    } catch(e) {}\n" +
+                                "  var isMosaic = " + isMosaic + ";\n" +
+                                "  if (window.__andplay_muted === undefined) {\n" +
+                                "    window.__andplay_muted = " + (isMosaic ? initialMuted : "false") + ";\n" +
+                                "  }\n" +
+                                "  function updateAudioAndPlay() {\n" +
+                                "    var m = (window.__andplay_muted !== false);\n" +
                                 "    try {\n" +
                                 "      var media = document.querySelectorAll('video, audio');\n" +
                                 "      for (var i = 0; i < media.length; i++) {\n" +
                                 "        var v = media[i];\n" +
+                                "        if (v.muted !== m) v.muted = m;\n" +
+                                "        if (m && v.volume > 0) v.volume = 0.0;\n" +
+                                "        else if (!m && v.volume < 1.0) v.volume = 1.0;\n" +
                                 "        if (v.paused) { v.play().catch(function(){}); }\n" +
+                                "      }\n" +
+                                "    } catch(e) {}\n" +
+                                "    try {\n" +
+                                "      if (typeof jwplayer === 'function') {\n" +
+                                "        var p = jwplayer();\n" +
+                                "        if (p && typeof p.play === 'function') {\n" +
+                                "          if (typeof p.setMute === 'function') p.setMute(m);\n" +
+                                "          if (typeof p.setVolume === 'function') p.setVolume(m ? 0 : 100);\n" +
+                                "          var s = typeof p.getState === 'function' ? p.getState() : '';\n" +
+                                "          if (s === 'paused' || s === 'idle') { p.play(); }\n" +
+                                "        }\n" +
                                 "      }\n" +
                                 "    } catch(e) {}\n" +
                                 "    try {\n" +
@@ -859,15 +932,51 @@ public class MainActivity extends Activity {
                                 "      }\n" +
                                 "    } catch(e) {}\n" +
                                 "  }\n" +
-                                "  setInterval(forcePlay, 500);\n" +
-                                "  document.addEventListener('DOMContentLoaded', forcePlay);\n" +
-                                "  window.addEventListener('load', forcePlay);\n" +
+                                "  window.addEventListener('message', function(e) {\n" +
+                                "    if (e.data && e.data.type === 'ANDPLAY_REQUEST_AUDIO') {\n" +
+                                "      try {\n" +
+                                "        if (e.source) {\n" +
+                                "          e.source.postMessage({ type: 'ANDPLAY_AUDIO_CONTROL', muted: (window.__andplay_muted !== false) }, '*');\n" +
+                                "        }\n" +
+                                "      } catch(err) {}\n" +
+                                "    }\n" +
+                                "    if (e.data && e.data.type === 'ANDPLAY_AUDIO_CONTROL') {\n" +
+                                "      window.__andplay_muted = !!e.data.muted;\n" +
+                                "      updateAudioAndPlay();\n" +
+                                "      try {\n" +
+                                "        if (window.frames && window.frames.length > 0) {\n" +
+                                "          for (var k = 0; k < window.frames.length; k++) {\n" +
+                                "            window.frames[k].postMessage(e.data, '*');\n" +
+                                "          }\n" +
+                                "        }\n" +
+                                "      } catch(err) {}\n" +
+                                "    }\n" +
+                                "  });\n" +
+                                "  try {\n" +
+                                "    if (window.top && window.top !== window) {\n" +
+                                "      window.top.postMessage({ type: 'ANDPLAY_REQUEST_AUDIO' }, '*');\n" +
+                                "    }\n" +
+                                "  } catch(e) {}\n" +
+                                "  if (isMosaic) {\n" +
+                                "    document.addEventListener('pause', function(e) {\n" +
+                                "      if (e.target && (e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO')) {\n" +
+                                "        setTimeout(function() { if (e.target.paused) e.target.play().catch(function(){}); }, 50);\n" +
+                                "      }\n" +
+                                "    }, true);\n" +
+                                "  }\n" +
+                                "  setInterval(updateAudioAndPlay, 400);\n" +
+                                "  document.addEventListener('DOMContentLoaded', updateAudioAndPlay);\n" +
+                                "  window.addEventListener('load', updateAudioAndPlay);\n" +
                                 "})();\n" +
                                 "</script>";
                         html = html.replaceAll("(?is)<script[^>]*aclib[^>]*>.*?</script>", "")
                                    .replaceAll("(?is)<script[^>]*histats[^>]*>.*?</script>", "")
-                                   .replace("allow=\"encrypted-media\"", "allow=\"autoplay *; encrypted-media *; fullscreen *; picture-in-picture *\"")
-                                   .replaceFirst("(?i)<head>", "<head>" + hideStyle + autoplayScript);
+                                   .replaceAll("(?i)<iframe\\b([^>]*)>", "<iframe$1 allow=\"autoplay *; encrypted-media *; fullscreen *; picture-in-picture *\">");
+                        if (html.toLowerCase().contains("<head>")) {
+                            html = html.replaceFirst("(?i)<head>", "<head>" + hideStyle + autoplayScript);
+                        } else {
+                            html = hideStyle + autoplayScript + html;
+                        }
                         byte[] htmlBytes = html.getBytes(StandardCharsets.UTF_8);
                         return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(htmlBytes));
                     }
@@ -971,7 +1080,7 @@ public class MainActivity extends Activity {
 
                 @Override
                 public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                    WebResourceResponse res = handleEmbedInterception(view, request, true);
+                    WebResourceResponse res = handleEmbedInterception(view, request, true, slotIdx);
                     if (res != null) return res;
                     return super.shouldInterceptRequest(view, request);
                 }
@@ -988,42 +1097,14 @@ public class MainActivity extends Activity {
                 @Override
                 public void onPageFinished(WebView view, String url) {
                     super.onPageFinished(view, url);
-                    boolean isFocused = (slot.slotView != null && slot.slotView.isFocused());
-                    String script = "(function() {" +
-                            "try {" +
-                            "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"] { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';" +
-                            "  var st = document.createElement('style');" +
-                            "  st.textContent = css;" +
-                            "  (document.head || document.documentElement).appendChild(st);" +
-                            "} catch(e) {}" +
-                            "function forcePlay() {" +
-                            "  var hasPaused = false;" +
-                            "  var media = document.querySelectorAll('video, audio');" +
-                            "  for (var i = 0; i < media.length; i++) {" +
-                            "    media[i].muted = " + (!isFocused) + ";" +
-                            (isFocused ? "    media[i].volume = 1.0;" : "") +
-                            "    if (media[i].paused) { hasPaused = true; media[i].play().catch(function(){}); }" +
-                            "  }" +
-                            "  if (typeof jwplayer === 'function') {" +
-                            "    try {" +
-                            "      var p = jwplayer();" +
-                            "      if (p && typeof p.getState === 'function') {" +
-                            "        var s = p.getState();" +
-                            "        if (s === 'paused' || s === 'idle') { p.play(); hasPaused = true; }" +
-                            "      }" +
-                            "    } catch(e) {}" +
-                            "  }" +
-                            "  if (hasPaused) {" +
-                            "    var btns = document.querySelectorAll('.vjs-big-play-button, .plyr__control--overlaid, button[aria-label*=\"Play\" i], button[title*=\"Play\" i]');" +
-                            "    for (var j = 0; j < btns.length; j++) {" +
-                            "      try { btns[j].click(); } catch(e){}" +
-                            "    }" +
-                            "  }" +
-                            "}" +
-                            "forcePlay();" +
-                            "setInterval(forcePlay, 800);" +
-                            "})();";
-                    view.evaluateJavascript(script, null);
+                    boolean isFocused = (slotIdx == currentMosaicFocusedIdx);
+                    setSlotAudioMuted(slot, !isFocused);
+                    view.postDelayed(() -> {
+                        if (isMosaicActive && slot.webView == view) {
+                            boolean f = (slotIdx == currentMosaicFocusedIdx);
+                            setSlotAudioMuted(slot, !f);
+                        }
+                    }, 1200);
                 }
             });
 
@@ -1399,7 +1480,7 @@ public class MainActivity extends Activity {
 
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                WebResourceResponse res = handleEmbedInterception(view, request, false);
+                WebResourceResponse res = handleEmbedInterception(view, request, false, -1);
                 if (res != null) return res;
                 return super.shouldInterceptRequest(view, request);
             }
