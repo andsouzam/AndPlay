@@ -5,3 +5,4 @@ atualizar.bat
 .gradle/
 **/build/
 local.properties
+*.zip
