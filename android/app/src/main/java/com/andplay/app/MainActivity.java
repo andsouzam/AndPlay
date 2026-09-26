@@ -692,6 +692,22 @@ public class MainActivity extends Activity {
                     "      }" +
                     "    } catch(e) {}" +
                     "    try {" +
+                    "      if (win.__andplay_bitmovin_instances) {" +
+                    "        for (var bi = 0; bi < win.__andplay_bitmovin_instances.length; bi++) {" +
+                    "          var bp = win.__andplay_bitmovin_instances[bi];" +
+                    "          if (bp) {" +
+                    "            if (m) {" +
+                    "              if (typeof bp.mute === 'function') bp.mute();" +
+                    "            } else {" +
+                    "              if (typeof bp.unmute === 'function') bp.unmute();" +
+                    "              if (typeof bp.setVolume === 'function') bp.setVolume(100);" +
+                    "              if (typeof bp.isPaused === 'function' && bp.isPaused()) bp.play();" +
+                    "            }" +
+                    "          }" +
+                    "        }" +
+                    "      }" +
+                    "    } catch(e) {}" +
+                    "    try {" +
                     "      if (win.frames && win.frames.length > 0) {" +
                     "        for (var j = 0; j < win.frames.length; j++) {" +
                     "          try {" +
@@ -740,6 +756,47 @@ public class MainActivity extends Activity {
                 slot.titleView.setText(String.format(Locale.getDefault(), "TELA %d - %03d %s (Sem Sinal)", slotIdx + 1, chNum, slot.channel != null ? slot.channel.name : ""));
             }
         }
+    }
+
+    private String decodeBolodechocolateHtml(String html) {
+        if (html == null || !html.contains("var Dws") || !html.contains("String.fromCharCode")) {
+            return html;
+        }
+        try {
+            java.util.regex.Matcher offsetMatcher = java.util.regex.Pattern.compile("-\\s*(\\d+)\\s*\\)\\s*;\\s*\\}\\s*\\)\\s*;").matcher(html);
+            if (!offsetMatcher.find()) {
+                return html;
+            }
+            long offset = Long.parseLong(offsetMatcher.group(1));
+
+            java.util.regex.Matcher dwsMatcher = java.util.regex.Pattern.compile("(?s)var Dws\\s*=\\s*\\[(.*?)\\];").matcher(html);
+            if (!dwsMatcher.find()) {
+                return html;
+            }
+            String arrayContent = dwsMatcher.group(1);
+            String[] tokens = arrayContent.split(",");
+            StringBuilder decoded = new StringBuilder(tokens.length);
+            for (String token : tokens) {
+                String clean = token.replace("\"", "").replace("'", "").trim();
+                if (!clean.isEmpty()) {
+                    byte[] decodedBytes = android.util.Base64.decode(clean, android.util.Base64.DEFAULT);
+                    String s = new String(decodedBytes, StandardCharsets.UTF_8);
+                    String digits = s.replaceAll("\\D", "");
+                    if (!digits.isEmpty()) {
+                        long code = Long.parseLong(digits) - offset;
+                        decoded.append((char) code);
+                    }
+                }
+            }
+            String res = decoded.toString();
+            if (res.contains("<html") || res.contains("<body") || res.contains("<script")) {
+                Log.i("EPlay", "Sucesso ao desofuscar HTML do bolodechocolate (" + res.length() + " chars)");
+                return res;
+            }
+        } catch (Exception e) {
+            Log.w("EPlay", "Erro ao desofuscar bolodechocolate: " + e.getMessage());
+        }
+        return html;
     }
 
     private WebResourceResponse handleEmbedInterception(WebView view, WebResourceRequest request, boolean isMosaic, int mosaicSlotIdx) {
@@ -893,7 +950,21 @@ public class MainActivity extends Activity {
                     Response okRes = sharedOkHttpClient.newCall(okReq).execute();
                     if (okRes.isSuccessful() && okRes.body() != null) {
                         String html = okRes.body().string();
-                        String hideStyle = "<style>.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], video::-webkit-media-controls { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; } body, html { background: #000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }</style>";
+                        html = decodeBolodechocolateHtml(html);
+                        String hideStyle = "<style>" +
+                                ".jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, " +
+                                ".plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], " +
+                                "video::-webkit-media-controls, " +
+                                ".bmpui-ui-seekbar, .bmpui-ui-volumeslider, .bmpui-ui-controlbar, .bmpui-controlbar, " +
+                                ".bmpui-ui-playbacktogglebutton, .bmpui-ui-hugeplaybacktogglebutton, .bmpui-ui-watermark, " +
+                                ".bmpui-ui-settings-panel, .bmpui-ui-selectbox, #status { " +
+                                "  display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; " +
+                                "} " +
+                                "body, html, #wrapper, #player { " +
+                                "  background: #000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; " +
+                                "  width: 100% !important; height: 100% !important; " +
+                                "}" +
+                                "</style>";
                         boolean isFocused = (isMosaic && mosaicSlotIdx >= 0 && mosaicSlotIdx == currentMosaicFocusedIdx);
                         boolean initialMuted = isMosaic ? !isFocused : false;
                         String autoplayScript = "<script>\n" +
@@ -902,6 +973,36 @@ public class MainActivity extends Activity {
                                 "  if (window.__andplay_muted === undefined) {\n" +
                                 "    window.__andplay_muted = " + (isMosaic ? initialMuted : "false") + ";\n" +
                                 "  }\n" +
+                                "  (function hookBitmovin() {\n" +
+                                "    window.__andplay_bitmovin_instances = window.__andplay_bitmovin_instances || [];\n" +
+                                "    if (window.bitmovin && window.bitmovin.player && window.bitmovin.player.Player) {\n" +
+                                "      if (!window.bitmovin.player.Player.__andplay_hooked) {\n" +
+                                "        var OriginalPlayer = window.bitmovin.player.Player;\n" +
+                                "        window.bitmovin.player.Player = function(container, config) {\n" +
+                                "          var inst = new OriginalPlayer(container, config);\n" +
+                                "          window.__andplay_bitmovin_instances.push(inst);\n" +
+                                "          var m = (window.__andplay_muted !== false);\n" +
+                                "          if (m) {\n" +
+                                "            try { if (typeof inst.mute === 'function') inst.mute(); } catch(e){}\n" +
+                                "          }\n" +
+                                "          if (isMosaic && typeof inst.on === 'function') {\n" +
+                                "            inst.on('paused', function() {\n" +
+                                "              setTimeout(function() {\n" +
+                                "                if (inst.isPaused && inst.isPaused()) {\n" +
+                                "                  inst.play();\n" +
+                                "                }\n" +
+                                "              }, 50);\n" +
+                                "            });\n" +
+                                "          }\n" +
+                                "          return inst;\n" +
+                                "        };\n" +
+                                "        window.bitmovin.player.Player.prototype = OriginalPlayer.prototype;\n" +
+                                "        window.bitmovin.player.Player.__andplay_hooked = true;\n" +
+                                "      }\n" +
+                                "    } else {\n" +
+                                "      setTimeout(hookBitmovin, 50);\n" +
+                                "    }\n" +
+                                "  })();\n" +
                                 "  function updateAudioAndPlay() {\n" +
                                 "    var m = (window.__andplay_muted !== false);\n" +
                                 "    try {\n" +
@@ -922,6 +1023,22 @@ public class MainActivity extends Activity {
                                 "          if (typeof p.setVolume === 'function') p.setVolume(m ? 0 : 100);\n" +
                                 "          var s = typeof p.getState === 'function' ? p.getState() : '';\n" +
                                 "          if (s === 'paused' || s === 'idle') { p.play(); }\n" +
+                                "        }\n" +
+                                "      }\n" +
+                                "    } catch(e) {}\n" +
+                                "    try {\n" +
+                                "      if (window.__andplay_bitmovin_instances) {\n" +
+                                "        for (var bi = 0; bi < window.__andplay_bitmovin_instances.length; bi++) {\n" +
+                                "          var bp = window.__andplay_bitmovin_instances[bi];\n" +
+                                "          if (bp) {\n" +
+                                "            if (m) {\n" +
+                                "              if (typeof bp.mute === 'function') bp.mute();\n" +
+                                "            } else {\n" +
+                                "              if (typeof bp.unmute === 'function') bp.unmute();\n" +
+                                "              if (typeof bp.setVolume === 'function') bp.setVolume(100);\n" +
+                                "              if (typeof bp.isPaused === 'function' && bp.isPaused()) bp.play();\n" +
+                                "            }\n" +
+                                "          }\n" +
                                 "        }\n" +
                                 "      }\n" +
                                 "    } catch(e) {}\n" +
