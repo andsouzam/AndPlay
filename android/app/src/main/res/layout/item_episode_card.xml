@@ -2,12 +2,13 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/epCardRoot"
     android:layout_width="match_parent"
-    android:layout_height="68dp"
+    android:layout_height="76dp"
     android:layout_marginStart="6dp"
     android:layout_marginEnd="6dp"
     android:layout_marginTop="2dp"
     android:layout_marginBottom="4dp"
     android:background="@drawable/card_focus_bg"
+    android:foreground="@drawable/card_focus_fg"
     android:clickable="true"
     android:focusable="true"
     android:focusableInTouchMode="true"
@@ -30,8 +31,8 @@
 
     <ImageView
         android:id="@+id/epThumb"
-        android:layout_width="80dp"
-        android:layout_height="52dp"
+        android:layout_width="84dp"
+        android:layout_height="58dp"
         android:layout_marginStart="4dp"
         android:scaleType="centerCrop" />
 
@@ -50,17 +51,28 @@
             android:maxLines="1"
             android:text="Título do Episódio"
             android:textColor="#FFFFFF"
-            android:textSize="13sp"
+            android:textSize="12.5sp"
             android:textStyle="bold" />
 
         <TextView
             android:id="@+id/epDuration"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="45 min"
-            android:textColor="#AAAAAA"
-            android:textSize="11sp" />
+            android:layout_marginTop="1dp"
+            android:text="45 min • ★ 8.5"
+            android:textColor="#FFC107"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/epPlot"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Sinopse detalhada do episódio..."
+            android:textColor="#99A4BA"
+            android:textSize="10sp" />
     </LinearLayout>
 
     <TextView

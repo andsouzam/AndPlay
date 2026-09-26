@@ -1,41 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/movieCardRoot"
     android:layout_width="125dp"
-    android:layout_height="136dp"
+    android:layout_height="170dp"
     android:layout_margin="3dp"
-    android:background="@drawable/card_focus_bg"
+    android:background="#121622"
+    android:foreground="@drawable/card_focus_fg"
     android:clickable="true"
     android:focusable="true"
-    android:focusableInTouchMode="true"
-    android:orientation="vertical"
-    android:padding="4dp">
+    android:focusableInTouchMode="true">
 
     <ImageView
         android:id="@+id/moviePoster"
         android:layout_width="match_parent"
-        android:layout_height="96dp"
+        android:layout_height="match_parent"
         android:scaleType="centerCrop" />
 
-    <TextView
-        android:id="@+id/movieTitle"
+    <!-- Barra translúcida sobreposta ao rodapé da capa -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:text="Título do Filme"
-        android:textColor="#FFFFFF"
-        android:textSize="10sp"
-        android:textStyle="bold" />
+        android:layout_gravity="bottom"
+        android:background="@drawable/card_bottom_gradient"
+        android:orientation="vertical"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="18dp"
+        android:paddingBottom="6dp">
 
-    <TextView
-        android:id="@+id/movieSubtitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:ellipsize="end"
-        android:maxLines="1"
-        android:text="2024 ★ 8.5"
-        android:textColor="#FFC107"
-        android:textSize="9sp" />
-</LinearLayout>
+        <TextView
+            android:id="@+id/movieTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Título do Filme"
+            android:textColor="#FFFFFF"
+            android:textSize="10.5sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/movieSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="2024 ★ 8.5"
+            android:textColor="#FFC107"
+            android:textSize="9.5sp" />
+    </LinearLayout>
+</FrameLayout>

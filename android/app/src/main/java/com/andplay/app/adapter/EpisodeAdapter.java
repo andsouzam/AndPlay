@@ -21,14 +21,24 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         void onEpisodeClick(Episode episode);
     }
 
+    public interface OnEpisodeFocusListener {
+        void onEpisodeFocus(Episode episode);
+    }
+
     private final Context context;
     private final List<Episode> episodes;
     private final OnEpisodeClickListener listener;
+    private final OnEpisodeFocusListener focusListener;
 
-    public EpisodeAdapter(Context context, List<Episode> episodes, OnEpisodeClickListener listener) {
+    public EpisodeAdapter(Context context, List<Episode> episodes, OnEpisodeClickListener listener, OnEpisodeFocusListener focusListener) {
         this.context = context;
         this.episodes = episodes;
         this.listener = listener;
+        this.focusListener = focusListener;
+    }
+
+    public EpisodeAdapter(Context context, List<Episode> episodes, OnEpisodeClickListener listener) {
+        this(context, episodes, listener, null);
     }
 
     @NonNull
@@ -43,7 +53,25 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         Episode ep = episodes.get(position);
         holder.num.setText(String.format("E%02d", ep.episode_num));
         holder.title.setText(ep.getDisplayTitle());
-        holder.duration.setText(ep.getDurationText());
+
+        StringBuilder details = new StringBuilder();
+        String dur = ep.getDurationText();
+        if (!dur.isEmpty()) details.append(dur);
+        String rating = ep.getRating();
+        if (!rating.isEmpty()) {
+            if (details.length() > 0) details.append(" • ");
+            details.append("★ ").append(rating);
+        }
+        String date = ep.getReleaseDate();
+        if (!date.isEmpty()) {
+            if (details.length() > 0) details.append(" • ");
+            details.append(date);
+        }
+        holder.duration.setText(details.length() > 0 ? details.toString() : "Duração padrão");
+
+        if (holder.plot != null) {
+            holder.plot.setText(ep.getPlot());
+        }
 
         String thumb = ep.getThumbUrl();
         if (thumb != null && !thumb.isEmpty()) {
@@ -79,6 +107,9 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
             v.setScaleX(1.0f);
             v.setScaleY(1.0f);
             v.setElevation(hasFocus ? 4f : 0f);
+            if (hasFocus && focusListener != null) {
+                focusListener.onEpisodeFocus(ep);
+            }
         });
     }
 
@@ -92,6 +123,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         ImageView thumb;
         TextView title;
         TextView duration;
+        TextView plot;
         TextView watchBtn;
 
         ViewHolder(@NonNull View itemView) {
@@ -100,6 +132,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
             thumb = itemView.findViewById(R.id.epThumb);
             title = itemView.findViewById(R.id.epTitle);
             duration = itemView.findViewById(R.id.epDuration);
+            plot = itemView.findViewById(R.id.epPlot);
             watchBtn = itemView.findViewById(R.id.epWatchBtn);
         }
     }

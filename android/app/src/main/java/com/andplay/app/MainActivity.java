@@ -71,13 +71,16 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import android.view.MotionEvent;
 
+import android.graphics.Color;
 import com.andplay.app.adapter.CategoryPillAdapter;
 import com.andplay.app.adapter.ChannelRailAdapter;
 import com.andplay.app.adapter.EpisodeAdapter;
 import com.andplay.app.adapter.MoviePosterAdapter;
 import com.andplay.app.adapter.SportsRailAdapter;
+import com.andplay.app.adapter.TimelineAdapter;
 import com.andplay.app.api.ApiClient;
 import com.andplay.app.epg.EpgEngine;
+import com.andplay.app.epg.EpgEngine.TimelineProgram;
 import com.andplay.app.model.Category;
 import com.andplay.app.model.Channel;
 import com.andplay.app.model.Episode;
@@ -153,9 +156,24 @@ public class MainActivity extends Activity {
 
     // Series Detail Views
     private LinearLayout seriesDetailLayout;
-    private TextView seriesBackBtn, seriesDetailTitle;
+    private TextView seriesDetailTitle, seriesDetailRating, seriesDetailYear, seriesDetailGenre, seriesDetailPlot;
     private RecyclerView seriesSeasonsRecycler;
     private RecyclerView seriesEpisodesRecycler;
+    private List<String> currentSeriesSeasonKeys = new ArrayList<>();
+    private int currentSeriesSeasonIdx = 0;
+
+    // Full EPG Guide Views
+    private LinearLayout fullGuideLayout;
+    private TextView guideClock;
+    private TextView guideHeroChannelBadge, guideHeroStatusBadge, guideHeroTime, guideHeroRemaining;
+    private TextView guideHeroTitle, guideHeroSynopsis;
+    private ProgressBar guideHeroProgress;
+    private TextView guidePrevChannelHint, guideChannelTitle, guideNextChannelHint;
+    private RecyclerView guideTimelineRecycler;
+    private TimelineAdapter guideTimelineAdapter;
+    private int guideSelectedChannelIdx = 0;
+    private List<TimelineProgram> guideCurrentTimeline = new ArrayList<>();
+    private boolean suppressNextEnterUp = false;
 
     // Loading Overlay
     private LinearLayout loadingLayout;
@@ -292,10 +310,29 @@ public class MainActivity extends Activity {
 
         // Series Detail
         seriesDetailLayout = findViewById(R.id.seriesDetailLayout);
-        seriesBackBtn = findViewById(R.id.seriesBackBtn);
         seriesDetailTitle = findViewById(R.id.seriesDetailTitle);
+        seriesDetailRating = findViewById(R.id.seriesDetailRating);
+        seriesDetailYear = findViewById(R.id.seriesDetailYear);
+        seriesDetailGenre = findViewById(R.id.seriesDetailGenre);
+        seriesDetailPlot = findViewById(R.id.seriesDetailPlot);
         seriesSeasonsRecycler = findViewById(R.id.seriesSeasonsRecycler);
         seriesEpisodesRecycler = findViewById(R.id.seriesEpisodesRecycler);
+
+        // Full EPG Guide
+        fullGuideLayout = findViewById(R.id.fullGuideLayout);
+        guideClock = findViewById(R.id.guideClock);
+        guideHeroChannelBadge = findViewById(R.id.guideHeroChannelBadge);
+        guideHeroStatusBadge = findViewById(R.id.guideHeroStatusBadge);
+        guideHeroTime = findViewById(R.id.guideHeroTime);
+        guideHeroRemaining = findViewById(R.id.guideHeroRemaining);
+        guideHeroTitle = findViewById(R.id.guideHeroTitle);
+        guideHeroProgress = findViewById(R.id.guideHeroProgress);
+        guideHeroSynopsis = findViewById(R.id.guideHeroSynopsis);
+        guidePrevChannelHint = findViewById(R.id.guidePrevChannelHint);
+        guideChannelTitle = findViewById(R.id.guideChannelTitle);
+        guideNextChannelHint = findViewById(R.id.guideNextChannelHint);
+        guideTimelineRecycler = findViewById(R.id.guideTimelineRecycler);
+        guideTimelineRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 
         // Loading
         loadingLayout = findViewById(R.id.loadingLayout);
@@ -961,7 +998,7 @@ public class MainActivity extends Activity {
             }
         });
         btnNavEpg.setOnClickListener(v -> {
-            toggleDrawer();
+            openFullGuide();
         });
 
         if (btnHeaderOptions != null) {
@@ -985,12 +1022,6 @@ public class MainActivity extends Activity {
                 return false;
             });
         }
-
-        seriesBackBtn.setOnClickListener(v -> {
-            destroyCurrentStream();
-            isPlayingVod = false;
-            setScreenMode(ScreenMode.VOD);
-        });
     }
 
     private void setupChannelsRail() {
@@ -1938,7 +1969,16 @@ public class MainActivity extends Activity {
             closeDrawer();
             hideOsdBanner();
             destroyCurrentStream();
-            if (seriesBackBtn != null) seriesBackBtn.requestFocus();
+            if (seriesEpisodesRecycler != null) {
+                seriesEpisodesRecycler.postDelayed(() -> {
+                    if (seriesEpisodesRecycler.getChildCount() > 0) {
+                        View first = seriesEpisodesRecycler.getChildAt(0);
+                        if (first != null) first.requestFocus();
+                    } else if (seriesSeasonsRecycler != null) {
+                        seriesSeasonsRecycler.requestFocus();
+                    }
+                }, 100);
+            }
         }
     }
 
@@ -2122,7 +2162,19 @@ public class MainActivity extends Activity {
     private void openSeriesDetail(Series series) {
         activeVodSeries = series;
         setScreenMode(ScreenMode.SERIES_DETAIL);
-        seriesDetailTitle.setText("📺 " + series.getDisplayTitle() + " • Temporadas");
+        seriesDetailTitle.setText("📺 " + series.getDisplayTitle());
+        if (seriesDetailRating != null) {
+            seriesDetailRating.setText(series.rating != null && !series.rating.isEmpty() ? "★ " + series.rating : "★ 8.0");
+        }
+        if (seriesDetailYear != null) {
+            seriesDetailYear.setText(series.releaseDate != null ? series.releaseDate : "");
+        }
+        if (seriesDetailGenre != null) {
+            seriesDetailGenre.setText(series.genre != null ? series.genre : "");
+        }
+        if (seriesDetailPlot != null) {
+            seriesDetailPlot.setText(series.plot != null ? series.plot : "Temporadas e episódios disponíveis.");
+        }
 
         showLoading("Carregando episódios...");
         executor.execute(() -> {
@@ -2153,12 +2205,17 @@ public class MainActivity extends Activity {
             }
         });
 
+        currentSeriesSeasonKeys = seasonKeys;
+        currentSeriesSeasonIdx = 0;
+
         for (String sNum : seasonKeys) {
             seasonPills.add(new Category(sNum, "Temporada " + sNum));
         }
 
         seriesSeasonsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         seriesSeasonsRecycler.setAdapter(new CategoryPillAdapter(seasonPills, cat -> {
+            int idx = seasonKeys.indexOf(cat.category_id);
+            if (idx >= 0) currentSeriesSeasonIdx = idx;
             displaySeasonEpisodes(series, episodesMap.get(cat.category_id), cat.category_id);
         }));
 
@@ -2167,11 +2224,31 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void switchSeriesSeason(int delta) {
+        if (currentSeriesSeasonKeys == null || currentSeriesSeasonKeys.isEmpty() || activeVodSeries == null || currentSeriesEpisodesMap == null) return;
+        currentSeriesSeasonIdx = (currentSeriesSeasonIdx + delta + currentSeriesSeasonKeys.size()) % currentSeriesSeasonKeys.size();
+        String sNum = currentSeriesSeasonKeys.get(currentSeriesSeasonIdx);
+        if (seriesSeasonsRecycler != null && seriesSeasonsRecycler.getAdapter() instanceof CategoryPillAdapter) {
+            ((CategoryPillAdapter) seriesSeasonsRecycler.getAdapter()).setSelectedId(sNum);
+            seriesSeasonsRecycler.smoothScrollToPosition(currentSeriesSeasonIdx);
+        }
+        displaySeasonEpisodes(activeVodSeries, currentSeriesEpisodesMap.get(sNum), sNum);
+    }
+
     private void displaySeasonEpisodes(Series series, List<Episode> eps, String seasonNum) {
         if (eps == null) eps = new ArrayList<>();
         seriesEpisodesRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
         seriesEpisodesRecycler.setAdapter(new EpisodeAdapter(this, eps, ep -> {
             playSeriesEpisode(series, ep, seasonNum);
+        }, ep -> {
+            if (ep != null && seriesDetailPlot != null) {
+                String epPlot = ep.getPlot();
+                if (epPlot != null && !epPlot.isEmpty()) {
+                    seriesDetailPlot.setText("E" + ep.episode_num + " - " + epPlot);
+                } else if (series.plot != null) {
+                    seriesDetailPlot.setText(series.plot);
+                }
+            }
         }));
     }
 
@@ -2212,6 +2289,13 @@ public class MainActivity extends Activity {
         int keyCode = event.getKeyCode();
         int action = event.getAction();
 
+        if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) && action == KeyEvent.ACTION_UP) {
+            if (suppressNextEnterUp) {
+                suppressNextEnterUp = false;
+                return true;
+            }
+        }
+
         if (action == KeyEvent.ACTION_DOWN) {
             // Teclas de controle de TV por Assinatura / Receptor
             if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
@@ -2224,7 +2308,10 @@ public class MainActivity extends Activity {
                     stepZapChannel(-1);
                     return true;
                 }
-            } else if (keyCode == KeyEvent.KEYCODE_GUIDE || keyCode == KeyEvent.KEYCODE_INFO) {
+            } else if (keyCode == KeyEvent.KEYCODE_GUIDE) {
+                toggleFullGuide();
+                return true;
+            } else if (keyCode == KeyEvent.KEYCODE_INFO) {
                 if (currentMode == ScreenMode.FULLSCREEN) {
                     toggleDrawer();
                     return true;
@@ -2259,21 +2346,79 @@ public class MainActivity extends Activity {
                 }
             }
 
+            // CENÁRIO 0: GUIA DE PROGRAMAÇÃO COMPLETO EM TELA CHEIA
+            if (fullGuideLayout != null && fullGuideLayout.getVisibility() == View.VISIBLE) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    guideSwitchChannel(-1);
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    guideSwitchChannel(1);
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    guideTuneSelectedChannel();
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_BACK) {
+                    closeFullGuide();
+                    return true;
+                }
+                // LEFT e RIGHT navegam normalmente pela timeline horizontal
+            }
+
             // CENÁRIO 1: GAVETA LATERAL ESTÁ ABERTA (qualquer modo de tela)
             if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
                 resetDrawerTimeout();
 
-                // D-pad Esquerdo e Direito alternam entre grupos/categorias de canais (sem fechar a gaveta)
-                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    switchDrawerCategory(-1);
-                    return true;
-                } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    switchDrawerCategory(1);
-                    return true;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    RecyclerView.LayoutManager lm = drawerChannelsRecycler != null ? drawerChannelsRecycler.getLayoutManager() : null;
+                    if (lm instanceof GridLayoutManager) {
+                        GridLayoutManager glm = (GridLayoutManager) lm;
+                        int spanCount = glm.getSpanCount();
+                        View focused = drawerChannelsRecycler.findFocus();
+                        View itemView = focused != null ? drawerChannelsRecycler.findContainingItemView(focused) : null;
+                        int pos = itemView != null ? drawerChannelsRecycler.getChildAdapterPosition(itemView) : RecyclerView.NO_POSITION;
+                        if (pos != RecyclerView.NO_POSITION) {
+                            int col = pos % spanCount;
+                            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                                if (col > 0) {
+                                    // Move foco na mesma linha para a coluna esquerda
+                                    return super.dispatchKeyEvent(event);
+                                } else {
+                                    switchDrawerCategory(-1);
+                                    return true;
+                                }
+                            } else {
+                                int itemCount = drawerChannelsRecycler.getAdapter() != null ? drawerChannelsRecycler.getAdapter().getItemCount() : 0;
+                                if (col < spanCount - 1 && pos + 1 < itemCount) {
+                                    // Move foco na mesma linha para a coluna direita
+                                    return super.dispatchKeyEvent(event);
+                                } else {
+                                    switchDrawerCategory(1);
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                        switchDrawerCategory(-1);
+                        return true;
+                    } else {
+                        switchDrawerCategory(1);
+                        return true;
+                    }
                 }
                 // UP e DOWN navegam normalmente pelos itens do RecyclerView
+            } else if (currentMode == ScreenMode.SERIES_DETAIL) {
+                // CENÁRIO 2: DETALHES DA SÉRIE - D-pad Esquerdo e Direito alternam temporadas
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    switchSeriesSeason(-1);
+                    return true;
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    switchSeriesSeason(1);
+                    return true;
+                }
             } else if (currentMode == ScreenMode.FULLSCREEN) {
-                // CENÁRIO 2: GAVETA LATERAL ESTÁ FECHADA EM TELA CHEIA
+                // CENÁRIO 3: GAVETA LATERAL ESTÁ FECHADA EM TELA CHEIA
                 if (!isPlayingVod) {
                         // D-pad Esquerdo abre a gaveta lateral
                         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
@@ -2302,6 +2447,7 @@ public class MainActivity extends Activity {
                                 confirmPendingZapChannel();
                                 return true;
                             } else if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
+                                suppressNextEnterUp = true;
                                 openDrawer();
                                 return true;
                             } else {
@@ -2339,6 +2485,7 @@ public class MainActivity extends Activity {
                         // ENTER abre a gaveta se OSD já estiver visível, senão exibe o OSD
                         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
                             if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
+                                suppressNextEnterUp = true;
                                 openDrawer();
                                 return true;
                             } else {
@@ -2365,6 +2512,11 @@ public class MainActivity extends Activity {
     }
 
     private boolean handleBack() {
+        if (fullGuideLayout != null && fullGuideLayout.getVisibility() == View.VISIBLE) {
+            closeFullGuide();
+            return true;
+        }
+
         if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
             closeDrawer();
             return true;
@@ -2416,6 +2568,164 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Pressione Voltar novamente para sair", Toast.LENGTH_SHORT).show();
         }
         return true;
+    }
+
+    public void openFullGuide() {
+        if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
+            closeDrawer();
+        }
+        hideOsdBanner();
+        if (fullGuideLayout != null) {
+            fullGuideLayout.setVisibility(View.VISIBLE);
+            guideSelectedChannelIdx = (currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) ? currentChannelIdx : 0;
+            if (guideClock != null) {
+                SimpleDateFormat tf = new SimpleDateFormat("HH:mm", Locale.getDefault());
+                guideClock.setText(tf.format(new Date()));
+            }
+            populateGuideForCurrentChannel();
+        }
+    }
+
+    public void closeFullGuide() {
+        if (fullGuideLayout != null) {
+            fullGuideLayout.setVisibility(View.GONE);
+            if (currentMode == ScreenMode.CENTRAL && pipContainer != null) {
+                pipContainer.postDelayed(() -> {
+                    pipContainer.setFocusable(true);
+                    pipContainer.requestFocus();
+                }, 80);
+            } else if (currentMode == ScreenMode.FULLSCREEN) {
+                showOsdBanner(3000);
+            }
+        }
+    }
+
+    public void toggleFullGuide() {
+        if (fullGuideLayout != null && fullGuideLayout.getVisibility() == View.VISIBLE) {
+            closeFullGuide();
+        } else {
+            openFullGuide();
+        }
+    }
+
+    private void guideSwitchChannel(int delta) {
+        if (allChannels.isEmpty()) return;
+        guideSelectedChannelIdx = (guideSelectedChannelIdx + delta + allChannels.size()) % allChannels.size();
+        populateGuideForCurrentChannel();
+    }
+
+    private void guideTuneSelectedChannel() {
+        int targetIdx = guideSelectedChannelIdx;
+        closeFullGuide();
+        if (targetIdx == currentChannelIdx && (currentActiveStreamUrl != null && !currentActiveStreamUrl.isEmpty())) {
+            setScreenMode(ScreenMode.FULLSCREEN);
+            return;
+        }
+        destroyCurrentStream();
+        tuneChannel(targetIdx, true);
+        setScreenMode(ScreenMode.FULLSCREEN);
+    }
+
+    private void populateGuideForCurrentChannel() {
+        if (allChannels.isEmpty() || guideSelectedChannelIdx < 0 || guideSelectedChannelIdx >= allChannels.size()) return;
+        Channel ch = allChannels.get(guideSelectedChannelIdx);
+
+        if (guideChannelTitle != null) {
+            guideChannelTitle.setText(String.format(Locale.getDefault(), "%03d • %s", guideSelectedChannelIdx + 1, ch.name));
+        }
+        if (guidePrevChannelHint != null) {
+            int prev = (guideSelectedChannelIdx - 1 + allChannels.size()) % allChannels.size();
+            guidePrevChannelHint.setText(String.format(Locale.getDefault(), "▲ %03d. %s", prev + 1, allChannels.get(prev).name));
+        }
+        if (guideNextChannelHint != null) {
+            int next = (guideSelectedChannelIdx + 1) % allChannels.size();
+            guideNextChannelHint.setText(String.format(Locale.getDefault(), "▼ %03d. %s", next + 1, allChannels.get(next).name));
+        }
+
+        guideCurrentTimeline = EpgEngine.getChannelTimeline(ch);
+        int nowIdx = 0;
+        for (int i = 0; i < guideCurrentTimeline.size(); i++) {
+            if (guideCurrentTimeline.get(i).isCurrent) {
+                nowIdx = i;
+                break;
+            }
+        }
+
+        if (!guideCurrentTimeline.isEmpty()) {
+            updateGuideHero(guideCurrentTimeline.get(nowIdx), ch, guideSelectedChannelIdx);
+        }
+
+        guideTimelineAdapter = new TimelineAdapter(this, guideCurrentTimeline, new TimelineAdapter.OnTimelineActionListener() {
+            @Override
+            public void onProgramClick(TimelineProgram program) {
+                guideTuneSelectedChannel();
+            }
+
+            @Override
+            public void onProgramFocus(TimelineProgram program, int position) {
+                updateGuideHero(program, ch, guideSelectedChannelIdx);
+            }
+        });
+        guideTimelineRecycler.setAdapter(guideTimelineAdapter);
+
+        final int focusSlot = nowIdx;
+        guideTimelineRecycler.scrollToPosition(focusSlot);
+        guideTimelineRecycler.postDelayed(() -> {
+            RecyclerView.ViewHolder vh = guideTimelineRecycler.findViewHolderForAdapterPosition(focusSlot);
+            if (vh != null && vh.itemView != null) {
+                vh.itemView.requestFocus();
+            } else if (guideTimelineRecycler.getChildCount() > 0) {
+                View first = guideTimelineRecycler.getChildAt(0);
+                if (first != null) first.requestFocus();
+            }
+        }, 80);
+    }
+
+    private void updateGuideHero(TimelineProgram prog, Channel ch, int chIdx) {
+        if (prog == null) return;
+        if (guideHeroChannelBadge != null) {
+            guideHeroChannelBadge.setText(String.format(Locale.getDefault(), "%03d • %s", chIdx + 1, ch != null ? ch.name : ""));
+        }
+        if (guideHeroStatusBadge != null) {
+            if (prog.isCurrent) {
+                guideHeroStatusBadge.setText("🔴 NO AR");
+                guideHeroStatusBadge.setBackgroundResource(R.drawable.badge_gold);
+                guideHeroStatusBadge.setTextColor(Color.BLACK);
+            } else if (prog.isPast) {
+                guideHeroStatusBadge.setText("⏪ EXIBIDO");
+                guideHeroStatusBadge.setBackgroundColor(Color.parseColor("#333A48"));
+                guideHeroStatusBadge.setTextColor(Color.parseColor("#99A3B0"));
+            } else {
+                guideHeroStatusBadge.setText("⏱️ EM BREVE");
+                guideHeroStatusBadge.setBackgroundColor(Color.parseColor("#1B3358"));
+                guideHeroStatusBadge.setTextColor(Color.parseColor("#7AB2F5"));
+            }
+        }
+        if (guideHeroTime != null) {
+            guideHeroTime.setText(prog.timeRange != null ? prog.timeRange : "--:--");
+        }
+        if (guideHeroRemaining != null) {
+            if (prog.isCurrent) {
+                guideHeroRemaining.setVisibility(View.VISIBLE);
+                guideHeroRemaining.setText("Restam ~" + prog.remainingMin + " min");
+            } else {
+                guideHeroRemaining.setVisibility(View.GONE);
+            }
+        }
+        if (guideHeroTitle != null) {
+            guideHeroTitle.setText(prog.title != null ? prog.title : "Sem título");
+        }
+        if (guideHeroProgress != null) {
+            if (prog.isCurrent) {
+                guideHeroProgress.setVisibility(View.VISIBLE);
+                guideHeroProgress.setProgress(prog.progress);
+            } else {
+                guideHeroProgress.setVisibility(View.GONE);
+            }
+        }
+        if (guideHeroSynopsis != null) {
+            guideHeroSynopsis.setText(prog.synopsis != null && !prog.synopsis.isEmpty() ? prog.synopsis : "Transmissão digital oficial ao vivo em alta definição.");
+        }
     }
 
     private void showProviderOptionsDialog() {

@@ -73,6 +73,32 @@ public class EpgEngine {
         }
     }
 
+    public static class TimelineProgram {
+        public String title;
+        public String synopsis;
+        public long startMs;
+        public long stopMs;
+        public String timeRange;
+        public boolean isCurrent;
+        public boolean isPast;
+        public boolean isFuture;
+        public int progress;
+        public int remainingMin;
+
+        public TimelineProgram(String title, String synopsis, long startMs, long stopMs, String timeRange, boolean isCurrent, boolean isPast, boolean isFuture, int progress, int remainingMin) {
+            this.title = title;
+            this.synopsis = synopsis;
+            this.startMs = startMs;
+            this.stopMs = stopMs;
+            this.timeRange = timeRange;
+            this.isCurrent = isCurrent;
+            this.isPast = isPast;
+            this.isFuture = isFuture;
+            this.progress = progress;
+            this.remainingMin = remainingMin;
+        }
+    }
+
     private static final Map<String, List<ProgramInfo>> liveEpgMap = new ConcurrentHashMap<>();
     private static final Map<String, List<String>> REGIONAL_ALIASES = new HashMap<>();
 
@@ -538,120 +564,76 @@ public class EpgEngine {
         return generateDynamicSchedule(ch);
     }
 
-    private static LiveSchedule generateDynamicSchedule(Channel ch) {
+    public static class ProgramDetails {
+        public String title;
+        public String desc;
+        public String nextTitle;
+
+        public ProgramDetails(String title, String desc, String nextTitle) {
+            this.title = title;
+            this.desc = desc;
+            this.nextTitle = nextTitle;
+        }
+    }
+
+    public static ProgramDetails getShowDetailsAtHour(Channel ch, int hours) {
+        hours = ((hours % 24) + 24) % 24;
         String chName = (ch != null && ch.name != null) ? ch.name : "Canal Ao Vivo";
         String norm = normalizeKey(chName);
-        Calendar cal = Calendar.getInstance();
-        int hours = cal.get(Calendar.HOUR_OF_DAY);
-        int mins = cal.get(Calendar.MINUTE);
-
-        String title;
-        String desc;
-        String nextTitle;
 
         if (norm.contains("globo") || norm.contains("tvbahia") || norm.contains("rbstv")) {
             if (hours >= 4 && hours < 6) {
-                title = "Hora 1";
-                desc = "As primeiras notícias do dia com agilidade e dinamismo.";
-                nextTitle = "Bom Dia Brasil";
+                return new ProgramDetails("Hora 1", "As primeiras notícias do dia com agilidade e dinamismo.", "Bom Dia Brasil");
             } else if (hours >= 6 && hours < 8) {
-                title = "Bom Dia Local";
-                desc = "Notícias locais da sua região, trânsito e previsão do tempo.";
-                nextTitle = "Bom Dia Brasil";
+                return new ProgramDetails("Bom Dia Local", "Notícias locais da sua região, trânsito e previsão do tempo.", "Bom Dia Brasil");
             } else if (hours >= 8 && hours < 9) {
-                title = "Bom Dia Brasil";
-                desc = "Os acontecimentos mais importantes do país e do mundo.";
-                nextTitle = "Encontro com Patrícia Poeta";
+                return new ProgramDetails("Bom Dia Brasil", "Os acontecimentos mais importantes do país e do mundo.", "Encontro com Patrícia Poeta");
             } else if (hours >= 9 && hours < 10) {
-                title = "Encontro com Patrícia Poeta";
-                desc = "Música, entretenimento e entrevistas com convidados especiais.";
-                nextTitle = "Mais Você";
+                return new ProgramDetails("Encontro com Patrícia Poeta", "Música, entretenimento e entrevistas com convidados especiais.", "Mais Você");
             } else if (hours >= 10 && hours < 12) {
-                title = "Mais Você com Ana Maria Braga";
-                desc = "Receitas deliciosas, bate-papo, culinária e matérias especiais.";
-                nextTitle = "Globo Esporte";
+                return new ProgramDetails("Mais Você com Ana Maria Braga", "Receitas deliciosas, bate-papo, culinária e matérias especiais.", "Globo Esporte");
             } else if (hours >= 12 && hours < 13) {
-                title = "Jornal Local - 1ª Edição";
-                desc = "O balanço dos fatos do dia em sua região ao vivo.";
-                nextTitle = "Globo Esporte";
+                return new ProgramDetails("Jornal Local - 1ª Edição", "O balanço dos fatos do dia em sua região ao vivo.", "Globo Esporte");
             } else if (hours >= 13 && hours < 14) {
-                title = "Globo Esporte";
-                desc = "Tudo sobre o futebol e os principais atletas do país.";
-                nextTitle = "Jornal Hoje";
+                return new ProgramDetails("Globo Esporte", "Tudo sobre o futebol e os principais atletas do país.", "Jornal Hoje");
             } else if (hours >= 14 && hours < 15) {
-                title = "Jornal Hoje";
-                desc = "Noticiário vespertino com tudo o que está acontecendo agora.";
-                nextTitle = "Sessão da Tarde";
+                return new ProgramDetails("Jornal Hoje", "Noticiário vespertino com tudo o que está acontecendo agora.", "Sessão da Tarde");
             } else if (hours >= 15 && hours < 17) {
-                title = "Sessão da Tarde";
-                desc = "Grandes filmes e sucessos para animar a sua tarde em alta definição.";
-                nextTitle = "Vale a Pena Ver de Novo";
+                return new ProgramDetails("Sessão da Tarde", "Grandes filmes e sucessos para animar a sua tarde em alta definição.", "Vale a Pena Ver de Novo");
             } else if (hours >= 17 && hours < 18) {
-                title = "Vale a Pena Ver de Novo";
-                desc = "As novelas consagradas que marcaram época na TV Globo.";
-                nextTitle = "Novela das Seis";
+                return new ProgramDetails("Vale a Pena Ver de Novo", "As novelas consagradas que marcaram época na TV Globo.", "Novela das Seis");
             } else if (hours >= 18 && hours < 19) {
-                title = "Novela das Seis";
-                desc = "A trama do início de noite repleta de romance e aventura.";
-                nextTitle = "Jornal Local - 2ª Edição";
+                return new ProgramDetails("Novela das Seis", "A trama do início de noite repleta de romance e aventura.", "Jornal Local - 2ª Edição");
             } else if (hours >= 19 && hours < 20) {
-                title = "Jornal Local - 2ª Edição";
-                desc = "As principais notícias do final de tarde na sua cidade.";
-                nextTitle = "Novela das Sete";
+                return new ProgramDetails("Jornal Local - 2ª Edição", "As principais notícias do final de tarde na sua cidade.", "Novela das Sete");
             } else if (hours >= 20 && hours < 21) {
-                title = "Jornal Nacional";
-                desc = "O principal telejornal do Brasil com cobertura factual completa.";
-                nextTitle = "Novela das Nove";
+                return new ProgramDetails("Jornal Nacional", "O principal telejornal do Brasil com cobertura factual completa.", "Novela das Nove");
             } else if (hours >= 21 && hours < 22) {
-                title = "Novela das Nove";
-                desc = "A novela do horário nobre em alta definição digital.";
-                nextTitle = "Cinema Especial / Futebol";
+                return new ProgramDetails("Novela das Nove", "A novela do horário nobre em alta definição digital.", "Cinema Especial / Futebol");
             } else if (hours >= 22 && hours < 24) {
-                title = "Linha de Shows / Cinema Especial";
-                desc = "Filmes premiados, reality shows e produções de prestígio.";
-                nextTitle = "Jornal da Globo";
+                return new ProgramDetails("Linha de Shows / Cinema Especial", "Filmes premiados, reality shows e produções de prestígio.", "Jornal da Globo");
             } else {
-                title = "Jornal da Globo / Conversa com Bial";
-                desc = "Análise aprofundada dos assuntos políticos e econômicos do dia.";
-                nextTitle = "Hora 1";
+                return new ProgramDetails("Jornal da Globo / Conversa com Bial", "Análise aprofundada dos assuntos políticos e econômicos do dia.", "Hora 1");
             }
         } else if (norm.contains("band")) {
             if (hours >= 6 && hours < 9) {
-                title = "Bora Brasil";
-                desc = "O amanhecer com as notícias mais quentes do trânsito e do país.";
-                nextTitle = "Jogo Aberto";
+                return new ProgramDetails("Bora Brasil", "O amanhecer com as notícias mais quentes do trânsito e do país.", "Jogo Aberto");
             } else if (hours >= 9 && hours < 11) {
-                title = "The Chef com Edu Guedes";
-                desc = "Dicas práticas de culinária e gastronomia na sua manhã.";
-                nextTitle = "Jogo Aberto";
+                return new ProgramDetails("The Chef com Edu Guedes", "Dicas práticas de culinária e gastronomia na sua manhã.", "Jogo Aberto");
             } else if (hours >= 11 && hours < 13) {
-                title = "Jogo Aberto";
-                desc = "Renata Fan e Denílson debatem o futebol com irreverência e gols.";
-                nextTitle = "Os Donos da Bola";
+                return new ProgramDetails("Jogo Aberto", "Renata Fan e Denílson debatem o futebol com irreverência e gols.", "Os Donos da Bola");
             } else if (hours >= 13 && hours < 14) {
-                title = "Os Donos da Bola";
-                desc = "Craque Neto e comentaristas debatem os lances polêmicos da rodada.";
-                nextTitle = "Melhor da Tarde";
+                return new ProgramDetails("Os Donos da Bola", "Craque Neto e comentaristas debatem os lances polêmicos da rodada.", "Melhor da Tarde");
             } else if (hours >= 14 && hours < 16) {
-                title = "Melhor da Tarde";
-                desc = "Entretenimento, variedades, culinária e fofocas das celebridades.";
-                nextTitle = "Brasil Urgente";
+                return new ProgramDetails("Melhor da Tarde", "Entretenimento, variedades, culinária e fofocas das celebridades.", "Brasil Urgente");
             } else if (hours >= 16 && hours < 19) {
-                title = "Brasil Urgente com Datena";
-                desc = "Plantão policial ao vivo e os principais flagrantes das capitais.";
-                nextTitle = "Jornal da Band";
+                return new ProgramDetails("Brasil Urgente com Datena", "Plantão policial ao vivo e os principais flagrantes das capitais.", "Jornal da Band");
             } else if (hours >= 19 && hours < 21) {
-                title = "Jornal da Band";
-                desc = "Telejornal de credibilidade com os temas mais relevantes do dia.";
-                nextTitle = "Melhor da Noite";
+                return new ProgramDetails("Jornal da Band", "Telejornal de credibilidade com os temas mais relevantes do dia.", "Melhor da Noite");
             } else if (hours >= 21 && hours < 23) {
-                title = "Melhor da Noite";
-                desc = "Programa ao vivo de variedades com cultura, humor e entretenimento.";
-                nextTitle = "Jornal da Noite";
+                return new ProgramDetails("Melhor da Noite", "Programa ao vivo de variedades com cultura, humor e entretenimento.", "Jornal da Noite");
             } else {
-                title = "Jornal da Noite / Linha de Shows";
-                desc = "Noticiário de encerramento do dia e compactos esportivos.";
-                nextTitle = "Bora Brasil";
+                return new ProgramDetails("Jornal da Noite / Linha de Shows", "Noticiário de encerramento do dia e compactos esportivos.", "Bora Brasil");
             }
         } else {
             String period;
@@ -669,10 +651,15 @@ public class EpgEngine {
                 period = "Madrugada Especial";
                 nextPeriod = "Edição Matinal";
             }
-            title = chName + " - " + period;
-            desc = "Transmissão digital oficial em tempo real em alta definição.";
-            nextTitle = chName + " - " + nextPeriod;
+            return new ProgramDetails(chName + " - " + period, "Transmissão digital oficial em tempo real em alta definição.", chName + " - " + nextPeriod);
         }
+    }
+
+    private static LiveSchedule generateDynamicSchedule(Channel ch) {
+        Calendar cal = Calendar.getInstance();
+        int hours = cal.get(Calendar.HOUR_OF_DAY);
+        int mins = cal.get(Calendar.MINUTE);
+        ProgramDetails pd = getShowDetailsAtHour(ch, hours);
 
         int prog = Math.min(95, Math.max(10, (mins * 100) / 60));
         int rem = Math.max(5, 60 - mins);
@@ -680,15 +667,115 @@ public class EpgEngine {
         String endStr = String.format(Locale.getDefault(), "%02d:00", (hours + 1) % 24);
 
         return new LiveSchedule(
-                title,
-                desc,
+                pd.title,
+                pd.desc,
                 startStr,
                 endStr,
                 prog,
                 rem,
-                nextTitle,
+                pd.nextTitle,
                 endStr
         );
+    }
+
+    public static List<TimelineProgram> getChannelTimeline(Channel ch) {
+        List<TimelineProgram> timeline = new ArrayList<>();
+        if (ch == null) return timeline;
+
+        long now = System.currentTimeMillis();
+        SimpleDateFormat tf = new SimpleDateFormat("HH:mm", Locale.getDefault());
+        List<String> candidates = getSearchAliases(ch);
+        List<ProgramInfo> progs = null;
+
+        for (String cand : candidates) {
+            if (cand.isEmpty()) continue;
+            progs = liveEpgMap.get(cand);
+            if (progs != null && !progs.isEmpty()) break;
+        }
+
+        if (progs == null || progs.isEmpty()) {
+            for (String cand : candidates) {
+                if (cand.length() < 3) continue;
+                for (Map.Entry<String, List<ProgramInfo>> entry : liveEpgMap.entrySet()) {
+                    String k = entry.getKey();
+                    if (k.equals(cand) || k.startsWith(cand) || cand.startsWith(k)
+                            || (k.length() >= 4 && cand.contains(k))
+                            || (cand.length() >= 4 && k.contains(cand))) {
+                        progs = entry.getValue();
+                        break;
+                    }
+                }
+                if (progs != null && !progs.isEmpty()) break;
+            }
+        }
+
+        if (progs != null && !progs.isEmpty()) {
+            int currentIdx = -1;
+            for (int i = 0; i < progs.size(); i++) {
+                ProgramInfo p = progs.get(i);
+                if (p.startMs <= now && now < p.stopMs) {
+                    currentIdx = i;
+                    break;
+                }
+            }
+            if (currentIdx < 0) {
+                for (int i = 0; i < progs.size(); i++) {
+                    if (progs.get(i).startMs >= now) {
+                        currentIdx = i;
+                        break;
+                    }
+                }
+            }
+            if (currentIdx < 0) currentIdx = progs.size() - 1;
+
+            int startIdx = Math.max(0, currentIdx - 3);
+            int endIdx = Math.min(progs.size(), currentIdx + 9);
+
+            for (int i = startIdx; i < endIdx; i++) {
+                ProgramInfo p = progs.get(i);
+                boolean isCur = (p.startMs <= now && now < p.stopMs);
+                boolean isPast = (p.stopMs <= now);
+                boolean isFut = (p.startMs > now);
+                int dur = (int) Math.max(1, (p.stopMs - p.startMs) / 60000);
+                int elapsed = (int) Math.max(0, (now - p.startMs) / 60000);
+                int prog = isCur ? (int) Math.min(99, Math.max(2, (elapsed * 100) / dur)) : (isPast ? 100 : 0);
+                int rem = isCur ? (int) Math.max(1, (p.stopMs - now) / 60000) : 0;
+                String timeRange = tf.format(new Date(p.startMs)) + " - " + tf.format(new Date(p.stopMs));
+                String syn = (p.desc != null && !p.desc.trim().isEmpty()) ? p.desc.trim() : "Transmissão digital oficial ao vivo em alta definição.";
+                timeline.add(new TimelineProgram(p.title, syn, p.startMs, p.stopMs, timeRange, isCur, isPast, isFut, prog, rem));
+            }
+            return timeline;
+        }
+
+        // Se não houver XMLTV para este canal, gera 3 passados, 1 atual e 6 futuros contextualizados
+        Calendar cal = Calendar.getInstance();
+        int curHour = cal.get(Calendar.HOUR_OF_DAY);
+        int curMin = cal.get(Calendar.MINUTE);
+
+        // 3 passados (curHour - 3, -2, -1)
+        for (int hDiff = -3; hDiff < 0; hDiff++) {
+            int h = curHour + hDiff;
+            ProgramDetails pd = getShowDetailsAtHour(ch, h);
+            String timeRange = String.format(Locale.getDefault(), "%02d:00 - %02d:00", ((h % 24) + 24) % 24, (((h + 1) % 24) + 24) % 24);
+            timeline.add(new TimelineProgram(pd.title, pd.desc, 0, 0, timeRange, false, true, false, 100, 0));
+        }
+
+        // Atual (curHour)
+        ProgramDetails curPd = getShowDetailsAtHour(ch, curHour);
+        int prog = Math.min(95, Math.max(10, (curMin * 100) / 60));
+        int rem = Math.max(5, 60 - curMin);
+        String curRange = String.format(Locale.getDefault(), "%02d:00 - %02d:00", ((curHour % 24) + 24) % 24, (((curHour + 1) % 24) + 24) % 24);
+        timeline.add(new TimelineProgram(curPd.title, curPd.desc, 0, 0, curRange, true, false, false, prog, rem));
+
+        // 6 futuros (curHour + 1 a + 6)
+        for (int hDiff = 1; hDiff <= 6; hDiff++) {
+            int h = curHour + hDiff;
+            ProgramDetails pd = getShowDetailsAtHour(ch, h);
+            String timeRange = String.format(Locale.getDefault(), "%02d:00 - %02d:00", ((h % 24) + 24) % 24, (((h + 1) % 24) + 24) % 24);
+            timeline.add(new TimelineProgram(pd.title, pd.desc, 0, 0, timeRange, false, false, true, 0, 0));
+        }
+
+        return timeline;
     }
 
     private static void saveLocalCache(Context context) {
