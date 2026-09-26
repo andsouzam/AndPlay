@@ -84,6 +84,9 @@ public class ApiClient {
                     if (idLow.contains("appletv") || nameLow.contains("apple tv")) {
                         continue;
                     }
+                    if ("premiere".equals(ch.id) || "premiere 1".equalsIgnoreCase(ch.name)) {
+                        ch.name = "Premiere Clubes";
+                    }
                     valid.add(ch);
                 }
                 return valid;

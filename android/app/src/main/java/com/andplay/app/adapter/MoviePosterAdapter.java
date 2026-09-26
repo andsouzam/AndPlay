@@ -88,10 +88,31 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
 
         holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
             v.animate().scaleX(hasFocus ? 1.05f : 1.0f).scaleY(hasFocus ? 1.05f : 1.0f).setDuration(120).start();
-            if (hasFocus && listener != null) {
-                listener.onMovieFocus(movie);
+            if (hasFocus) {
+                preloadUpcomingPosters(holder.getBindingAdapterPosition() >= 0 ? holder.getBindingAdapterPosition() : position);
+                if (listener != null) {
+                    listener.onMovieFocus(movie);
+                }
             }
         });
+    }
+
+    private void preloadUpcomingPosters(int currentPosition) {
+        if (movies == null || movies.isEmpty() || currentPosition < 0) return;
+        // Pré-carrega capas até 5 linhas abaixo da selecionada (7 colunas x 5 linhas = 35 itens à frente no grid)
+        int itemsAhead = isGrid ? 35 : 15;
+        int targetEnd = Math.min(movies.size(), currentPosition + itemsAhead + 1);
+        for (int i = currentPosition + 1; i < targetEnd; i++) {
+            Movie m = movies.get(i);
+            String url = m.getPosterUrl();
+            if (url != null && !url.isEmpty()) {
+                Glide.with(context)
+                        .load(url)
+                        .override(220, 300)
+                        .diskCacheStrategy(DiskCacheStrategy.ALL)
+                        .preload(220, 300);
+            }
+        }
     }
 
     @Override

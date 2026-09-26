@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import com.andplay.app.provider.ProviderManager;
 import java.util.Arrays;
+import java.util.Collections;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -205,6 +206,7 @@ public class MainActivity extends Activity {
     private boolean isVideoPlaybackActive = false;
     private List<Channel.StreamFallback> currentChannelFallbacks = new ArrayList<>();
     private int currentFallbackIdx = 0;
+    private long pendingVodSeekPositionMs = 0;
 
     private Movie activeVodMovie = null;
     private Series activeVodSeries = null;
@@ -450,8 +452,15 @@ public class MainActivity extends Activity {
         exoPlayer.addListener(new Player.Listener() {
             @Override
             public void onPlaybackStateChanged(int playbackState) {
-                if (playbackState == Player.STATE_READY && exoPlayer.getPlayWhenReady()) {
-                    mainHandler.post(() -> onPlaybackStarted());
+                if (playbackState == Player.STATE_READY) {
+                    if (pendingVodSeekPositionMs > 0 && exoPlayer != null) {
+                        long targetSeek = pendingVodSeekPositionMs;
+                        pendingVodSeekPositionMs = 0;
+                        exoPlayer.seekTo(targetSeek);
+                    }
+                    if (exoPlayer.getPlayWhenReady()) {
+                        mainHandler.post(() -> onPlaybackStarted());
+                    }
                 }
             }
 
@@ -788,9 +797,23 @@ public class MainActivity extends Activity {
         return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds);
     }
 
+    private String getMovieProgressKey(Movie movie) {
+        if (movie == null) return null;
+        if (movie.stream_id != null && !movie.stream_id.isEmpty()) {
+            return "movie_" + movie.stream_id;
+        }
+        if (movie.num > 0) {
+            return "movie_num_" + movie.num;
+        }
+        if (movie.name != null && !movie.name.isEmpty()) {
+            return "movie_name_" + movie.name;
+        }
+        return null;
+    }
+
     private String getCurrentVodKey() {
-        if (activeVodMovie != null && activeVodMovie.stream_id != null) {
-            return "movie_" + activeVodMovie.stream_id;
+        if (activeVodMovie != null) {
+            return getMovieProgressKey(activeVodMovie);
         }
         if (activeVodEpisode != null && activeVodEpisode.id != null) {
             return "episode_" + activeVodEpisode.id;
@@ -819,8 +842,8 @@ public class MainActivity extends Activity {
                 prefs.edit().remove(key).remove(key + "_dur").remove(key + "_time").apply();
                 return;
             }
-            // Salva apenas se assistiu pelo menos 10 segundos
-            if (positionMs > 10000) {
+            // Salva apenas se assistiu pelo menos 5 segundos
+            if (positionMs > 5000) {
                 prefs.edit()
                         .putLong(key, positionMs)
                         .putLong(key + "_dur", durationMs)
@@ -913,10 +936,62 @@ public class MainActivity extends Activity {
         });
     }
 
+    private static final String PREF_APP_STATE = "andplay_app_state";
+    private static final String KEY_LAST_CHANNEL_ID = "last_channel_id";
+    private static final String KEY_LAST_CHANNEL_INDEX = "last_channel_idx";
+
+    private int getChannelGroupRank(Channel ch) {
+        if (ch == null) return 7;
+        String k = ch.key != null ? ch.key.toLowerCase(Locale.ROOT) : "";
+        String c = ch.cat != null ? ch.cat.toLowerCase(Locale.ROOT) : "";
+
+        // 1. Abertos
+        if ("open_tv".equals(k) || c.contains("aberto")) return 1;
+
+        // 2. Esportes
+        if ("sports".equals(k) || c.contains("esporte")) return 2;
+
+        // 4. Filmes
+        if ("movies".equals(k) || c.contains("filme")) return 4;
+
+        // 5. Infantil
+        if ("kids".equals(k) || c.contains("infantil") || c.contains("desenho")) return 5;
+
+        // 6. 24hrs
+        if ("channels_24h".equals(k) || c.contains("24")) return 6;
+
+        // 3. Variedades (Variedades, Notícias, Documentários, Séries, Realitys, Geral, etc.)
+        if ("variety".equals(k) || "reality".equals(k)
+                || c.contains("variedade") || c.contains("not") || c.contains("doc")
+                || c.contains("rie") || c.contains("serie")
+                || c.contains("reality") || c.contains("geral")
+                || c.contains("ing") || c.contains("miami")) {
+            return 3;
+        }
+
+        // 7. Outros
+        return 7;
+    }
+
+    private void sortChannelsByGroup(List<Channel> channels) {
+        if (channels == null || channels.isEmpty()) return;
+        Collections.sort(channels, (c1, c2) -> {
+            int r1 = getChannelGroupRank(c1);
+            int r2 = getChannelGroupRank(c2);
+            if (r1 != r2) {
+                return Integer.compare(r1, r2);
+            }
+            String n1 = c1.name != null ? c1.name : "";
+            String n2 = c2.name != null ? c2.name : "";
+            return n1.compareToIgnoreCase(n2);
+        });
+    }
+
     private void loadInitialData() {
         showLoading("Carregando canais...");
         executor.execute(() -> {
             allChannels = ApiClient.loadLocalChannels(this);
+            sortChannelsByGroup(allChannels);
             allSports = ApiClient.getLiveSports();
 
             mainHandler.post(() -> {
@@ -943,7 +1018,23 @@ public class MainActivity extends Activity {
                 });
 
                 if (!allChannels.isEmpty()) {
-                    tuneChannel(0, false);
+                    int initialIdx = 0;
+                    try {
+                        SharedPreferences sp = getSharedPreferences(PREF_APP_STATE, Context.MODE_PRIVATE);
+                        String lastId = sp.getString(KEY_LAST_CHANNEL_ID, "");
+                        int lastIdx = sp.getInt(KEY_LAST_CHANNEL_INDEX, -1);
+                        if (lastId != null && !lastId.isEmpty()) {
+                            for (int i = 0; i < allChannels.size(); i++) {
+                                if (lastId.equals(allChannels.get(i).id)) {
+                                    initialIdx = i;
+                                    break;
+                                }
+                            }
+                        } else if (lastIdx >= 0 && lastIdx < allChannels.size()) {
+                            initialIdx = lastIdx;
+                        }
+                    } catch (Exception ignored) {}
+                    tuneChannel(initialIdx, false);
                 }
 
                 if (pipContainer != null) {
@@ -1207,10 +1298,11 @@ public class MainActivity extends Activity {
         drawerCats.add(new Category("ALL", "Todos"));
         drawerCats.add(new Category("open_tv", "Abertos"));
         drawerCats.add(new Category("sports", "Esportes"));
-        drawerCats.add(new Category("movies", "Filmes 24H"));
-        drawerCats.add(new Category("kids", "Infantil"));
         drawerCats.add(new Category("variety", "Variedades"));
+        drawerCats.add(new Category("movies", "Filmes"));
+        drawerCats.add(new Category("kids", "Infantil"));
         drawerCats.add(new Category("channels_24h", "24 Horas"));
+        drawerCats.add(new Category("other", "Outros"));
 
         drawerCatsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         drawerCatsAdapter = new CategoryPillAdapter(drawerCats, cat -> {
@@ -1226,9 +1318,20 @@ public class MainActivity extends Activity {
                 ? allChannels.get(currentChannelIdx) : null;
 
         selectedDrawerCatIdx = 0;
-        if (currentCh != null && currentCh.key != null) {
+        if (currentCh != null) {
+            int rank = getChannelGroupRank(currentCh);
+            String targetCatId = "ALL";
+            switch (rank) {
+                case 1: targetCatId = "open_tv"; break;
+                case 2: targetCatId = "sports"; break;
+                case 3: targetCatId = "variety"; break;
+                case 4: targetCatId = "movies"; break;
+                case 5: targetCatId = "kids"; break;
+                case 6: targetCatId = "channels_24h"; break;
+                case 7: targetCatId = "other"; break;
+            }
             for (int i = 0; i < drawerCats.size(); i++) {
-                if (currentCh.key.equals(drawerCats.get(i).category_id)) {
+                if (targetCatId.equals(drawerCats.get(i).category_id)) {
                     selectedDrawerCatIdx = i;
                     break;
                 }
@@ -1473,7 +1576,21 @@ public class MainActivity extends Activity {
     private void filterDrawerChannels(String catId, Channel targetChannel) {
         List<Channel> filtered = new ArrayList<>();
         for (Channel ch : allChannels) {
-            if ("ALL".equals(catId) || (ch.key != null && ch.key.equals(catId))) {
+            if ("ALL".equals(catId)) {
+                filtered.add(ch);
+            } else if ("open_tv".equals(catId) && getChannelGroupRank(ch) == 1) {
+                filtered.add(ch);
+            } else if ("sports".equals(catId) && getChannelGroupRank(ch) == 2) {
+                filtered.add(ch);
+            } else if ("variety".equals(catId) && getChannelGroupRank(ch) == 3) {
+                filtered.add(ch);
+            } else if ("movies".equals(catId) && getChannelGroupRank(ch) == 4) {
+                filtered.add(ch);
+            } else if ("kids".equals(catId) && getChannelGroupRank(ch) == 5) {
+                filtered.add(ch);
+            } else if ("channels_24h".equals(catId) && getChannelGroupRank(ch) == 6) {
+                filtered.add(ch);
+            } else if ("other".equals(catId) && getChannelGroupRank(ch) == 7) {
                 filtered.add(ch);
             }
         }
@@ -1545,6 +1662,14 @@ public class MainActivity extends Activity {
         currentChannelIdx = (idx + allChannels.size()) % allChannels.size();
         Channel ch = allChannels.get(currentChannelIdx);
         isPlayingVod = false;
+
+        try {
+            SharedPreferences sp = getSharedPreferences(PREF_APP_STATE, Context.MODE_PRIVATE);
+            sp.edit()
+                    .putString(KEY_LAST_CHANNEL_ID, ch.id != null ? ch.id : "")
+                    .putInt(KEY_LAST_CHANNEL_INDEX, currentChannelIdx)
+                    .apply();
+        } catch (Exception ignored) {}
 
         LiveSchedule epg = EpgEngine.getLiveSchedule(ch);
 
@@ -1669,10 +1794,10 @@ public class MainActivity extends Activity {
 
     public void playMovie(Movie movie) {
         if (movie == null) return;
-        String key = "movie_" + movie.stream_id;
+        String key = getMovieProgressKey(movie);
         long savedPos = getVodProgress(key);
 
-        if (savedPos > 10000) {
+        if (savedPos > 5000) {
             String[] options = new String[] {
                     "▶️ CONTINUAR DE ONDE PAROU (" + formatDuration(savedPos) + ")",
                     "🔄 VOLTAR AO INÍCIO"
@@ -1731,7 +1856,7 @@ public class MainActivity extends Activity {
         long savedPos = getVodProgress(key);
 
         String fullTitle = series.getDisplayTitle() + " • T" + seasonNum + ":E" + ep.episode_num;
-        if (savedPos > 10000) {
+        if (savedPos > 5000) {
             String[] options = new String[] {
                     "▶️ CONTINUAR DE ONDE PAROU (" + formatDuration(savedPos) + ")",
                     "🔄 VOLTAR AO INÍCIO"
@@ -2238,6 +2363,48 @@ public class MainActivity extends Activity {
             seriesSeasonsRecycler.smoothScrollToPosition(currentSeriesSeasonIdx);
         }
         displaySeasonEpisodes(activeVodSeries, currentSeriesEpisodesMap.get(sNum), sNum);
+        focusFirstEpisode();
+    }
+
+    private void focusFirstEpisode() {
+        if (seriesEpisodesRecycler == null) return;
+        seriesEpisodesRecycler.scrollToPosition(0);
+        seriesEpisodesRecycler.post(() -> {
+            RecyclerView.ViewHolder vh = seriesEpisodesRecycler.findViewHolderForAdapterPosition(0);
+            if (vh != null && vh.itemView != null) {
+                vh.itemView.requestFocus();
+            } else {
+                seriesEpisodesRecycler.postDelayed(() -> {
+                    RecyclerView.ViewHolder vh2 = seriesEpisodesRecycler.findViewHolderForAdapterPosition(0);
+                    if (vh2 != null && vh2.itemView != null) {
+                        vh2.itemView.requestFocus();
+                    } else if (seriesEpisodesRecycler.getChildCount() > 0) {
+                        seriesEpisodesRecycler.getChildAt(0).requestFocus();
+                    }
+                }, 60);
+            }
+        });
+    }
+
+    private void focusCurrentSeasonPill() {
+        if (seriesSeasonsRecycler == null || currentSeriesSeasonKeys == null || currentSeriesSeasonKeys.isEmpty()) return;
+        final int targetPos = Math.max(0, Math.min(currentSeriesSeasonIdx, currentSeriesSeasonKeys.size() - 1));
+        seriesSeasonsRecycler.scrollToPosition(targetPos);
+        seriesSeasonsRecycler.post(() -> {
+            RecyclerView.ViewHolder vh = seriesSeasonsRecycler.findViewHolderForAdapterPosition(targetPos);
+            if (vh != null && vh.itemView != null) {
+                vh.itemView.requestFocus();
+            } else {
+                seriesSeasonsRecycler.postDelayed(() -> {
+                    RecyclerView.ViewHolder vh2 = seriesSeasonsRecycler.findViewHolderForAdapterPosition(targetPos);
+                    if (vh2 != null && vh2.itemView != null) {
+                        vh2.itemView.requestFocus();
+                    } else if (seriesSeasonsRecycler.getChildCount() > 0) {
+                        seriesSeasonsRecycler.getChildAt(0).requestFocus();
+                    }
+                }, 60);
+            }
+        });
     }
 
     private void displaySeasonEpisodes(Series series, List<Episode> eps, String seasonNum) {
@@ -2432,6 +2599,16 @@ public class MainActivity extends Activity {
                     } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                         switchSeriesSeason(1);
                         return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                        if (seriesEpisodesRecycler != null && seriesEpisodesRecycler.hasFocus()) {
+                            View focused = seriesEpisodesRecycler.findFocus();
+                            View itemView = focused != null ? seriesEpisodesRecycler.findContainingItemView(focused) : null;
+                            int pos = itemView != null ? seriesEpisodesRecycler.getChildAdapterPosition(itemView) : -1;
+                            if (pos <= 0 || !seriesEpisodesRecycler.canScrollVertically(-1)) {
+                                focusCurrentSeasonPill();
+                                return true;
+                            }
+                        }
                     }
                 }
             } else if (currentMode == ScreenMode.FULLSCREEN) {
@@ -2606,15 +2783,30 @@ public class MainActivity extends Activity {
             return true;
         }
 
-        // Raiz do app (Central): exige 2 toques rápidos para sair
+        // Raiz do app (Central): exige 2 toques rápidos para abrir confirmação de saída
         long now = SystemClock.elapsedRealtime();
-        if (now - lastBackAt < 2000) {
-            finish();
+        if (now - lastBackAt < 2500) {
+            lastBackAt = 0;
+            showExitConfirmDialog();
         } else {
             lastBackAt = now;
             Toast.makeText(this, "Pressione Voltar novamente para sair", Toast.LENGTH_SHORT).show();
         }
         return true;
+    }
+
+    private void showExitConfirmDialog() {
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Sair do AndPlay")
+                .setMessage("Deseja realmente fechar o aplicativo?")
+                .setPositiveButton("Sim, Sair", (dialog, which) -> {
+                    dialog.dismiss();
+                    finish();
+                })
+                .setNegativeButton("Cancelar", (dialog, which) -> {
+                    dialog.dismiss();
+                })
+                .show();
     }
 
     public void openFullGuide() {
