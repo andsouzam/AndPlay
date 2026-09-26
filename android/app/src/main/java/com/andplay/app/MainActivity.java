@@ -643,9 +643,6 @@ public class MainActivity extends Activity {
             setSlotAudioMuted(slot, !isFocused);
             if (isFocused) {
                 showMosaicSlotOverlay(i);
-                if (slot.isPlayingEmbed && slot.webView != null) {
-                    triggerViewTap(slot.webView);
-                }
             } else {
                 if (slot.hideOverlayRunnable != null) {
                     mainHandler.removeCallbacks(slot.hideOverlayRunnable);
@@ -824,9 +821,9 @@ public class MainActivity extends Activity {
             }
         }
 
-        // 5. Intercepta páginas e frames do rdcanais.net, bolodechocolate e rdembed limpando anúncios, controles e garantindo permissões de autoplay
-        if (url.contains("rdcanais.net") || url.contains("rdembed") || url.contains("redecanais") || url.contains("bolodechocolate")) {
-            if (request.isForMainFrame() || url.endsWith(".html") || url.endsWith(".php") || url.contains("/embed/")) {
+        // 5. Intercepta páginas e frames do rdcanais.net, bolodechocolate, rdembed e localhost.tattoo limpando anúncios, controles e garantindo permissões de autoplay
+        if (url.contains("rdcanais.net") || url.contains("rdembed") || url.contains("redecanais") || url.contains("bolodechocolate") || url.contains("localhost.tattoo")) {
+            if (request.isForMainFrame() || url.endsWith(".html") || url.endsWith(".php") || url.contains("/embed/") || url.contains("player") || url.contains("canais") || url.contains("canal")) {
                 try {
                     Request okReq = new Request.Builder()
                             .url(url)
@@ -836,10 +833,41 @@ public class MainActivity extends Activity {
                     if (okRes.isSuccessful() && okRes.body() != null) {
                         String html = okRes.body().string();
                         String hideStyle = "<style>.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], video::-webkit-media-controls { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; } body, html { background: #000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; }</style>";
+                        String autoplayScript = "<script>\n" +
+                                ";(function() {\n" +
+                                "  function forcePlay() {\n" +
+                                "    try {\n" +
+                                "      if (typeof jwplayer === 'function') {\n" +
+                                "        var p = jwplayer();\n" +
+                                "        if (p && typeof p.play === 'function') {\n" +
+                                "          var s = typeof p.getState === 'function' ? p.getState() : '';\n" +
+                                "          if (s === 'paused' || s === 'idle') { p.play(); }\n" +
+                                "        }\n" +
+                                "      }\n" +
+                                "    } catch(e) {}\n" +
+                                "    try {\n" +
+                                "      var media = document.querySelectorAll('video, audio');\n" +
+                                "      for (var i = 0; i < media.length; i++) {\n" +
+                                "        var v = media[i];\n" +
+                                "        if (v.paused) { v.play().catch(function(){}); }\n" +
+                                "      }\n" +
+                                "    } catch(e) {}\n" +
+                                "    try {\n" +
+                                "      var btns = document.querySelectorAll('.vjs-big-play-button, .plyr__control--overlaid, button[aria-label*=\"Play\" i], button[title*=\"Play\" i]');\n" +
+                                "      for (var j = 0; j < btns.length; j++) {\n" +
+                                "        btns[j].click();\n" +
+                                "      }\n" +
+                                "    } catch(e) {}\n" +
+                                "  }\n" +
+                                "  setInterval(forcePlay, 500);\n" +
+                                "  document.addEventListener('DOMContentLoaded', forcePlay);\n" +
+                                "  window.addEventListener('load', forcePlay);\n" +
+                                "})();\n" +
+                                "</script>";
                         html = html.replaceAll("(?is)<script[^>]*aclib[^>]*>.*?</script>", "")
                                    .replaceAll("(?is)<script[^>]*histats[^>]*>.*?</script>", "")
                                    .replace("allow=\"encrypted-media\"", "allow=\"autoplay *; encrypted-media *; fullscreen *; picture-in-picture *\"")
-                                   .replaceFirst("(?i)<head>", "<head>" + hideStyle);
+                                   .replaceFirst("(?i)<head>", "<head>" + hideStyle + autoplayScript);
                         byte[] htmlBytes = html.getBytes(StandardCharsets.UTF_8);
                         return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(htmlBytes));
                     }
@@ -890,6 +918,9 @@ public class MainActivity extends Activity {
             WebView wv = new WebView(this);
             wv.setFocusable(false);
             wv.setFocusableInTouchMode(false);
+            wv.setClickable(false);
+            wv.setOnTouchListener((v, event) -> true);
+            wv.setOnKeyListener((v, keyCode, event) -> true);
             slot.webView = wv;
 
             WebSettings ws = wv.getSettings();
@@ -922,11 +953,16 @@ public class MainActivity extends Activity {
                     String url = request != null ? request.getUrl().toString() : "";
                     if (url.startsWith("file://")
                             || url.contains("rdcanais.net")
+                            || url.contains("redecanaistv.af")
+                            || url.contains("redecanais")
                             || url.contains("v2.rdembed.sbs")
                             || url.contains("streamverde.net")
                             || url.contains("cazetv.shop")
                             || url.contains("tvacabo.top")
-                            || url.contains("redecanaistv.af")
+                            || url.contains("tvacabo.free.nf")
+                            || url.contains("bolodechocolate.fit")
+                            || url.contains("esportesembed.net")
+                            || url.contains("localhost.tattoo")
                             || url.contains("about:blank")) {
                         return false;
                     }
@@ -955,24 +991,33 @@ public class MainActivity extends Activity {
                     boolean isFocused = (slot.slotView != null && slot.slotView.isFocused());
                     String script = "(function() {" +
                             "try {" +
-                            "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"] { display: none !important; opacity: 0 !important; visibility: hidden !important; }';" +
+                            "  var css = '.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-flag-touch .jw-display-icon-container, .jw-flag-touch .jw-display-icon-display, .jw-flag-touch .jw-icon-playback, .plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"] { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';" +
                             "  var st = document.createElement('style');" +
                             "  st.textContent = css;" +
                             "  (document.head || document.documentElement).appendChild(st);" +
                             "} catch(e) {}" +
                             "function forcePlay() {" +
+                            "  var hasPaused = false;" +
                             "  var media = document.querySelectorAll('video, audio');" +
                             "  for (var i = 0; i < media.length; i++) {" +
                             "    media[i].muted = " + (!isFocused) + ";" +
                             (isFocused ? "    media[i].volume = 1.0;" : "") +
-                            "    if (media[i].paused) media[i].play().catch(function(){});" +
-                            "  }" +
-                            "  var btns = document.querySelectorAll('.jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .vjs-big-play-button, .plyr__control--overlaid, button[aria-label*=\"Play\" i], button[title*=\"Play\" i], .play-button, [class*=\"play\"]');" +
-                            "  for (var j = 0; j < btns.length; j++) {" +
-                            "    try { btns[j].click(); } catch(e){}" +
+                            "    if (media[i].paused) { hasPaused = true; media[i].play().catch(function(){}); }" +
                             "  }" +
                             "  if (typeof jwplayer === 'function') {" +
-                            "    try { jwplayer().play(); } catch(e){}" +
+                            "    try {" +
+                            "      var p = jwplayer();" +
+                            "      if (p && typeof p.getState === 'function') {" +
+                            "        var s = p.getState();" +
+                            "        if (s === 'paused' || s === 'idle') { p.play(); hasPaused = true; }" +
+                            "      }" +
+                            "    } catch(e) {}" +
+                            "  }" +
+                            "  if (hasPaused) {" +
+                            "    var btns = document.querySelectorAll('.vjs-big-play-button, .plyr__control--overlaid, button[aria-label*=\"Play\" i], button[title*=\"Play\" i]');" +
+                            "    for (var j = 0; j < btns.length; j++) {" +
+                            "      try { btns[j].click(); } catch(e){}" +
+                            "    }" +
                             "  }" +
                             "}" +
                             "forcePlay();" +
@@ -988,24 +1033,6 @@ public class MainActivity extends Activity {
 
             String autoplayUrl = fb.url + (fb.url.contains("?") ? "&" : "?") + "autoplay=1";
             wv.loadUrl(autoplayUrl);
-
-            mainHandler.postDelayed(() -> {
-                if (isMosaicActive && slot.isPlayingEmbed && slot.webView == wv) {
-                    triggerViewTap(wv);
-                }
-            }, 1200);
-
-            mainHandler.postDelayed(() -> {
-                if (isMosaicActive && slot.isPlayingEmbed && slot.webView == wv) {
-                    triggerViewTap(wv);
-                }
-            }, 2200);
-
-            mainHandler.postDelayed(() -> {
-                if (isMosaicActive && slot.isPlayingEmbed && slot.webView == wv) {
-                    triggerViewTap(wv);
-                }
-            }, 3500);
 
         } else {
             slot.isPlayingEmbed = false;
@@ -3815,6 +3842,47 @@ public class MainActivity extends Activity {
             }
         }
 
+        // 0. MODO MOSAICO: Prioridade absoluta para D-Pad, Enter e Back quando gaveta fechada
+        if (isMosaicActive) {
+            if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
+                // Gaveta aberta sobre o mosaico: deixa seguir para o tratamento de gaveta abaixo
+            } else {
+                if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == KeyEvent.KEYCODE_VOLUME_MUTE) {
+                    return super.dispatchKeyEvent(event);
+                }
+                if (action == KeyEvent.ACTION_DOWN) {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                        moveMosaicFocus(-1, 0);
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                        moveMosaicFocus(1, 0);
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                        moveMosaicFocus(0, -1);
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                        moveMosaicFocus(0, 1);
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                        onMosaicSlotClicked(currentMosaicFocusedIdx);
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_BACK) {
+                        return true;
+                    }
+                } else if (action == KeyEvent.ACTION_UP) {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                            || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                            || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_BACK) {
+                        handleBack();
+                        return true;
+                    }
+                }
+                return true; // Consome qualquer outra tecla no Mosaico para NENHUMA tecla vazar para WebViews
+            }
+        }
+
         if (action == KeyEvent.ACTION_DOWN) {
             // Teclas de controle de TV por Assinatura / Receptor
             if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
@@ -4001,33 +4069,6 @@ public class MainActivity extends Activity {
                     }
                 }
 
-                return super.dispatchKeyEvent(event);
-            } else if (isMosaicActive) {
-                // Durante modo Mosaico com gaveta fechada, interceptar DPAD e Enter explicitamente para navegar entre os slots
-                if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                        moveMosaicFocus(-1, 0);
-                        return true;
-                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                        moveMosaicFocus(1, 0);
-                        return true;
-                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                        moveMosaicFocus(0, -1);
-                        return true;
-                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                        moveMosaicFocus(0, 1);
-                        return true;
-                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
-                        onMosaicSlotClicked(currentMosaicFocusedIdx);
-                        return true;
-                    }
-                } else if (event.getAction() == KeyEvent.ACTION_UP) {
-                    if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
-                            || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
-                            || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
-                        return true;
-                    }
-                }
                 return super.dispatchKeyEvent(event);
             } else if (currentMode == ScreenMode.SERIES_DETAIL) {
                 // CENÁRIO 2: DETALHES DA SÉRIE
