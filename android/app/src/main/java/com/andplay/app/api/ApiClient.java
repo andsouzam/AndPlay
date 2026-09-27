@@ -1322,15 +1322,17 @@ public class ApiClient {
         public int goalDiff;
         public int points;
         public boolean isHighlighted; // time da partida atual
+        public String groupName;      // ex: "Conferência Leste", "Grupo A"
     }
 
     public static class RoundMatch {
         public String homeTeam;
         public String awayTeam;
-        public String score;      // ex: "2 x 1" ou null se não iniciou
-        public String matchTime;  // ex: "20:00" ou "AO VIVO" ou "45'"
-        public String state;      // "pre" | "in" | "post"
-        public boolean isCurrent; // é a partida que está sendo assistida
+        public String score;        // ex: "2 x 1" ou "vs"
+        public String matchTime;    // ex: "20:00"
+        public String statusLabel;  // ex: "Encerrado", "● AO VIVO • 45'", "Hoje 20:00", "Sáb 26/09"
+        public String state;        // "pre" | "in" | "post"
+        public boolean isCurrent;   // é a partida que está sendo assistida
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1339,14 +1341,14 @@ public class ApiClient {
 
     /**
      * Busca a tabela de classificação da liga correspondente à competição do evento.
-     * Retorna lista ordenada por posição, ou lista vazia se não disponível.
+     * Suporta ligas com tabela única (Brasileirão, Premier League) e ligas com grupos/conferências (MLS, etc.).
      */
     public static List<StandingEntry> getStandings(String competition, String homeTeam, String awayTeam) {
         List<StandingEntry> result = new ArrayList<>();
         String league = getEspnLeagueForCompetition(competition);
         if (league == null) return result;
 
-        // Algumas competições de copa não têm tabela (Champions, Libertadores, Copa do Brasil, etc.)
+        // Algumas competições de copa não têm tabela contínua (Champions, Libertadores, Copa do Brasil, etc.)
         if (league.startsWith("conmebol.") || league.equals("bra.copa_do_brazil")
                 || league.equals("uefa.champions") || league.equals("fifa.friendly")
                 || league.equals("uefa.nations")) {
@@ -1366,63 +1368,149 @@ public class ApiClient {
                 String json = response.body().string();
                 JsonObject root = JsonParser.parseString(json).getAsJsonObject();
 
-                // Estrutura: standings -> entries[] -> team + stats[]
-                if (!root.has("standings")) return result;
-                JsonObject standings = root.getAsJsonObject("standings");
-                if (!standings.has("entries") || !standings.get("entries").isJsonArray()) return result;
-                JsonArray entries = standings.getAsJsonArray("entries");
+                JsonArray entries = null;
+                String groupName = "";
 
-                String normHome = cleanAndNormalizeTeam(homeTeam);
-                String normAway = cleanAndNormalizeTeam(awayTeam);
+                // A ESPN v2 organiza a classificação dentro de 'children' (mesmo em ligas de grupo único como Brasileirão)
+                if (root.has("children") && root.get("children").isJsonArray()) {
+                    JsonArray children = root.getAsJsonArray("children");
+                    int chosenIdx = 0;
+
+                    // Se houver mais de uma conferência/grupo (ex: MLS Conferência Leste e Oeste),
+                    // procura o grupo ao qual pertence o time da partida em exibição
+                    if (children.size() > 1 && (homeTeam != null || awayTeam != null)) {
+                        boolean found = false;
+                        for (int c = 0; c < children.size(); c++) {
+                            JsonObject ch = children.get(c).getAsJsonObject();
+                            if (ch.has("standings") && ch.get("standings").isJsonObject()) {
+                                JsonObject st = ch.getAsJsonObject("standings");
+                                if (st.has("entries") && st.get("entries").isJsonArray()) {
+                                    JsonArray chEntries = st.getAsJsonArray("entries");
+                                    for (int e = 0; e < chEntries.size(); e++) {
+                                        JsonObject entryObj = chEntries.get(e).getAsJsonObject();
+                                        if (entryObj.has("team") && entryObj.get("team").isJsonObject()) {
+                                            JsonObject tm = entryObj.getAsJsonObject("team");
+                                            String tmName = optString(tm, "displayName", optString(tm, "name", ""));
+                                            if (matchTeamName(tmName, homeTeam) || matchTeamName(tmName, awayTeam)) {
+                                                chosenIdx = c;
+                                                found = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if (found) break;
+                        }
+                    }
+
+                    if (chosenIdx < children.size()) {
+                        JsonObject chosenChild = children.get(chosenIdx).getAsJsonObject();
+                        groupName = optString(chosenChild, "name", "");
+                        if (chosenChild.has("standings") && chosenChild.get("standings").isJsonObject()) {
+                            JsonObject st = chosenChild.getAsJsonObject("standings");
+                            if (st.has("entries") && st.get("entries").isJsonArray()) {
+                                entries = st.getAsJsonArray("entries");
+                            }
+                        }
+                    }
+                } else if (root.has("standings") && root.get("standings").isJsonObject()) {
+                    JsonObject st = root.getAsJsonObject("standings");
+                    if (st.has("entries") && st.get("entries").isJsonArray()) {
+                        entries = st.getAsJsonArray("entries");
+                    }
+                }
+
+                if (entries == null || entries.size() == 0) return result;
 
                 for (int i = 0; i < entries.size(); i++) {
                     JsonObject entry = entries.get(i).getAsJsonObject();
                     StandingEntry se = new StandingEntry();
                     se.position = i + 1;
+                    se.groupName = groupName;
 
                     if (entry.has("team") && entry.get("team").isJsonObject()) {
                         JsonObject team = entry.getAsJsonObject("team");
                         se.teamName = optString(team, "displayName", optString(team, "name", ""));
-                        se.teamAbbr = optString(team, "abbreviation", optString(team, "shortDisplayName", ""));
-                        String normTeam = cleanAndNormalizeTeam(se.teamName);
-                        se.isHighlighted = normTeam.equals(normHome) || normTeam.equals(normAway)
-                                || matchTeamName(se.teamName, homeTeam) || matchTeamName(se.teamName, awayTeam);
+                        se.teamAbbr = optString(team, "shortDisplayName", optString(team, "abbreviation", ""));
+                        se.isHighlighted = matchTeamName(se.teamName, homeTeam) || matchTeamName(se.teamName, awayTeam);
                     }
 
-                    // Estatísticas: busca por nome de stat
+                    // Estatísticas
                     if (entry.has("stats") && entry.get("stats").isJsonArray()) {
                         JsonArray stats = entry.getAsJsonArray("stats");
                         for (int j = 0; j < stats.size(); j++) {
                             JsonObject stat = stats.get(j).getAsJsonObject();
-                            String name = optString(stat, "name", "");
+                            String name = optString(stat, "name", "").toLowerCase(Locale.ROOT);
                             int val = 0;
-                            try { val = stat.has("value") ? (int) stat.get("value").getAsDouble() : 0; } catch (Exception ignored) {}
+                            try {
+                                if (stat.has("value") && !stat.get("value").isJsonNull()) {
+                                    val = (int) Math.round(stat.get("value").getAsDouble());
+                                }
+                            } catch (Exception ignored) {}
+
                             switch (name) {
-                                case "gamesPlayed": se.played = val; break;
-                                case "wins": se.wins = val; break;
-                                case "ties": se.draws = val; break;
-                                case "losses": se.losses = val; break;
-                                case "pointsFor": se.goalsFor = val; break;
-                                case "pointsAgainst": se.goalsAgainst = val; break;
-                                case "pointDifferential": se.goalDiff = val; break;
-                                case "points": se.points = val; break;
-                                // aliases ESPN
-                                case "gf": se.goalsFor = val; break;
-                                case "ga": se.goalsAgainst = val; break;
-                                case "gd": se.goalDiff = val; break;
-                                case "pts": se.points = val; break;
-                                case "w": se.wins = val; break;
-                                case "d": se.draws = val; break;
-                                case "l": se.losses = val; break;
-                                case "gp": se.played = val; break;
+                                case "rank":
+                                    if (val > 0) se.position = val;
+                                    break;
+                                case "gamesplayed":
+                                case "gp":
+                                    se.played = val;
+                                    break;
+                                case "wins":
+                                case "w":
+                                    se.wins = val;
+                                    break;
+                                case "ties":
+                                case "d":
+                                    se.draws = val;
+                                    break;
+                                case "losses":
+                                case "l":
+                                    se.losses = val;
+                                    break;
+                                case "pointsfor":
+                                case "gf":
+                                    se.goalsFor = val;
+                                    break;
+                                case "pointsagainst":
+                                case "ga":
+                                    se.goalsAgainst = val;
+                                    break;
+                                case "pointdifferential":
+                                case "gd":
+                                    se.goalDiff = val;
+                                    break;
+                                case "points":
+                                case "pts":
+                                    se.points = val;
+                                    break;
                             }
                         }
-                        // Recalcula SG se não veio direto
                         if (se.goalDiff == 0 && (se.goalsFor > 0 || se.goalsAgainst > 0)) {
                             se.goalDiff = se.goalsFor - se.goalsAgainst;
                         }
                     }
                     result.add(se);
+                }
+
+                // Ordena por posição / pontos / saldo
+                Collections.sort(result, (a, b) -> {
+                    if (a.position > 0 && b.position > 0 && a.position != b.position) {
+                        return Integer.compare(a.position, b.position);
+                    }
+                    if (a.points != b.points) {
+                        return Integer.compare(b.points, a.points);
+                    }
+                    if (a.goalDiff != b.goalDiff) {
+                        return Integer.compare(b.goalDiff, a.goalDiff);
+                    }
+                    return Integer.compare(b.goalsFor, a.goalsFor);
+                });
+
+                // Normaliza numeração de posição 1..N
+                for (int idx = 0; idx < result.size(); idx++) {
+                    result.get(idx).position = idx + 1;
                 }
             }
         } catch (Exception e) {
@@ -1436,21 +1524,17 @@ public class ApiClient {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Busca os jogos da rodada atual da liga correspondente ao evento.
-     * Retorna lista de RoundMatch ordenada por horário.
+     * Busca os jogos da rodada atual completa da liga correspondente ao evento.
+     * Retorna lista de RoundMatch com placares, status e horários devidamente formatados.
      */
     public static List<RoundMatch> getRoundMatches(String competition, String homeTeam, String awayTeam) {
         List<RoundMatch> result = new ArrayList<>();
         String league = getEspnLeagueForCompetition(competition);
         if (league == null) return result;
 
-        TimeZone tz = TimeZone.getTimeZone("America/Sao_Paulo");
-        SimpleDateFormat df = new SimpleDateFormat("yyyyMMdd", Locale.US);
-        df.setTimeZone(tz);
-        String todayStr = df.format(new Date());
-
+        // Sem dates= a ESPN retorna todos os jogos da rodada/semana atual
         String url = "https://site.api.espn.com/apis/site/v2/sports/soccer/" + league
-                + "/scoreboard?dates=" + todayStr + "&lang=pt&region=br";
+                + "/scoreboard?lang=pt&region=br";
         try {
             Request request = new Request.Builder()
                     .url(url)
@@ -1463,10 +1547,25 @@ public class ApiClient {
                 JsonObject root = JsonParser.parseString(json).getAsJsonObject();
                 if (!root.has("events") || !root.get("events").isJsonArray()) return result;
 
+                JsonArray events = root.getAsJsonArray("events");
+
+                TimeZone tz = TimeZone.getTimeZone("America/Sao_Paulo");
                 SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.US);
                 timeFmt.setTimeZone(tz);
 
-                JsonArray events = root.getAsJsonArray("events");
+                SimpleDateFormat dayCodeFmt = new SimpleDateFormat("yyyyMMdd", Locale.US);
+                dayCodeFmt.setTimeZone(tz);
+                String todayCode = dayCodeFmt.format(new Date());
+
+                Date tomorrowDate = new Date(System.currentTimeMillis() + 86400000L);
+                String tomorrowCode = dayCodeFmt.format(tomorrowDate);
+
+                SimpleDateFormat dayNameFmt = new SimpleDateFormat("EEE dd/MM", new Locale("pt", "BR"));
+                dayNameFmt.setTimeZone(tz);
+
+                SimpleDateFormat isofmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'", Locale.US);
+                isofmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+
                 for (int i = 0; i < events.size(); i++) {
                     JsonElement el = events.get(i);
                     if (!el.isJsonObject()) continue;
@@ -1491,16 +1590,27 @@ public class ApiClient {
                     }
                     rm.state = state;
 
-                    // Horário de início
+                    // Horário e dia de início
                     String startDate = optString(ev, "date", "");
+                    String timeStr = "--:--";
+                    String dayLabel = "";
                     try {
                         if (!startDate.isEmpty()) {
-                            SimpleDateFormat isofmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'", Locale.US);
-                            isofmt.setTimeZone(TimeZone.getTimeZone("UTC"));
                             Date d = isofmt.parse(startDate);
-                            if (d != null) rm.matchTime = timeFmt.format(d);
+                            if (d != null) {
+                                timeStr = timeFmt.format(d);
+                                String dCode = dayCodeFmt.format(d);
+                                if (dCode.equals(todayCode)) {
+                                    dayLabel = "Hoje";
+                                } else if (dCode.equals(tomorrowCode)) {
+                                    dayLabel = "Amanhã";
+                                } else {
+                                    dayLabel = dayNameFmt.format(d);
+                                }
+                            }
                         }
                     } catch (Exception ignored) {}
+                    rm.matchTime = timeStr;
 
                     // Times e placar
                     if (comp.has("competitors") && comp.get("competitors").isJsonArray()) {
@@ -1522,12 +1632,14 @@ public class ApiClient {
                         rm.awayTeam = aName;
 
                         if ("in".equalsIgnoreCase(state)) {
-                            rm.score = hScore + " x " + aScore;
-                            rm.matchTime = clock.isEmpty() ? "AO VIVO" : clock;
+                            rm.score = (hScore.isEmpty() ? "0" : hScore) + " x " + (aScore.isEmpty() ? "0" : aScore);
+                            rm.statusLabel = "AO VIVO" + (!clock.isEmpty() ? " • " + clock : "");
                         } else if ("post".equalsIgnoreCase(state)) {
-                            rm.score = hScore + " x " + aScore;
+                            rm.score = (hScore.isEmpty() ? "0" : hScore) + " x " + (aScore.isEmpty() ? "0" : aScore);
+                            rm.statusLabel = "Encerrado" + (!dayLabel.isEmpty() ? " • " + dayLabel : "");
                         } else {
-                            rm.score = null; // pré-jogo: mostra só horário
+                            rm.score = "vs";
+                            rm.statusLabel = dayLabel + " " + timeStr;
                         }
 
                         // Marca se é a partida sendo assistida

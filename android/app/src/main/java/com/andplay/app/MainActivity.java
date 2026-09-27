@@ -2783,6 +2783,12 @@ public class MainActivity extends Activity {
                 // Popula standings
                 if (standingsRecycler != null && hasStandings) {
                     standingsRecycler.setAdapter(new StandingsAdapter(standings));
+                    if (standingsLeagueName != null && !standings.isEmpty()) {
+                        String grp = standings.get(0).groupName;
+                        if (grp != null && !grp.isEmpty() && !grp.matches("\\d{4}")) {
+                            standingsLeagueName.setText(activeSportsEvent.league + " • " + grp);
+                        }
+                    }
                 }
 
                 // Popula rodada
@@ -2940,7 +2946,7 @@ public class MainActivity extends Activity {
             android.widget.LinearLayout row = new android.widget.LinearLayout(parent.getContext());
             row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
             row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            row.setPadding(dp(12), dp(10), dp(12), dp(10));
+            row.setPadding(dp(12), dp(8), dp(12), dp(8));
             row.setLayoutParams(new RecyclerView.LayoutParams(
                     RecyclerView.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT));
             return new VH(row);
@@ -2952,7 +2958,7 @@ public class MainActivity extends Activity {
             boolean live = "in".equalsIgnoreCase(m.state);
             boolean fin  = "post".equalsIgnoreCase(m.state);
 
-            int bg = m.isCurrent ? 0x44FFD700 : (pos % 2 == 0 ? 0x0AFFFFFF : 0x00000000);
+            int bg = m.isCurrent ? 0x33FFD700 : (pos % 2 == 0 ? 0x0AFFFFFF : 0x00000000);
             h.row.setBackgroundColor(bg);
 
             h.home.setText(m.homeTeam != null ? m.homeTeam : "");
@@ -2961,15 +2967,19 @@ public class MainActivity extends Activity {
             h.away.setText(m.awayTeam != null ? m.awayTeam : "");
             h.away.setTextColor(m.isCurrent ? 0xFFFFD700 : 0xFFFFFFFF);
 
+            h.scoreTv.setText(m.score != null ? m.score : "vs");
             if (live) {
-                h.center.setText(m.matchTime != null ? m.matchTime : "AO VIVO");
-                h.center.setTextColor(0xFF4FC3F7);
-            } else if (fin && m.score != null) {
-                h.center.setText(m.score);
-                h.center.setTextColor(0xFFFFFFFF);
+                h.scoreTv.setTextColor(0xFF4FC3F7);
+                h.statusTv.setText(m.statusLabel != null ? m.statusLabel : "AO VIVO");
+                h.statusTv.setTextColor(0xFF4FC3F7);
+            } else if (fin) {
+                h.scoreTv.setTextColor(m.isCurrent ? 0xFFFFD700 : 0xFFFFFFFF);
+                h.statusTv.setText(m.statusLabel != null ? m.statusLabel : "Encerrado");
+                h.statusTv.setTextColor(0xFF888888);
             } else {
-                h.center.setText(m.matchTime != null ? m.matchTime : "--:--");
-                h.center.setTextColor(0xFF888888);
+                h.scoreTv.setTextColor(0xFF888888);
+                h.statusTv.setText(m.statusLabel != null ? m.statusLabel : m.matchTime);
+                h.statusTv.setTextColor(0xFF4FC3F7);
             }
         }
 
@@ -2977,13 +2987,40 @@ public class MainActivity extends Activity {
 
         class VH extends RecyclerView.ViewHolder {
             android.widget.LinearLayout row;
-            android.widget.TextView home, center, away;
+            android.widget.TextView home;
+            android.widget.LinearLayout centerBox;
+            android.widget.TextView scoreTv;
+            android.widget.TextView statusTv;
+            android.widget.TextView away;
+
             VH(android.widget.LinearLayout v) {
                 super(v);
                 row = v;
-                home   = makeTv(v, 0, android.view.Gravity.END,    0xFFFFFFFF, 12, false, 1);
-                center = makeTv(v, dp(72), android.view.Gravity.CENTER, 0xFF888888, 11, true,  0);
-                away   = makeTv(v, 0, android.view.Gravity.START,  0xFFFFFFFF, 12, false, 1);
+                home = makeTv(v, 0, android.view.Gravity.END, 0xFFFFFFFF, 12, false, 1);
+
+                centerBox = new android.widget.LinearLayout(v.getContext());
+                centerBox.setOrientation(android.widget.LinearLayout.VERTICAL);
+                centerBox.setGravity(android.view.Gravity.CENTER);
+                android.widget.LinearLayout.LayoutParams cLp = new android.widget.LinearLayout.LayoutParams(
+                        dp(100), android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+                cLp.setMargins(dp(6), 0, dp(6), 0);
+                centerBox.setLayoutParams(cLp);
+                v.addView(centerBox);
+
+                scoreTv = new android.widget.TextView(v.getContext());
+                scoreTv.setGravity(android.view.Gravity.CENTER);
+                scoreTv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12);
+                scoreTv.setTypeface(null, android.graphics.Typeface.BOLD);
+                centerBox.addView(scoreTv);
+
+                statusTv = new android.widget.TextView(v.getContext());
+                statusTv.setGravity(android.view.Gravity.CENTER);
+                statusTv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10);
+                statusTv.setMaxLines(1);
+                statusTv.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                centerBox.addView(statusTv);
+
+                away = makeTv(v, 0, android.view.Gravity.START, 0xFFFFFFFF, 12, false, 1);
             }
         }
 
