@@ -111,29 +111,35 @@
             <TextView
                 android:id="@+id/subTabSchedule"
                 android:layout_width="wrap_content"
-                android:layout_height="match_parent"
+                android:layout_height="30dp"
+                android:layout_gravity="center_vertical"
+                android:layout_marginEnd="6dp"
                 android:gravity="center"
-                android:paddingStart="18dp"
-                android:paddingEnd="18dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
                 android:text="📅 CALENDÁRIO"
                 android:textSize="11sp"
                 android:textColor="#FFFFFF"
                 android:focusable="true"
-                android:focusableInTouchMode="true" />
+                android:focusableInTouchMode="true"
+                android:background="@drawable/sports_hub_tab_bg" />
 
             <!-- Sub-tab TABELA -->
             <TextView
                 android:id="@+id/subTabStandings"
                 android:layout_width="wrap_content"
-                android:layout_height="match_parent"
+                android:layout_height="30dp"
+                android:layout_gravity="center_vertical"
+                android:layout_marginEnd="12dp"
                 android:gravity="center"
-                android:paddingStart="18dp"
-                android:paddingEnd="16dp"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
                 android:text="🏆 TABELA"
                 android:textSize="11sp"
                 android:textColor="#FFFFFF"
                 android:focusable="true"
-                android:focusableInTouchMode="true" />
+                android:focusableInTouchMode="true"
+                android:background="@drawable/sports_hub_tab_bg" />
 
             <!-- Dica de navegação -->
             <TextView

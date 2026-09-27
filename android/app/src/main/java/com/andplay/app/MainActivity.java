@@ -6026,15 +6026,24 @@ public class MainActivity extends Activity {
                     hideSportsOverlay();
                     return true;
                 }
-                // UP/DOWN/LEFT/RIGHT → scrolla o conteúdo ativo
-                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
-                        || keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    // D-Pad Esquerdo seleciona a aba TABELA (à esquerda). Nunca fecha o overlay nem abre gaveta.
+                    switchStandingsTab("standings");
+                    if (tabStandings != null) tabStandings.requestFocus();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    // D-Pad Direito seleciona a aba RODADA (à direita). Nunca fecha o overlay.
+                    switchStandingsTab("round");
+                    if (tabRound != null) tabRound.requestFocus();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    // Rola a lista ativa para cima/baixo sem interferir no vídeo de fundo
                     RecyclerView activeRecycler = "round".equals(standingsActiveTab) ? roundMatchesRecycler : standingsRecycler;
                     if (activeRecycler != null) {
-                        int vert = 0, horiz = 0;
-                        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) vert = 160;
-                        else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) vert = -160;
-                        activeRecycler.smoothScrollBy(horiz, vert);
+                        int amount = (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) ? 140 : -140;
+                        activeRecycler.smoothScrollBy(0, amount);
                     }
                     return true;
                 }

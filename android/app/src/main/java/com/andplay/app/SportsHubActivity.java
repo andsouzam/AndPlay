@@ -5,8 +5,6 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -34,20 +32,21 @@ import java.util.concurrent.Executors;
  *
  * NAVEGAÇÃO D-PAD 2-COLUNAS (LATERAL):
  *  SIDEBAR (Esquerda):
- *    ↑/↓   → navega entre as ligas (carrega automaticamente após pausa de 150ms)
- *    →/OK  → entra no conteúdo (foca nas abas Calendário/Tabela)
+ *    ↑/↓   → navega livremente entre as ligas (SEM recarregar a tela, sem perder foco)
+ *    OK    → CONFIRMA a troca da liga selecionada
+ *    →     → confirma a liga e entra nas sub-abas (Calendário / Tabela)
  *    BACK  → fecha a Activity
  *
  *  SUB-ABAS (Topo do conteúdo):
- *    ←     → do Calendário volta para a sidebar; da Tabela vai para Calendário
+ *    ←     → da Tabela vai para Calendário; do Calendário volta para a sidebar
  *    →     → do Calendário vai para Tabela
  *    ↓     → desce para a lista de jogos ou classificação
- *    OK    → alterna a aba
+ *    OK    → alterna a aba ativa
  *
  *  CONTEÚDO (Lista de jogos ou Classificação):
- *    ↑/↓   → scrolla os itens
+ *    ↑/↓   → sobe e desce normalmente item a item
+ *    ↑     → apenas no PRIMEIRO item (topo) sobe para as sub-abas
  *    ←     → de QUALQUER item da lista, volta DIRETO para a sidebar na liga atual!
- *    ↑     → do 1º item, sobe de volta para as sub-abas
  *    BACK  → volta para a sidebar
  */
 public class SportsHubActivity extends Activity {
@@ -69,8 +68,6 @@ public class SportsHubActivity extends Activity {
 
     // ── State ────────────────────────────────────────────────────────────────
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private Runnable pendingLeagueSelectRunnable;
 
     private List<SportsEvent> liveEvents;
     private int currentLeagueIdx = 0;
@@ -88,13 +85,11 @@ public class SportsHubActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sports_hub);
 
-        // Receber live events do MainActivity para EPG match
         try {
             //noinspection unchecked
             liveEvents = (List<SportsEvent>) getIntent().getSerializableExtra("live_events");
         } catch (Exception ignored) {}
 
-        // Views
         leagueTabsRv       = findViewById(R.id.leagueTabsRv);
         hubContentRv       = findViewById(R.id.hubContentRv);
         subTabSchedule     = findViewById(R.id.subTabSchedule);
@@ -109,15 +104,12 @@ public class SportsHubActivity extends Activity {
         setupContentRv();
 
         // Carregar primeira liga
-        selectLeague(0, true);
+        commitLeagueSelection(0);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (pendingLeagueSelectRunnable != null) {
-            handler.removeCallbacks(pendingLeagueSelectRunnable);
-        }
         executor.shutdownNow();
     }
 
@@ -137,7 +129,7 @@ public class SportsHubActivity extends Activity {
             boolean inContent = (focused != null) && (focused == hubContentRv
                     || (hubContentRv != null && hubContentRv.findContainingItemView(focused) != null));
 
-            // BACK: do conteúdo/abas volta para sidebar; da sidebar fecha
+            // BACK: do conteúdo ou abas volta para sidebar; da sidebar fecha
             if (keyCode == KeyEvent.KEYCODE_BACK) {
                 if (!inSidebar) {
                     focusCurrentLeagueInSidebar();
@@ -149,31 +141,24 @@ public class SportsHubActivity extends Activity {
 
             // ── CENÁRIO A: FOCO NA SIDEBAR ──
             if (inSidebar) {
-                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    // Cancela debounce e seleciona imediatamente a liga focada
-                    if (pendingLeagueSelectRunnable != null) {
-                        handler.removeCallbacks(pendingLeagueSelectRunnable);
-                        pendingLeagueSelectRunnable = null;
-                    }
-                    int pos = getFocusedSidebarPosition(focused);
-                    if (pos >= 0 && pos != currentLeagueIdx) {
-                        selectLeague(pos, false);
-                    }
-                    focusActiveSubTab();
-                    return true;
-                }
                 if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                    if (pendingLeagueSelectRunnable != null) {
-                        handler.removeCallbacks(pendingLeagueSelectRunnable);
-                        pendingLeagueSelectRunnable = null;
-                    }
+                    // Confirma a troca de liga com ENTER (sem sair da sidebar)
                     int pos = getFocusedSidebarPosition(focused);
                     if (pos >= 0) {
-                        selectLeague(pos, false);
+                        commitLeagueSelection(pos);
+                    }
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    // Confirma a liga se mudou e entra nas sub-abas
+                    int pos = getFocusedSidebarPosition(focused);
+                    if (pos >= 0 && pos != currentLeagueIdx) {
+                        commitLeagueSelection(pos);
                     }
                     focusActiveSubTab();
                     return true;
                 }
+                // UP / DOWN navegam livremente entre as ligas sem recarregar view nem resetar foco
                 return super.dispatchKeyEvent(event);
             }
 
@@ -210,7 +195,7 @@ public class SportsHubActivity extends Activity {
 
             // ── CENÁRIO C: FOCO NO CONTEÚDO (Lista de Jogos / Tabela) ──
             if (inContent) {
-                // DPAD_LEFT: de qualquer posição da lista, volta direto para a sidebar!
+                // DPAD_LEFT: de QUALQUER item da lista, volta direto para a sidebar na liga atual!
                 if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
                     focusCurrentLeagueInSidebar();
                     return true;
@@ -219,13 +204,19 @@ public class SportsHubActivity extends Activity {
                 if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     return true;
                 }
-                // DPAD_UP: se estiver no topo da lista, sobe para as sub-abas
+                // DPAD_UP: apenas quando o foco estiver no PRIMEIRO item (topo da lista) sobe para as sub-abas!
+                // Em qualquer outro item, deixa o RecyclerView subir item a item normalmente!
                 if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                    LinearLayoutManager lm = (LinearLayoutManager) hubContentRv.getLayoutManager();
-                    if (lm != null && lm.findFirstCompletelyVisibleItemPosition() == 0) {
-                        focusActiveSubTab();
-                        return true;
+                    View containing = hubContentRv.findContainingItemView(focused);
+                    if (containing != null) {
+                        int pos = hubContentRv.getChildAdapterPosition(containing);
+                        if (pos <= 0) {
+                            focusActiveSubTab();
+                            return true;
+                        }
                     }
+                    // Se pos > 0, NÃO intercepta: o RecyclerView sobe item a item normalmente
+                    return super.dispatchKeyEvent(event);
                 }
                 return super.dispatchKeyEvent(event);
             }
@@ -295,19 +286,26 @@ public class SportsHubActivity extends Activity {
 
     // ── Alternância de Liga e Sub-Abas ──────────────────────────────────────
 
-    private void selectLeague(int leagueIdx, boolean forceReload) {
-        boolean leagueChanged = (leagueIdx != currentLeagueIdx);
-        currentLeagueIdx = leagueIdx;
+    /**
+     * Confirma a troca de liga selecionada (acionado pelo ENTER ou DPAD DIREITO na sidebar).
+     * Usa notifyItemChanged apenas nos 2 itens afetados para nunca resetar o foco da sidebar.
+     */
+    private void commitLeagueSelection(int newLeagueIdx) {
+        if (newLeagueIdx < 0 || newLeagueIdx >= ApiClient.HUB_LEAGUES.length) return;
+        int oldIdx = currentLeagueIdx;
+        currentLeagueIdx = newLeagueIdx;
 
-        // Atualiza destaque na sidebar
-        leagueTabAdapter.notifyDataSetChanged();
-        leagueTabsRv.scrollToPosition(currentLeagueIdx);
+        // Atualiza apenas os dois itens afetados para preservar o foco intacto
+        if (leagueTabAdapter != null) {
+            leagueTabAdapter.notifyItemChanged(oldIdx);
+            leagueTabAdapter.notifyItemChanged(currentLeagueIdx);
+        }
 
         updateSubTabsUI();
         updateLeagueNameHeader();
 
-        if (forceReload || leagueChanged || cachedLeagueIdx != leagueIdx) {
-            loadLeagueData(leagueIdx);
+        if (cachedLeagueIdx != currentLeagueIdx) {
+            loadLeagueData(currentLeagueIdx);
         } else {
             applyCurrentTab();
         }
@@ -363,7 +361,7 @@ public class SportsHubActivity extends Activity {
             scheduleAdapter.updateData(currentSchedule);
             hubContentRv.setAdapter(scheduleAdapter);
             updateEmptyState(currentSchedule.isEmpty());
-            scrollToToday();
+            scrollToInitialPosition();
         } else {
             boolean hasStandings = !currentStandings.isEmpty();
             if (standingsHeaderRow != null) {
@@ -376,10 +374,17 @@ public class SportsHubActivity extends Activity {
         }
     }
 
-    private void scrollToToday() {
+    /**
+     * Rola para o primeiro evento ao vivo; se não houver ao vivo, rola para o primeiro
+     * evento que ainda não começou. Jamais para em uma data com todos os eventos finalizados.
+     */
+    private void scrollToInitialPosition() {
         if (currentSchedule.isEmpty()) return;
-        int todayPos = scheduleAdapter.findTodayPosition();
-        if (todayPos >= 0) hubContentRv.scrollToPosition(todayPos);
+        int targetPos = scheduleAdapter.findInitialScrollPosition();
+        LinearLayoutManager lm = (LinearLayoutManager) hubContentRv.getLayoutManager();
+        if (lm != null && targetPos >= 0) {
+            lm.scrollToPositionWithOffset(targetPos, 0);
+        }
     }
 
     private void updateEmptyState(boolean empty) {
@@ -389,22 +394,17 @@ public class SportsHubActivity extends Activity {
     // ── UI helpers ───────────────────────────────────────────────────────────
 
     private void updateSubTabsUI() {
-        int activeColor   = Color.parseColor("#4FC3F7");
-        int inactiveColor = Color.parseColor("#70FFFFFF");
-        int activeBg      = Color.parseColor("#1A4FC3F7");
-
-        subTabSchedule.setTextColor(isScheduleTabActive  ? activeColor : inactiveColor);
-        subTabStandings.setTextColor(!isScheduleTabActive ? activeColor : inactiveColor);
-        subTabSchedule.setBackgroundColor(isScheduleTabActive  ? activeBg : Color.TRANSPARENT);
-        subTabStandings.setBackgroundColor(!isScheduleTabActive ? activeBg : Color.TRANSPARENT);
-        subTabSchedule.setTypeface(null, isScheduleTabActive  ? Typeface.BOLD : Typeface.NORMAL);
+        subTabSchedule.setSelected(isScheduleTabActive);
+        subTabStandings.setSelected(!isScheduleTabActive);
+        subTabSchedule.setTypeface(null, isScheduleTabActive ? Typeface.BOLD : Typeface.NORMAL);
         subTabStandings.setTypeface(null, !isScheduleTabActive ? Typeface.BOLD : Typeface.NORMAL);
+        subTabSchedule.setTextColor(isScheduleTabActive ? 0xFFFFC107 : 0xAAFFFFFF);
+        subTabStandings.setTextColor(!isScheduleTabActive ? 0xFFFFC107 : 0xAAFFFFFF);
     }
 
     private void animateTab(View v, boolean focus) {
-        v.animate().scaleX(focus ? 1.06f : 1f).scaleY(focus ? 1.06f : 1f).setDuration(100).start();
-        if (focus) v.setBackgroundColor(Color.parseColor("#22FFFFFF"));
-        else       updateSubTabsUI();
+        v.animate().scaleX(focus ? 1.05f : 1f).scaleY(focus ? 1.05f : 1f).setDuration(100).start();
+        updateSubTabsUI();
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -420,33 +420,18 @@ public class SportsHubActivity extends Activity {
                 tv = (TextView) v;
                 v.setFocusable(true);
                 v.setOnClickListener(v1 -> {
-                    selectLeague(getAdapterPosition(), false);
-                    focusActiveSubTab();
+                    commitLeagueSelection(getAdapterPosition());
                 });
                 v.setOnFocusChangeListener((v13, hasFocus) -> {
                     v13.animate().scaleX(hasFocus ? 1.04f : 1f).scaleY(hasFocus ? 1.04f : 1f).setDuration(100).start();
                     if (hasFocus) {
-                        v13.setBackgroundColor(Color.parseColor("#284FC3F7"));
-                        scheduleLeagueSelection(getAdapterPosition());
+                        tv.setTextColor(0xFFFFFFFF);
                     } else {
                         boolean active = (getAdapterPosition() == currentLeagueIdx);
-                        v13.setBackgroundColor(active ? Color.parseColor("#1E4FC3F7") : Color.TRANSPARENT);
+                        tv.setTextColor(active ? 0xFFFFC107 : 0xCCFFFFFF);
                     }
                 });
             }
-        }
-
-        private void scheduleLeagueSelection(int pos) {
-            if (pos < 0 || pos >= ApiClient.HUB_LEAGUES.length) return;
-            if (pendingLeagueSelectRunnable != null) {
-                handler.removeCallbacks(pendingLeagueSelectRunnable);
-            }
-            pendingLeagueSelectRunnable = () -> {
-                if (currentLeagueIdx != pos) {
-                    selectLeague(pos, false);
-                }
-            };
-            handler.postDelayed(pendingLeagueSelectRunnable, 180);
         }
 
         @NonNull @Override
@@ -461,27 +446,12 @@ public class SportsHubActivity extends Activity {
             boolean active = (position == currentLeagueIdx);
 
             holder.tv.setText(l[2] + " " + l[1]);
-
-            if (active) {
-                holder.tv.setBackgroundColor(Color.parseColor("#1E4FC3F7"));
-                holder.tv.setTextColor(Color.parseColor("#4FC3F7"));
-                holder.tv.setTypeface(null, Typeface.BOLD);
-                holder.tv.setPadding(dpToPx(10), holder.tv.getPaddingTop(),
-                        holder.tv.getPaddingEnd(), holder.tv.getPaddingBottom());
-            } else {
-                holder.tv.setBackgroundColor(Color.TRANSPARENT);
-                holder.tv.setTextColor(Color.parseColor("#AAFFFFFF"));
-                holder.tv.setTypeface(null, Typeface.NORMAL);
-                holder.tv.setPadding(dpToPx(14), holder.tv.getPaddingTop(),
-                        holder.tv.getPaddingEnd(), holder.tv.getPaddingBottom());
-            }
+            holder.itemView.setSelected(active);
+            holder.tv.setTypeface(null, active ? Typeface.BOLD : Typeface.NORMAL);
+            holder.tv.setTextColor(active ? 0xFFFFC107 : 0xCCFFFFFF);
         }
 
         @Override public int getItemCount() { return ApiClient.HUB_LEAGUES.length; }
-
-        private int dpToPx(int dp) {
-            return (int)(dp * getResources().getDisplayMetrics().density);
-        }
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -503,10 +473,52 @@ public class SportsHubActivity extends Activity {
             notifyDataSetChanged();
         }
 
-        int findTodayPosition() {
+        /**
+         * Encontra a posição de início do calendário:
+         * 1. Primeiro evento ao vivo.
+         * 2. Se não houver ao vivo, primeiro evento que ainda não começou.
+         * 3. Jamais para em uma data com todos os eventos finalizados (exceto fim total do campeonato).
+         */
+        int findInitialScrollPosition() {
+            if (items.isEmpty()) return 0;
+
+            int firstLiveDayHeader = -1;
+            int firstUpcomingDayHeader = -1;
+
+            int currentDayHeaderPos = 0;
             for (int i = 0; i < items.size(); i++) {
+                Object item = items.get(i);
+                if (item instanceof ApiClient.ScheduleDay) {
+                    currentDayHeaderPos = i;
+                } else if (item instanceof ApiClient.RoundMatch) {
+                    ApiClient.RoundMatch rm = (ApiClient.RoundMatch) item;
+                    boolean isLive = "in".equalsIgnoreCase(rm.state);
+                    boolean isFinished = "post".equalsIgnoreCase(rm.state);
+                    boolean isUpcoming = !isFinished && !isLive;
+
+                    // 1ª prioridade: primeiro evento AO VIVO
+                    if (isLive && firstLiveDayHeader < 0) {
+                        firstLiveDayHeader = currentDayHeaderPos;
+                    }
+                    // 2ª prioridade: primeiro evento QUE AINDA NÃO COMEÇOU
+                    if (isUpcoming && firstUpcomingDayHeader < 0) {
+                        firstUpcomingDayHeader = currentDayHeaderPos;
+                    }
+                }
+            }
+
+            if (firstLiveDayHeader >= 0) {
+                return firstLiveDayHeader;
+            }
+            if (firstUpcomingDayHeader >= 0) {
+                return firstUpcomingDayHeader;
+            }
+
+            // Fallback apenas se todos os eventos do campeonato estiverem finalizados:
+            // rola para o último dia disponível ao invés do primeiro
+            for (int i = items.size() - 1; i >= 0; i--) {
                 if (items.get(i) instanceof ApiClient.ScheduleDay) {
-                    if (((ApiClient.ScheduleDay) items.get(i)).isToday) return i;
+                    return i;
                 }
             }
             return 0;
@@ -544,19 +556,19 @@ public class SportsHubActivity extends Activity {
             ll.setGravity(Gravity.CENTER_VERTICAL);
             ll.setLayoutParams(new ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            ll.setPadding(px(14), px(7), px(14), px(7));
+            ll.setPadding(px(14), px(8), px(14), px(8));
 
             View dash = new View(parent.getContext());
             dash.setLayoutParams(new LinearLayout.LayoutParams(px(3), px(14)));
             ((LinearLayout.LayoutParams) dash.getLayoutParams()).setMarginEnd(px(8));
-            dash.setBackgroundColor(Color.parseColor("#4FC3F7"));
+            dash.setBackgroundColor(Color.parseColor("#FFC107"));
 
             TextView tv = new TextView(parent.getContext());
             tv.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-            tv.setTextColor(Color.parseColor("#4FC3F7"));
+            tv.setTextColor(Color.parseColor("#FFC107"));
             tv.setTextSize(11);
             tv.setTypeface(null, Typeface.BOLD);
-            tv.setLetterSpacing(0.1f);
+            tv.setLetterSpacing(0.08f);
             tv.setTag("date_tv");
 
             ll.addView(dash);
@@ -575,7 +587,7 @@ public class SportsHubActivity extends Activity {
                 if (day.isToday) label = "● " + label.toUpperCase();
                 tv.setText(label.toUpperCase());
                 itemView.setBackgroundColor(day.isToday
-                        ? Color.parseColor("#0E4FC3F7")
+                        ? Color.parseColor("#12FFC107")
                         : Color.parseColor("#06FFFFFF"));
             }
         }
@@ -584,11 +596,14 @@ public class SportsHubActivity extends Activity {
         private View makeMatchView(ViewGroup parent) {
             LinearLayout root = new LinearLayout(parent.getContext());
             root.setOrientation(LinearLayout.VERTICAL);
-            root.setLayoutParams(new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            root.setPadding(px(14), px(9), px(14), px(9));
+            LinearLayout.LayoutParams rootLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            rootLp.setMargins(px(10), px(2), px(10), px(2));
+            root.setLayoutParams(rootLp);
+            root.setPadding(px(12), px(8), px(12), px(8));
             root.setFocusable(true);
             root.setFocusableInTouchMode(true);
+            root.setBackgroundResource(R.drawable.sports_hub_row_bg);
 
             LinearLayout row = new LinearLayout(parent.getContext());
             row.setOrientation(LinearLayout.HORIZONTAL);
@@ -598,12 +613,12 @@ public class SportsHubActivity extends Activity {
 
             TextView tvIcon = new TextView(parent.getContext());
             tvIcon.setTextSize(11);
-            tvIcon.setTextColor(Color.parseColor("#4FC3F7"));
+            tvIcon.setTextColor(Color.parseColor("#00E676"));
             tvIcon.setTag("icon");
             tvIcon.setVisibility(View.GONE);
             LinearLayout.LayoutParams lpIcon = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            lpIcon.setMarginEnd(px(4));
+            lpIcon.setMarginEnd(px(6));
             tvIcon.setLayoutParams(lpIcon);
 
             TextView home = new TextView(parent.getContext());
@@ -618,14 +633,14 @@ public class SportsHubActivity extends Activity {
             TextView score = new TextView(parent.getContext());
             LinearLayout.LayoutParams lpScore = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            lpScore.setMarginStart(px(10));
-            lpScore.setMarginEnd(px(10));
+            lpScore.setMarginStart(px(12));
+            lpScore.setMarginEnd(px(12));
             score.setLayoutParams(lpScore);
             score.setGravity(Gravity.CENTER);
             score.setTextSize(13);
             score.setTypeface(null, Typeface.BOLD);
-            score.setMinWidth(px(52));
-            score.setPadding(px(6), px(2), px(6), px(2));
+            score.setMinWidth(px(56));
+            score.setPadding(px(8), px(3), px(8), px(3));
             score.setTag("score");
 
             TextView away = new TextView(parent.getContext());
@@ -648,15 +663,14 @@ public class SportsHubActivity extends Activity {
             status.setGravity(Gravity.CENTER);
             status.setTextSize(10);
             status.setTextColor(Color.parseColor("#80FFFFFF"));
-            status.setPadding(0, px(3), 0, 0);
+            status.setPadding(0, px(2), 0, 0);
             status.setTag("status");
 
             root.addView(row);
             root.addView(status);
 
             root.setOnFocusChangeListener((v, f) -> {
-                v.setBackgroundColor(f ? Color.parseColor("#22FFFFFF") : Color.TRANSPARENT);
-                v.animate().scaleX(f ? 1.01f : 1f).scaleY(f ? 1.01f : 1f).setDuration(80).start();
+                v.animate().scaleX(f ? 1.02f : 1f).scaleY(f ? 1.02f : 1f).setDuration(80).start();
             });
 
             return root;
@@ -680,17 +694,17 @@ public class SportsHubActivity extends Activity {
 
                 if ("in".equalsIgnoreCase(rm.state)) {
                     score.setTextColor(Color.parseColor("#00E676"));
-                    score.setBackgroundColor(Color.parseColor("#1200E676"));
+                    score.setBackgroundColor(Color.parseColor("#1800E676"));
                 } else if ("post".equalsIgnoreCase(rm.state)) {
-                    score.setTextColor(Color.parseColor("#BFBFBF"));
-                    score.setBackgroundColor(Color.parseColor("#0AFFFFFF"));
+                    score.setTextColor(Color.parseColor("#BBBBBB"));
+                    score.setBackgroundColor(Color.parseColor("#12FFFFFF"));
                 } else {
                     score.setTextColor(Color.parseColor("#FFC107"));
-                    score.setBackgroundColor(Color.parseColor("#0AFFC107"));
+                    score.setBackgroundColor(Color.parseColor("#14FFC107"));
                 }
 
                 if (rm.channelId != null && !rm.channelId.isEmpty()) {
-                    icon.setText("📺");
+                    icon.setText("📺 " + (rm.channelName != null ? rm.channelName : "AO VIVO"));
                     icon.setVisibility(View.VISIBLE);
                 } else {
                     icon.setVisibility(View.GONE);
@@ -746,8 +760,7 @@ public class SportsHubActivity extends Activity {
             holder.sg.setText(sgnStr(e.goalDiff));
             holder.gp.setText(String.valueOf(e.goalsFor));
 
-            holder.itemView.setBackgroundColor(e.isHighlighted
-                    ? Color.parseColor("#1A4FC3F7") : Color.TRANSPARENT);
+            holder.itemView.setSelected(e.isHighlighted);
         }
 
         @Override public int getItemCount() { return currentStandings.size(); }
@@ -757,14 +770,18 @@ public class SportsHubActivity extends Activity {
         private View makeRow(ViewGroup parent) {
             LinearLayout ll = new LinearLayout(parent.getContext());
             ll.setOrientation(LinearLayout.HORIZONTAL);
-            ll.setLayoutParams(new ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            ll.setPadding(px(14), px(10), px(14), px(10));
+            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            rowLp.setMargins(px(10), px(1), px(10), px(1));
+            ll.setLayoutParams(rowLp);
+            ll.setPadding(px(14), px(9), px(14), px(9));
             ll.setGravity(Gravity.CENTER_VERTICAL);
             ll.setFocusable(true);
             ll.setFocusableInTouchMode(true);
-            ll.setOnFocusChangeListener((v, f) ->
-                    v.setBackgroundColor(f ? Color.parseColor("#22FFFFFF") : Color.TRANSPARENT));
+            ll.setBackgroundResource(R.drawable.sports_hub_row_bg);
+            ll.setOnFocusChangeListener((v, f) -> {
+                v.animate().scaleX(f ? 1.01f : 1f).scaleY(f ? 1.01f : 1f).setDuration(80).start();
+            });
 
             ll.addView(col(parent, 26, false, "#70FFFFFF", 10)); // pos
             ll.addView(col(parent,  0, true,  "#FFFFFF",   13)); // name
