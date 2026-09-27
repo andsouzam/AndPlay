@@ -102,7 +102,10 @@ public class ChannelRailAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             vh.name.setText(ch.name != null ? ch.name : "Canal");
 
             LiveSchedule epg = EpgEngine.getLiveSchedule(ch);
-            vh.program.setText(epg != null && epg.nowTitle != null ? epg.nowTitle : "SEM DADOS DE PROGRAMAÇÃO");
+            String progTitle = (epg != null && epg.nowTitle != null && !epg.nowTitle.isEmpty())
+                    ? epg.nowTitle
+                    : (ch.now != null && !ch.now.isEmpty() ? ch.now : "SEM DADOS DE PROGRAMAÇÃO");
+            vh.program.setText(progTitle);
 
             boolean isPlaying = (position == currentPlayingIdx);
             vh.liveBadge.setVisibility(isPlaying ? View.VISIBLE : View.GONE);

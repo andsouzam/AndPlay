@@ -250,6 +250,8 @@ public class MainActivity extends Activity {
     private String activeVodSeasonNum = "1";
     private Map<String, List<Episode>> currentSeriesEpisodesMap = new HashMap<>();
     private String currentVodType = "movies";
+    private boolean isPlayingSportsEvent = false;
+    private SportsEvent activeSportsEvent = null;
     private OkHttpClient sharedOkHttpClient;
 
     public List<Channel> getAllChannels() {
@@ -2815,6 +2817,52 @@ public class MainActivity extends Activity {
         selectDrawerCategory(selectedDrawerCatIdx, currentCh);
     }
 
+    private void setupDrawerForSports() {
+        if (btnDrawerOptions != null) btnDrawerOptions.setVisibility(View.GONE);
+        if (btnDrawerMosaic != null) btnDrawerMosaic.setVisibility(View.GONE);
+        if (activeSportsEvent == null) return;
+
+        if (drawerHeaderTitle != null) {
+            drawerHeaderTitle.setText("⚽ " + activeSportsEvent.getDisplayName());
+        }
+
+        // Popula drawerCats com apenas uma categoria: a liga do evento
+        drawerCats.clear();
+        drawerCats.add(new Category("SPORTS", activeSportsEvent.getDisplayLeague()));
+        drawerCatsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        drawerCatsAdapter = new CategoryPillAdapter(drawerCats, cat -> {});
+        drawerCatsAdapter.setSelectedId("SPORTS");
+        drawerCatsRecycler.setAdapter(drawerCatsAdapter);
+
+        // Converte os fallbacks em pseudo-canais para reutilizar ChannelRailAdapter
+        List<Channel> pseudoChannels = new ArrayList<>();
+        for (Channel.StreamFallback fb : activeSportsEvent.fallbacks) {
+            Channel pseudo = new Channel();
+            pseudo.name = fb.name;
+            pseudo.now = fb.isEmbed ? "Transmissão via embed" : "Transmissão via HLS";
+            pseudoChannels.add(pseudo);
+        }
+
+        drawerChannelsRecycler.setLayoutManager(new LinearLayoutManager(this));
+        ChannelRailAdapter sportsAdapter = new ChannelRailAdapter(this, pseudoChannels, true, (channel, index) -> {
+            closeDrawer();
+            startSportsPlayback(activeSportsEvent, index);
+        });
+        sportsAdapter.setCurrentPlayingIdx(currentFallbackIdx);
+        drawerChannelsRecycler.setAdapter(sportsAdapter);
+
+        drawerChannelsRecycler.scrollToPosition(currentFallbackIdx);
+        drawerChannelsRecycler.postDelayed(() -> {
+            RecyclerView.ViewHolder vh = drawerChannelsRecycler.findViewHolderForAdapterPosition(currentFallbackIdx);
+            if (vh != null && vh.itemView != null) {
+                vh.itemView.requestFocus();
+            } else if (drawerChannelsRecycler.getChildCount() > 0) {
+                View first = drawerChannelsRecycler.getChildAt(0);
+                if (first != null) first.requestFocus();
+            }
+        }, 80);
+    }
+
     private void setupDrawerForSeries() {
         if (btnDrawerOptions != null) btnDrawerOptions.setVisibility(View.GONE);
         if (btnDrawerMosaic != null) btnDrawerMosaic.setVisibility(View.GONE);
@@ -3008,6 +3056,8 @@ public class MainActivity extends Activity {
 
     private void switchDrawerCategory(int delta) {
         if (drawerCats.isEmpty()) return;
+        // No modo esportivo, há apenas uma categoria (não deve navegar entre categorias)
+        if (isPlayingSportsEvent) return;
         selectedDrawerCatIdx = (selectedDrawerCatIdx + delta + drawerCats.size()) % drawerCats.size();
         Category cat = drawerCats.get(selectedDrawerCatIdx);
         if (drawerCatsAdapter != null) {
@@ -3161,6 +3211,8 @@ public class MainActivity extends Activity {
         currentChannelIdx = (idx + allChannels.size()) % allChannels.size();
         Channel ch = allChannels.get(currentChannelIdx);
         isPlayingVod = false;
+        isPlayingSportsEvent = false;
+        activeSportsEvent = null;
 
         try {
             SharedPreferences sp = getSharedPreferences(PREF_APP_STATE, Context.MODE_PRIVATE);
@@ -3244,6 +3296,26 @@ public class MainActivity extends Activity {
         zapHandler.removeCallbacks(zapConfirmRunnable);
         pendingZapChannelIdx = -1;
         hideOsdBanner();
+    }
+
+    private void stepSportsFallback(int step) {
+        if (activeSportsEvent == null || activeSportsEvent.fallbacks == null || activeSportsEvent.fallbacks.isEmpty()) return;
+        int size = activeSportsEvent.fallbacks.size();
+        currentFallbackIdx = ((currentFallbackIdx + step) % size + size) % size;
+        Channel.StreamFallback fb = activeSportsEvent.fallbacks.get(currentFallbackIdx);
+
+        // Atualiza OSD sem trocar a transmissão ainda (preview por 3s)
+        osdChNum.setText("JOGO");
+        osdChName.setText(activeSportsEvent.getDisplayName());
+        osdNowTitle.setText("⚽ " + activeSportsEvent.getDisplayLeague());
+        osdSynopsis.setText(activeSportsEvent.getDisplayName() + " - Transmissão via " + fb.name);
+        osdRemaining.setText(activeSportsEvent.matchTime != null ? activeSportsEvent.matchTime : "Ao Vivo");
+        showOsdBanner(5000);
+
+        zapHandler.removeCallbacks(zapConfirmRunnable);
+        zapHandler.postDelayed(() -> {
+            startSportsPlayback(activeSportsEvent, currentFallbackIdx);
+        }, 3000);
     }
 
     private void playStream(String url, boolean isEmbed) {
@@ -3531,6 +3603,8 @@ public class MainActivity extends Activity {
     private void startSportsPlayback(SportsEvent ev, int fallbackIndex) {
         destroyCurrentStream();
         isPlayingVod = false;
+        isPlayingSportsEvent = true;
+        activeSportsEvent = ev;
         setScreenMode(ScreenMode.FULLSCREEN);
 
         currentChannelFallbacks = ev.fallbacks;
@@ -3638,7 +3712,10 @@ public class MainActivity extends Activity {
             hideOsdBanner();
             resetDrawerTimeout();
 
-            if (isPlayingVod) {
+            if (isPlayingSportsEvent) {
+                if (btnDrawerOptions != null) btnDrawerOptions.setVisibility(View.GONE);
+                if (btnDrawerMosaic != null) btnDrawerMosaic.setVisibility(View.GONE);
+            } else if (isPlayingVod) {
                 if (btnDrawerOptions != null) btnDrawerOptions.setVisibility(View.GONE);
                 if (btnDrawerMosaic != null) btnDrawerMosaic.setVisibility(View.GONE);
             } else {
@@ -3647,7 +3724,9 @@ public class MainActivity extends Activity {
             }
 
             epgDrawer.post(() -> {
-                if (isPlayingVod) {
+                if (isPlayingSportsEvent) {
+                    setupDrawerForSports();
+                } else if (isPlayingVod) {
                     if (activeVodSeries != null) {
                         setupDrawerForSeries();
                     } else if (activeVodMovie != null) {
@@ -3694,6 +3773,10 @@ public class MainActivity extends Activity {
                 activeMoviePlaylistQueue = null;
                 activeMoviePlaylistIndex = -1;
                 activeMoviePlaylistName = null;
+            }
+            if (isPlayingSportsEvent) {
+                isPlayingSportsEvent = false;
+                activeSportsEvent = null;
             }
         }
 
@@ -5437,13 +5520,21 @@ public class MainActivity extends Activity {
 
                         // D-pad Cima (+) alterna canais em ordem crescente (+1) com confirmação após 3s
                         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                            stepZapChannel(1);
+                            if (isPlayingSportsEvent) {
+                                stepSportsFallback(1);
+                            } else {
+                                stepZapChannel(1);
+                            }
                             return true;
                         }
 
                         // D-pad Baixo (-) alterna canais em ordem decrescente (-1) com confirmação após 3s
                         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                            stepZapChannel(-1);
+                            if (isPlayingSportsEvent) {
+                                stepSportsFallback(-1);
+                            } else {
+                                stepZapChannel(-1);
+                            }
                             return true;
                         }
 
@@ -5578,6 +5669,11 @@ public class MainActivity extends Activity {
                 activeVodEpisode = null;
                 setScreenMode(target);
                 return true;
+            }
+            if (isPlayingSportsEvent) {
+                zapHandler.removeCallbacks(zapConfirmRunnable);
+                isPlayingSportsEvent = false;
+                activeSportsEvent = null;
             }
             setScreenMode(ScreenMode.CENTRAL);
             return true;
