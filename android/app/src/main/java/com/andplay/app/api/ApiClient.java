@@ -1030,7 +1030,7 @@ public class ApiClient {
         return t.matches(".*\\b(crb|cuiaba|santos|sport|coritiba|vila nova|paysandu|chapecoense|operario|novorizontino|mirassol|america mg|america mineiro|avai|ceara|goias|ponte preta|botafogo sp|brusque|amazonas|guarani|ituano)\\b.*");
     }
 
-    private static boolean matchTeamName(String evTeam, String espnTeam) {
+    public static boolean matchTeamName(String evTeam, String espnTeam) {
         if (evTeam == null || espnTeam == null) return false;
         String a = cleanAndNormalizeTeam(evTeam);
         String b = cleanAndNormalizeTeam(espnTeam);
@@ -1041,7 +1041,24 @@ public class ApiClient {
         return false;
     }
 
-    private static String getEspnLeagueForCompetition(String comp) {
+    public static String getEspnLeagueForCompetition(String comp, String homeTeam, String awayTeam) {
+        String fromComp = getEspnLeagueForCompetition(comp);
+        if (fromComp != null) return fromComp;
+
+        // Se a competição for genérica (ex: "Futebol", null, "Premiere Clubes"),
+        // infere a liga através dos clubes participantes:
+        if (homeTeam != null || awayTeam != null) {
+            if (isBrazilianSerieBClub(homeTeam) || isBrazilianSerieBClub(awayTeam)) {
+                return "bra.2";
+            }
+            if (isBrazilianClub(homeTeam) || isBrazilianClub(awayTeam)) {
+                return "bra.1";
+            }
+        }
+        return null;
+    }
+
+    public static String getEspnLeagueForCompetition(String comp) {
         if (comp == null) return null;
         String c = Normalizer.normalize(comp.toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
                 .replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
@@ -1437,7 +1454,7 @@ public class ApiClient {
 
     public static List<StandingEntry> getStandings(String competition, String homeTeam, String awayTeam) {
         List<StandingEntry> result = new ArrayList<>();
-        String league = getEspnLeagueForCompetition(competition);
+        String league = getEspnLeagueForCompetition(competition, homeTeam, awayTeam);
         if (league == null) return result;
 
         // Algumas competições de copa não têm tabela contínua (Champions, Libertadores, Copa do Brasil, etc.)
@@ -1674,7 +1691,7 @@ public class ApiClient {
      */
     public static List<RoundMatch> getRoundMatches(String competition, String homeTeam, String awayTeam) {
         List<RoundMatch> result = new ArrayList<>();
-        String league = getEspnLeagueForCompetition(competition);
+        String league = getEspnLeagueForCompetition(competition, homeTeam, awayTeam);
         if (league == null) return result;
 
         TimeZone tzBrasilia = TimeZone.getTimeZone("America/Sao_Paulo");

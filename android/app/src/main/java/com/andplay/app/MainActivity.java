@@ -269,6 +269,7 @@ public class MainActivity extends Activity {
     private RecyclerView standingsRecycler;
     private RecyclerView roundMatchesRecycler;
     private boolean standingsOverlayVisible = false;
+    private long lastSportsOverlayCloseAt = 0L;
     private String standingsActiveTab = "standings"; // "standings" | "round"
 
 
@@ -2932,6 +2933,7 @@ public class MainActivity extends Activity {
 
     private void hideSportsOverlay() {
         if (sportsStandingsOverlay == null) return;
+        lastSportsOverlayCloseAt = SystemClock.elapsedRealtime();
         standingsOverlayVisible = false;
         sportsStandingsOverlay.setVisibility(View.GONE);
         if (!isPlayingSportsEvent) {
@@ -3048,34 +3050,48 @@ public class MainActivity extends Activity {
                     if (hName.length() >= 3 && aName.length() >= 3) {
                         SportsEvent synth = new SportsEvent();
                         synth.name = title;
-                        synth.isLive = !isRepriseTitle; // reprises não são ao vivo
-                        synth.isFinished = isRepriseTitle;
-                        synth.homeName = hName;
-                        synth.awayName = aName;
 
-                        if (epg.synopsis != null && !epg.synopsis.isEmpty()) {
-                            String firstLine = epg.synopsis.split("\n")[0].trim();
-                            // Sanitizar: se times são brasileiros mas a sinopse sugere liga europeia, corrigir
-                            if (!firstLine.isEmpty() && (ApiClient.isBrazilianClub(hName) || ApiClient.isBrazilianClub(aName))) {
-                                String fl = firstLine.toLowerCase(Locale.ROOT);
-                                if (fl.contains("nations") || fl.contains("uefa") || fl.contains("premier league")
-                                        || fl.contains("la liga") || fl.contains("bundesliga")
-                                        || fl.contains("serie a italiana") || fl.contains("ligue 1")) {
-                                    if (ApiClient.isBrazilianSerieBClub(hName) || ApiClient.isBrazilianSerieBClub(aName)) {
-                                        firstLine = "Brasileirão Série B";
-                                    } else {
-                                        firstLine = "Brasileirão Série A";
+                        // Verifica se este jogo realmente está acontecendo ao vivo agora no mundo real:
+                        // Se não estiver na lista allSports como isLive, canais como Premiere Clubes exibem reprise/VT.
+                        boolean confirmedLive = false;
+                        if (!allSports.isEmpty()) {
+                            for (SportsEvent ev : allSports) {
+                                if (ev.isLive && ev.homeName != null && ev.awayName != null) {
+                                    if ((ApiClient.matchTeamName(ev.homeName, hName) || ApiClient.matchTeamName(ev.homeName, aName))
+                                            && (ApiClient.matchTeamName(ev.awayName, aName) || ApiClient.matchTeamName(ev.awayName, hName))) {
+                                        confirmedLive = true;
+                                        synth.score = ev.score;
+                                        synth.clock = ev.clock;
+                                        break;
                                     }
                                 }
                             }
+                        }
+
+                        // Se o título sinaliza reprise OU se é um canal de reprises (ex: Premiere Clubes) e não há jogo ao vivo ativo:
+                        String chIdLow = ch.id != null ? ch.id.toLowerCase(Locale.ROOT) : "";
+                        String chNameLow = ch.name != null ? ch.name.toLowerCase(Locale.ROOT) : "";
+                        boolean isRepriseChannel = chIdLow.contains("premiereclubes") || chNameLow.contains("premiere clubes")
+                                || chIdLow.contains("combate") || chNameLow.contains("combate");
+
+                        boolean isReprise = isRepriseTitle || (isRepriseChannel && !confirmedLive);
+                        synth.isLive = confirmedLive || (!isReprise && !isRepriseTitle);
+                        synth.isFinished = isReprise;
+                        synth.homeName = hName;
+                        synth.awayName = aName;
+
+                        // Determinação precisa de liga para clubes brasileiros
+                        if (ApiClient.isBrazilianSerieBClub(hName) || ApiClient.isBrazilianSerieBClub(aName)) {
+                            synth.league = "Brasileirão Série B";
+                        } else if (ApiClient.isBrazilianClub(hName) || ApiClient.isBrazilianClub(aName)) {
+                            synth.league = "Brasileirão Série A";
+                        } else if (epg.synopsis != null && !epg.synopsis.isEmpty()) {
+                            String firstLine = epg.synopsis.split("\n")[0].trim();
                             synth.league = firstLine.isEmpty() ? "Futebol" : firstLine;
                         } else {
                             synth.league = "Futebol";
                         }
-                        // Marcar reprise na sinopse se detectado
-                        if (isRepriseTitle && epg.synopsis != null && !epg.synopsis.isEmpty()) {
-                            synth.league = "🔁 REPRISE";
-                        }
+
                         if (ch.id != null) {
                             synth.candidateChannels = new ArrayList<>();
                             synth.candidateChannels.add(ch.id);
@@ -6179,11 +6195,12 @@ public class MainActivity extends Activity {
         if (standingsOverlayVisible && sportsStandingsOverlay != null
                 && sportsStandingsOverlay.getVisibility() == View.VISIBLE) {
             if (keyCode == KeyEvent.KEYCODE_BACK) {
-                // No DOWN: fecha o overlay. No UP: apenas consome — não propaga.
-                if (action == KeyEvent.ACTION_DOWN) {
+                // Fecha o overlay estritamente no ACTION_UP para que standingsOverlayVisible
+                // permaneça true durante o ACTION_DOWN, evitando que o ACTION_UP vaze para a Activity.
+                if (action == KeyEvent.ACTION_UP) {
                     hideSportsOverlay();
                 }
-                return true; // consome DOWN e UP
+                return true; // consome tanto DOWN quanto UP, sem vazar
             }
             // Para qualquer outra tecla, só processa no DOWN para evitar duplo disparo
             if (action == KeyEvent.ACTION_DOWN) {
@@ -6624,6 +6641,12 @@ public class MainActivity extends Activity {
     }
 
     private boolean handleBack() {
+        // Debounce de segurança: se o overlay de esportes acabou de ser fechado (últimos 400ms),
+        // consome o evento imediatamente sem fechar a reprodução em tela cheia nem voltar à tela inicial.
+        if (SystemClock.elapsedRealtime() - lastSportsOverlayCloseAt < 400) {
+            return true;
+        }
+
         if (activeSearchDialog != null && activeSearchDialog.isShowing()) {
             activeSearchDialog.dismiss();
             activeSearchDialog = null;
