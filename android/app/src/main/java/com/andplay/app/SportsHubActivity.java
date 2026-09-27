@@ -10,6 +10,7 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -579,24 +580,22 @@ public class SportsHubActivity extends Activity {
             root.setFocusableInTouchMode(true);
             root.setBackgroundResource(R.drawable.sports_hub_row_bg);
 
-            LinearLayout row = new LinearLayout(parent.getContext());
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setLayoutParams(new LinearLayout.LayoutParams(
+            // Container em FrameLayout para garantir alinhamento perfeito do "VS" e placar
+            // independentemente da presença ou largura do badge do canal
+            FrameLayout rowContainer = new FrameLayout(parent.getContext());
+            rowContainer.setLayoutParams(new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-            TextView tvIcon = new TextView(parent.getContext());
-            tvIcon.setTextSize(11);
-            tvIcon.setTextColor(Color.parseColor("#00E676"));
-            tvIcon.setTag("icon");
-            tvIcon.setVisibility(View.GONE);
-            LinearLayout.LayoutParams lpIcon = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            lpIcon.setMarginEnd(px(6));
-            tvIcon.setLayoutParams(lpIcon);
+            // Linha principal do jogo: [Home (peso 1)] [Placar/VS (centro exato)] [Away (peso 1)]
+            LinearLayout matchRow = new LinearLayout(parent.getContext());
+            matchRow.setOrientation(LinearLayout.HORIZONTAL);
+            matchRow.setGravity(Gravity.CENTER_VERTICAL);
+            matchRow.setLayoutParams(new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
             TextView home = new TextView(parent.getContext());
             home.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            home.setPadding(px(150), 0, 0, 0); // Margem de segurança para o badge de canal à esquerda
             home.setGravity(Gravity.END);
             home.setTextColor(Color.WHITE);
             home.setTextSize(13);
@@ -619,6 +618,7 @@ public class SportsHubActivity extends Activity {
 
             TextView away = new TextView(parent.getContext());
             away.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            away.setPadding(0, 0, px(150), 0); // Margem simétrica à direita para manter o VS 100% no centro
             away.setGravity(Gravity.START);
             away.setTextColor(Color.WHITE);
             away.setTextSize(13);
@@ -626,10 +626,26 @@ public class SportsHubActivity extends Activity {
             away.setEllipsize(android.text.TextUtils.TruncateAt.END);
             away.setTag("away");
 
-            row.addView(tvIcon);
-            row.addView(home);
-            row.addView(score);
-            row.addView(away);
+            matchRow.addView(home);
+            matchRow.addView(score);
+            matchRow.addView(away);
+
+            // Badge de canal (camada independente à esquerda, sem empurrar a linha do jogo)
+            TextView tvIcon = new TextView(parent.getContext());
+            tvIcon.setTextSize(11);
+            tvIcon.setTextColor(Color.parseColor("#00E676"));
+            tvIcon.setTag("icon");
+            tvIcon.setVisibility(View.GONE);
+            tvIcon.setSingleLine(true);
+            tvIcon.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tvIcon.setMaxWidth(px(145));
+            FrameLayout.LayoutParams lpIcon = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lpIcon.gravity = Gravity.START | Gravity.CENTER_VERTICAL;
+            tvIcon.setLayoutParams(lpIcon);
+
+            rowContainer.addView(matchRow);
+            rowContainer.addView(tvIcon);
 
             TextView status = new TextView(parent.getContext());
             status.setLayoutParams(new LinearLayout.LayoutParams(
@@ -640,7 +656,7 @@ public class SportsHubActivity extends Activity {
             status.setPadding(0, px(2), 0, 0);
             status.setTag("status");
 
-            root.addView(row);
+            root.addView(rowContainer);
             root.addView(status);
 
             root.setOnFocusChangeListener((v, f) -> {
