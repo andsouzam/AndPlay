@@ -354,7 +354,8 @@ public class SportsHubActivity extends Activity {
                     return false;
                 });
                 leagueHeader.setOnFocusChangeListener((v13, hasFocus) -> {
-                    v13.animate().scaleX(hasFocus ? 1.04f : 1f).scaleY(hasFocus ? 1.04f : 1f).setDuration(100).start();
+                    // Sem scaleX para não extrapolar margens; apenas scaleY sutil e cor via background
+                    v13.animate().scaleY(hasFocus ? 1.04f : 1f).setDuration(100).start();
                 });
 
                 // Botão TABELA
@@ -377,7 +378,7 @@ public class SportsHubActivity extends Activity {
                     return false;
                 });
                 btnSubStandings.setOnFocusChangeListener((v15, hasFocus) -> {
-                    v15.animate().scaleX(hasFocus ? 1.04f : 1f).scaleY(hasFocus ? 1.04f : 1f).setDuration(100).start();
+                    v15.animate().scaleY(hasFocus ? 1.04f : 1f).setDuration(100).start();
                 });
 
                 // Botão CALENDÁRIO
@@ -400,7 +401,7 @@ public class SportsHubActivity extends Activity {
                     return false;
                 });
                 btnSubSchedule.setOnFocusChangeListener((v17, hasFocus) -> {
-                    v17.animate().scaleX(hasFocus ? 1.04f : 1f).scaleY(hasFocus ? 1.04f : 1f).setDuration(100).start();
+                    v17.animate().scaleY(hasFocus ? 1.04f : 1f).setDuration(100).start();
                 });
             }
         }

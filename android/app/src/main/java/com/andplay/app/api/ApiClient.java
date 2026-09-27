@@ -680,6 +680,19 @@ public class ApiClient {
                                 title = (!homeName.isEmpty() && !awayName.isEmpty()) ? homeName + " x " + awayName : "Evento Esportivo";
                             }
 
+                            // Sanitização de anomalias da API (ex: times brasileiros da Série B rotulados como UEFA Nations League)
+                            String compLow = competition.toLowerCase(Locale.ROOT);
+                            if (isBrazilianClub(homeName) || isBrazilianClub(awayName)) {
+                                if (compLow.contains("nations") || compLow.contains("uefa") || compLow.contains("premier")
+                                        || compLow.contains("la liga") || compLow.contains("bundesliga") || compLow.contains("italiano")) {
+                                    if (isBrazilianSerieBClub(homeName) || isBrazilianSerieBClub(awayName)) {
+                                        competition = "Brasileirão Série B";
+                                    } else {
+                                        competition = "Brasileirão Série A";
+                                    }
+                                }
+                            }
+
                             // Captura o timestamp de início para calcular HOJE/AMANHÃ
                             long startTs = 0L;
                             if (item.has("start_timestamp") && !item.get("start_timestamp").isJsonNull()) {
@@ -995,6 +1008,26 @@ public class ApiClient {
             return TEAM_ALIASES.get(s);
         }
         return s;
+    }
+
+    public static boolean isBrazilianClub(String teamName) {
+        if (teamName == null || teamName.isEmpty()) return false;
+        String t = Normalizer.normalize(teamName.toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+                .replaceAll("[^a-z0-9 ]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return t.matches(".*\\b(crb|cuiaba|santos|sport|coritiba|vila nova|paysandu|chapecoense|operario|novorizontino|mirassol|america mg|america mineiro|avai|ceara|goias|ponte preta|botafogo sp|brusque|amazonas|guarani|ituano|flamengo|palmeiras|corinthians|sao paulo|vasco|fluminense|botafogo|gremio|internacional|cruzeiro|atletico mg|bahia|fortaleza|athletico pr|vitoria|juventude|criciuma|atletico go|nautico|csa|figueirense|tombense|confianca|abc|caxias|ferroviaria|volta redonda|ypiranga|londrina|remo|sampaio correa|aparecidense|ferroviario)\\b.*");
+    }
+
+    public static boolean isBrazilianSerieBClub(String teamName) {
+        if (teamName == null || teamName.isEmpty()) return false;
+        String t = Normalizer.normalize(teamName.toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+                .replaceAll("[^a-z0-9 ]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return t.matches(".*\\b(crb|cuiaba|santos|sport|coritiba|vila nova|paysandu|chapecoense|operario|novorizontino|mirassol|america mg|america mineiro|avai|ceara|goias|ponte preta|botafogo sp|brusque|amazonas|guarani|ituano)\\b.*");
     }
 
     private static boolean matchTeamName(String evTeam, String espnTeam) {
@@ -1480,6 +1513,54 @@ public class ApiClient {
                     }
                 }
 
+                // Para ligas que dividem temporadas em fases/estágios (ex: bra.3 - Série C Primeira Fase, Segunda Fase),
+                // o endpoint padrão sem parâmetros não retorna 'children' na raiz. Buscamos a última temporada e estágio com tabela:
+                if ((entries == null || entries.size() == 0) && root.has("seasons") && root.get("seasons").isJsonArray()) {
+                    JsonArray seasonsArr = root.getAsJsonArray("seasons");
+                    for (int si = 0; si < seasonsArr.size(); si++) {
+                        JsonObject seasonObj = seasonsArr.get(si).getAsJsonObject();
+                        int sYear = 0;
+                        if (seasonObj.has("year")) sYear = seasonObj.get("year").getAsInt();
+                        if (seasonObj.has("types") && seasonObj.get("types").isJsonArray()) {
+                            JsonArray typesArr = seasonObj.getAsJsonArray("types");
+                            for (int ti = 0; ti < typesArr.size(); ti++) {
+                                JsonObject tObj = typesArr.get(ti).getAsJsonObject();
+                                boolean hasSt = tObj.has("hasStandings") && tObj.get("hasStandings").getAsBoolean();
+                                String tId = optString(tObj, "id", "1");
+                                if (hasSt) {
+                                    String subUrl = "https://site.api.espn.com/apis/v2/sports/soccer/" + league
+                                            + "/standings?season=" + sYear + "&stage=" + tId + "&lang=pt&region=br";
+                                    Request subReq = new Request.Builder().url(subUrl)
+                                            .header("Accept", "*/*").header("User-Agent", "curl/8.21.0").build();
+                                    try (Response subResp = httpClient.newCall(subReq).execute()) {
+                                        if (subResp.isSuccessful() && subResp.body() != null) {
+                                            JsonObject subRoot = JsonParser.parseString(subResp.body().string()).getAsJsonObject();
+                                            if (subRoot.has("children") && subRoot.get("children").isJsonArray()) {
+                                                JsonArray ch = subRoot.getAsJsonArray("children");
+                                                if (ch.size() > 0) {
+                                                    JsonObject child0 = ch.get(0).getAsJsonObject();
+                                                    groupName = optString(child0, "name", "");
+                                                    if (child0.has("standings") && child0.get("standings").isJsonObject()) {
+                                                        JsonObject st = child0.getAsJsonObject("standings");
+                                                        if (st.has("entries") && st.get("entries").isJsonArray()) {
+                                                            JsonArray subEntries = st.getAsJsonArray("entries");
+                                                            if (subEntries.size() > 0) {
+                                                                entries = subEntries;
+                                                                break;
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } catch (Exception ignored) {}
+                                }
+                            }
+                        }
+                        if (entries != null && entries.size() > 0) break;
+                    }
+                }
+
                 if (entries == null || entries.size() == 0) return result;
 
                 for (int i = 0; i < entries.size(); i++) {
@@ -1914,13 +1995,24 @@ public class ApiClient {
                         JsonArray cal = leagueObj.getAsJsonArray("calendar");
                         if (cal.size() > 0 && cal.get(0).isJsonPrimitive()) {
                             hasDateCalendar = true;
+                            List<String> allCalDates = new ArrayList<>();
                             for (int i = 0; i < cal.size(); i++) {
                                 try {
                                     Date calDate = isoDateFmt.parse(cal.get(i).getAsString());
-                                    if (calDate != null && calDate.getTime() >= winStart && calDate.getTime() <= winEnd) {
-                                        calendarDateCodes.add(dayCodeFmt.format(calDate));
+                                    if (calDate != null) {
+                                        String dCode = dayCodeFmt.format(calDate);
+                                        allCalDates.add(dCode);
+                                        if (calDate.getTime() >= winStart && calDate.getTime() <= winEnd) {
+                                            calendarDateCodes.add(dCode);
+                                        }
                                     }
                                 } catch (Exception ignored) {}
+                            }
+                            if (calendarDateCodes.isEmpty() && !allCalDates.isEmpty()) {
+                                int startIdx = Math.max(0, allCalDates.size() - 15);
+                                for (int i = startIdx; i < allCalDates.size(); i++) {
+                                    calendarDateCodes.add(allCalDates.get(i));
+                                }
                             }
                         }
                     }
@@ -2071,7 +2163,14 @@ public class ApiClient {
                             if (matched == null) matched = liveByKey.get(key2);
                             if (matched != null) {
                                 rm.channelId = matched.id;
-                                rm.channelName = matched.getDisplayLeague();
+                                String chLabel = null;
+                                if (matched.candidateChannels != null && !matched.candidateChannels.isEmpty()) {
+                                    chLabel = matched.candidateChannels.get(0);
+                                }
+                                if (chLabel == null || chLabel.isEmpty()) {
+                                    chLabel = "AO VIVO";
+                                }
+                                rm.channelName = chLabel;
                             }
                             rm.isCurrent = false;
                         }
