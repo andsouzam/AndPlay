@@ -2653,14 +2653,12 @@ public class MainActivity extends Activity {
         }
 
         // Re-match de canal normal: se estiver em tela cheia assistindo um canal regular,
-        // re-verifica se o canal tem evento ao vivo detectado
+        // re-verifica se o canal tem evento ao vivo detectado (atualiza inclusive se encerrou -> null)
         if (!isPlayingSportsEvent && currentMode == ScreenMode.FULLSCREEN
                 && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
             Channel curCh = allChannels.get(currentChannelIdx);
             SportsEvent detected = detectSportsEventForChannel(curCh);
-            if (detected != null) {
-                activeSportsEvent = detected;
-            }
+            activeSportsEvent = detected;
         }
 
         // Verifica se a lista tem a mesma quantidade e os mesmos IDs na mesma ordem
@@ -2941,38 +2939,98 @@ public class MainActivity extends Activity {
         }
     }
 
+    /**
+     * Verifica se o canal é esportivo ou TV aberta onde ocorrem transmissões esportivas.
+     * Evita falsos positivos em canais de filmes, infantis, variedades, documentários, etc.
+     */
+    public static boolean isEligibleForSportsMatch(Channel ch) {
+        if (ch == null) return false;
+        String k = ch.key != null ? ch.key.toLowerCase(Locale.ROOT) : "";
+        String c = ch.cat != null ? ch.cat.toLowerCase(Locale.ROOT) : "";
+        String n = ch.name != null ? ch.name.toLowerCase(Locale.ROOT) : "";
+        String id = ch.id != null ? ch.id.toLowerCase(Locale.ROOT) : "";
+
+        // Categorias oficiais de Esporte e TV Aberta
+        if ("sports".equals(k) || "open_tv".equals(k)) return true;
+        if (c.contains("esport") || c.contains("sport") || c.contains("abert") || c.contains("noticia") || c.contains("news")) return true;
+
+        // Canais abertos ou de esportes por nome ou ID
+        if (n.contains("sportv") || n.contains("espn") || n.contains("premiere") || n.contains("combate")
+                || n.contains("bandsports") || n.contains("cazé") || n.contains("caze") || n.contains("tnt")
+                || n.contains("globo") || n.contains("band") || n.contains("sbt") || n.contains("record")
+                || n.contains("nosso futebol") || n.contains("goat") || n.contains("dazn") || n.contains("space")) {
+            return true;
+        }
+        if (id.contains("sportv") || id.contains("espn") || id.contains("premiere") || id.contains("combate")
+                || id.contains("band") || id.contains("globo") || id.contains("sbt") || id.contains("record")
+                || id.contains("tnt") || id.contains("caze") || id.contains("space")) {
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean isGenericSportsTitle(String title) {
+        if (title == null) return true;
+        String t = title.toLowerCase(Locale.ROOT).trim();
+        return t.length() < 5 || t.equals("futebol") || t.equals("ao vivo") || t.equals("futebol ao vivo")
+                || t.equals("evento esportivo") || t.equals("esportes") || t.equals("esporte")
+                || t.equals("jogo") || t.equals("jogos") || t.equals("transmissão") || t.equals("transmissao")
+                || t.equals("campeonato") || t.equals("rodada") || t.equals("partida");
+    }
+
     public SportsEvent detectSportsEventForChannel(Channel ch) {
         if (ch == null) return null;
+        // Se o canal NÃO é elegível para esportes (ex: Cartoon, HBO, Discovery), nunca gera match
+        if (!isEligibleForSportsMatch(ch)) return null;
+
         // 1. Match direto por candidateChannels em allSports
-        if (ch.id != null && !allSports.isEmpty()) {
+        if (ch.id != null && !ch.id.trim().isEmpty() && !allSports.isEmpty()) {
+            String chIdNorm = ch.id.trim().toLowerCase(Locale.ROOT);
             for (SportsEvent ev : allSports) {
-                if (ev.isLive && ev.candidateChannels != null && ev.candidateChannels.contains(ch.id)) {
-                    return ev;
-                }
-            }
-        }
-        // 2. Match por título do EPG atual vs eventos em allSports
-        LiveSchedule epg = EpgEngine.getLiveSchedule(ch);
-        if (epg != null && epg.nowTitle != null && !epg.nowTitle.isEmpty() && !allSports.isEmpty()) {
-            String epgLow = epg.nowTitle.toLowerCase(Locale.ROOT);
-            for (SportsEvent ev : allSports) {
-                if (!ev.isLive) continue;
-                if (ev.name != null && epgLow.contains(ev.name.toLowerCase(Locale.ROOT))) {
-                    return ev;
-                }
-                if (ev.homeName != null && ev.awayName != null) {
-                    String h = ev.homeName.toLowerCase(Locale.ROOT);
-                    String a = ev.awayName.toLowerCase(Locale.ROOT);
-                    if (epgLow.contains(h) && epgLow.contains(a)) {
-                        return ev;
+                if (ev.isLive && ev.candidateChannels != null) {
+                    for (String cand : ev.candidateChannels) {
+                        if (cand != null && !cand.trim().isEmpty() && cand.trim().equalsIgnoreCase(chIdNorm)) {
+                            return ev;
+                        }
                     }
                 }
             }
         }
+
+        // 2. Match por título do EPG atual vs eventos em allSports
+        LiveSchedule epg = EpgEngine.getLiveSchedule(ch);
+        if (epg != null && epg.nowTitle != null && !epg.nowTitle.trim().isEmpty() && !allSports.isEmpty()) {
+            String epgLow = epg.nowTitle.toLowerCase(Locale.ROOT).trim();
+            for (SportsEvent ev : allSports) {
+                if (!ev.isLive) continue;
+
+                // Match pelo título completo do evento: exige >= 6 caracteres e não pode ser termo genérico
+                if (ev.name != null) {
+                    String evName = ev.name.toLowerCase(Locale.ROOT).trim();
+                    if (evName.length() >= 6 && !isGenericSportsTitle(evName)) {
+                        if (epgLow.contains(evName)) {
+                            return ev;
+                        }
+                    }
+                }
+
+                // Match por times: AMBOS os times devem ter pelo menos 3 caracteres e ambos devem constar no EPG
+                if (ev.homeName != null && ev.awayName != null) {
+                    String h = ev.homeName.toLowerCase(Locale.ROOT).trim();
+                    String a = ev.awayName.toLowerCase(Locale.ROOT).trim();
+                    if (h.length() >= 3 && a.length() >= 3) {
+                        if (epgLow.contains(h) && epgLow.contains(a)) {
+                            return ev;
+                        }
+                    }
+                }
+            }
+        }
+
         // 3. Fallback sintético: título do EPG no formato "Time A x Time B", "Time A X Time B", etc.
-        if (epg != null && epg.nowTitle != null) {
-            String title = epg.nowTitle;
-            // Verificar se é reprise/VT antes de criar evento sintético ao vivo
+        // Aplicado apenas para canais elegíveis (esporte/aberto)
+        if (epg != null && epg.nowTitle != null && !epg.nowTitle.trim().isEmpty()) {
+            String title = epg.nowTitle.trim();
             boolean isRepriseTitle = isRepriseProgramTitle(title);
             String sep = null;
             if (title.contains(" x ")) sep = " x ";
@@ -2982,44 +3040,49 @@ public class MainActivity extends Activity {
             else if (title.contains(" v ")) sep = " v ";
 
             if (sep != null) {
-                SportsEvent synth = new SportsEvent();
-                synth.name = title;
-                synth.isLive = !isRepriseTitle; // reprises não são ao vivo
-                synth.isFinished = isRepriseTitle;
                 String[] parts = title.split(sep, 2);
                 if (parts.length == 2) {
-                    synth.homeName = parts[0].trim();
-                    synth.awayName = parts[1].trim();
-                }
-                if (epg.synopsis != null && !epg.synopsis.isEmpty()) {
-                    String firstLine = epg.synopsis.split("\n")[0].trim();
-                    // Sanitizar: se times são brasileiros mas a sinopse sugere liga europeia, corrigir
-                    if (!firstLine.isEmpty() && synth.homeName != null && synth.awayName != null
-                            && (ApiClient.isBrazilianClub(synth.homeName) || ApiClient.isBrazilianClub(synth.awayName))) {
-                        String fl = firstLine.toLowerCase(java.util.Locale.ROOT);
-                        if (fl.contains("nations") || fl.contains("uefa") || fl.contains("premier league")
-                                || fl.contains("la liga") || fl.contains("bundesliga")
-                                || fl.contains("serie a italiana") || fl.contains("ligue 1")) {
-                            if (ApiClient.isBrazilianSerieBClub(synth.homeName) || ApiClient.isBrazilianSerieBClub(synth.awayName)) {
-                                firstLine = "Brasileirão Série B";
-                            } else {
-                                firstLine = "Brasileirão Série A";
+                    String hName = parts[0].trim();
+                    String aName = parts[1].trim();
+                    // Garante que ambos os lados do confronto tenham tamanho significativo
+                    if (hName.length() >= 3 && aName.length() >= 3) {
+                        SportsEvent synth = new SportsEvent();
+                        synth.name = title;
+                        synth.isLive = !isRepriseTitle; // reprises não são ao vivo
+                        synth.isFinished = isRepriseTitle;
+                        synth.homeName = hName;
+                        synth.awayName = aName;
+
+                        if (epg.synopsis != null && !epg.synopsis.isEmpty()) {
+                            String firstLine = epg.synopsis.split("\n")[0].trim();
+                            // Sanitizar: se times são brasileiros mas a sinopse sugere liga europeia, corrigir
+                            if (!firstLine.isEmpty() && (ApiClient.isBrazilianClub(hName) || ApiClient.isBrazilianClub(aName))) {
+                                String fl = firstLine.toLowerCase(Locale.ROOT);
+                                if (fl.contains("nations") || fl.contains("uefa") || fl.contains("premier league")
+                                        || fl.contains("la liga") || fl.contains("bundesliga")
+                                        || fl.contains("serie a italiana") || fl.contains("ligue 1")) {
+                                    if (ApiClient.isBrazilianSerieBClub(hName) || ApiClient.isBrazilianSerieBClub(aName)) {
+                                        firstLine = "Brasileirão Série B";
+                                    } else {
+                                        firstLine = "Brasileirão Série A";
+                                    }
+                                }
                             }
+                            synth.league = firstLine.isEmpty() ? "Futebol" : firstLine;
+                        } else {
+                            synth.league = "Futebol";
                         }
+                        // Marcar reprise na sinopse se detectado
+                        if (isRepriseTitle && epg.synopsis != null && !epg.synopsis.isEmpty()) {
+                            synth.league = "🔁 REPRISE";
+                        }
+                        if (ch.id != null) {
+                            synth.candidateChannels = new ArrayList<>();
+                            synth.candidateChannels.add(ch.id);
+                        }
+                        return synth;
                     }
-                    synth.league = firstLine.isEmpty() ? "Futebol" : firstLine;
-                } else {
-                    synth.league = "Futebol";
                 }
-                // Marcar reprise na sinopse se detectado
-                if (isRepriseTitle && epg.synopsis != null && !epg.synopsis.isEmpty()) {
-                    synth.league = "🔁 REPRISE";
-                }
-                if (ch.id != null) {
-                    synth.candidateChannels = new ArrayList<>();
-                    synth.candidateChannels.add(ch.id);
-                }
-                return synth;
             }
         }
         return null;
@@ -4387,13 +4450,22 @@ public class MainActivity extends Activity {
     private void updateOsd(Channel ch, int chIdx, LiveSchedule epg) {
         if (ch == null) return;
 
-        if (activeSportsEvent == null) {
-            activeSportsEvent = detectSportsEventForChannel(ch);
+        // Se NÃO estiver reproduzindo um evento esportivo direto do hub/rail,
+        // o evento esportivo DEVE ser detectado especificamente para este canal 'ch'.
+        // Nunca reutilizar activeSportsEvent de outro canal ao zapear!
+        SportsEvent chSportsEvent;
+        if (isPlayingSportsEvent) {
+            chSportsEvent = activeSportsEvent;
+        } else {
+            chSportsEvent = detectSportsEventForChannel(ch);
+            if (chIdx == currentChannelIdx) {
+                activeSportsEvent = chSportsEvent;
+            }
         }
 
         String displayName = ch.name;
-        if (activeSportsEvent != null && activeSportsEvent.score != null && !activeSportsEvent.score.isEmpty()) {
-            displayName = ch.name + " • " + activeSportsEvent.score;
+        if (chSportsEvent != null && chSportsEvent.score != null && !chSportsEvent.score.isEmpty()) {
+            displayName = ch.name + " • " + chSportsEvent.score;
         }
 
         topChNum.setText(String.format("CH %03d", chIdx + 1));
@@ -4408,18 +4480,18 @@ public class MainActivity extends Activity {
             if (isReprise) {
                 // Reprise/VT: mostrar badge diferente, sem score ao vivo
                 liveText = "🔁 REPRISE: " + epg.nowTitle;
-                if (activeSportsEvent != null && activeSportsEvent.score != null
-                        && !activeSportsEvent.score.isEmpty() && activeSportsEvent.isFinished) {
-                    liveText += "  •  Placar Final: " + activeSportsEvent.score;
+                if (chSportsEvent != null && chSportsEvent.score != null
+                        && !chSportsEvent.score.isEmpty() && chSportsEvent.isFinished) {
+                    liveText += "  •  Placar Final: " + chSportsEvent.score;
                 }
             } else {
                 liveText = "🔴 NO AR: " + epg.nowTitle;
-                if (activeSportsEvent != null && activeSportsEvent.score != null && !activeSportsEvent.score.isEmpty()) {
-                    if (activeSportsEvent.isLive) {
-                        liveText = "🔴 NO AR: " + epg.nowTitle + "  •  " + activeSportsEvent.score +
-                                (activeSportsEvent.clock != null && !activeSportsEvent.clock.isEmpty() ? " (" + activeSportsEvent.clock + ")" : "");
-                    } else if (activeSportsEvent.isFinished) {
-                        liveText = "🏁 FIM: " + epg.nowTitle + "  •  Placar Final: " + activeSportsEvent.score;
+                if (chSportsEvent != null && chSportsEvent.score != null && !chSportsEvent.score.isEmpty()) {
+                    if (chSportsEvent.isLive) {
+                        liveText = "🔴 NO AR: " + epg.nowTitle + "  •  " + chSportsEvent.score +
+                                (chSportsEvent.clock != null && !chSportsEvent.clock.isEmpty() ? " (" + chSportsEvent.clock + ")" : "");
+                    } else if (chSportsEvent.isFinished) {
+                        liveText = "🏁 FIM: " + epg.nowTitle + "  •  Placar Final: " + chSportsEvent.score;
                     }
                 }
             }
@@ -4430,10 +4502,10 @@ public class MainActivity extends Activity {
             osdProgressBar.setProgress(epg.progress);
         } else {
             String noEpgText = "🔴 NO AR: SEM DADOS DE PROGRAMAÇÃO";
-            if (activeSportsEvent != null) {
-                noEpgText = "🔴 NO AR: " + activeSportsEvent.getDisplayName() +
-                        (activeSportsEvent.score != null ? "  •  " + activeSportsEvent.score : "") +
-                        (activeSportsEvent.clock != null && !activeSportsEvent.clock.isEmpty() ? " (" + activeSportsEvent.clock + ")" : "");
+            if (chSportsEvent != null) {
+                noEpgText = "🔴 NO AR: " + chSportsEvent.getDisplayName() +
+                        (chSportsEvent.score != null ? "  •  " + chSportsEvent.score : "") +
+                        (chSportsEvent.clock != null && !chSportsEvent.clock.isEmpty() ? " (" + chSportsEvent.clock + ")" : "");
             }
             osdNowTitle.setText(noEpgText);
             osdRemaining.setText("--:--");
@@ -4444,21 +4516,21 @@ public class MainActivity extends Activity {
 
         // Hint esportivo: mostrar quando há jogo ao vivo neste canal
         if (osdSportsHint != null) {
-            if (activeSportsEvent != null && activeSportsEvent.isLive) {
+            if (chSportsEvent != null && chSportsEvent.isLive) {
                 // Apenas jogos ao vivo reais: mostrar hint de tabela/rodada
-                String hintText = "▶  " + activeSportsEvent.getDisplayName();
-                if (activeSportsEvent.score != null && !activeSportsEvent.score.isEmpty()) {
-                    hintText += "  " + activeSportsEvent.score;
-                    if (activeSportsEvent.clock != null && !activeSportsEvent.clock.isEmpty()) {
-                        hintText += " (" + activeSportsEvent.clock + ")";
+                String hintText = "▶  " + chSportsEvent.getDisplayName();
+                if (chSportsEvent.score != null && !chSportsEvent.score.isEmpty()) {
+                    hintText += "  " + chSportsEvent.score;
+                    if (chSportsEvent.clock != null && !chSportsEvent.clock.isEmpty()) {
+                        hintText += " (" + chSportsEvent.clock + ")";
                     }
                 }
                 hintText += "  —  DPAD DIREITO: ver tabela/rodada";
                 osdSportsHint.setText(hintText);
                 osdSportsHint.setVisibility(View.VISIBLE);
-            } else if (activeSportsEvent != null && activeSportsEvent.isFinished && activeSportsEvent.score != null) {
+            } else if (chSportsEvent != null && chSportsEvent.isFinished && chSportsEvent.score != null) {
                 // Jogo encerrado (ou reprise): mostrar placar final, sem hint de dpad
-                String hintText = "🏁  " + activeSportsEvent.getDisplayName() + "  •  Placar Final: " + activeSportsEvent.score;
+                String hintText = "🏁  " + chSportsEvent.getDisplayName() + "  •  Placar Final: " + chSportsEvent.score;
                 osdSportsHint.setText(hintText);
                 osdSportsHint.setVisibility(View.VISIBLE);
             } else {
