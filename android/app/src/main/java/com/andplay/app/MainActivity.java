@@ -106,6 +106,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -1928,6 +1929,29 @@ public class MainActivity extends Activity {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
             ));
         }
+        targetHost.requestLayout();
+        unifiedPlayerBox.requestLayout();
+        if (unifiedExoPlayerView != null) {
+            unifiedExoPlayerView.requestLayout();
+        }
+        if (unifiedEmbedWebView != null) {
+            unifiedEmbedWebView.requestLayout();
+            if (isPlayingEmbed) {
+                unifiedEmbedWebView.setInitialScale(0);
+                unifiedEmbedWebView.evaluateJavascript(
+                        "(function() {" +
+                        "  var meta = document.querySelector('meta[name=\"viewport\"]');" +
+                        "  if (!meta) { meta = document.createElement('meta'); meta.name = 'viewport'; document.head.appendChild(meta); }" +
+                        "  meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';" +
+                        "  var vids = document.querySelectorAll('video, iframe');" +
+                        "  for (var i = 0; i < vids.length; i++) {" +
+                        "    vids[i].style.width = '100%';" +
+                        "    vids[i].style.height = '100%';" +
+                        "    vids[i].style.objectFit = 'contain';" +
+                        "  }" +
+                        "})();", null);
+            }
+        }
     }
 
     private static final String PREF_VOD_PROGRESS = "vod_playback_progress_prefs";
@@ -2327,7 +2351,6 @@ public class MainActivity extends Activity {
                 setupChannelsRail();
                 setupSportsRail();
                 setupDrawer();
-                refreshSportsEvents();
 
                 // Inicializa o sincronizador de EPG real de TV
                 EpgEngine.init(MainActivity.this);
@@ -2531,16 +2554,116 @@ public class MainActivity extends Activity {
             try {
                 List<SportsEvent> fresh = ApiClient.getLiveSports();
                 if (fresh != null && !fresh.isEmpty()) {
-                    mainHandler.post(() -> {
-                        allSports.clear();
-                        allSports.addAll(fresh);
-                        if (sportsRail != null && sportsRail.getAdapter() != null) {
-                            sportsRail.getAdapter().notifyDataSetChanged();
-                        }
-                    });
+                    mainHandler.post(() -> updateSportsList(fresh));
                 }
             } catch (Exception ignored) {}
         });
+    }
+
+    private void updateSportsList(List<SportsEvent> fresh) {
+        if (fresh == null || fresh.isEmpty()) return;
+        if (allSports.isEmpty()) {
+            allSports.addAll(fresh);
+            if (sportsRail != null && sportsRail.getAdapter() != null) {
+                sportsRail.getAdapter().notifyDataSetChanged();
+            }
+            return;
+        }
+
+        // Se estiver em reprodução de um evento esportivo em tela cheia, atualiza os dados do evento ativo
+        if (isPlayingSportsEvent && activeSportsEvent != null) {
+            for (SportsEvent fev : fresh) {
+                if (Objects.equals(fev.id, activeSportsEvent.id)) {
+                    activeSportsEvent.score = fev.score;
+                    activeSportsEvent.clock = fev.clock;
+                    activeSportsEvent.isLive = fev.isLive;
+                    activeSportsEvent.isFinished = fev.isFinished;
+                    break;
+                }
+            }
+        }
+
+        // Verifica se a lista tem a mesma quantidade e os mesmos IDs na mesma ordem
+        boolean sameOrderAndSize = (allSports.size() == fresh.size());
+        if (sameOrderAndSize) {
+            for (int i = 0; i < fresh.size(); i++) {
+                String oldId = allSports.get(i).id;
+                String newId = fresh.get(i).id;
+                if (!Objects.equals(oldId, newId)) {
+                    sameOrderAndSize = false;
+                    break;
+                }
+            }
+        }
+
+        if (sameOrderAndSize) {
+            // Atualização granular item a item — NÃO remove views e preserva 100% o foco
+            for (int i = 0; i < fresh.size(); i++) {
+                SportsEvent oldEv = allSports.get(i);
+                SportsEvent newEv = fresh.get(i);
+
+                boolean changed = false;
+                if (!Objects.equals(oldEv.score, newEv.score)) {
+                    oldEv.score = newEv.score;
+                    changed = true;
+                }
+                if (!Objects.equals(oldEv.clock, newEv.clock)) {
+                    oldEv.clock = newEv.clock;
+                    changed = true;
+                }
+                if (oldEv.isLive != newEv.isLive) {
+                    oldEv.isLive = newEv.isLive;
+                    changed = true;
+                }
+                if (oldEv.isFinished != newEv.isFinished) {
+                    oldEv.isFinished = newEv.isFinished;
+                    changed = true;
+                }
+                if (!Objects.equals(oldEv.matchTime, newEv.matchTime)) {
+                    oldEv.matchTime = newEv.matchTime;
+                    changed = true;
+                }
+                if (newEv.fallbacks != null && !newEv.fallbacks.isEmpty()) {
+                    oldEv.fallbacks = newEv.fallbacks;
+                }
+
+                if (changed && sportsRail != null && sportsRail.getAdapter() != null) {
+                    sportsRail.getAdapter().notifyItemChanged(i);
+                }
+            }
+        } else {
+            // Se a lista mudou de tamanho ou ordem: salva o item que tem o foco antes de recarregar
+            int focusedIndex = -1;
+            if (sportsRail != null) {
+                View focused = sportsRail.getFocusedChild();
+                if (focused != null) {
+                    focusedIndex = sportsRail.getChildAdapterPosition(focused);
+                }
+            }
+            String focusedId = (focusedIndex >= 0 && focusedIndex < allSports.size()) ? allSports.get(focusedIndex).id : null;
+
+            allSports.clear();
+            allSports.addAll(fresh);
+            if (sportsRail != null && sportsRail.getAdapter() != null) {
+                sportsRail.getAdapter().notifyDataSetChanged();
+            }
+
+            // Restaura o foco na posição do mesmo card caso o usuário estivesse na grade
+            if (focusedId != null && sportsRail != null) {
+                for (int i = 0; i < allSports.size(); i++) {
+                    if (focusedId.equals(allSports.get(i).id)) {
+                        final int targetPos = i;
+                        sportsRail.post(() -> {
+                            RecyclerView.ViewHolder vh = sportsRail.findViewHolderForAdapterPosition(targetPos);
+                            if (vh != null) {
+                                vh.itemView.requestFocus();
+                            }
+                        });
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     private void setupSportsRail() {

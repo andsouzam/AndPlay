@@ -1128,6 +1128,41 @@ public class ApiClient {
         } catch (Exception ignored) {}
     }
 
+    private static class EspnCachedScore {
+        final String score;
+        final String homeScore;
+        final String awayScore;
+        final String clock;
+
+        EspnCachedScore(String score, String homeScore, String awayScore, String clock) {
+            this.score = score;
+            this.homeScore = homeScore;
+            this.awayScore = awayScore;
+            this.clock = clock;
+        }
+    }
+
+    private static final Map<String, EspnCachedScore> FINISHED_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static EspnCachedScore getCachedFinishedScore(String home, String away) {
+        if (home == null || away == null) return null;
+        String a = cleanAndNormalizeTeam(home);
+        String b = cleanAndNormalizeTeam(away);
+        if (a.isEmpty() || b.isEmpty()) return null;
+        String k1 = a + "_" + b;
+        if (FINISHED_CACHE.containsKey(k1)) return FINISHED_CACHE.get(k1);
+        String k2 = b + "_" + a;
+        return FINISHED_CACHE.get(k2);
+    }
+
+    private static void saveFinishedScoreToCache(String home, String away, String score, String homeScore, String awayScore, String clock) {
+        if (home == null || away == null || score == null) return;
+        String a = cleanAndNormalizeTeam(home);
+        String b = cleanAndNormalizeTeam(away);
+        if (a.isEmpty() || b.isEmpty()) return;
+        FINISHED_CACHE.put(a + "_" + b, new EspnCachedScore(score, homeScore, awayScore, clock));
+    }
+
     private static void enrichSportsWithScores(List<SportsEvent> events) {
         if (events == null || events.isEmpty()) return;
         try {
@@ -1135,35 +1170,72 @@ public class ApiClient {
             SimpleDateFormat df = new SimpleDateFormat("yyyyMMdd", Locale.US);
             df.setTimeZone(tz);
             String todayStr = df.format(new Date());
-            String yestStr = df.format(new Date(System.currentTimeMillis() - 86400000L));
+            long nowSec = System.currentTimeMillis() / 1000L;
 
-            Set<String> dates = new HashSet<>();
-            dates.add(todayStr);
-            dates.add(yestStr);
-
-            Set<String> leagues = new HashSet<>();
-            leagues.add("bra.1");
-            leagues.add("bra.2");
-            leagues.add("uefa.nations");
-            leagues.add("usa.1");
-            leagues.add("fifa.friendly");
-
+            // 1. Aplica placares de jogos finalizados já cacheados (sem fazer chamadas de rede)
             for (SportsEvent ev : events) {
-                if (ev.startTimestamp > 0) {
-                    dates.add(df.format(new Date(ev.startTimestamp * 1000L)));
+                if (ev.homeName == null || ev.awayName == null) continue;
+                EspnCachedScore cs = getCachedFinishedScore(ev.homeName, ev.awayName);
+                if (cs != null) {
+                    ev.score = cs.score;
+                    ev.homeScore = cs.homeScore;
+                    ev.awayScore = cs.awayScore;
+                    ev.clock = cs.clock;
+                    ev.isFinished = true;
+                    ev.isLive = false;
                 }
-                String lg = getEspnLeagueForCompetition(ev.league);
-                if (lg != null) leagues.add(lg);
             }
 
+            // 2. Filtra APENAS eventos que realmente precisam de consulta à ESPN:
+            //    - Jogos marcados como AO VIVO (placar muda em tempo real)
+            //    - Jogos finalizados que ainda NÃO têm placar no cache
+            //    - Jogos com início recente/próximo (começou há menos de 4h ou começa em menos de 15min)
+            Set<String> datesToQuery = new HashSet<>();
+            Set<String> leaguesToQuery = new HashSet<>();
+            List<SportsEvent> pendingEvents = new ArrayList<>();
+
+            for (SportsEvent ev : events) {
+                if (ev.homeName == null || ev.awayName == null) continue;
+
+                // Se já está finalizado com placar preenchido, não necessita de nova requisição
+                if (ev.isFinished && ev.score != null && !ev.score.isEmpty()) {
+                    continue;
+                }
+
+                boolean isRecentlyStarted = (ev.startTimestamp > 0)
+                        && (nowSec >= (ev.startTimestamp - 15 * 60L))
+                        && (nowSec <= (ev.startTimestamp + 4 * 3600L));
+
+                boolean needsQuery = ev.isLive
+                        || ev.isFinished // Finalizado pendente de placar
+                        || isRecentlyStarted; // Na janela ativa de partida
+
+                if (needsQuery) {
+                    pendingEvents.add(ev);
+                    if (ev.startTimestamp > 0) {
+                        datesToQuery.add(df.format(new Date(ev.startTimestamp * 1000L)));
+                    } else {
+                        datesToQuery.add(todayStr);
+                    }
+                    String lg = getEspnLeagueForCompetition(ev.league);
+                    if (lg != null) leaguesToQuery.add(lg);
+                }
+            }
+
+            // Se nenhum evento necessita de atualização ou busca, encerra sem fazer requisições HTTP
+            if (pendingEvents.isEmpty() || datesToQuery.isEmpty()) {
+                return;
+            }
+
+            // 3. Executa requisições ESPN em paralelo APENAS para as datas e ligas dos jogos pendentes
             List<EspnMatch> espnMatches = Collections.synchronizedList(new ArrayList<>());
-            ExecutorService pool = Executors.newFixedThreadPool(6);
+            ExecutorService pool = Executors.newFixedThreadPool(Math.min(6, Math.max(1, leaguesToQuery.size() + 1)));
             List<Future<?>> futures = new ArrayList<>();
 
-            for (String d : dates) {
+            for (String d : datesToQuery) {
                 final String fDate = d;
                 futures.add(pool.submit(() -> fetchEspnScorepanel(fDate, espnMatches)));
-                for (String lg : leagues) {
+                for (String lg : leaguesToQuery) {
                     final String fLg = lg;
                     futures.add(pool.submit(() -> fetchEspnScoreboard(fLg, fDate, espnMatches)));
                 }
@@ -1176,8 +1248,8 @@ public class ApiClient {
             }
             pool.shutdown();
 
-            for (SportsEvent ev : events) {
-                if (ev.homeName == null || ev.awayName == null) continue;
+            // 4. Faz a correlação de placares apenas para os eventos pendentes
+            for (SportsEvent ev : pendingEvents) {
                 for (EspnMatch em : espnMatches) {
                     boolean directMatch = (matchTeamName(ev.homeName, em.homeName) || matchTeamName(ev.homeName, em.homeShortName))
                             && (matchTeamName(ev.awayName, em.awayName) || matchTeamName(ev.awayName, em.awayShortName));
@@ -1185,7 +1257,7 @@ public class ApiClient {
                             && (matchTeamName(ev.awayName, em.homeName) || matchTeamName(ev.awayName, em.homeShortName));
 
                     if (directMatch || revMatch) {
-                        // Se o jogo ainda não começou ("pre"), é jogo agendado (HOJE/AMANHÃ), portanto não define placar
+                        // Se o jogo ainda não começou ("pre"), não define placar
                         if ("pre".equalsIgnoreCase(em.state)) {
                             ev.isLive = false;
                             ev.isFinished = false;
@@ -1207,6 +1279,7 @@ public class ApiClient {
                                 ev.awayScore = aScore;
                                 ev.score = hScore + " x " + aScore;
                                 ev.clock = em.clock;
+                                saveFinishedScoreToCache(ev.homeName, ev.awayName, ev.score, hScore, aScore, em.clock);
                             }
                         } else if (isIn) {
                             ev.isLive = true;
@@ -1226,6 +1299,7 @@ public class ApiClient {
             e.printStackTrace();
         }
     }
+
 
     public static List<SportsEvent> getDefaultSportsFallbacks() {
         return getLiveSports();
