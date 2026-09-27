@@ -1304,5 +1304,246 @@ public class ApiClient {
     public static List<SportsEvent> getDefaultSportsFallbacks() {
         return getLiveSports();
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // MODELOS PARA OVERLAY DE TABELA / RODADA
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public static class StandingEntry {
+        public int position;
+        public String teamName;
+        public String teamAbbr;
+        public int played;
+        public int wins;
+        public int draws;
+        public int losses;
+        public int goalsFor;
+        public int goalsAgainst;
+        public int goalDiff;
+        public int points;
+        public boolean isHighlighted; // time da partida atual
+    }
+
+    public static class RoundMatch {
+        public String homeTeam;
+        public String awayTeam;
+        public String score;      // ex: "2 x 1" ou null se não iniciou
+        public String matchTime;  // ex: "20:00" ou "AO VIVO" ou "45'"
+        public String state;      // "pre" | "in" | "post"
+        public boolean isCurrent; // é a partida que está sendo assistida
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TABELA DE CLASSIFICAÇÃO
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Busca a tabela de classificação da liga correspondente à competição do evento.
+     * Retorna lista ordenada por posição, ou lista vazia se não disponível.
+     */
+    public static List<StandingEntry> getStandings(String competition, String homeTeam, String awayTeam) {
+        List<StandingEntry> result = new ArrayList<>();
+        String league = getEspnLeagueForCompetition(competition);
+        if (league == null) return result;
+
+        // Algumas competições de copa não têm tabela (Champions, Libertadores, Copa do Brasil, etc.)
+        if (league.startsWith("conmebol.") || league.equals("bra.copa_do_brazil")
+                || league.equals("uefa.champions") || league.equals("fifa.friendly")
+                || league.equals("uefa.nations")) {
+            return result; // sem tabela contínua
+        }
+
+        String url = "https://site.api.espn.com/apis/v2/sports/soccer/" + league
+                + "/standings?lang=pt&region=br";
+        try {
+            Request request = new Request.Builder()
+                    .url(url)
+                    .header("Accept", "*/*")
+                    .header("User-Agent", "curl/8.21.0")
+                    .build();
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful() || response.body() == null) return result;
+                String json = response.body().string();
+                JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+
+                // Estrutura: standings -> entries[] -> team + stats[]
+                if (!root.has("standings")) return result;
+                JsonObject standings = root.getAsJsonObject("standings");
+                if (!standings.has("entries") || !standings.get("entries").isJsonArray()) return result;
+                JsonArray entries = standings.getAsJsonArray("entries");
+
+                String normHome = cleanAndNormalizeTeam(homeTeam);
+                String normAway = cleanAndNormalizeTeam(awayTeam);
+
+                for (int i = 0; i < entries.size(); i++) {
+                    JsonObject entry = entries.get(i).getAsJsonObject();
+                    StandingEntry se = new StandingEntry();
+                    se.position = i + 1;
+
+                    if (entry.has("team") && entry.get("team").isJsonObject()) {
+                        JsonObject team = entry.getAsJsonObject("team");
+                        se.teamName = optString(team, "displayName", optString(team, "name", ""));
+                        se.teamAbbr = optString(team, "abbreviation", optString(team, "shortDisplayName", ""));
+                        String normTeam = cleanAndNormalizeTeam(se.teamName);
+                        se.isHighlighted = normTeam.equals(normHome) || normTeam.equals(normAway)
+                                || matchTeamName(se.teamName, homeTeam) || matchTeamName(se.teamName, awayTeam);
+                    }
+
+                    // Estatísticas: busca por nome de stat
+                    if (entry.has("stats") && entry.get("stats").isJsonArray()) {
+                        JsonArray stats = entry.getAsJsonArray("stats");
+                        for (int j = 0; j < stats.size(); j++) {
+                            JsonObject stat = stats.get(j).getAsJsonObject();
+                            String name = optString(stat, "name", "");
+                            int val = 0;
+                            try { val = stat.has("value") ? (int) stat.get("value").getAsDouble() : 0; } catch (Exception ignored) {}
+                            switch (name) {
+                                case "gamesPlayed": se.played = val; break;
+                                case "wins": se.wins = val; break;
+                                case "ties": se.draws = val; break;
+                                case "losses": se.losses = val; break;
+                                case "pointsFor": se.goalsFor = val; break;
+                                case "pointsAgainst": se.goalsAgainst = val; break;
+                                case "pointDifferential": se.goalDiff = val; break;
+                                case "points": se.points = val; break;
+                                // aliases ESPN
+                                case "gf": se.goalsFor = val; break;
+                                case "ga": se.goalsAgainst = val; break;
+                                case "gd": se.goalDiff = val; break;
+                                case "pts": se.points = val; break;
+                                case "w": se.wins = val; break;
+                                case "d": se.draws = val; break;
+                                case "l": se.losses = val; break;
+                                case "gp": se.played = val; break;
+                            }
+                        }
+                        // Recalcula SG se não veio direto
+                        if (se.goalDiff == 0 && (se.goalsFor > 0 || se.goalsAgainst > 0)) {
+                            se.goalDiff = se.goalsFor - se.goalsAgainst;
+                        }
+                    }
+                    result.add(se);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return result;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // JOGOS DA RODADA
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Busca os jogos da rodada atual da liga correspondente ao evento.
+     * Retorna lista de RoundMatch ordenada por horário.
+     */
+    public static List<RoundMatch> getRoundMatches(String competition, String homeTeam, String awayTeam) {
+        List<RoundMatch> result = new ArrayList<>();
+        String league = getEspnLeagueForCompetition(competition);
+        if (league == null) return result;
+
+        TimeZone tz = TimeZone.getTimeZone("America/Sao_Paulo");
+        SimpleDateFormat df = new SimpleDateFormat("yyyyMMdd", Locale.US);
+        df.setTimeZone(tz);
+        String todayStr = df.format(new Date());
+
+        String url = "https://site.api.espn.com/apis/site/v2/sports/soccer/" + league
+                + "/scoreboard?dates=" + todayStr + "&lang=pt&region=br";
+        try {
+            Request request = new Request.Builder()
+                    .url(url)
+                    .header("Accept", "*/*")
+                    .header("User-Agent", "curl/8.21.0")
+                    .build();
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful() || response.body() == null) return result;
+                String json = response.body().string();
+                JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+                if (!root.has("events") || !root.get("events").isJsonArray()) return result;
+
+                SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.US);
+                timeFmt.setTimeZone(tz);
+
+                JsonArray events = root.getAsJsonArray("events");
+                for (int i = 0; i < events.size(); i++) {
+                    JsonElement el = events.get(i);
+                    if (!el.isJsonObject()) continue;
+                    JsonObject ev = el.getAsJsonObject();
+                    if (!ev.has("competitions") || !ev.get("competitions").isJsonArray()) continue;
+                    JsonArray comps = ev.getAsJsonArray("competitions");
+                    if (comps.size() == 0) continue;
+                    JsonObject comp = comps.get(0).getAsJsonObject();
+
+                    RoundMatch rm = new RoundMatch();
+
+                    // Estado e clock
+                    String state = "";
+                    String clock = "";
+                    if (comp.has("status") && comp.get("status").isJsonObject()) {
+                        JsonObject st = comp.getAsJsonObject("status");
+                        if (st.has("type") && st.get("type").isJsonObject()) {
+                            JsonObject t = st.getAsJsonObject("type");
+                            state = optString(t, "state", "");
+                            clock = optString(t, "shortDetail", "");
+                        }
+                    }
+                    rm.state = state;
+
+                    // Horário de início
+                    String startDate = optString(ev, "date", "");
+                    try {
+                        if (!startDate.isEmpty()) {
+                            SimpleDateFormat isofmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'", Locale.US);
+                            isofmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+                            Date d = isofmt.parse(startDate);
+                            if (d != null) rm.matchTime = timeFmt.format(d);
+                        }
+                    } catch (Exception ignored) {}
+
+                    // Times e placar
+                    if (comp.has("competitors") && comp.get("competitors").isJsonArray()) {
+                        JsonArray competitors = comp.getAsJsonArray("competitors");
+                        String hName = "", aName = "", hScore = "", aScore = "";
+                        for (int k = 0; k < competitors.size(); k++) {
+                            JsonObject c = competitors.get(k).getAsJsonObject();
+                            String ha = optString(c, "homeAway", "");
+                            String sc = optString(c, "score", "");
+                            String name = "";
+                            if (c.has("team") && c.get("team").isJsonObject()) {
+                                JsonObject tm = c.getAsJsonObject("team");
+                                name = optString(tm, "shortDisplayName", optString(tm, "displayName", ""));
+                            }
+                            if ("home".equalsIgnoreCase(ha)) { hName = name; hScore = sc; }
+                            else { aName = name; aScore = sc; }
+                        }
+                        rm.homeTeam = hName;
+                        rm.awayTeam = aName;
+
+                        if ("in".equalsIgnoreCase(state)) {
+                            rm.score = hScore + " x " + aScore;
+                            rm.matchTime = clock.isEmpty() ? "AO VIVO" : clock;
+                        } else if ("post".equalsIgnoreCase(state)) {
+                            rm.score = hScore + " x " + aScore;
+                        } else {
+                            rm.score = null; // pré-jogo: mostra só horário
+                        }
+
+                        // Marca se é a partida sendo assistida
+                        rm.isCurrent = (matchTeamName(hName, homeTeam) && matchTeamName(aName, awayTeam))
+                                || (matchTeamName(hName, awayTeam) && matchTeamName(aName, homeTeam));
+                    }
+
+                    if (rm.homeTeam != null && !rm.homeTeam.isEmpty()) {
+                        result.add(rm);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return result;
+    }
 }
 

@@ -606,6 +606,13 @@
                 android:textColor="#888888"
                 android:textSize="11sp" />
         </LinearLayout>
+
+        <!-- OVERLAY DE TABELA / RODADA (D-pad Direito em modo esportivo) -->
+        <include
+            layout="@layout/sports_standings_overlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
     </FrameLayout>
 
 

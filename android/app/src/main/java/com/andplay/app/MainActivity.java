@@ -255,6 +255,22 @@ public class MainActivity extends Activity {
     private SportsEvent activeSportsEvent = null;
     private OkHttpClient sharedOkHttpClient;
 
+    // Sports Standings Overlay
+    private View sportsStandingsOverlay;
+    private TextView standingsLeagueName;
+    private TextView standingsMatchScore;
+    private TextView tabStandings;
+    private TextView tabRound;
+    private ProgressBar standingsProgress;
+    private TextView standingsEmptyMsg;
+    private LinearLayout standingsTablePanel;
+    private LinearLayout roundMatchesPanel;
+    private RecyclerView standingsRecycler;
+    private RecyclerView roundMatchesRecycler;
+    private boolean standingsOverlayVisible = false;
+    private String standingsActiveTab = "standings"; // "standings" | "round"
+
+
     public List<Channel> getAllChannels() {
         return allChannels;
     }
@@ -456,6 +472,46 @@ public class MainActivity extends Activity {
         mosaicRow2 = findViewById(R.id.mosaicRow2);
         btnDrawerMosaic = findViewById(R.id.btnDrawerMosaic);
         initMosaicSlots();
+
+        // Sports Standings Overlay
+        sportsStandingsOverlay = findViewById(R.id.sportsStandingsOverlay);
+        standingsLeagueName    = findViewById(R.id.standingsLeagueName);
+        standingsMatchScore    = findViewById(R.id.standingsMatchScore);
+        tabStandings           = findViewById(R.id.tabStandings);
+        tabRound               = findViewById(R.id.tabRound);
+        standingsProgress      = findViewById(R.id.standingsProgress);
+        standingsEmptyMsg      = findViewById(R.id.standingsEmptyMsg);
+        standingsTablePanel    = findViewById(R.id.standingsTablePanel);
+        roundMatchesPanel      = findViewById(R.id.roundMatchesPanel);
+        standingsRecycler      = findViewById(R.id.standingsRecycler);
+        roundMatchesRecycler   = findViewById(R.id.roundMatchesRecycler);
+
+        if (standingsRecycler != null) {
+            standingsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+        }
+        if (roundMatchesRecycler != null) {
+            roundMatchesRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+        }
+
+        // Fundo escurecido: toque fecha o overlay
+        View standingsDim = findViewById(R.id.standingsDim);
+        if (standingsDim != null) {
+            standingsDim.setOnClickListener(v -> hideSportsOverlay());
+        }
+
+        // Abas
+        if (tabStandings != null) {
+            tabStandings.setOnClickListener(v -> switchStandingsTab("standings"));
+            tabStandings.setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus) switchStandingsTab("standings");
+            });
+        }
+        if (tabRound != null) {
+            tabRound.setOnClickListener(v -> switchStandingsTab("round"));
+            tabRound.setOnFocusChangeListener((v, hasFocus) -> {
+                if (hasFocus) switchStandingsTab("round");
+            });
+        }
     }
 
     private void initMosaicSlots() {
@@ -2672,6 +2728,286 @@ public class MainActivity extends Activity {
         startSportsRefreshTicker();
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // OVERLAY: TABELA + JOGOS DA RODADA (D-pad Direito em tela cheia esportiva)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private void showSportsOverlay() {
+        if (sportsStandingsOverlay == null || activeSportsEvent == null) return;
+        standingsOverlayVisible = true;
+        sportsStandingsOverlay.setVisibility(View.VISIBLE);
+
+        // Cabeçalho
+        if (standingsLeagueName != null) standingsLeagueName.setText(activeSportsEvent.league);
+        if (standingsMatchScore != null) {
+            if (activeSportsEvent.isLive && activeSportsEvent.score != null) {
+                standingsMatchScore.setText("● AO VIVO  " + activeSportsEvent.score +
+                        (activeSportsEvent.clock != null ? "  " + activeSportsEvent.clock : ""));
+            } else if (activeSportsEvent.isFinished && activeSportsEvent.score != null) {
+                standingsMatchScore.setText("Encerrado  " + activeSportsEvent.score);
+            } else {
+                standingsMatchScore.setText(activeSportsEvent.matchTime != null ? activeSportsEvent.matchTime : "");
+            }
+        }
+
+        // Mostra a aba padrão (tabela)
+        standingsActiveTab = "standings";
+        applyTabStyle();
+
+        // Mostra loading e busca dados em background
+        if (standingsProgress != null) standingsProgress.setVisibility(View.VISIBLE);
+        if (standingsEmptyMsg != null) standingsEmptyMsg.setVisibility(View.GONE);
+        if (standingsTablePanel != null) standingsTablePanel.setVisibility(View.GONE);
+        if (roundMatchesPanel != null) roundMatchesPanel.setVisibility(View.GONE);
+
+        final String comp = activeSportsEvent.league;
+        final String home = activeSportsEvent.homeName;
+        final String away = activeSportsEvent.awayName;
+
+        executor.execute(() -> {
+            List<ApiClient.StandingEntry> standings = ApiClient.getStandings(comp, home, away);
+            List<ApiClient.RoundMatch> roundMatches = ApiClient.getRoundMatches(comp, home, away);
+            mainHandler.post(() -> {
+                if (!standingsOverlayVisible) return;
+                if (standingsProgress != null) standingsProgress.setVisibility(View.GONE);
+
+                boolean hasStandings = !standings.isEmpty();
+                boolean hasRound = !roundMatches.isEmpty();
+
+                if (!hasStandings && !hasRound) {
+                    if (standingsEmptyMsg != null) standingsEmptyMsg.setVisibility(View.VISIBLE);
+                    return;
+                }
+
+                // Popula standings
+                if (standingsRecycler != null && hasStandings) {
+                    standingsRecycler.setAdapter(new StandingsAdapter(standings));
+                }
+
+                // Popula rodada
+                if (roundMatchesRecycler != null && hasRound) {
+                    roundMatchesRecycler.setAdapter(new RoundMatchesAdapter(roundMatches));
+                }
+
+                // Escolhe qual aba mostrar (tabela tem prioridade, mas se não existe vai direto p/ rodada)
+                if (hasStandings) {
+                    standingsActiveTab = "standings";
+                } else {
+                    standingsActiveTab = "round";
+                }
+                applyTabStyle();
+                renderActiveTab(hasStandings, hasRound);
+            });
+        });
+
+        // Foca na aba de tabela
+        if (tabStandings != null) tabStandings.requestFocus();
+    }
+
+    private void hideSportsOverlay() {
+        if (sportsStandingsOverlay == null) return;
+        standingsOverlayVisible = false;
+        sportsStandingsOverlay.setVisibility(View.GONE);
+    }
+
+    private void switchStandingsTab(String tab) {
+        standingsActiveTab = tab;
+        applyTabStyle();
+        boolean hasStandings = standingsRecycler != null && standingsRecycler.getAdapter() != null
+                && standingsRecycler.getAdapter().getItemCount() > 0;
+        boolean hasRound = roundMatchesRecycler != null && roundMatchesRecycler.getAdapter() != null
+                && roundMatchesRecycler.getAdapter().getItemCount() > 0;
+        renderActiveTab(hasStandings, hasRound);
+    }
+
+    private void applyTabStyle() {
+        if (tabStandings == null || tabRound == null) return;
+        boolean isStandings = "standings".equals(standingsActiveTab);
+        tabStandings.setTextColor(isStandings ? 0xFFFFFFFF : 0x80FFFFFF);
+        tabStandings.setBackgroundColor(isStandings ? 0x991565C0 : 0x00000000);
+        tabRound.setTextColor(!isStandings ? 0xFFFFFFFF : 0x80FFFFFF);
+        tabRound.setBackgroundColor(!isStandings ? 0x991565C0 : 0x00000000);
+    }
+
+    private void renderActiveTab(boolean hasStandings, boolean hasRound) {
+        if (standingsTablePanel == null || roundMatchesPanel == null) return;
+        if ("standings".equals(standingsActiveTab) && hasStandings) {
+            standingsTablePanel.setVisibility(View.VISIBLE);
+            roundMatchesPanel.setVisibility(View.GONE);
+        } else if ("round".equals(standingsActiveTab) && hasRound) {
+            standingsTablePanel.setVisibility(View.GONE);
+            roundMatchesPanel.setVisibility(View.VISIBLE);
+        } else {
+            // Aba solicitada não tem dados: tenta a outra
+            if (hasStandings) {
+                standingsTablePanel.setVisibility(View.VISIBLE);
+                roundMatchesPanel.setVisibility(View.GONE);
+            } else if (hasRound) {
+                standingsTablePanel.setVisibility(View.GONE);
+                roundMatchesPanel.setVisibility(View.VISIBLE);
+            }
+        }
+    }
+
+    // ─── Adapter: Tabela de Classificação ────────────────────────────────────
+
+    private class StandingsAdapter extends RecyclerView.Adapter<StandingsAdapter.VH> {
+        private final List<ApiClient.StandingEntry> items;
+        StandingsAdapter(List<ApiClient.StandingEntry> items) { this.items = items; }
+
+        @Override
+        public VH onCreateViewHolder(android.view.ViewGroup parent, int viewType) {
+            android.widget.LinearLayout row = new android.widget.LinearLayout(parent.getContext());
+            row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(12), dp(8), dp(12), dp(8));
+            row.setLayoutParams(new RecyclerView.LayoutParams(
+                    RecyclerView.LayoutParams.MATCH_PARENT, dp(36)));
+            return new VH(row);
+        }
+
+        @Override
+        public void onBindViewHolder(VH h, int pos) {
+            ApiClient.StandingEntry e = items.get(pos);
+            // Destaque para os times da partida atual
+            int bg = e.isHighlighted ? 0x33FFD700 : (pos % 2 == 0 ? 0x0AFFFFFF : 0x00000000);
+            h.row.setBackgroundColor(bg);
+
+            String sgStr = (e.goalDiff >= 0 ? "+" : "") + e.goalDiff;
+            h.pos.setText(String.valueOf(e.position));
+            h.pos.setTextColor(e.isHighlighted ? 0xFFFFD700 : 0xFF888888);
+            h.team.setText(e.teamAbbr != null && !e.teamAbbr.isEmpty() ? e.teamAbbr : e.teamName);
+            h.team.setTextColor(e.isHighlighted ? 0xFFFFD700 : 0xFFFFFFFF);
+            h.played.setText(String.valueOf(e.played));
+            h.pts.setText(String.valueOf(e.points));
+            h.pts.setTextColor(e.isHighlighted ? 0xFFFFD700 : 0xFFFFFFFF);
+            h.sg.setText(sgStr);
+            h.gf.setText(String.valueOf(e.goalsFor));
+        }
+
+        @Override public int getItemCount() { return items.size(); }
+
+        class VH extends RecyclerView.ViewHolder {
+            android.widget.LinearLayout row;
+            android.widget.TextView pos, team, played, pts, sg, gf;
+            VH(android.widget.LinearLayout v) {
+                super(v);
+                row = v;
+                pos   = addCell(v, dp(28), android.view.Gravity.CENTER, 0xFF888888, 10, true);
+                team  = addCell(v, 0,       android.view.Gravity.START,  0xFFFFFFFF, 11, false);
+                ((android.widget.LinearLayout.LayoutParams) team.getLayoutParams()).weight = 1;
+                played = addCell(v, dp(24), android.view.Gravity.CENTER, 0xFF888888, 10, false);
+                pts    = addCell(v, dp(28), android.view.Gravity.CENTER, 0xFFFFFFFF, 10, true);
+                sg     = addCell(v, dp(24), android.view.Gravity.CENTER, 0xFF888888, 10, false);
+                gf     = addCell(v, dp(24), android.view.Gravity.CENTER, 0xFF888888, 10, false);
+            }
+        }
+
+        private android.widget.TextView addCell(android.widget.LinearLayout parent, int widthPx,
+                int gravity, int color, int spSize, boolean bold) {
+            android.widget.TextView tv = new android.widget.TextView(parent.getContext());
+            android.widget.LinearLayout.LayoutParams lp;
+            if (widthPx == 0) {
+                lp = new android.widget.LinearLayout.LayoutParams(0,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            } else {
+                lp = new android.widget.LinearLayout.LayoutParams(widthPx,
+                        android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            }
+            tv.setLayoutParams(lp);
+            tv.setGravity(gravity);
+            tv.setTextColor(color);
+            tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, spSize);
+            if (bold) tv.setTypeface(null, android.graphics.Typeface.BOLD);
+            parent.addView(tv);
+            return tv;
+        }
+
+        private int dp(int v) {
+            return Math.round(v * getResources().getDisplayMetrics().density);
+        }
+    }
+
+    // ─── Adapter: Jogos da Rodada ─────────────────────────────────────────────
+
+    private class RoundMatchesAdapter extends RecyclerView.Adapter<RoundMatchesAdapter.VH> {
+        private final List<ApiClient.RoundMatch> items;
+        RoundMatchesAdapter(List<ApiClient.RoundMatch> items) { this.items = items; }
+
+        @Override
+        public VH onCreateViewHolder(android.view.ViewGroup parent, int viewType) {
+            android.widget.LinearLayout row = new android.widget.LinearLayout(parent.getContext());
+            row.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(12), dp(10), dp(12), dp(10));
+            row.setLayoutParams(new RecyclerView.LayoutParams(
+                    RecyclerView.LayoutParams.MATCH_PARENT, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT));
+            return new VH(row);
+        }
+
+        @Override
+        public void onBindViewHolder(VH h, int pos) {
+            ApiClient.RoundMatch m = items.get(pos);
+            boolean live = "in".equalsIgnoreCase(m.state);
+            boolean fin  = "post".equalsIgnoreCase(m.state);
+
+            int bg = m.isCurrent ? 0x44FFD700 : (pos % 2 == 0 ? 0x0AFFFFFF : 0x00000000);
+            h.row.setBackgroundColor(bg);
+
+            h.home.setText(m.homeTeam != null ? m.homeTeam : "");
+            h.home.setTextColor(m.isCurrent ? 0xFFFFD700 : 0xFFFFFFFF);
+
+            h.away.setText(m.awayTeam != null ? m.awayTeam : "");
+            h.away.setTextColor(m.isCurrent ? 0xFFFFD700 : 0xFFFFFFFF);
+
+            if (live) {
+                h.center.setText(m.matchTime != null ? m.matchTime : "AO VIVO");
+                h.center.setTextColor(0xFF4FC3F7);
+            } else if (fin && m.score != null) {
+                h.center.setText(m.score);
+                h.center.setTextColor(0xFFFFFFFF);
+            } else {
+                h.center.setText(m.matchTime != null ? m.matchTime : "--:--");
+                h.center.setTextColor(0xFF888888);
+            }
+        }
+
+        @Override public int getItemCount() { return items.size(); }
+
+        class VH extends RecyclerView.ViewHolder {
+            android.widget.LinearLayout row;
+            android.widget.TextView home, center, away;
+            VH(android.widget.LinearLayout v) {
+                super(v);
+                row = v;
+                home   = makeTv(v, 0, android.view.Gravity.END,    0xFFFFFFFF, 12, false, 1);
+                center = makeTv(v, dp(72), android.view.Gravity.CENTER, 0xFF888888, 11, true,  0);
+                away   = makeTv(v, 0, android.view.Gravity.START,  0xFFFFFFFF, 12, false, 1);
+            }
+        }
+
+        private android.widget.TextView makeTv(android.widget.LinearLayout parent, int widthPx,
+                int gravity, int color, int sp, boolean bold, int weight) {
+            android.widget.TextView tv = new android.widget.TextView(parent.getContext());
+            android.widget.LinearLayout.LayoutParams lp = widthPx == 0
+                    ? new android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, weight)
+                    : new android.widget.LinearLayout.LayoutParams(widthPx, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT);
+            tv.setLayoutParams(lp);
+            tv.setGravity(gravity);
+            tv.setTextColor(color);
+            tv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp);
+            tv.setSingleLine(true);
+            tv.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            if (bold) tv.setTypeface(null, android.graphics.Typeface.BOLD);
+            parent.addView(tv);
+            return tv;
+        }
+
+        private int dp(int v) {
+            return Math.round(v * getResources().getDisplayMetrics().density);
+        }
+    }
+
     private static boolean isDemoMovie(Movie m) {
         if (m == null) return false;
         String n = m.name != null ? m.name.toLowerCase() : "";
@@ -3913,6 +4249,7 @@ public class MainActivity extends Activity {
 
     public void setScreenMode(ScreenMode mode) {
         if (currentMode == ScreenMode.FULLSCREEN && mode != ScreenMode.FULLSCREEN) {
+            hideSportsOverlay(); // Fecha overlay de tabela ao sair da tela cheia
             if (isPlayingVod) {
                 stopVodProgressTicker();
                 destroyCurrentStream();
@@ -5656,6 +5993,10 @@ public class MainActivity extends Activity {
 
                         // D-pad Esquerdo abre a gaveta lateral apenas se o overlay NÃO estiver visível
                         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                            if (standingsOverlayVisible) {
+                                hideSportsOverlay();
+                                return true;
+                            }
                             if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
                                 // Dentro do overlay de informações, DPAD_LEFT não aciona o menu gaveta
                                 scheduleOsdHide(getOsdTimeoutMs());
@@ -5666,6 +6007,18 @@ public class MainActivity extends Activity {
                             }
                             openDrawer();
                             return true;
+                        }
+
+                        // D-pad Direito: abre/fecha overlay de tabela + rodada (apenas em modo esportivo)
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                            if (isPlayingSportsEvent && activeSportsEvent != null) {
+                                if (standingsOverlayVisible) {
+                                    hideSportsOverlay();
+                                } else {
+                                    showSportsOverlay();
+                                }
+                                return true;
+                            }
                         }
 
                         // D-pad Cima (+) alterna canais em ordem crescente (+1) com confirmação após 3s
@@ -5687,6 +6040,7 @@ public class MainActivity extends Activity {
                             }
                             return true;
                         }
+
 
                         // ENTER / OK confirma a troca imediata se estiver zapeando, abre a gaveta se o OSD já estiver visível, ou exibe o OSD se oculto
                         if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
@@ -5804,6 +6158,11 @@ public class MainActivity extends Activity {
         if (currentMode == ScreenMode.FULLSCREEN) {
             if (pendingZapChannelIdx >= 0) {
                 cancelPendingZap();
+                return true;
+            }
+            // Se overlay de tabela/rodada estiver aberto, fecha-o primeiro
+            if (standingsOverlayVisible) {
+                hideSportsOverlay();
                 return true;
             }
             if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
