@@ -72,12 +72,17 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="◀ Fechar"
-                android:textColor="#80FFFFFF"
+                android:background="#22FFFFFF"
+                android:paddingStart="8dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="3dp"
+                android:text="VOLTAR: Fechar"
+                android:textColor="#B0FFFFFF"
                 android:textSize="11sp" />
         </LinearLayout>
 
-        <!-- Abas: Tabela / Rodada -->
+        <!-- Abas: Tabela / Rodada (navegáveis por D-pad Esquerdo e Direito) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="40dp"
@@ -90,7 +95,7 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:gravity="center"
-                android:text="TABELA"
+                android:text="◀ TABELA"
                 android:textColor="#FFFFFF"
                 android:textSize="12sp"
                 android:textStyle="bold"
@@ -109,7 +114,7 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:gravity="center"
-                android:text="RODADA"
+                android:text="RODADA ▶"
                 android:textColor="#80FFFFFF"
                 android:textSize="12sp"
                 android:textStyle="bold"

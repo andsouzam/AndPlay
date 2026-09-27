@@ -2734,6 +2734,7 @@ public class MainActivity extends Activity {
 
     private void showSportsOverlay() {
         if (sportsStandingsOverlay == null || activeSportsEvent == null) return;
+        if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) return;
         standingsOverlayVisible = true;
         sportsStandingsOverlay.setVisibility(View.VISIBLE);
 
@@ -4191,6 +4192,9 @@ public class MainActivity extends Activity {
     public void openDrawer() {
         if (fullGuideLayout != null && fullGuideLayout.getVisibility() == View.VISIBLE) {
             closeFullGuide();
+        }
+        if (standingsOverlayVisible) {
+            hideSportsOverlay();
         }
         drawerHandler.removeCallbacks(drawerHideRunnable);
         if (epgDrawer != null) {
@@ -5831,6 +5835,48 @@ public class MainActivity extends Activity {
                 return super.dispatchKeyEvent(event);
             }
 
+            // CENÁRIO 0.5: OVERLAY DE TABELA / RODADA ESPORTIVA (TELA CHEIA)
+            if (standingsOverlayVisible && sportsStandingsOverlay != null && sportsStandingsOverlay.getVisibility() == View.VISIBLE) {
+                if (keyCode == KeyEvent.KEYCODE_BACK) {
+                    hideSportsOverlay();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    // D-Pad Esquerdo seleciona a aba TABELA (à esquerda). Nunca fecha o overlay nem abre gaveta.
+                    switchStandingsTab("standings");
+                    if (tabStandings != null) tabStandings.requestFocus();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    // D-Pad Direito seleciona a aba RODADA (à direita). Nunca fecha o overlay.
+                    switchStandingsTab("round");
+                    if (tabRound != null) tabRound.requestFocus();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    // Rola a lista ativa para cima/baixo sem interferir no vídeo de fundo
+                    RecyclerView activeRecycler = "round".equals(standingsActiveTab) ? roundMatchesRecycler : standingsRecycler;
+                    if (activeRecycler != null) {
+                        int amount = (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) ? 140 : -140;
+                        activeRecycler.smoothScrollBy(0, amount);
+                    }
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    // Alterna entre as abas ao pressionar Enter
+                    if ("standings".equals(standingsActiveTab)) {
+                        switchStandingsTab("round");
+                        if (tabRound != null) tabRound.requestFocus();
+                    } else {
+                        switchStandingsTab("standings");
+                        if (tabStandings != null) tabStandings.requestFocus();
+                    }
+                    return true;
+                }
+                // Consome todas as outras teclas (números, canais, etc.) para isolamento total contra interferência no player
+                return true;
+            }
+
             // CENÁRIO 1: GAVETA LATERAL ESTÁ ABERTA (qualquer modo de tela)
             if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
                 resetDrawerTimeout();
@@ -5991,12 +6037,8 @@ public class MainActivity extends Activity {
                             return true;
                         }
 
-                        // D-pad Esquerdo abre a gaveta lateral apenas se o overlay NÃO estiver visível
+                        // D-pad Esquerdo abre a gaveta lateral
                         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                            if (standingsOverlayVisible) {
-                                hideSportsOverlay();
-                                return true;
-                            }
                             if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
                                 // Dentro do overlay de informações, DPAD_LEFT não aciona o menu gaveta
                                 scheduleOsdHide(getOsdTimeoutMs());
@@ -6009,15 +6051,13 @@ public class MainActivity extends Activity {
                             return true;
                         }
 
-                        // D-pad Direito: abre/fecha overlay de tabela + rodada (apenas em modo esportivo)
+                        // D-pad Direito: abre overlay de tabela + rodada (apenas em modo esportivo, se gaveta fechada)
                         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                             if (isPlayingSportsEvent && activeSportsEvent != null) {
-                                if (standingsOverlayVisible) {
-                                    hideSportsOverlay();
-                                } else {
+                                if (epgDrawer == null || epgDrawer.getVisibility() != View.VISIBLE) {
                                     showSportsOverlay();
+                                    return true;
                                 }
-                                return true;
                             }
                         }
 
@@ -6128,6 +6168,11 @@ public class MainActivity extends Activity {
             return true;
         }
 
+        if (standingsOverlayVisible) {
+            hideSportsOverlay();
+            return true;
+        }
+
         if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) {
             closeDrawer();
             return true;
@@ -6158,11 +6203,6 @@ public class MainActivity extends Activity {
         if (currentMode == ScreenMode.FULLSCREEN) {
             if (pendingZapChannelIdx >= 0) {
                 cancelPendingZap();
-                return true;
-            }
-            // Se overlay de tabela/rodada estiver aberto, fecha-o primeiro
-            if (standingsOverlayVisible) {
-                hideSportsOverlay();
                 return true;
             }
             if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
