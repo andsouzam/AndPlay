@@ -58,6 +58,7 @@
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
+                        android:nextFocusLeft="@+id/pipContainer"
                         android:nextFocusRight="@+id/btnNavMovies"
                         android:padding="3dp">
 
@@ -169,6 +170,7 @@
                                 android:focusableInTouchMode="true"
                                 android:nextFocusUp="@+id/btnHeaderOptions"
                                 android:nextFocusLeft="@+id/btnNavMovies"
+                                android:nextFocusRight="@+id/btnNavSeries"
                                 android:nextFocusDown="@+id/btnNavEpg"
                                 android:gravity="center"
                                 android:orientation="vertical">
@@ -241,6 +243,9 @@
                                 android:clickable="true"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
+                                android:nextFocusLeft="@+id/btnNavSports"
+                                android:nextFocusUp="@+id/btnNavSeries"
+                                android:nextFocusRight="@+id/btnNavEpg"
                                 android:gravity="center"
                                 android:orientation="vertical">
 
@@ -606,13 +611,6 @@
                 android:textColor="#888888"
                 android:textSize="11sp" />
         </LinearLayout>
-
-        <!-- OVERLAY DE TABELA / RODADA (D-pad Direito em modo esportivo) -->
-        <include
-            layout="@layout/sports_standings_overlay"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
     </FrameLayout>
 
 
@@ -1506,6 +1504,14 @@
             android:textSize="11sp" />
     </LinearLayout>
 
+
+    <!-- ======================================================== -->
+    <!-- OVERLAY DE TABELA / RODADA (DISPONÍVEL EM CENTRAL E FULLSCREEN) -->
+    <!-- ======================================================== -->
+    <include
+        layout="@layout/sports_standings_overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <!-- ======================================================== -->
     <!-- OVERLAY DE CARREGAMENTO (SPINNER)                        -->

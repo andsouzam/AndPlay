@@ -2724,7 +2724,14 @@ public class MainActivity extends Activity {
 
     private void setupSportsRail() {
         sportsRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
-        sportsRail.setAdapter(new SportsRailAdapter(this, allSports, ev -> playSportsEvent(ev)));
+        sportsRail.setAdapter(new SportsRailAdapter(this, allSports, ev -> {
+            if (ev != null && ev.isFinished) {
+                activeSportsEvent = ev;
+                showSportsOverlay();
+            } else {
+                playSportsEvent(ev);
+            }
+        }));
         startSportsRefreshTicker();
     }
 
@@ -2815,6 +2822,9 @@ public class MainActivity extends Activity {
         if (sportsStandingsOverlay == null) return;
         standingsOverlayVisible = false;
         sportsStandingsOverlay.setVisibility(View.GONE);
+        if (!isPlayingSportsEvent) {
+            activeSportsEvent = null;
+        }
     }
 
     private void switchStandingsTab(String tab) {
@@ -6182,6 +6192,11 @@ public class MainActivity extends Activity {
                             return true;
                         }
                     }
+                } else if (currentMode == ScreenMode.CENTRAL) {
+                    // CENÁRIO 4: TELA INICIAL (CENTRAL) - BARREIRAS LATERAIS
+                    if (checkCentralHorizontalBarriers(keyCode)) {
+                        return true;
+                    }
                 }
             }
 
@@ -6191,6 +6206,50 @@ public class MainActivity extends Activity {
         }
 
         return super.dispatchKeyEvent(event);
+    }
+
+    private boolean checkCentralHorizontalBarriers(int keyCode) {
+        if (keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) {
+            return false;
+        }
+
+        // 1. Miniplayer (pipContainer): barreira lateral esquerda
+        if (pipContainer != null && pipContainer.hasFocus()) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                return true; // Esbarra na parede esquerda
+            }
+            return false;
+        }
+
+        // 2. Cards laterais superiores (btnNavSeries e btnNavEpg): barreira lateral direita
+        if ((btnNavSeries != null && btnNavSeries.hasFocus()) || (btnNavEpg != null && btnNavEpg.hasFocus())) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                return true; // Esbarra na parede direita
+            }
+            return false;
+        }
+
+        // 3. Trilhos horizontais (Canais, Jogos/Eventos, Filmes, Séries): barreiras esquerda e direita
+        RecyclerView[] rails = new RecyclerView[] { channelsRail, sportsRail, moviesRail, seriesRail };
+        for (RecyclerView rail : rails) {
+            if (rail != null && rail.hasFocus()) {
+                View focused = rail.findFocus();
+                View itemView = focused != null ? rail.findContainingItemView(focused) : null;
+                int pos = itemView != null ? rail.getChildAdapterPosition(itemView) : -1;
+                if (pos == RecyclerView.NO_POSITION) return false;
+
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && pos == 0) {
+                    return true; // Barreira à esquerda: esbarra na parede
+                }
+                RecyclerView.Adapter<?> adapter = rail.getAdapter();
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && adapter != null && pos == adapter.getItemCount() - 1) {
+                    return true; // Barreira à direita: esbarra na parede
+                }
+                return false;
+            }
+        }
+
+        return false;
     }
 
     private boolean handleBack() {
