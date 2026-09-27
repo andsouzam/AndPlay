@@ -2653,20 +2653,13 @@ public class MainActivity extends Activity {
         }
 
         // Re-match de canal normal: se estiver em tela cheia assistindo um canal regular,
-        // re-verifica se o canal passou a transmitir (ou parou de transmitir) um evento ao vivo
+        // re-verifica se o canal tem evento ao vivo detectado
         if (!isPlayingSportsEvent && currentMode == ScreenMode.FULLSCREEN
                 && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
             Channel curCh = allChannels.get(currentChannelIdx);
-            if (curCh.id != null) {
-                SportsEvent newMatch = null;
-                for (SportsEvent fev : fresh) {
-                    if (fev.isLive && fev.candidateChannels != null
-                            && fev.candidateChannels.contains(curCh.id)) {
-                        newMatch = fev;
-                        break;
-                    }
-                }
-                activeSportsEvent = newMatch; // null se o jogo terminou ou não há mais match
+            SportsEvent detected = detectSportsEventForChannel(curCh);
+            if (detected != null) {
+                activeSportsEvent = detected;
             }
         }
 
@@ -2882,6 +2875,69 @@ public class MainActivity extends Activity {
         if (!isPlayingSportsEvent) {
             activeSportsEvent = null;
         }
+    }
+
+    private SportsEvent detectSportsEventForChannel(Channel ch) {
+        if (ch == null) return null;
+        // 1. Match direto por candidateChannels em allSports
+        if (ch.id != null && !allSports.isEmpty()) {
+            for (SportsEvent ev : allSports) {
+                if (ev.isLive && ev.candidateChannels != null && ev.candidateChannels.contains(ch.id)) {
+                    return ev;
+                }
+            }
+        }
+        // 2. Match por título do EPG atual vs eventos em allSports
+        LiveSchedule epg = EpgEngine.getLiveSchedule(ch);
+        if (epg != null && epg.nowTitle != null && !epg.nowTitle.isEmpty() && !allSports.isEmpty()) {
+            String epgLow = epg.nowTitle.toLowerCase(Locale.ROOT);
+            for (SportsEvent ev : allSports) {
+                if (!ev.isLive) continue;
+                if (ev.name != null && epgLow.contains(ev.name.toLowerCase(Locale.ROOT))) {
+                    return ev;
+                }
+                if (ev.homeName != null && ev.awayName != null) {
+                    String h = ev.homeName.toLowerCase(Locale.ROOT);
+                    String a = ev.awayName.toLowerCase(Locale.ROOT);
+                    if (epgLow.contains(h) && epgLow.contains(a)) {
+                        return ev;
+                    }
+                }
+            }
+        }
+        // 3. Fallback sintético: título do EPG no formato "Time A x Time B", "Time A X Time B", etc.
+        if (epg != null && epg.nowTitle != null) {
+            String title = epg.nowTitle;
+            String sep = null;
+            if (title.contains(" x ")) sep = " x ";
+            else if (title.contains(" X ")) sep = " X ";
+            else if (title.contains(" vs ")) sep = " vs ";
+            else if (title.contains(" VS ")) sep = " VS ";
+            else if (title.contains(" v ")) sep = " v ";
+
+            if (sep != null) {
+                SportsEvent synth = new SportsEvent();
+                synth.name = title;
+                synth.isLive = true;
+                String[] parts = title.split(sep, 2);
+                if (parts.length == 2) {
+                    synth.homeName = parts[0].trim();
+                    synth.awayName = parts[1].trim();
+                }
+                if (epg.synopsis != null && !epg.synopsis.isEmpty()) {
+                    String firstLine = epg.synopsis.split("\n")[0].trim();
+                    synth.league = firstLine.isEmpty() ? "Futebol" : firstLine;
+                } else {
+                    synth.league = "Futebol";
+                }
+                if (ch.id != null) {
+                    synth.candidateChannels = new ArrayList<>();
+                    synth.candidateChannels.add(ch.id);
+                }
+                return synth;
+            }
+        }
+        return null;
     }
 
     private void switchStandingsTab(String tab) {
@@ -3793,18 +3849,6 @@ public class MainActivity extends Activity {
         isPlayingVod = false;
         isPlayingSportsEvent = false;
         activeSportsEvent = null;
-
-        // Detectar match esportivo: verifica se este canal está transmitindo um evento ao vivo
-        // Se sim, ativa activeSportsEvent para habilitar o overlay via D-pad Direito
-        if (ch.id != null && !allSports.isEmpty()) {
-            for (SportsEvent ev : allSports) {
-                if (ev.isLive && ev.candidateChannels != null && ev.candidateChannels.contains(ch.id)) {
-                    activeSportsEvent = ev;
-                    break;
-                }
-            }
-        }
-
         try {
             SharedPreferences sp = getSharedPreferences(PREF_APP_STATE, Context.MODE_PRIVATE);
             sp.edit()
@@ -3815,6 +3859,9 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) {}
 
         LiveSchedule epg = EpgEngine.getLiveSchedule(ch);
+
+        // Detectar match esportivo via candidateChannels, título EPG ou padrão sintético
+        activeSportsEvent = detectSportsEventForChannel(ch);
 
         // Atualiza PiP
         pipChannelName.setText(String.format("%03d - %s", currentChannelIdx + 1, ch.name));
@@ -5973,34 +6020,26 @@ public class MainActivity extends Activity {
             }
 
             // CENÁRIO 0.5: OVERLAY DE TABELA / RODADA ESPORTIVA (TELA CHEIA)
+            // Fecha SOMENTE com BACK. Nenhum DPAD fecha o overlay.
             if (standingsOverlayVisible && sportsStandingsOverlay != null && sportsStandingsOverlay.getVisibility() == View.VISIBLE) {
                 if (keyCode == KeyEvent.KEYCODE_BACK) {
                     hideSportsOverlay();
                     return true;
                 }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    // D-Pad Esquerdo seleciona a aba TABELA (à esquerda). Nunca fecha o overlay nem abre gaveta.
-                    switchStandingsTab("standings");
-                    if (tabStandings != null) tabStandings.requestFocus();
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    // D-Pad Direito seleciona a aba RODADA (à direita). Nunca fecha o overlay.
-                    switchStandingsTab("round");
-                    if (tabRound != null) tabRound.requestFocus();
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    // Rola a lista ativa para cima/baixo sem interferir no vídeo de fundo
+                // UP/DOWN/LEFT/RIGHT → scrolla o conteúdo ativo
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                        || keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                     RecyclerView activeRecycler = "round".equals(standingsActiveTab) ? roundMatchesRecycler : standingsRecycler;
                     if (activeRecycler != null) {
-                        int amount = (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) ? 140 : -140;
-                        activeRecycler.smoothScrollBy(0, amount);
+                        int vert = 0, horiz = 0;
+                        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) vert = 160;
+                        else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) vert = -160;
+                        activeRecycler.smoothScrollBy(horiz, vert);
                     }
                     return true;
                 }
+                // OK/ENTER → alterna entre Tabela e Rodada
                 if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                    // Alterna entre as abas ao pressionar Enter
                     if ("standings".equals(standingsActiveTab)) {
                         switchStandingsTab("round");
                         if (tabRound != null) tabRound.requestFocus();
@@ -6010,7 +6049,7 @@ public class MainActivity extends Activity {
                     }
                     return true;
                 }
-                // Consome todas as outras teclas (números, canais, etc.) para isolamento total contra interferência no player
+                // Consome todas as outras teclas — isolamento total, nada vaza para o player/drawer
                 return true;
             }
 
@@ -6192,6 +6231,9 @@ public class MainActivity extends Activity {
                         // Funciona tanto ao entrar via playSportsEvent quanto ao navegar num
                         // canal normal que está transmitindo um evento ao vivo com match EPG
                         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                            if (activeSportsEvent == null && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
+                                activeSportsEvent = detectSportsEventForChannel(allChannels.get(currentChannelIdx));
+                            }
                             if (activeSportsEvent != null) {
                                 if (epgDrawer == null || epgDrawer.getVisibility() != View.VISIBLE) {
                                     showSportsOverlay();

@@ -5,6 +5,8 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -28,19 +30,25 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Hub de esportes — tela completa com sidebar de ligas e calendário/tabela.
+ * Hub de esportes — tela completa com sidebar lateral de ligas e painel de conteúdo.
  *
- * NAVEGAÇÃO D-PAD:
- *  ↑/↓  no conteúdo  → scrollar itens
- *  ←    no conteúdo  → vai para sub-tab anterior (ou liga anterior) 
- *  →    no conteúdo  → vai para próximo sub-tab (ou próxima liga)
- *  ↑/↓  na sidebar   → muda liga
- *  →    na sidebar   → entra no conteúdo
- *  BACK               → fecha
+ * NAVEGAÇÃO D-PAD 2-COLUNAS (LATERAL):
+ *  SIDEBAR (Esquerda):
+ *    ↑/↓   → navega entre as ligas (carrega automaticamente após pausa de 150ms)
+ *    →/OK  → entra no conteúdo (foca nas abas Calendário/Tabela)
+ *    BACK  → fecha a Activity
  *
- * MODELO DE PÁGINAS (virtual):
- *   pageIndex = leagueIdx * 2 + (isCal ? 0 : 1)
- *   ← decrece pageIndex; → incrementa pageIndex
+ *  SUB-ABAS (Topo do conteúdo):
+ *    ←     → do Calendário volta para a sidebar; da Tabela vai para Calendário
+ *    →     → do Calendário vai para Tabela
+ *    ↓     → desce para a lista de jogos ou classificação
+ *    OK    → alterna a aba
+ *
+ *  CONTEÚDO (Lista de jogos ou Classificação):
+ *    ↑/↓   → scrolla os itens
+ *    ←     → de QUALQUER item da lista, volta DIRETO para a sidebar na liga atual!
+ *    ↑     → do 1º item, sobe de volta para as sub-abas
+ *    BACK  → volta para a sidebar
  */
 public class SportsHubActivity extends Activity {
 
@@ -52,6 +60,7 @@ public class SportsHubActivity extends Activity {
     private TextView hubLeagueName;
     private ProgressBar hubProgress;
     private TextView hubEmptyMsg;
+    private LinearLayout standingsHeaderRow;
 
     // ── Adapters ─────────────────────────────────────────────────────────────
     private LeagueTabAdapter leagueTabAdapter;
@@ -60,15 +69,16 @@ public class SportsHubActivity extends Activity {
 
     // ── State ────────────────────────────────────────────────────────────────
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private Runnable pendingLeagueSelectRunnable;
+
     private List<SportsEvent> liveEvents;
-    private int  currentLeagueIdx    = 0;
+    private int currentLeagueIdx = 0;
     private boolean isScheduleTabActive = true;
 
-    // Cache por liga para não re-buscar ao navegar entre tabs
+    // Cache da liga ativa para não re-buscar ao alternar entre abas
     private final List<ApiClient.ScheduleDay>  currentSchedule  = new ArrayList<>();
     private final List<ApiClient.StandingEntry> currentStandings = new ArrayList<>();
-
-    // Índice da liga cujos dados estão em cache
     private int cachedLeagueIdx = -1;
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -85,35 +95,180 @@ public class SportsHubActivity extends Activity {
         } catch (Exception ignored) {}
 
         // Views
-        leagueTabsRv    = findViewById(R.id.leagueTabsRv);
-        hubContentRv    = findViewById(R.id.hubContentRv);
-        subTabSchedule  = findViewById(R.id.subTabSchedule);
-        subTabStandings = findViewById(R.id.subTabStandings);
-        hubLeagueName   = findViewById(R.id.hubLeagueName);
-        hubProgress     = findViewById(R.id.hubProgress);
-        hubEmptyMsg     = findViewById(R.id.hubEmptyMsg);
+        leagueTabsRv       = findViewById(R.id.leagueTabsRv);
+        hubContentRv       = findViewById(R.id.hubContentRv);
+        subTabSchedule     = findViewById(R.id.subTabSchedule);
+        subTabStandings    = findViewById(R.id.subTabStandings);
+        hubLeagueName      = findViewById(R.id.hubLeagueName);
+        hubProgress        = findViewById(R.id.hubProgress);
+        hubEmptyMsg        = findViewById(R.id.hubEmptyMsg);
+        standingsHeaderRow = findViewById(R.id.standingsHeaderRow);
 
         setupSidebar();
         setupSubTabs();
         setupContentRv();
 
         // Carregar primeira liga
-        loadLeagueData(0, true);
+        selectLeague(0, true);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (pendingLeagueSelectRunnable != null) {
+            handler.removeCallbacks(pendingLeagueSelectRunnable);
+        }
         executor.shutdownNow();
     }
 
+    /**
+     * Intercepta navegação D-pad no nível da Activity para garantir fluxo consistente
+     * entre a Sidebar vertical e o Painel de Conteúdo.
+     */
     @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            finish();
-            return true;
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            int keyCode = event.getKeyCode();
+            View focused = getCurrentFocus();
+
+            boolean inSidebar = (focused != null) && (focused == leagueTabsRv
+                    || (leagueTabsRv != null && leagueTabsRv.findContainingItemView(focused) != null));
+            boolean inSubTabs = (focused == subTabSchedule || focused == subTabStandings);
+            boolean inContent = (focused != null) && (focused == hubContentRv
+                    || (hubContentRv != null && hubContentRv.findContainingItemView(focused) != null));
+
+            // BACK: do conteúdo/abas volta para sidebar; da sidebar fecha
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                if (!inSidebar) {
+                    focusCurrentLeagueInSidebar();
+                    return true;
+                }
+                finish();
+                return true;
+            }
+
+            // ── CENÁRIO A: FOCO NA SIDEBAR ──
+            if (inSidebar) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    // Cancela debounce e seleciona imediatamente a liga focada
+                    if (pendingLeagueSelectRunnable != null) {
+                        handler.removeCallbacks(pendingLeagueSelectRunnable);
+                        pendingLeagueSelectRunnable = null;
+                    }
+                    int pos = getFocusedSidebarPosition(focused);
+                    if (pos >= 0 && pos != currentLeagueIdx) {
+                        selectLeague(pos, false);
+                    }
+                    focusActiveSubTab();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    if (pendingLeagueSelectRunnable != null) {
+                        handler.removeCallbacks(pendingLeagueSelectRunnable);
+                        pendingLeagueSelectRunnable = null;
+                    }
+                    int pos = getFocusedSidebarPosition(focused);
+                    if (pos >= 0) {
+                        selectLeague(pos, false);
+                    }
+                    focusActiveSubTab();
+                    return true;
+                }
+                return super.dispatchKeyEvent(event);
+            }
+
+            // ── CENÁRIO B: FOCO NAS SUB-ABAS (Calendário / Tabela) ──
+            if (inSubTabs) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    if (focused == subTabStandings) {
+                        switchSubTab(true);
+                        subTabSchedule.requestFocus();
+                        return true;
+                    } else {
+                        focusCurrentLeagueInSidebar();
+                        return true;
+                    }
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    if (focused == subTabSchedule) {
+                        switchSubTab(false);
+                        subTabStandings.requestFocus();
+                        return true;
+                    }
+                    return true; // Parede direita
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    focusFirstContentItem();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    switchSubTab(focused == subTabSchedule);
+                    return true;
+                }
+                return super.dispatchKeyEvent(event);
+            }
+
+            // ── CENÁRIO C: FOCO NO CONTEÚDO (Lista de Jogos / Tabela) ──
+            if (inContent) {
+                // DPAD_LEFT: de qualquer posição da lista, volta direto para a sidebar!
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    focusCurrentLeagueInSidebar();
+                    return true;
+                }
+                // DPAD_RIGHT: consome para não perder foco
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    return true;
+                }
+                // DPAD_UP: se estiver no topo da lista, sobe para as sub-abas
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    LinearLayoutManager lm = (LinearLayoutManager) hubContentRv.getLayoutManager();
+                    if (lm != null && lm.findFirstCompletelyVisibleItemPosition() == 0) {
+                        focusActiveSubTab();
+                        return true;
+                    }
+                }
+                return super.dispatchKeyEvent(event);
+            }
         }
-        return super.onKeyDown(keyCode, event);
+        return super.dispatchKeyEvent(event);
+    }
+
+    private int getFocusedSidebarPosition(View focused) {
+        if (leagueTabsRv == null || focused == null) return -1;
+        View child = leagueTabsRv.findContainingItemView(focused);
+        if (child != null) {
+            return leagueTabsRv.getChildAdapterPosition(child);
+        }
+        return -1;
+    }
+
+    private void focusActiveSubTab() {
+        if (isScheduleTabActive && subTabSchedule != null) {
+            subTabSchedule.requestFocus();
+        } else if (subTabStandings != null) {
+            subTabStandings.requestFocus();
+        }
+    }
+
+    private void focusFirstContentItem() {
+        if (hubContentRv != null && hubContentRv.getChildCount() > 0) {
+            hubContentRv.requestFocus();
+            View first = hubContentRv.getChildAt(0);
+            if (first != null) first.requestFocus();
+        }
+    }
+
+    private void focusCurrentLeagueInSidebar() {
+        if (leagueTabsRv == null) return;
+        leagueTabsRv.scrollToPosition(currentLeagueIdx);
+        leagueTabsRv.postDelayed(() -> {
+            RecyclerView.ViewHolder vh = leagueTabsRv.findViewHolderForAdapterPosition(currentLeagueIdx);
+            if (vh != null && vh.itemView != null) {
+                vh.itemView.requestFocus();
+            } else {
+                leagueTabsRv.requestFocus();
+            }
+        }, 50);
     }
 
     // ── Setup ────────────────────────────────────────────────────────────────
@@ -122,66 +277,11 @@ public class SportsHubActivity extends Activity {
         leagueTabsRv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
         leagueTabAdapter = new LeagueTabAdapter();
         leagueTabsRv.setAdapter(leagueTabAdapter);
-
-        // D-pad DIREITA na sidebar → foca conteúdo
-        leagueTabsRv.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                hubContentRv.requestFocus();
-                return true;
-            }
-            return false;
-        });
     }
 
     private void setupSubTabs() {
-        subTabSchedule.setOnClickListener(v -> switchToPage(currentLeagueIdx, true));
-        subTabStandings.setOnClickListener(v -> switchToPage(currentLeagueIdx, false));
-
-        subTabSchedule.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() != KeyEvent.ACTION_UP) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                switchToPage(currentLeagueIdx, true);
-                return true;
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                switchToPage(currentLeagueIdx, false);
-                subTabStandings.requestFocus();
-                return true;
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                leagueTabsRv.requestFocus();
-                return true;
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                hubContentRv.requestFocus();
-                return true;
-            }
-            return false;
-        });
-
-        subTabStandings.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() != KeyEvent.ACTION_UP) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                switchToPage(currentLeagueIdx, false);
-                return true;
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                // Avançar para próxima liga
-                navigateNextPage();
-                return true;
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                switchToPage(currentLeagueIdx, true);
-                subTabSchedule.requestFocus();
-                return true;
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                hubContentRv.requestFocus();
-                return true;
-            }
-            return false;
-        });
-
+        subTabSchedule.setOnClickListener(v -> switchSubTab(true));
+        subTabStandings.setOnClickListener(v -> switchSubTab(false));
         subTabSchedule.setOnFocusChangeListener((v, f) -> animateTab(v, f));
         subTabStandings.setOnFocusChangeListener((v, f) -> animateTab(v, f));
     }
@@ -191,83 +291,37 @@ public class SportsHubActivity extends Activity {
         scheduleAdapter  = new ScheduleAdapter();
         standingsAdapter = new StandingsAdapter();
         hubContentRv.setAdapter(scheduleAdapter);
-
-        // D-pad ESQUERDA/DIREITA no conteúdo → navega entre páginas
-        hubContentRv.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                navigatePrevPage();
-                return true;
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                navigateNextPage();
-                return true;
-            }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                // Se no primeiro item, sobe para sub-tabs
-                LinearLayoutManager lm = (LinearLayoutManager) hubContentRv.getLayoutManager();
-                if (lm != null && lm.findFirstCompletelyVisibleItemPosition() == 0) {
-                    subTabSchedule.requestFocus();
-                    return true;
-                }
-            }
-            return false;
-        });
     }
 
-    // ── Navegação de páginas ─────────────────────────────────────────────────
+    // ── Alternância de Liga e Sub-Abas ──────────────────────────────────────
 
-    /**
-     * Mapa virtual de páginas:
-     *   pageIndex = leagueIdx * 2 + (isCal ? 0 : 1)
-     */
-    private void navigateNextPage() {
-        int pageIdx = currentLeagueIdx * 2 + (isScheduleTabActive ? 0 : 1);
-        int maxPage = ApiClient.HUB_LEAGUES.length * 2 - 1;
-        if (pageIdx >= maxPage) return;
-        pageIdx++;
-        int newLeague = pageIdx / 2;
-        boolean newCal = (pageIdx % 2 == 0);
-        switchToPage(newLeague, newCal);
-    }
-
-    private void navigatePrevPage() {
-        int pageIdx = currentLeagueIdx * 2 + (isScheduleTabActive ? 0 : 1);
-        if (pageIdx <= 0) return;
-        pageIdx--;
-        int newLeague = pageIdx / 2;
-        boolean newCal = (pageIdx % 2 == 0);
-        switchToPage(newLeague, newCal);
-    }
-
-    /**
-     * Troca para a página especificada: liga + tab.
-     * Se a liga mudou → busca dados novos.
-     * Se só o tab mudou → troca o adapter.
-     */
-    private void switchToPage(int leagueIdx, boolean schedulTab) {
+    private void selectLeague(int leagueIdx, boolean forceReload) {
         boolean leagueChanged = (leagueIdx != currentLeagueIdx);
-        currentLeagueIdx    = leagueIdx;
-        isScheduleTabActive = schedulTab;
+        currentLeagueIdx = leagueIdx;
 
-        // Atualiza sidebar highlight
+        // Atualiza destaque na sidebar
         leagueTabAdapter.notifyDataSetChanged();
-        // Scroll sidebar para item visível
         leagueTabsRv.scrollToPosition(currentLeagueIdx);
 
         updateSubTabsUI();
         updateLeagueNameHeader();
 
-        if (leagueChanged || cachedLeagueIdx != leagueIdx) {
-            loadLeagueData(leagueIdx, schedulTab);
+        if (forceReload || leagueChanged || cachedLeagueIdx != leagueIdx) {
+            loadLeagueData(leagueIdx);
         } else {
-            // Só trocar adapter sem re-buscar
             applyCurrentTab();
         }
     }
 
+    private void switchSubTab(boolean schedule) {
+        if (isScheduleTabActive == schedule) return;
+        isScheduleTabActive = schedule;
+        updateSubTabsUI();
+        applyCurrentTab();
+    }
+
     private void updateLeagueNameHeader() {
-        if (currentLeagueIdx < ApiClient.HUB_LEAGUES.length) {
+        if (currentLeagueIdx >= 0 && currentLeagueIdx < ApiClient.HUB_LEAGUES.length) {
             String[] l = ApiClient.HUB_LEAGUES[currentLeagueIdx];
             hubLeagueName.setText(l[2] + "  " + l[1]);
         }
@@ -275,19 +329,19 @@ public class SportsHubActivity extends Activity {
 
     // ── Carregamento de dados ────────────────────────────────────────────────
 
-    private void loadLeagueData(int leagueIdx, boolean scheduleTab) {
+    private void loadLeagueData(int leagueIdx) {
         String espnSlug = ApiClient.HUB_LEAGUES[leagueIdx][0];
 
         hubProgress.setVisibility(View.VISIBLE);
         hubContentRv.setVisibility(View.GONE);
         hubEmptyMsg.setVisibility(View.GONE);
+        if (standingsHeaderRow != null) standingsHeaderRow.setVisibility(View.GONE);
 
         executor.execute(() -> {
             List<ApiClient.ScheduleDay>   schedule  = ApiClient.getFullLeagueSchedule(espnSlug, liveEvents);
             List<ApiClient.StandingEntry> standings = ApiClient.getStandingsBySlug(espnSlug);
 
             runOnUiThread(() -> {
-                // Verifica se ainda é a liga que o user quer
                 if (currentLeagueIdx != leagueIdx) return;
 
                 cachedLeagueIdx = leagueIdx;
@@ -305,14 +359,19 @@ public class SportsHubActivity extends Activity {
 
     private void applyCurrentTab() {
         if (isScheduleTabActive) {
+            if (standingsHeaderRow != null) standingsHeaderRow.setVisibility(View.GONE);
             scheduleAdapter.updateData(currentSchedule);
             hubContentRv.setAdapter(scheduleAdapter);
             updateEmptyState(currentSchedule.isEmpty());
             scrollToToday();
         } else {
+            boolean hasStandings = !currentStandings.isEmpty();
+            if (standingsHeaderRow != null) {
+                standingsHeaderRow.setVisibility(hasStandings ? View.VISIBLE : View.GONE);
+            }
             hubContentRv.setAdapter(standingsAdapter);
             standingsAdapter.notifyDataSetChanged();
-            updateEmptyState(currentStandings.isEmpty());
+            updateEmptyState(!hasStandings);
             hubContentRv.scrollToPosition(0);
         }
     }
@@ -330,7 +389,6 @@ public class SportsHubActivity extends Activity {
     // ── UI helpers ───────────────────────────────────────────────────────────
 
     private void updateSubTabsUI() {
-        // Aba ativa: cor azul, underline visual via background
         int activeColor   = Color.parseColor("#4FC3F7");
         int inactiveColor = Color.parseColor("#70FFFFFF");
         int activeBg      = Color.parseColor("#1A4FC3F7");
@@ -346,7 +404,7 @@ public class SportsHubActivity extends Activity {
     private void animateTab(View v, boolean focus) {
         v.animate().scaleX(focus ? 1.06f : 1f).scaleY(focus ? 1.06f : 1f).setDuration(100).start();
         if (focus) v.setBackgroundColor(Color.parseColor("#22FFFFFF"));
-        else       updateSubTabsUI(); // restaura cor de acordo com estado ativo
+        else       updateSubTabsUI();
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -361,20 +419,34 @@ public class SportsHubActivity extends Activity {
                 super(v);
                 tv = (TextView) v;
                 v.setFocusable(true);
-                v.setOnClickListener(v1 -> switchToPage(getAdapterPosition(), true));
-                v.setOnKeyListener((v12, keyCode, event) -> {
-                    if (event.getAction() == KeyEvent.ACTION_UP
-                            && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
-                        switchToPage(getAdapterPosition(), true);
-                        return true;
-                    }
-                    return false;
+                v.setOnClickListener(v1 -> {
+                    selectLeague(getAdapterPosition(), false);
+                    focusActiveSubTab();
                 });
                 v.setOnFocusChangeListener((v13, hasFocus) -> {
                     v13.animate().scaleX(hasFocus ? 1.04f : 1f).scaleY(hasFocus ? 1.04f : 1f).setDuration(100).start();
-                    v13.setBackgroundColor(hasFocus ? Color.parseColor("#1A4FC3F7") : Color.TRANSPARENT);
+                    if (hasFocus) {
+                        v13.setBackgroundColor(Color.parseColor("#284FC3F7"));
+                        scheduleLeagueSelection(getAdapterPosition());
+                    } else {
+                        boolean active = (getAdapterPosition() == currentLeagueIdx);
+                        v13.setBackgroundColor(active ? Color.parseColor("#1E4FC3F7") : Color.TRANSPARENT);
+                    }
                 });
             }
+        }
+
+        private void scheduleLeagueSelection(int pos) {
+            if (pos < 0 || pos >= ApiClient.HUB_LEAGUES.length) return;
+            if (pendingLeagueSelectRunnable != null) {
+                handler.removeCallbacks(pendingLeagueSelectRunnable);
+            }
+            pendingLeagueSelectRunnable = () -> {
+                if (currentLeagueIdx != pos) {
+                    selectLeague(pos, false);
+                }
+            };
+            handler.postDelayed(pendingLeagueSelectRunnable, 180);
         }
 
         @NonNull @Override
@@ -391,7 +463,6 @@ public class SportsHubActivity extends Activity {
             holder.tv.setText(l[2] + " " + l[1]);
 
             if (active) {
-                // Item selecionado: fundo azul suave + texto mais brilhante + traço à esquerda
                 holder.tv.setBackgroundColor(Color.parseColor("#1E4FC3F7"));
                 holder.tv.setTextColor(Color.parseColor("#4FC3F7"));
                 holder.tv.setTypeface(null, Typeface.BOLD);
@@ -438,7 +509,7 @@ public class SportsHubActivity extends Activity {
                     if (((ApiClient.ScheduleDay) items.get(i)).isToday) return i;
                 }
             }
-            return 0; // fallback: início
+            return 0;
         }
 
         @Override public int getItemViewType(int pos) {
@@ -475,7 +546,6 @@ public class SportsHubActivity extends Activity {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             ll.setPadding(px(14), px(7), px(14), px(7));
 
-            // Traço decorativo
             View dash = new View(parent.getContext());
             dash.setLayoutParams(new LinearLayout.LayoutParams(px(3), px(14)));
             ((LinearLayout.LayoutParams) dash.getLayoutParams()).setMarginEnd(px(8));
@@ -504,7 +574,6 @@ public class SportsHubActivity extends Activity {
                 String label = day.dateLabel;
                 if (day.isToday) label = "● " + label.toUpperCase();
                 tv.setText(label.toUpperCase());
-                // Fundo levemente mais forte para o dia de hoje
                 itemView.setBackgroundColor(day.isToday
                         ? Color.parseColor("#0E4FC3F7")
                         : Color.parseColor("#06FFFFFF"));
@@ -521,14 +590,12 @@ public class SportsHubActivity extends Activity {
             root.setFocusable(true);
             root.setFocusableInTouchMode(true);
 
-            // Linha superior: [home] [score box] [away]
             LinearLayout row = new LinearLayout(parent.getContext());
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setLayoutParams(new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-            // Ícone transmissão (oculto por default)
             TextView tvIcon = new TextView(parent.getContext());
             tvIcon.setTextSize(11);
             tvIcon.setTextColor(Color.parseColor("#4FC3F7"));
@@ -539,7 +606,6 @@ public class SportsHubActivity extends Activity {
             lpIcon.setMarginEnd(px(4));
             tvIcon.setLayoutParams(lpIcon);
 
-            // Mandante
             TextView home = new TextView(parent.getContext());
             home.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
             home.setGravity(Gravity.END);
@@ -549,7 +615,6 @@ public class SportsHubActivity extends Activity {
             home.setEllipsize(android.text.TextUtils.TruncateAt.END);
             home.setTag("home");
 
-            // Box do placar
             TextView score = new TextView(parent.getContext());
             LinearLayout.LayoutParams lpScore = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -563,7 +628,6 @@ public class SportsHubActivity extends Activity {
             score.setPadding(px(6), px(2), px(6), px(2));
             score.setTag("score");
 
-            // Visitante
             TextView away = new TextView(parent.getContext());
             away.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
             away.setGravity(Gravity.START);
@@ -578,7 +642,6 @@ public class SportsHubActivity extends Activity {
             row.addView(score);
             row.addView(away);
 
-            // Status/horário (centralizado)
             TextView status = new TextView(parent.getContext());
             status.setLayoutParams(new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -591,7 +654,6 @@ public class SportsHubActivity extends Activity {
             root.addView(row);
             root.addView(status);
 
-            // Focus visual
             root.setOnFocusChangeListener((v, f) -> {
                 v.setBackgroundColor(f ? Color.parseColor("#22FFFFFF") : Color.TRANSPARENT);
                 v.animate().scaleX(f ? 1.01f : 1f).scaleY(f ? 1.01f : 1f).setDuration(80).start();
@@ -616,7 +678,6 @@ public class SportsHubActivity extends Activity {
                 score.setText(rm.score != null ? rm.score : "vs");
                 status.setText(rm.statusLabel != null ? rm.statusLabel : "");
 
-                // Cor do score de acordo com estado
                 if ("in".equalsIgnoreCase(rm.state)) {
                     score.setTextColor(Color.parseColor("#00E676"));
                     score.setBackgroundColor(Color.parseColor("#1200E676"));
@@ -628,7 +689,6 @@ public class SportsHubActivity extends Activity {
                     score.setBackgroundColor(Color.parseColor("#0AFFC107"));
                 }
 
-                // Ícone de transmissão
                 if (rm.channelId != null && !rm.channelId.isEmpty()) {
                     icon.setText("📺");
                     icon.setVisibility(View.VISIBLE);
@@ -636,7 +696,6 @@ public class SportsHubActivity extends Activity {
                     icon.setVisibility(View.GONE);
                 }
 
-                // Click → lançar canal (só se tiver channelId)
                 itemView.setOnClickListener(v -> handleMatchClick(rm));
                 itemView.setOnKeyListener((v, keyCode, event) -> {
                     if (event.getAction() == KeyEvent.ACTION_UP
@@ -687,7 +746,6 @@ public class SportsHubActivity extends Activity {
             holder.sg.setText(sgnStr(e.goalDiff));
             holder.gp.setText(String.valueOf(e.goalsFor));
 
-            // Destaque para time assistido
             holder.itemView.setBackgroundColor(e.isHighlighted
                     ? Color.parseColor("#1A4FC3F7") : Color.TRANSPARENT);
         }
@@ -716,7 +774,6 @@ public class SportsHubActivity extends Activity {
             ll.addView(col(parent, 28, false, "#AAAAAA",   11)); // sg
             ll.addView(col(parent, 24, false, "#AAAAAA",   11)); // gp
 
-            // pts bold
             ((TextView) ll.getChildAt(2)).setTypeface(null, Typeface.BOLD);
 
             return ll;
