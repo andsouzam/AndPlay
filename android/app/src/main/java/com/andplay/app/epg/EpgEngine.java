@@ -11,6 +11,10 @@ import com.andplay.app.api.ApiClient;
 import com.andplay.app.model.Channel;
 import com.andplay.app.model.LiveSchedule;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -192,6 +196,10 @@ public class EpgEngine {
         REGIONAL_ALIASES.put("redetv", Arrays.asList("redetv", "redetvsp", "redetvrj"));
         REGIONAL_ALIASES.put("redevida", Arrays.asList("redevida"));
         REGIONAL_ALIASES.put("redegospel", Arrays.asList("redegospel"));
+
+        // Xsports (Canal de esportes com API oficial TVMap)
+        REGIONAL_ALIASES.put("xsports", Arrays.asList("xsports", "xsport", "x-sports", "canalisports", "xsportsbrasil"));
+        REGIONAL_ALIASES.put("xsport", Arrays.asList("xsports", "xsport", "x-sports", "canalisports", "xsportsbrasil"));
     }
 
     private static final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -218,6 +226,8 @@ public class EpgEngine {
 
         if (now - lastSync > 2 * 60 * 60 * 1000 || liveEpgMap.isEmpty()) {
             syncFromNetwork(appCtx);
+        } else if (!liveEpgMap.containsKey("xsports") || liveEpgMap.get("xsports").isEmpty()) {
+            executor.execute(EpgEngine::fetchXsportsEpg);
         }
     }
 
@@ -281,6 +291,14 @@ public class EpgEngine {
                             try { is.close(); } catch (Exception ignored) {}
                         }
                     }
+                }
+
+                // Sincroniza também a programação oficial do canal Xsports via TVMap
+                try {
+                    fetchXsportsEpg();
+                    downloaded = true;
+                } catch (Exception e) {
+                    Log.w(TAG, "Falha ao sincronizar EPG Xsports: " + e.getMessage());
                 }
 
                 if (downloaded) {
@@ -410,6 +428,134 @@ public class EpgEngine {
         return 0;
     }
 
+    public static long parseIsoDate(String dateStr) {
+        if (dateStr == null || dateStr.trim().isEmpty()) return 0;
+        try {
+            // Android 24+ e Java moderno suportam 'XXX' (ex: -03:00)
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US);
+            Date d = sdf.parse(dateStr.trim());
+            if (d != null) return d.getTime();
+        } catch (Exception e) {
+            try {
+                String clean = dateStr.trim();
+                if (clean.length() >= 25 && clean.charAt(clean.length() - 3) == ':') {
+                    clean = clean.substring(0, clean.length() - 3) + clean.substring(clean.length() - 2);
+                }
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US);
+                Date d = sdf.parse(clean);
+                if (d != null) return d.getTime();
+            } catch (Exception e2) {
+                try {
+                    String noTz = dateStr.length() >= 19 ? dateStr.substring(0, 19) : dateStr;
+                    SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US);
+                    sdf.setTimeZone(TimeZone.getTimeZone("America/Sao_Paulo"));
+                    Date d = sdf.parse(noTz);
+                    if (d != null) return d.getTime();
+                } catch (Exception ignored) {}
+            }
+        }
+        return 0;
+    }
+
+    public static synchronized void fetchXsportsEpg() {
+        try {
+            long now = System.currentTimeMillis();
+            List<ProgramInfo> list = new ArrayList<>();
+            String[] urls = {
+                    "https://tvmap.com.br/api/Xsports",
+                    "https://tvmap.com.br/api/Xsports/Amanha"
+            };
+
+            for (String u : urls) {
+                HttpURLConnection conn = null;
+                try {
+                    conn = (HttpURLConnection) new URL(u).openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setConnectTimeout(8000);
+                    conn.setReadTimeout(12000);
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10; Mobile)");
+                    conn.setRequestProperty("Accept", "application/json");
+
+                    if (conn.getResponseCode() == 200) {
+                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                            JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
+                            if (root.has("exhibitions") && root.get("exhibitions").isJsonArray()) {
+                                JsonArray exhibitions = root.getAsJsonArray("exhibitions");
+                                for (int i = 0; i < exhibitions.size(); i++) {
+                                    JsonElement el = exhibitions.get(i);
+                                    if (!el.isJsonObject()) continue;
+                                    JsonObject obj = el.getAsJsonObject();
+
+                                    String title = obj.has("title") && !obj.get("title").isJsonNull() ? obj.get("title").getAsString() : "";
+                                    String startStr = obj.has("startDate") && !obj.get("startDate").isJsonNull() ? obj.get("startDate").getAsString() : "";
+                                    String endStr = obj.has("endDate") && !obj.get("endDate").isJsonNull() ? obj.get("endDate").getAsString() : "";
+                                    String desc = obj.has("upperDescription") && !obj.get("upperDescription").isJsonNull() ? obj.get("upperDescription").getAsString() : "";
+
+                                    if (title.isEmpty() || startStr.isEmpty() || endStr.isEmpty()) continue;
+
+                                    long startMs = parseIsoDate(startStr);
+                                    long stopMs = parseIsoDate(endStr);
+                                    if (startMs <= 0 || stopMs <= 0 || stopMs <= startMs) continue;
+
+                                    // Limpeza do título (remove duplicação redundante "A : A")
+                                    if (title.contains(" : ")) {
+                                        String[] parts = title.split(" : ");
+                                        if (parts.length >= 2 && parts[0].contains(parts[1].trim())) {
+                                            title = parts[0].trim();
+                                        }
+                                    }
+                                    title = ApiClient.sanitizeText(title);
+
+                                    if (desc.contains("Não há sinopse disponível") || desc.trim().isEmpty()) {
+                                        desc = "Transmissão oficial ao vivo do canal Xsports.";
+                                    } else {
+                                        desc = ApiClient.sanitizeText(desc);
+                                    }
+
+                                    // Mantém atrações de 3h atrás até 36h no futuro
+                                    if (stopMs >= (now - 3 * 3600000L) && startMs <= (now + 36 * 3600000L)) {
+                                        list.add(new ProgramInfo(title, desc, startMs, stopMs));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "Falha ao buscar EPG TVMap Xsports (" + u + "): " + e.getMessage());
+                } finally {
+                    if (conn != null) {
+                        try { conn.disconnect(); } catch (Exception ignored) {}
+                    }
+                }
+            }
+
+            if (!list.isEmpty()) {
+                Collections.sort(list, (a, b) -> Long.compare(a.startMs, b.startMs));
+                // Remove duplicatas se houver sobreposição entre hoje e amanhã
+                List<ProgramInfo> deduplicated = new ArrayList<>();
+                for (ProgramInfo p : list) {
+                    boolean exists = false;
+                    for (ProgramInfo existing : deduplicated) {
+                        if (existing.startMs == p.startMs && existing.stopMs == p.stopMs) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (!exists) deduplicated.add(p);
+                }
+
+                // Registra sob todos os aliases conhecidos do canal
+                String[] keys = {"xsports", "xsport", "canalisports", "xsportsbrasil"};
+                for (String k : keys) {
+                    liveEpgMap.put(k, deduplicated);
+                }
+                Log.i(TAG, "EPG TVMap do canal Xsports atualizado com sucesso: " + deduplicated.size() + " atrações!");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Erro ao processar EPG TVMap Xsports: " + e.getMessage());
+        }
+    }
+
     public static String normalizeKey(String raw) {
         if (raw == null) return "";
         String s = raw.toLowerCase(Locale.ROOT);
@@ -470,6 +616,14 @@ public class EpgEngine {
         List<String> candidates = getSearchAliases(ch);
         List<ProgramInfo> progs = null;
 
+        // Dispara fetch do Xsports se aplicável e ainda não estiver no cache
+        for (String cand : candidates) {
+            if (cand.contains("xsport") && (!liveEpgMap.containsKey("xsports") || liveEpgMap.get("xsports").isEmpty())) {
+                executor.execute(EpgEngine::fetchXsportsEpg);
+                break;
+            }
+        }
+
         // 1. Busca exata por candidato na ordem de prioridade (afiliada local -> rede nacional)
         for (String cand : candidates) {
             if (cand.isEmpty()) continue;
@@ -477,15 +631,15 @@ public class EpgEngine {
             if (progs != null && !progs.isEmpty()) break;
         }
 
-        // 2. Se não encontrou exato, busca parcial por candidato na ordem de prioridade
+        // 2. Se não encontrou exato, busca parcial estrita por candidato na ordem de prioridade
         if (progs == null || progs.isEmpty()) {
             for (String cand : candidates) {
                 if (cand.length() < 3) continue;
                 for (Map.Entry<String, List<ProgramInfo>> entry : liveEpgMap.entrySet()) {
                     String k = entry.getKey();
-                    if (k.equals(cand) || k.startsWith(cand) || cand.startsWith(k)
-                            || (k.length() >= 4 && cand.contains(k))
-                            || (cand.length() >= 4 && k.contains(cand))) {
+                    if (k.equals(cand)
+                            || (cand.length() >= 5 && k.startsWith(cand))
+                            || (k.length() >= 5 && cand.startsWith(k))) {
                         progs = entry.getValue();
                         break;
                     }
@@ -689,6 +843,14 @@ public class EpgEngine {
         List<String> candidates = getSearchAliases(ch);
         List<ProgramInfo> progs = null;
 
+        // Dispara fetch do Xsports se aplicável e ainda não estiver no cache
+        for (String cand : candidates) {
+            if (cand.contains("xsport") && (!liveEpgMap.containsKey("xsports") || liveEpgMap.get("xsports").isEmpty())) {
+                executor.execute(EpgEngine::fetchXsportsEpg);
+                break;
+            }
+        }
+
         for (String cand : candidates) {
             if (cand.isEmpty()) continue;
             progs = liveEpgMap.get(cand);
@@ -700,9 +862,9 @@ public class EpgEngine {
                 if (cand.length() < 3) continue;
                 for (Map.Entry<String, List<ProgramInfo>> entry : liveEpgMap.entrySet()) {
                     String k = entry.getKey();
-                    if (k.equals(cand) || k.startsWith(cand) || cand.startsWith(k)
-                            || (k.length() >= 4 && cand.contains(k))
-                            || (cand.length() >= 4 && k.contains(cand))) {
+                    if (k.equals(cand)
+                            || (cand.length() >= 5 && k.startsWith(cand))
+                            || (k.length() >= 5 && cand.startsWith(k))) {
                         progs = entry.getValue();
                         break;
                     }
@@ -808,6 +970,9 @@ public class EpgEngine {
                     liveEpgMap.putAll(map);
                     Log.i(TAG, "Cache local do EPG carregado: " + liveEpgMap.size() + " canais.");
                 }
+            }
+            if (!liveEpgMap.containsKey("xsports") || liveEpgMap.get("xsports").isEmpty()) {
+                executor.execute(EpgEngine::fetchXsportsEpg);
             }
         } catch (Exception e) {
             Log.w(TAG, "Erro ao ler cache EPG local: " + e.getMessage());

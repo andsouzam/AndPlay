@@ -2223,13 +2223,13 @@ public class ApiClient {
     public static boolean isRealTvChannel(String name) {
         if (name == null || name.trim().isEmpty()) return false;
         String n = name.toLowerCase(Locale.ROOT).trim();
-        if (n.contains("xsport") || n.contains("opcao") || n.contains("opção")
+        if (n.contains("opcao") || n.contains("opção")
                 || n.contains("embed") || n.contains("stream") || n.contains("server")
                 || n.contains("web") || n.contains("player")) {
             return false;
         }
         return n.contains("sportv") || n.contains("premiere") || n.contains("espn")
-                || n.contains("globo") || n.contains("band") || n.contains("sbt")
+                || n.contains("xsport") || n.contains("globo") || n.contains("band") || n.contains("sbt")
                 || n.contains("record") || n.contains("cazé") || n.contains("caze")
                 || n.contains("tnt") || n.contains("combate") || n.contains("max")
                 || n.contains("prime") || n.contains("paramount") || n.contains("dazn")
@@ -2263,11 +2263,7 @@ public class ApiClient {
         }
 
         if (!webOptions.isEmpty()) {
-            String first = webOptions.get(0);
-            if (first.toLowerCase(Locale.ROOT).contains("xsport")) {
-                return "Transmissão Web";
-            }
-            return first;
+            return webOptions.get(0);
         }
 
         return "AO VIVO";

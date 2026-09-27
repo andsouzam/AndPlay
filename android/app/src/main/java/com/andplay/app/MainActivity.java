@@ -4401,10 +4401,18 @@ public class MainActivity extends Activity {
             }
         }
 
-        // 3. Se não houver confirmação no EPG, mas o primeiro canal candidato existir na grade, sintoniza direto
+        // 3. Se não houver confirmação única no EPG, verifica todos os canais candidatos disponíveis na grade
         if (ev.candidateChannels != null && !ev.candidateChannels.isEmpty()) {
-            Channel candCh = findChannelByCandidate(ev.candidateChannels.get(0));
-            if (candCh != null) {
+            List<Channel> matchedChannels = new ArrayList<>();
+            for (String candName : ev.candidateChannels) {
+                Channel candCh = findChannelByCandidate(candName);
+                if (candCh != null && !matchedChannels.contains(candCh)) {
+                    matchedChannels.add(candCh);
+                }
+            }
+
+            if (matchedChannels.size() == 1) {
+                Channel candCh = matchedChannels.get(0);
                 int chIdx = allChannels.indexOf(candCh);
                 if (chIdx >= 0) {
                     Toast.makeText(this, "📺 Sintonizando " + candCh.name + " para a partida", Toast.LENGTH_SHORT).show();
@@ -4412,6 +4420,28 @@ public class MainActivity extends Activity {
                     setScreenMode(ScreenMode.FULLSCREEN);
                     return;
                 }
+            } else if (matchedChannels.size() > 1) {
+                String[] names = new String[matchedChannels.size()];
+                for (int i = 0; i < matchedChannels.size(); i++) {
+                    names[i] = "📺 " + matchedChannels.get(i).name;
+                }
+                AlertDialog dialog = createThemedDialogBuilder()
+                        .setTitle("⚽ " + ev.getDisplayName() + "\nEscolha o canal:")
+                        .setItems(names, (d, which) -> {
+                            d.dismiss();
+                            Channel chosen = matchedChannels.get(which);
+                            int chIdx = allChannels.indexOf(chosen);
+                            if (chIdx >= 0) {
+                                Toast.makeText(this, "📺 Sintonizando " + chosen.name, Toast.LENGTH_SHORT).show();
+                                tuneChannel(chIdx, true);
+                                setScreenMode(ScreenMode.FULLSCREEN);
+                            }
+                        })
+                        .setNegativeButton("Cancelar", null)
+                        .create();
+                styleDialogButtons(dialog);
+                dialog.show();
+                return;
             }
         }
 
