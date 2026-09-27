@@ -2895,26 +2895,33 @@ public class MainActivity extends Activity {
             h.pos.setTextColor(e.isHighlighted ? 0xFFFFD700 : 0xFF888888);
             h.team.setText(e.teamAbbr != null && !e.teamAbbr.isEmpty() ? e.teamAbbr : e.teamName);
             h.team.setTextColor(e.isHighlighted ? 0xFFFFD700 : 0xFFFFFFFF);
-            h.played.setText(String.valueOf(e.played));
             h.pts.setText(String.valueOf(e.points));
-            h.pts.setTextColor(e.isHighlighted ? 0xFFFFD700 : 0xFFFFFFFF);
+            h.pts.setTextColor(0xFFFFD700);
+            h.played.setText(String.valueOf(e.played));
+            h.played.setTextColor(e.isHighlighted ? 0xFFFFD700 : 0xFF888888);
+            h.wins.setText(String.valueOf(e.wins));
+            h.wins.setTextColor(e.isHighlighted ? 0xFFFFD700 : 0xFFFFFFFF);
             h.sg.setText(sgStr);
+            h.sg.setTextColor(e.isHighlighted ? 0xFFFFD700 : 0xFF888888);
             h.gf.setText(String.valueOf(e.goalsFor));
+            h.gf.setTextColor(e.isHighlighted ? 0xFFFFD700 : 0xFF888888);
         }
 
         @Override public int getItemCount() { return items.size(); }
 
         class VH extends RecyclerView.ViewHolder {
             android.widget.LinearLayout row;
-            android.widget.TextView pos, team, played, pts, sg, gf;
+            android.widget.TextView pos, team, pts, played, wins, sg, gf;
             VH(android.widget.LinearLayout v) {
                 super(v);
                 row = v;
-                pos   = addCell(v, dp(28), android.view.Gravity.CENTER, 0xFF888888, 10, true);
-                team  = addCell(v, 0,       android.view.Gravity.START,  0xFFFFFFFF, 11, false);
+                pos    = addCell(v, dp(24), android.view.Gravity.CENTER, 0xFF888888, 10, true);
+                team   = addCell(v, 0,       android.view.Gravity.START,  0xFFFFFFFF, 11, false);
                 ((android.widget.LinearLayout.LayoutParams) team.getLayoutParams()).weight = 1;
+                ((android.widget.LinearLayout.LayoutParams) team.getLayoutParams()).setMarginStart(dp(4));
+                pts    = addCell(v, dp(28), android.view.Gravity.CENTER, 0xFFFFD700, 10, true);
                 played = addCell(v, dp(24), android.view.Gravity.CENTER, 0xFF888888, 10, false);
-                pts    = addCell(v, dp(28), android.view.Gravity.CENTER, 0xFFFFFFFF, 10, true);
+                wins   = addCell(v, dp(24), android.view.Gravity.CENTER, 0xFFFFFFFF, 10, false);
                 sg     = addCell(v, dp(24), android.view.Gravity.CENTER, 0xFF888888, 10, false);
                 gf     = addCell(v, dp(24), android.view.Gravity.CENTER, 0xFF888888, 10, false);
             }

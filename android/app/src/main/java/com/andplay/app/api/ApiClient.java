@@ -1494,13 +1494,16 @@ public class ApiClient {
                     result.add(se);
                 }
 
-                // Ordena por posição / pontos / saldo
+                // Ordena por posição / pontos / vitórias / saldo / gols pró
                 Collections.sort(result, (a, b) -> {
                     if (a.position > 0 && b.position > 0 && a.position != b.position) {
                         return Integer.compare(a.position, b.position);
                     }
                     if (a.points != b.points) {
                         return Integer.compare(b.points, a.points);
+                    }
+                    if (a.wins != b.wins) {
+                        return Integer.compare(b.wins, a.wins);
                     }
                     if (a.goalDiff != b.goalDiff) {
                         return Integer.compare(b.goalDiff, a.goalDiff);
