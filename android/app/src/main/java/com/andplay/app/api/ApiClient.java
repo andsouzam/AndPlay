@@ -33,6 +33,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.OkHttpClient;
@@ -847,7 +850,9 @@ public class ApiClient {
 
     private static class EspnMatch {
         String homeName;
+        String homeShortName;
         String awayName;
+        String awayShortName;
         String homeScore;
         String awayScore;
         String clock;
@@ -856,67 +861,121 @@ public class ApiClient {
 
     private static final Map<String, String> TEAM_ALIASES = new HashMap<>();
     static {
+        // Seleções / UEFA Nations League
         TEAM_ALIASES.put("eslovenia", "slovenia");
+        TEAM_ALIASES.put("slovenia", "slovenia");
         TEAM_ALIASES.put("escocia", "scotland");
+        TEAM_ALIASES.put("scotland", "scotland");
         TEAM_ALIASES.put("islandia", "iceland");
+        TEAM_ALIASES.put("iceland", "iceland");
         TEAM_ALIASES.put("estonia", "estonia");
         TEAM_ALIASES.put("bulgaria", "bulgaria");
         TEAM_ALIASES.put("luxemburgo", "luxembourg");
+        TEAM_ALIASES.put("luxembourg", "luxembourg");
         TEAM_ALIASES.put("san marino", "san marino");
         TEAM_ALIASES.put("finlandia", "finland");
+        TEAM_ALIASES.put("finland", "finland");
         TEAM_ALIASES.put("ilhas faroe", "faroe islands");
+        TEAM_ALIASES.put("faroe islands", "faroe islands");
         TEAM_ALIASES.put("cazaquistao", "kazakhstan");
+        TEAM_ALIASES.put("kazakhstan", "kazakhstan");
         TEAM_ALIASES.put("eslovaquia", "slovakia");
+        TEAM_ALIASES.put("slovakia", "slovakia");
         TEAM_ALIASES.put("moldavia", "moldova");
+        TEAM_ALIASES.put("moldova", "moldova");
         TEAM_ALIASES.put("macedonia do norte", "north macedonia");
+        TEAM_ALIASES.put("north macedonia", "north macedonia");
         TEAM_ALIASES.put("suica", "switzerland");
+        TEAM_ALIASES.put("switzerland", "switzerland");
         TEAM_ALIASES.put("inglaterra", "england");
+        TEAM_ALIASES.put("england", "england");
         TEAM_ALIASES.put("espanha", "spain");
+        TEAM_ALIASES.put("spain", "spain");
         TEAM_ALIASES.put("republica tcheca", "czechia");
+        TEAM_ALIASES.put("tchequia", "czechia");
+        TEAM_ALIASES.put("czechia", "czechia");
         TEAM_ALIASES.put("croacia", "croatia");
+        TEAM_ALIASES.put("croatia", "croatia");
         TEAM_ALIASES.put("albania", "albania");
         TEAM_ALIASES.put("belarus", "belarus");
+        TEAM_ALIASES.put("bielorrussia", "belarus");
         TEAM_ALIASES.put("eua", "united states");
         TEAM_ALIASES.put("estados unidos", "united states");
+        TEAM_ALIASES.put("united states", "united states");
         TEAM_ALIASES.put("peru", "peru");
         TEAM_ALIASES.put("lituania", "lithuania");
+        TEAM_ALIASES.put("lithuania", "lithuania");
         TEAM_ALIASES.put("azerbaijao", "azerbaijan");
+        TEAM_ALIASES.put("azerbaijan", "azerbaijan");
         TEAM_ALIASES.put("servia", "serbia");
+        TEAM_ALIASES.put("serbia", "serbia");
         TEAM_ALIASES.put("holanda", "netherlands");
+        TEAM_ALIASES.put("paises baixos", "netherlands");
+        TEAM_ALIASES.put("netherlands", "netherlands");
         TEAM_ALIASES.put("italia", "italy");
+        TEAM_ALIASES.put("italy", "italy");
         TEAM_ALIASES.put("alemanha", "germany");
+        TEAM_ALIASES.put("germany", "germany");
         TEAM_ALIASES.put("franca", "france");
+        TEAM_ALIASES.put("france", "france");
         TEAM_ALIASES.put("portugal", "portugal");
         TEAM_ALIASES.put("belgica", "belgium");
+        TEAM_ALIASES.put("belgium", "belgium");
         TEAM_ALIASES.put("austria", "austria");
         TEAM_ALIASES.put("dinamarca", "denmark");
+        TEAM_ALIASES.put("denmark", "denmark");
         TEAM_ALIASES.put("suecia", "sweden");
+        TEAM_ALIASES.put("sweden", "sweden");
         TEAM_ALIASES.put("noruega", "norway");
+        TEAM_ALIASES.put("norway", "norway");
         TEAM_ALIASES.put("polonia", "poland");
+        TEAM_ALIASES.put("poland", "poland");
         TEAM_ALIASES.put("ucrania", "ukraine");
+        TEAM_ALIASES.put("ukraine", "ukraine");
         TEAM_ALIASES.put("turquia", "turkey");
+        TEAM_ALIASES.put("turkey", "turkey");
         TEAM_ALIASES.put("grecia", "greece");
-        TEAM_ALIASES.put("russia", "russia");
+        TEAM_ALIASES.put("greece", "greece");
         TEAM_ALIASES.put("uruguai", "uruguay");
         TEAM_ALIASES.put("paraguai", "paraguay");
         TEAM_ALIASES.put("colombia", "colombia");
         TEAM_ALIASES.put("argentina", "argentina");
         TEAM_ALIASES.put("chile", "chile");
 
+        // MLS e Clubes Internacionais
         TEAM_ALIASES.put("sj earthquakes", "san jose earthquakes");
+        TEAM_ALIASES.put("san jose earthquakes", "san jose earthquakes");
         TEAM_ALIASES.put("dc united", "dc united");
-        TEAM_ALIASES.put("d.c. united", "dc united");
-        TEAM_ALIASES.put("sport recife", "sport");
+        TEAM_ALIASES.put("d c united", "dc united");
         TEAM_ALIASES.put("sporting kc", "sporting kansas city");
+        TEAM_ALIASES.put("sporting kansas city", "sporting kansas city");
         TEAM_ALIASES.put("los angeles fc", "lafc");
-        TEAM_ALIASES.put("new york rb", "red bull new york");
-        TEAM_ALIASES.put("st. louis city", "st. louis city sc");
-        TEAM_ALIASES.put("operario-pr", "operario");
+        TEAM_ALIASES.put("lafc", "lafc");
+        TEAM_ALIASES.put("los angeles football club", "lafc");
+        TEAM_ALIASES.put("new york rb", "new york red bulls");
+        TEAM_ALIASES.put("red bull new york", "new york red bulls");
+        TEAM_ALIASES.put("ny red bulls", "new york red bulls");
+        TEAM_ALIASES.put("new york red bulls", "new york red bulls");
+        TEAM_ALIASES.put("st louis city", "st louis city");
+        TEAM_ALIASES.put("st louis city sc", "st louis city");
+        TEAM_ALIASES.put("cf montreal", "montreal");
+        TEAM_ALIASES.put("montreal impact", "montreal");
+
+        // Clubes Brasileiros
+        TEAM_ALIASES.put("sport recife", "sport");
+        TEAM_ALIASES.put("sport club do recife", "sport");
         TEAM_ALIASES.put("operario pr", "operario");
+        TEAM_ALIASES.put("operario ferroviario", "operario");
+        TEAM_ALIASES.put("operario", "operario");
         TEAM_ALIASES.put("atletico goianiense", "atletico goianiense");
-        TEAM_ALIASES.put("atletico-go", "atletico goianiense");
-        TEAM_ALIASES.put("athletico-pr", "athletico");
+        TEAM_ALIASES.put("atletico go", "atletico goianiense");
         TEAM_ALIASES.put("athletico pr", "athletico");
+        TEAM_ALIASES.put("athletico paranaense", "athletico");
+        TEAM_ALIASES.put("athletico", "athletico");
+        TEAM_ALIASES.put("america mg", "america mineiro");
+        TEAM_ALIASES.put("america mineiro", "america mineiro");
+        TEAM_ALIASES.put("ceara sc", "ceara");
+        TEAM_ALIASES.put("ceara", "ceara");
     }
 
     private static String cleanAndNormalizeTeam(String name) {
@@ -930,6 +989,9 @@ public class ApiClient {
             return TEAM_ALIASES.get(s);
         }
         s = s.replaceAll("\\b(fc|sc|cf|ec|ac)\\b", "").replaceAll("\\s+", " ").trim();
+        if (TEAM_ALIASES.containsKey(s)) {
+            return TEAM_ALIASES.get(s);
+        }
         return s;
     }
 
@@ -942,6 +1004,28 @@ public class ApiClient {
         if (a.length() >= 4 && b.contains(a)) return true;
         if (b.length() >= 4 && a.contains(b)) return true;
         return false;
+    }
+
+    private static String getEspnLeagueForCompetition(String comp) {
+        if (comp == null) return null;
+        String c = Normalizer.normalize(comp.toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
+        if (c.contains("major league") || c.contains("mls")) return "usa.1";
+        if (c.contains("serie b")) return "bra.2";
+        if (c.contains("serie a") || c.contains("brasileirao")) return "bra.1";
+        if (c.contains("nations") || c.contains("nacoes")) return "uefa.nations";
+        if (c.contains("premier") || c.contains("ingles")) return "eng.1";
+        if (c.contains("la liga") || c.contains("laliga") || c.contains("espanhol")) return "esp.1";
+        if (c.contains("italiano") || c.contains("serie a italiana")) return "ita.1";
+        if (c.contains("bundesliga") || c.contains("alemao")) return "ger.1";
+        if (c.contains("ligue 1") || c.contains("frances")) return "fra.1";
+        if (c.contains("champions") || c.contains("campeoes")) return "uefa.champions";
+        if (c.contains("libertadores")) return "conmebol.libertadores";
+        if (c.contains("sul americana") || c.contains("sudamericana")) return "conmebol.sudamericana";
+        if (c.contains("copa do brasil")) return "bra.copa_do_brazil";
+        if (c.contains("saudita") || c.contains("saudi")) return "sau.1";
+        if (c.contains("amistoso") || c.contains("friendly")) return "fifa.friendly";
+        return null;
     }
 
     private static void parseEspnEventsArray(JsonArray eventsArr, List<EspnMatch> out) {
@@ -976,15 +1060,19 @@ public class ApiClient {
                 String ha = optString(c, "homeAway", "");
                 String sc = optString(c, "score", "");
                 String name = "";
+                String shortName = "";
                 if (c.has("team") && c.get("team").isJsonObject()) {
                     JsonObject tm = c.getAsJsonObject("team");
                     name = optString(tm, "displayName", optString(tm, "name", ""));
+                    shortName = optString(tm, "shortDisplayName", "");
                 }
                 if ("home".equalsIgnoreCase(ha)) {
                     m.homeName = name;
+                    m.homeShortName = shortName;
                     m.homeScore = sc;
                 } else {
                     m.awayName = name;
+                    m.awayShortName = shortName;
                     m.awayScore = sc;
                 }
             }
@@ -999,8 +1087,8 @@ public class ApiClient {
         try {
             Request request = new Request.Builder()
                     .url(url)
-                    .header("Accept", "application/json")
-                    .header("User-Agent", "Mozilla/5.0")
+                    .header("Accept", "*/*")
+                    .header("User-Agent", "curl/8.21.0")
                     .build();
             try (Response response = httpClient.newCall(request).execute()) {
                 if (response.isSuccessful() && response.body() != null) {
@@ -1025,8 +1113,8 @@ public class ApiClient {
         try {
             Request request = new Request.Builder()
                     .url(url)
-                    .header("Accept", "application/json")
-                    .header("User-Agent", "Mozilla/5.0")
+                    .header("Accept", "*/*")
+                    .header("User-Agent", "curl/8.21.0")
                     .build();
             try (Response response = httpClient.newCall(request).execute()) {
                 if (response.isSuccessful() && response.body() != null) {
@@ -1052,24 +1140,49 @@ public class ApiClient {
             Set<String> dates = new HashSet<>();
             dates.add(todayStr);
             dates.add(yestStr);
+
+            Set<String> leagues = new HashSet<>();
+            leagues.add("bra.1");
+            leagues.add("bra.2");
+            leagues.add("uefa.nations");
+            leagues.add("usa.1");
+            leagues.add("fifa.friendly");
+
             for (SportsEvent ev : events) {
                 if (ev.startTimestamp > 0) {
                     dates.add(df.format(new Date(ev.startTimestamp * 1000L)));
                 }
+                String lg = getEspnLeagueForCompetition(ev.league);
+                if (lg != null) leagues.add(lg);
             }
 
-            List<EspnMatch> espnMatches = new ArrayList<>();
+            List<EspnMatch> espnMatches = Collections.synchronizedList(new ArrayList<>());
+            ExecutorService pool = Executors.newFixedThreadPool(6);
+            List<Future<?>> futures = new ArrayList<>();
+
             for (String d : dates) {
-                fetchEspnScorepanel(d, espnMatches);
-                fetchEspnScoreboard("bra.2", d, espnMatches);
-                fetchEspnScoreboard("bra.1", d, espnMatches);
+                final String fDate = d;
+                futures.add(pool.submit(() -> fetchEspnScorepanel(fDate, espnMatches)));
+                for (String lg : leagues) {
+                    final String fLg = lg;
+                    futures.add(pool.submit(() -> fetchEspnScoreboard(fLg, fDate, espnMatches)));
+                }
             }
+
+            for (Future<?> f : futures) {
+                try {
+                    f.get(4, TimeUnit.SECONDS);
+                } catch (Exception ignored) {}
+            }
+            pool.shutdown();
 
             for (SportsEvent ev : events) {
                 if (ev.homeName == null || ev.awayName == null) continue;
                 for (EspnMatch em : espnMatches) {
-                    boolean directMatch = matchTeamName(ev.homeName, em.homeName) && matchTeamName(ev.awayName, em.awayName);
-                    boolean revMatch = matchTeamName(ev.homeName, em.awayName) && matchTeamName(ev.awayName, em.homeName);
+                    boolean directMatch = (matchTeamName(ev.homeName, em.homeName) || matchTeamName(ev.homeName, em.homeShortName))
+                            && (matchTeamName(ev.awayName, em.awayName) || matchTeamName(ev.awayName, em.awayShortName));
+                    boolean revMatch = (matchTeamName(ev.homeName, em.awayName) || matchTeamName(ev.homeName, em.awayShortName))
+                            && (matchTeamName(ev.awayName, em.homeName) || matchTeamName(ev.awayName, em.homeShortName));
 
                     if (directMatch || revMatch) {
                         String hScore = directMatch ? em.homeScore : em.awayScore;
@@ -1080,7 +1193,7 @@ public class ApiClient {
                             ev.score = hScore + " x " + aScore;
                             ev.clock = em.clock;
 
-                            if ("post".equalsIgnoreCase(em.state) || "FT".equalsIgnoreCase(em.clock)) {
+                            if ("post".equalsIgnoreCase(em.state) || "FT".equalsIgnoreCase(em.clock) || "F".equalsIgnoreCase(em.clock)) {
                                 ev.isFinished = true;
                                 ev.isLive = false;
                             } else if ("in".equalsIgnoreCase(em.state)) {
@@ -1101,3 +1214,4 @@ public class ApiClient {
         return getLiveSports();
     }
 }
+
