@@ -11,95 +11,17 @@
     <!-- ======================================================== -->
     <!-- TELA 1: CENTRAL DA TV (HOME COM PIP, 4 CARDS E TRILHOS)   -->
     <!-- ======================================================== -->
-    <LinearLayout
+    <FrameLayout
         android:id="@+id/centralLayout"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clipChildren="false"
-        android:clipToPadding="false"
-        android:orientation="vertical">
+        android:layout_height="match_parent">
 
-        <!-- CABEÇALHO LIMPO (SEM NOMES PRÓPRIOS OU PROPAGANDA) -->
-        <LinearLayout
-            android:id="@+id/headerLayout"
-            android:layout_width="match_parent"
-            android:layout_height="42dp"
-            android:background="#0A0E1A"
-            android:gravity="center_vertical"
-            android:paddingStart="24dp"
-            android:paddingEnd="24dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📺"
-                android:textSize="16sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:background="@drawable/badge_live"
-                android:paddingStart="6dp"
-                android:paddingTop="2dp"
-                android:paddingEnd="6dp"
-                android:paddingBottom="2dp"
-                android:text="AO VIVO"
-                android:textColor="#000000"
-                android:textSize="9sp"
-                android:textStyle="bold" />
-
-            <View
-                android:layout_width="0dp"
-                android:layout_height="1dp"
-                android:layout_weight="1" />
-
-            <TextView
-                android:id="@+id/headerClock"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="00:00"
-                android:textColor="#FFFFFF"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/headerDate"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:text="SAB, 26 SET"
-                android:textColor="#AAAAAA"
-                android:textSize="12sp" />
-
-            <LinearLayout
-                android:id="@+id/btnHeaderOptions"
-                android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:layout_marginStart="16dp"
-                android:background="@drawable/card_focus_bg"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:orientation="horizontal"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="⚙️ OPÇÕES"
-                    android:textColor="#FFFFFF"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- CONTEÚDO ROLÁVEL DA CENTRAL -->
+        <!-- CONTEÚDO ROLÁVEL DA CENTRAL (INICIA ABAIXO DA TOPBAR FIXA) -->
         <androidx.core.widget.NestedScrollView
             android:id="@+id/centralScroll"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:layout_marginTop="42dp"
             android:clipChildren="false"
             android:clipToPadding="false"
             android:fillViewport="true">
@@ -213,6 +135,7 @@
                                 android:clickable="true"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
+                                android:nextFocusUp="@+id/btnHeaderOptions"
                                 android:nextFocusLeft="@+id/pipContainer"
                                 android:nextFocusRight="@+id/btnNavSeries"
                                 android:nextFocusDown="@+id/btnNavSports"
@@ -244,6 +167,7 @@
                                 android:clickable="true"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true"
+                                android:nextFocusUp="@+id/btnHeaderOptions"
                                 android:nextFocusLeft="@+id/btnNavMovies"
                                 android:nextFocusDown="@+id/btnNavEpg"
                                 android:gravity="center"
@@ -426,7 +350,94 @@
                     android:paddingBottom="12dp" />
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
-    </LinearLayout>
+
+        <!-- TOPBAR FIXA NO TOPO E POR CIMA DE TUDO -->
+        <LinearLayout
+            android:id="@+id/headerLayout"
+            android:layout_width="match_parent"
+            android:layout_height="42dp"
+            android:layout_gravity="top"
+            android:background="#0A0E1A"
+            android:elevation="12dp"
+            android:gravity="center_vertical"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📺"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/badge_live"
+                android:paddingStart="6dp"
+                android:paddingTop="2dp"
+                android:paddingEnd="6dp"
+                android:paddingBottom="2dp"
+                android:text="AO VIVO"
+                android:textColor="#000000"
+                android:textSize="9sp"
+                android:textStyle="bold" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <TextView
+                android:id="@+id/headerClock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00:00"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/headerDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:text="SAB, 26 SET"
+                android:textColor="#AAAAAA"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:id="@+id/btnHeaderOptions"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:layout_marginStart="16dp"
+                android:background="@drawable/card_focus_bg"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:nextFocusDown="@+id/btnNavSeries">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚙️ OPÇÕES"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Linha divisória sutil abaixo do cabeçalho fixo -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="42dp"
+            android:background="#1E283D"
+            android:elevation="12dp" />
+    </FrameLayout>
 
 
     <!-- ======================================================== -->

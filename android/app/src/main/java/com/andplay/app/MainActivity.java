@@ -128,7 +128,7 @@ public class MainActivity extends Activity {
     private FrameLayout fullscreenPlayerHost;
 
     // Central Views
-    private LinearLayout centralLayout;
+    private FrameLayout centralLayout;
     private NestedScrollView centralScroll;
     private TextView headerClock;
     private TextView headerDate;
@@ -2439,6 +2439,12 @@ public class MainActivity extends Activity {
                     return true;
                 }
                 return false;
+            });
+            btnHeaderOptions.setOnFocusChangeListener((v, hasFocus) -> {
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(120).start();
+                if (hasFocus && centralScroll != null) {
+                    centralScroll.smoothScrollTo(0, 0);
+                }
             });
         }
 
