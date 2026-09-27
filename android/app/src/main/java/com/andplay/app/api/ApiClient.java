@@ -1027,6 +1027,9 @@ public class ApiClient {
         if (c.contains("copa do brasil")) return "bra.copa_do_brazil";
         if (c.contains("saudita") || c.contains("saudi")) return "sau.1";
         if (c.contains("amistoso") || c.contains("friendly")) return "fifa.friendly";
+        if (c.contains("portuguesa") || c.contains("primeira liga") || c.contains("por.1")) return "por.1";
+        if (c.contains("argentino") || c.contains("argentina") || c.contains("arg.1")) return "arg.1";
+        if (c.contains("serie c") || c.contains("bra.3")) return "bra.3";
         return null;
     }
 
@@ -1327,6 +1330,32 @@ public class ApiClient {
         public String groupName;      // ex: "Conferência Leste", "Grupo A"
     }
 
+    public static final String[][] HUB_LEAGUES = {
+        // {slug ESPN, nome display, emoji}
+        {"bra.1", "Brasileirão A", "🇧🇷"},
+        {"bra.2", "Brasileirão B", "🇧🇷"},
+        {"bra.3", "Série C", "🇧🇷"},
+        {"conmebol.libertadores", "Libertadores", "🏆"},
+        {"conmebol.sudamericana", "Sulamericana", "🏆"},
+        {"bra.copa_do_brazil", "Copa do Brasil", "🏆"},
+        {"arg.1", "Arg. Primera", "🇦🇷"},
+        {"eng.1", "Premier League", "🏴󠁧󠁢󠁥󠁮󠁧󠁿"},
+        {"esp.1", "La Liga", "🇪🇸"},
+        {"ger.1", "Bundesliga", "🇩🇪"},
+        {"ita.1", "Serie A", "🇮🇹"},
+        {"fra.1", "Ligue 1", "🇫🇷"},
+        {"por.1", "Primeira Liga", "🇵🇹"}
+    };
+
+    public static class ScheduleDay {
+        public String dateLabel;   // "Hoje", "Sex 26/09"
+        public String dateCode;    // "20260926" (para ordenação)
+        public long dateMs;        // epoch ms do início do dia
+        public boolean isToday;
+        public List<RoundMatch> matches;
+        public ScheduleDay() { matches = new ArrayList<>(); }
+    }
+
     public static class RoundMatch {
         public String homeTeam;
         public String awayTeam;
@@ -1336,6 +1365,8 @@ public class ApiClient {
         public String state;        // "pre" | "in" | "post"
         public boolean isCurrent;   // é a partida que está sendo assistida
         public long startMs;        // timestamp em milissegundos para ordenação
+        public String channelId;    // id do SportsEvent com EPG match
+        public String channelName;  // nome do canal/competição
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1346,6 +1377,31 @@ public class ApiClient {
      * Busca a tabela de classificação da liga correspondente à competição do evento.
      * Suporta ligas com tabela única (Brasileirão, Premier League) e ligas com grupos/conferências (MLS, etc.).
      */
+    /** Versão que aceita slug ESPN diretamente — usada pelo SportsHub */
+    public static List<StandingEntry> getStandingsBySlug(String leagueSlug) {
+        if (leagueSlug == null || leagueSlug.isEmpty()) return new ArrayList<>();
+        // Cups sem tabela
+        if (leagueSlug.startsWith("conmebol.") || leagueSlug.equals("bra.copa_do_brazil")
+                || leagueSlug.equals("uefa.champions") || leagueSlug.equals("fifa.friendly")
+                || leagueSlug.equals("uefa.nations")) return new ArrayList<>();
+        // Mapeia slug → string reconhecida por getEspnLeagueForCompetition
+        String compName;
+        switch (leagueSlug) {
+            case "bra.1":  compName = "brasileirao serie a"; break;
+            case "bra.2":  compName = "serie b"; break;
+            case "bra.3":  compName = "serie c"; break;
+            case "arg.1":  compName = "campeonato argentino"; break;
+            case "eng.1":  compName = "premier league"; break;
+            case "esp.1":  compName = "la liga"; break;
+            case "ger.1":  compName = "bundesliga"; break;
+            case "ita.1":  compName = "serie a italiana"; break;
+            case "fra.1":  compName = "ligue 1"; break;
+            case "por.1":  compName = "portuguesa primeira liga"; break;
+            default:       compName = leagueSlug;
+        }
+        return getStandings(compName, null, null);
+    }
+
     public static List<StandingEntry> getStandings(String competition, String homeTeam, String awayTeam) {
         List<StandingEntry> result = new ArrayList<>();
         String league = getEspnLeagueForCompetition(competition);
@@ -1813,6 +1869,248 @@ public class ApiClient {
             e.printStackTrace();
         }
         return result;
+    }
+
+    /**
+     * Busca o calendário completo de uma liga: últimas 6 semanas + próximas 4 semanas.
+     * Usa o calendar ESPN para filtrar datas relevantes e faz requests paralelos.
+     * @param leagueSlug slug ESPN (ex: "bra.1")
+     * @param liveEvents lista de SportsEvent ativos para match EPG (pode ser null)
+     */
+    public static List<ScheduleDay> getFullLeagueSchedule(String leagueSlug, List<com.andplay.app.model.SportsEvent> liveEvents) {
+        List<ScheduleDay> result = new ArrayList<>();
+        if (leagueSlug == null || leagueSlug.isEmpty()) return result;
+
+        TimeZone tzBrasilia = TimeZone.getTimeZone("America/Sao_Paulo");
+        SimpleDateFormat dayCodeFmt = new SimpleDateFormat("yyyyMMdd", Locale.US);
+        dayCodeFmt.setTimeZone(tzBrasilia);
+        SimpleDateFormat isoDateFmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm'Z'", Locale.US);
+        isoDateFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+
+        try {
+            // 1. Buscar o calendar da liga (sem dates= para pegar metadados)
+            String baseUrl = "https://site.api.espn.com/apis/site/v2/sports/soccer/" + leagueSlug
+                    + "/scoreboard?lang=pt&region=br";
+            Request initReq = new Request.Builder().url(baseUrl)
+                    .header("Accept", "*/*").header("User-Agent", "curl/8.21.0").build();
+            JsonObject initRoot;
+            try (Response initResp = httpClient.newCall(initReq).execute()) {
+                if (!initResp.isSuccessful() || initResp.body() == null) return result;
+                initRoot = JsonParser.parseString(initResp.body().string()).getAsJsonObject();
+            }
+
+            // 2. Filtrar datas do calendar: -42 dias até +28 dias a partir de hoje
+            long now = System.currentTimeMillis();
+            long winStart = now - 42L * 86400000L;
+            long winEnd   = now + 28L * 86400000L;
+
+            Set<String> calendarDateCodes = new HashSet<>();
+            boolean hasDateCalendar = false;
+            if (initRoot.has("leagues") && initRoot.get("leagues").isJsonArray()) {
+                JsonArray leaguesArr = initRoot.getAsJsonArray("leagues");
+                if (leaguesArr.size() > 0) {
+                    JsonObject leagueObj = leaguesArr.get(0).getAsJsonObject();
+                    if (leagueObj.has("calendar") && leagueObj.get("calendar").isJsonArray()) {
+                        JsonArray cal = leagueObj.getAsJsonArray("calendar");
+                        if (cal.size() > 0 && cal.get(0).isJsonPrimitive()) {
+                            hasDateCalendar = true;
+                            for (int i = 0; i < cal.size(); i++) {
+                                try {
+                                    Date calDate = isoDateFmt.parse(cal.get(i).getAsString());
+                                    if (calDate != null && calDate.getTime() >= winStart && calDate.getTime() <= winEnd) {
+                                        calendarDateCodes.add(dayCodeFmt.format(calDate));
+                                    }
+                                } catch (Exception ignored) {}
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Se não há calendar de datas (ex: Copa, UCL), usar últimas 3 semanas + próximas 2 semanas
+            //    gerando datas candidatas e verificando quais têm eventos
+            List<String> datesToFetch = new ArrayList<>();
+            if (hasDateCalendar) {
+                datesToFetch.addAll(calendarDateCodes);
+            } else {
+                // Gerar todas as datas da janela
+                Calendar c = Calendar.getInstance(tzBrasilia);
+                c.setTimeInMillis(winStart);
+                while (c.getTimeInMillis() <= winEnd) {
+                    datesToFetch.add(dayCodeFmt.format(c.getTime()));
+                    c.add(Calendar.DAY_OF_YEAR, 1);
+                }
+            }
+
+            // Ordenar cronologicamente
+            Collections.sort(datesToFetch);
+
+            // 4. Busca paralela (até 8 threads) para todos os dias
+            if (datesToFetch.isEmpty()) return result;
+
+            ExecutorService pool = Executors.newFixedThreadPool(Math.min(datesToFetch.size(), 8));
+            List<Future<JsonArray>> futures = new ArrayList<>();
+            for (final String dateCode : datesToFetch) {
+                final String url = "https://site.api.espn.com/apis/site/v2/sports/soccer/"
+                        + leagueSlug + "/scoreboard?dates=" + dateCode + "&lang=pt&region=br";
+                futures.add(pool.submit(() -> {
+                    try {
+                        Request req = new Request.Builder().url(url)
+                                .header("Accept", "*/*").header("User-Agent", "curl/8.21.0").build();
+                        try (Response resp = httpClient.newCall(req).execute()) {
+                            if (!resp.isSuccessful() || resp.body() == null) return new JsonArray();
+                            JsonObject r = JsonParser.parseString(resp.body().string()).getAsJsonObject();
+                            return r.has("events") && r.get("events").isJsonArray()
+                                    ? r.getAsJsonArray("events") : new JsonArray();
+                        }
+                    } catch (Exception e) { return new JsonArray(); }
+                }));
+            }
+
+            // 5. Coletar e agrupar por data
+            SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.US);
+            timeFmt.setTimeZone(tzBrasilia);
+            SimpleDateFormat dayNameFmt = new SimpleDateFormat("EEE dd/MM", new Locale("pt", "BR"));
+            dayNameFmt.setTimeZone(tzBrasilia);
+            String todayCode = dayCodeFmt.format(new Date());
+            String tomorrowCode = dayCodeFmt.format(new Date(System.currentTimeMillis() + 86400000L));
+
+            // Pré-processar live events para match EPG
+            Map<String, com.andplay.app.model.SportsEvent> liveByKey = new LinkedHashMap<>();
+            if (liveEvents != null) {
+                for (com.andplay.app.model.SportsEvent ev : liveEvents) {
+                    if (ev.homeName != null && ev.awayName != null) {
+                        String key = normalize(ev.homeName) + "_" + normalize(ev.awayName);
+                        liveByKey.put(key, ev);
+                    }
+                }
+            }
+
+            LinkedHashMap<String, ScheduleDay> dayMap = new LinkedHashMap<>();
+            for (int fi = 0; fi < futures.size(); fi++) {
+                String dateCode = datesToFetch.get(fi);
+                try {
+                    JsonArray evs = futures.get(fi).get(10, TimeUnit.SECONDS);
+                    for (int i = 0; i < evs.size(); i++) {
+                        JsonElement el = evs.get(i);
+                        if (!el.isJsonObject()) continue;
+                        JsonObject ev = el.getAsJsonObject();
+                        String evId = optString(ev, "id", "");
+                        if (evId.isEmpty()) continue;
+                        if (!ev.has("competitions") || !ev.get("competitions").isJsonArray()) continue;
+                        JsonArray comps = ev.getAsJsonArray("competitions");
+                        if (comps.size() == 0) continue;
+                        JsonObject comp = comps.get(0).getAsJsonObject();
+
+                        RoundMatch rm = new RoundMatch();
+
+                        String state = "", clock = "";
+                        if (comp.has("status") && comp.get("status").isJsonObject()) {
+                            JsonObject st = comp.getAsJsonObject("status");
+                            if (st.has("type") && st.get("type").isJsonObject()) {
+                                JsonObject t = st.getAsJsonObject("type");
+                                state = optString(t, "state", "");
+                                clock = optString(t, "shortDetail", "");
+                            }
+                        }
+                        rm.state = state;
+
+                        String startDateStr = optString(ev, "date", "");
+                        String timeStr = "--:--", dayLabel = "";
+                        long startMs = 0;
+                        try {
+                            if (!startDateStr.isEmpty()) {
+                                Date d = isoDateFmt.parse(startDateStr);
+                                if (d != null) {
+                                    startMs = d.getTime();
+                                    timeStr = timeFmt.format(d);
+                                    String dCode = dayCodeFmt.format(d);
+                                    if (dCode.equals(todayCode)) dayLabel = "Hoje";
+                                    else if (dCode.equals(tomorrowCode)) dayLabel = "Amanhã";
+                                    else dayLabel = dayNameFmt.format(d);
+                                    dateCode = dCode; // normalizar para o dia real do evento
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                        rm.matchTime = timeStr;
+                        rm.startMs = startMs;
+
+                        if (comp.has("competitors") && comp.get("competitors").isJsonArray()) {
+                            JsonArray competitors = comp.getAsJsonArray("competitors");
+                            String hName = "", aName = "", hScore = "", aScore = "";
+                            for (int k = 0; k < competitors.size(); k++) {
+                                JsonObject c = competitors.get(k).getAsJsonObject();
+                                String ha = optString(c, "homeAway", "");
+                                String sc = optString(c, "score", "");
+                                String name = "";
+                                if (c.has("team") && c.get("team").isJsonObject()) {
+                                    JsonObject tm = c.getAsJsonObject("team");
+                                    name = optString(tm, "shortDisplayName", optString(tm, "displayName", ""));
+                                }
+                                if ("home".equalsIgnoreCase(ha)) { hName = name; hScore = sc; }
+                                else { aName = name; aScore = sc; }
+                            }
+                            rm.homeTeam = hName;
+                            rm.awayTeam = aName;
+
+                            if ("in".equalsIgnoreCase(state)) {
+                                rm.score = (hScore.isEmpty() ? "0" : hScore) + " x " + (aScore.isEmpty() ? "0" : aScore);
+                                rm.statusLabel = "● AO VIVO" + (!clock.isEmpty() ? " " + clock : "");
+                            } else if ("post".equalsIgnoreCase(state)) {
+                                rm.score = (hScore.isEmpty() ? "0" : hScore) + " x " + (aScore.isEmpty() ? "0" : aScore);
+                                rm.statusLabel = "Encerrado";
+                            } else {
+                                rm.score = "vs";
+                                rm.statusLabel = timeStr;
+                            }
+
+                            // Match EPG
+                            String key1 = normalize(hName) + "_" + normalize(aName);
+                            String key2 = normalize(aName) + "_" + normalize(hName);
+                            com.andplay.app.model.SportsEvent matched = liveByKey.get(key1);
+                            if (matched == null) matched = liveByKey.get(key2);
+                            if (matched != null) {
+                                rm.channelId = matched.id;
+                                rm.channelName = matched.getDisplayLeague();
+                            }
+                            rm.isCurrent = false;
+                        }
+
+                        if (rm.homeTeam != null && !rm.homeTeam.isEmpty()) {
+                            ScheduleDay day = dayMap.get(dateCode);
+                            if (day == null) {
+                                day = new ScheduleDay();
+                                day.dateCode = dateCode;
+                                day.dateMs = startMs;
+                                day.isToday = dateCode.equals(todayCode);
+                                day.dateLabel = dayLabel.isEmpty() ? dateCode : dayLabel;
+                                dayMap.put(dateCode, day);
+                            }
+                            day.matches.add(rm);
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+            pool.shutdown();
+
+            // 6. Ordenar partidas de cada dia por horário e retornar dias ordenados
+            List<ScheduleDay> days = new ArrayList<>(dayMap.values());
+            Collections.sort(days, (a, b) -> a.dateCode.compareTo(b.dateCode));
+            for (ScheduleDay day : days) {
+                Collections.sort(day.matches, (a, b) -> Long.compare(a.startMs, b.startMs));
+            }
+            result.addAll(days);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return result;
+    }
+
+    private static String normalize(String s) {
+        if (s == null) return "";
+        return java.text.Normalizer.normalize(s.toLowerCase(Locale.ROOT), java.text.Normalizer.Form.NFD)
+                .replaceAll("[^a-z0-9]", "");
     }
 }
 

@@ -157,6 +157,7 @@ public class MainActivity extends Activity {
     private RecyclerView sportsRail;
     private RecyclerView moviesRail;
     private RecyclerView seriesRail;
+    private static final int REQ_SPORTS_HUB = 1001;
 
     // Fullscreen Views
     private FrameLayout fullscreenLayout;
@@ -2502,15 +2503,26 @@ public class MainActivity extends Activity {
             isPlayingVod = false;
             openVodExplorer("series");
         });
-        btnNavSports.setOnClickListener(v -> {
-            if (centralScroll != null && sportsRail != null) {
-                centralScroll.smoothScrollTo(0, sportsRail.getTop() - 100);
-                sportsRail.requestFocus();
-            }
-        });
+        btnNavSports.setOnClickListener(v -> openSportsHub());
         btnNavEpg.setOnClickListener(v -> {
             openFullGuide();
         });
+
+        // Botão "VER TUDO ▶" ao lado do título de Jogos
+        View btnAllSports = findViewById(R.id.btnAllSports);
+        if (btnAllSports != null) {
+            btnAllSports.setOnClickListener(v -> openSportsHub());
+            btnAllSports.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP &&
+                        (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    openSportsHub();
+                    return true;
+                }
+                return false;
+            });
+            btnAllSports.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(120).start());
+        }
 
         if (btnHeaderOptions != null) {
             btnHeaderOptions.setOnClickListener(v -> showProviderOptionsDialog());
@@ -2716,6 +2728,32 @@ public class MainActivity extends Activity {
                             }
                         });
                         break;
+                    }
+                }
+            }
+        }
+    }
+
+    /** Abre o hub de jogos (SportsHubActivity) */
+    private void openSportsHub() {
+        android.content.Intent intent = new android.content.Intent(this, SportsHubActivity.class);
+        try {
+            java.util.ArrayList<SportsEvent> sportsList = new java.util.ArrayList<>(allSports);
+            intent.putExtra("live_events", sportsList);
+        } catch (Exception ignored) {}
+        startActivityForResult(intent, REQ_SPORTS_HUB);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_SPORTS_HUB && resultCode == RESULT_OK && data != null) {
+            String eventId = data.getStringExtra("launch_event_id");
+            if (eventId != null && !eventId.isEmpty()) {
+                for (SportsEvent ev : allSports) {
+                    if (eventId.equals(ev.id)) {
+                        playSportsEvent(ev);
+                        return;
                     }
                 }
             }

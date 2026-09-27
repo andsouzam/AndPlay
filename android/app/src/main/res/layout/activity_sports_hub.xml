@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Sports Hub — Layout com sidebar lateral de ligas
+  Estrutura: [Sidebar 168dp | Divider | Content]
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#080F1E"
+    android:orientation="horizontal">
+
+    <!-- ── SIDEBAR ESQUERDA: lista de ligas ───────────────────────────── -->
+    <LinearLayout
+        android:layout_width="168dp"
+        android:layout_height="match_parent"
+        android:background="#0C1428"
+        android:orientation="vertical">
+
+        <!-- Logo / Título sidebar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:gravity="center_vertical"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:background="#0A1020">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚽"
+                android:textSize="18sp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:paddingStart="8dp"
+                android:text="JOGOS"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.12" />
+        </LinearLayout>
+
+        <!-- Divider fino abaixo do título -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#1AFFFFFF" />
+
+        <!-- Lista de ligas -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/leagueTabsRv"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp" />
+
+        <!-- Dica de tecla -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingTop="8dp"
+            android:paddingBottom="10dp"
+            android:text="← VOLTAR: Fechar"
+            android:textColor="#40FFFFFF"
+            android:textSize="9sp" />
+    </LinearLayout>
+
+    <!-- ── DIVIDER VERTICAL ───────────────────────────────────────────── -->
+    <View
+        android:layout_width="1dp"
+        android:layout_height="match_parent"
+        android:background="#1AFFFFFF" />
+
+    <!-- ── CONTEÚDO DIREITO ───────────────────────────────────────────── -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <!-- Barra de contexto: nome da liga + sub-tabs + dicas -->
+        <LinearLayout
+            android:id="@+id/subTabsBar"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="#0A1020"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!-- Nome da liga ativa -->
+            <TextView
+                android:id="@+id/hubLeagueName"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:paddingStart="16dp"
+                android:textColor="#B0C8E8"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:singleLine="true"
+                android:ellipsize="end" />
+
+            <!-- Sub-tab CALENDÁRIO -->
+            <TextView
+                android:id="@+id/subTabSchedule"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:paddingStart="18dp"
+                android:paddingEnd="18dp"
+                android:text="📅 CALENDÁRIO"
+                android:textSize="11sp"
+                android:textColor="#FFFFFF"
+                android:focusable="true"
+                android:focusableInTouchMode="true" />
+
+            <!-- Sub-tab TABELA -->
+            <TextView
+                android:id="@+id/subTabStandings"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:paddingStart="18dp"
+                android:paddingEnd="16dp"
+                android:text="🏆 TABELA"
+                android:textSize="11sp"
+                android:textColor="#FFFFFF"
+                android:focusable="true"
+                android:focusableInTouchMode="true" />
+
+            <!-- Dica ← → -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="12dp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:paddingTop="2dp"
+                android:paddingBottom="2dp"
+                android:text="◀ ▶ navegar ligas"
+                android:textColor="#33FFFFFF"
+                android:textSize="9sp"
+                android:background="#11FFFFFF" />
+        </LinearLayout>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="#1AFFFFFF" />
+
+        <!-- Loading spinner -->
+        <ProgressBar
+            android:id="@+id/hubProgress"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="40dp"
+            android:visibility="gone" />
+
+        <!-- Mensagem sem dados -->
+        <TextView
+            android:id="@+id/hubEmptyMsg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingTop="48dp"
+            android:text="Sem dados disponíveis para esta liga"
+            android:textColor="#50FFFFFF"
+            android:textSize="13sp"
+            android:visibility="gone" />
+
+        <!-- Conteúdo principal (calendário ou tabela) -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/hubContentRv"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:paddingBottom="8dp" />
+
+    </LinearLayout>
+
+</LinearLayout>
