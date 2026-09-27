@@ -1201,12 +1201,12 @@ public class ApiClient {
         }
     }
 
-    // Cache LRU em memória volátil limitado a 100 partidas (descarta automaticamente os mais antigos, tamanho máximo ~15KB em RAM)
+    // Cache LRU em memória volátil com limite expandido para 500 partidas (~50KB a 60KB em RAM, bem abaixo de 1000KB)
     private static final Map<String, EspnCachedScore> FINISHED_CACHE =
-            Collections.synchronizedMap(new LinkedHashMap<String, EspnCachedScore>(64, 0.75f, true) {
+            Collections.synchronizedMap(new LinkedHashMap<String, EspnCachedScore>(256, 0.75f, true) {
                 @Override
                 protected boolean removeEldestEntry(Map.Entry<String, EspnCachedScore> eldest) {
-                    return size() > 100;
+                    return size() > 500;
                 }
             });
 
