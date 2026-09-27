@@ -1201,7 +1201,14 @@ public class ApiClient {
         }
     }
 
-    private static final Map<String, EspnCachedScore> FINISHED_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
+    // Cache LRU em memória volátil limitado a 100 partidas (descarta automaticamente os mais antigos, tamanho máximo ~15KB em RAM)
+    private static final Map<String, EspnCachedScore> FINISHED_CACHE =
+            Collections.synchronizedMap(new LinkedHashMap<String, EspnCachedScore>(64, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, EspnCachedScore> eldest) {
+                    return size() > 100;
+                }
+            });
 
     private static EspnCachedScore getCachedFinishedScore(String home, String away) {
         if (home == null || away == null) return null;
