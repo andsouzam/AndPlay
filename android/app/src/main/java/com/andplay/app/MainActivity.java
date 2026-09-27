@@ -170,6 +170,18 @@ public class MainActivity extends Activity {
     private LinearLayout vodLayout;
     private TextView vodHeroTitle, vodHeroRating, vodHeroYear, vodHeroGenre, vodHeroPlot;
     private TextView btnVodSearch;
+    private TextView btnVodWatched;
+    private TextView btnVodPlaylist;
+    private List<Movie> activeMoviePlaylistQueue = null;
+    private int activeMoviePlaylistIndex = 0;
+    private String activeMoviePlaylistName = null;
+
+    public static class MoviePlaylist {
+        public String id;
+        public String name;
+        public List<String> movieIds = new ArrayList<>();
+    }
+
     private boolean isViewingSeries = false;
     private RecyclerView vodCatsRecycler;
     private RecyclerView vodGridRecycler;
@@ -380,6 +392,20 @@ public class MainActivity extends Activity {
             btnVodSearch.setOnClickListener(v -> showVodSearchDialog());
             btnVodSearch.setOnFocusChangeListener((v, hasFocus) -> {
                 btnVodSearch.setTextColor(hasFocus ? android.graphics.Color.BLACK : android.graphics.Color.WHITE);
+            });
+        }
+        btnVodWatched = findViewById(R.id.btnVodWatched);
+        if (btnVodWatched != null) {
+            btnVodWatched.setOnClickListener(v -> showVodWatchedContent());
+            btnVodWatched.setOnFocusChangeListener((v, hasFocus) -> {
+                btnVodWatched.setTextColor(hasFocus ? android.graphics.Color.BLACK : android.graphics.Color.WHITE);
+            });
+        }
+        btnVodPlaylist = findViewById(R.id.btnVodPlaylist);
+        if (btnVodPlaylist != null) {
+            btnVodPlaylist.setOnClickListener(v -> showMoviePlaylistsDialog());
+            btnVodPlaylist.setOnFocusChangeListener((v, hasFocus) -> {
+                btnVodPlaylist.setTextColor(hasFocus ? android.graphics.Color.BLACK : android.graphics.Color.WHITE);
             });
         }
 
@@ -1622,6 +1648,8 @@ public class MainActivity extends Activity {
                     if (exoPlayer.getPlayWhenReady()) {
                         mainHandler.post(() -> onPlaybackStarted());
                     }
+                } else if (playbackState == Player.STATE_ENDED) {
+                    mainHandler.post(() -> onPlaybackEnded());
                 }
             }
 
@@ -2465,16 +2493,78 @@ public class MainActivity extends Activity {
         return n.contains("demo") || t.contains("demo");
     }
 
+    private static final String PREF_RECENT_MOVIES = "andplay_recent_movies";
+
+    private void saveRecentMovie(Movie movie) {
+        if (movie == null || movie.stream_id == null) return;
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREF_RECENT_MOVIES, Context.MODE_PRIVATE);
+            String raw = prefs.getString("history", "");
+            List<String> list = new ArrayList<>();
+            if (!raw.isEmpty()) {
+                for (String id : raw.split(",")) {
+                    if (!id.trim().isEmpty() && !id.trim().equals(movie.stream_id)) {
+                        list.add(id.trim());
+                    }
+                }
+            }
+            list.add(0, movie.stream_id);
+            while (list.size() > 500) {
+                list.remove(list.size() - 1);
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < list.size(); i++) {
+                if (i > 0) sb.append(",");
+                sb.append(list.get(i));
+            }
+            prefs.edit().putString("history", sb.toString()).apply();
+        } catch (Exception e) {
+            Log.w("EPlay", "Erro ao salvar filme recente: " + e.getMessage());
+        }
+    }
+
+    private List<String> getRecentMovieIds() {
+        List<String> list = new ArrayList<>();
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREF_RECENT_MOVIES, Context.MODE_PRIVATE);
+            String raw = prefs.getString("history", "");
+            if (!raw.isEmpty()) {
+                for (String id : raw.split(",")) {
+                    if (!id.trim().isEmpty()) {
+                        list.add(id.trim());
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return list;
+    }
+
     private void setupMoviesRail() {
-        if (cachedMovies == null || cachedMovies.isEmpty()) return;
-        List<Movie> subList = new ArrayList<>();
+        if (cachedMovies == null || cachedMovies.isEmpty() || moviesRail == null) return;
+        List<Movie> orderedMovies = new ArrayList<>();
+        List<String> recentIds = getRecentMovieIds();
+        for (String id : recentIds) {
+            for (Movie m : cachedMovies) {
+                if (m.stream_id != null && m.stream_id.equals(id)) {
+                    if (!orderedMovies.contains(m)) {
+                        orderedMovies.add(m);
+                    }
+                    break;
+                }
+            }
+            if (orderedMovies.size() >= 5) break;
+        }
+
         for (Movie m : cachedMovies) {
             if (isDemoMovie(m)) continue;
-            subList.add(m);
-            if (subList.size() >= 25) break;
+            if (!orderedMovies.contains(m)) {
+                orderedMovies.add(m);
+            }
+            if (orderedMovies.size() >= 30) break;
         }
+
         moviesRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
-        moviesRail.setAdapter(new MoviePosterAdapter(this, subList, new MoviePosterAdapter.OnMovieActionListener() {
+        moviesRail.setAdapter(new MoviePosterAdapter(this, orderedMovies, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
             public void onMovieClick(Movie movie) {
                 playMovie(movie);
@@ -2501,7 +2591,7 @@ public class MainActivity extends Activity {
                 }
             }
             list.add(0, series.series_id);
-            while (list.size() > 20) {
+            while (list.size() > 500) {
                 list.remove(list.size() - 1);
             }
             StringBuilder sb = new StringBuilder();
@@ -2544,7 +2634,7 @@ public class MainActivity extends Activity {
                     break;
                 }
             }
-            if (orderedSeries.size() >= 3) break;
+            if (orderedSeries.size() >= 5) break;
         }
 
         for (Series s : cachedSeries) {
@@ -2554,7 +2644,7 @@ public class MainActivity extends Activity {
             if (!orderedSeries.contains(s)) {
                 orderedSeries.add(s);
             }
-            if (orderedSeries.size() >= 25) break;
+            if (orderedSeries.size() >= 30) break;
         }
 
         List<Movie> converted = new ArrayList<>();
@@ -3158,6 +3248,9 @@ public class MainActivity extends Activity {
 
     public void playMovie(Movie movie) {
         if (movie == null) return;
+        activeMoviePlaylistQueue = null;
+        activeMoviePlaylistIndex = -1;
+        activeMoviePlaylistName = null;
         String key = getMovieProgressKey(movie);
         long savedPos = getVodProgress(key);
 
@@ -3185,6 +3278,7 @@ public class MainActivity extends Activity {
     }
 
     private void startMoviePlayback(Movie movie, long startPos) {
+        saveRecentMovie(movie);
         destroyCurrentStream();
         activeVodMovie = movie;
         activeVodSeries = null;
@@ -3196,9 +3290,16 @@ public class MainActivity extends Activity {
         playStream(streamUrl, false, startPos);
 
         // Preenche OSD com dados do filme
-        topChNum.setText("FILME");
+        if (activeMoviePlaylistQueue != null && !activeMoviePlaylistQueue.isEmpty()) {
+            String plLabel = (activeMoviePlaylistName != null ? activeMoviePlaylistName : "PLAYLIST") +
+                    " (" + (activeMoviePlaylistIndex + 1) + "/" + activeMoviePlaylistQueue.size() + ")";
+            topChNum.setText(plLabel);
+            osdChNum.setText(plLabel);
+        } else {
+            topChNum.setText("FILME");
+            osdChNum.setText("FILME");
+        }
         topChName.setText(movie.getDisplayTitle());
-        osdChNum.setText("FILME");
         osdChName.setText(movie.getDisplayTitle());
         osdNowTitle.setText("🎬 " + movie.getDisplayTitle());
         if (startPos > 0) {
@@ -3532,6 +3633,9 @@ public class MainActivity extends Activity {
                 activeVodMovie = null;
                 activeVodEpisode = null;
                 activeVodSeries = null;
+                activeMoviePlaylistQueue = null;
+                activeMoviePlaylistIndex = -1;
+                activeMoviePlaylistName = null;
             }
         }
 
@@ -3571,6 +3675,7 @@ public class MainActivity extends Activity {
                 }, 100);
             }
             setupChannelsRail();
+            setupMoviesRail();
             setupSeriesRail();
             if ((currentActiveStreamUrl == null || currentActiveStreamUrl.isEmpty()) && !allChannels.isEmpty()) {
                 tuneChannel(currentChannelIdx, false);
@@ -3660,6 +3765,8 @@ public class MainActivity extends Activity {
 
     private void renderVodContent(List<Category> categories, List<Movie> movies) {
         isViewingSeries = false;
+        if (btnVodPlaylist != null) btnVodPlaylist.setVisibility(View.VISIBLE);
+        if (btnVodWatched != null) btnVodWatched.setVisibility(View.VISIBLE);
         List<Category> pills = new ArrayList<>();
         pills.add(new Category("ALL", "🌟 Todas as Categorias"));
         if (categories != null) {
@@ -3705,6 +3812,8 @@ public class MainActivity extends Activity {
 
     private void renderSeriesContent(List<Category> categories, List<Series> seriesList) {
         isViewingSeries = true;
+        if (btnVodPlaylist != null) btnVodPlaylist.setVisibility(View.GONE);
+        if (btnVodWatched != null) btnVodWatched.setVisibility(View.VISIBLE);
         List<Category> pills = new ArrayList<>();
         pills.add(new Category("ALL", "🌟 Todas as Categorias"));
         if (categories != null) {
@@ -4131,6 +4240,641 @@ public class MainActivity extends Activity {
                 }
             }
         }));
+    }
+
+    private void ensureMoviesLoaded(Runnable onReady) {
+        if (cachedMovies != null && !cachedMovies.isEmpty()) {
+            if (onReady != null) onReady.run();
+            return;
+        }
+        showLoading("Carregando catálogo de filmes...");
+        executor.execute(() -> {
+            try {
+                if (movieCategories == null || movieCategories.isEmpty()) {
+                    movieCategories = ApiClient.getMovieCategories();
+                }
+                cachedMovies = ApiClient.getMovies();
+                mainHandler.post(() -> {
+                    hideLoading();
+                    if (onReady != null) onReady.run();
+                });
+            } catch (Exception e) {
+                mainHandler.post(() -> {
+                    hideLoading();
+                    Toast.makeText(this, "Erro ao carregar filmes: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
+    }
+
+    private void ensureSeriesLoaded(Runnable onReady) {
+        if (cachedSeries != null && !cachedSeries.isEmpty()) {
+            if (onReady != null) onReady.run();
+            return;
+        }
+        showLoading("Carregando catálogo de séries...");
+        executor.execute(() -> {
+            try {
+                if (seriesCategories == null || seriesCategories.isEmpty()) {
+                    seriesCategories = ApiClient.getSeriesCategories();
+                }
+                cachedSeries = ApiClient.getSeries();
+                mainHandler.post(() -> {
+                    hideLoading();
+                    if (onReady != null) onReady.run();
+                });
+            } catch (Exception e) {
+                mainHandler.post(() -> {
+                    hideLoading();
+                    Toast.makeText(this, "Erro ao carregar séries: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
+    }
+
+    private void showVodWatchedContent() {
+        if (isViewingSeries) {
+            ensureSeriesLoaded(() -> {
+                List<String> recentIds = getRecentSeriesIds();
+                if (recentIds.isEmpty()) {
+                    Toast.makeText(this, "Nenhuma série assistida recentemente.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                List<Series> watchedSeries = new ArrayList<>();
+                for (String id : recentIds) {
+                    for (Series s : cachedSeries) {
+                        if (s.series_id != null && s.series_id.equals(id)) {
+                            if (!watchedSeries.contains(s)) {
+                                watchedSeries.add(s);
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (watchedSeries.isEmpty()) {
+                    Toast.makeText(this, "Nenhuma série encontrada no histórico.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                List<Movie> converted = new ArrayList<>();
+                for (Series s : watchedSeries) {
+                    Movie pseudo = new Movie();
+                    pseudo.stream_id = s.series_id;
+                    pseudo.name = s.name;
+                    pseudo.title = s.title;
+                    pseudo.stream_icon = s.cover;
+                    pseudo.plot = s.plot;
+                    pseudo.rating = s.rating;
+                    pseudo.genre = s.genre;
+                    converted.add(pseudo);
+                }
+                vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+                vodGridRecycler.setAdapter(new MoviePosterAdapter(this, converted, true, new MoviePosterAdapter.OnMovieActionListener() {
+                    @Override
+                    public void onMovieClick(Movie m) {
+                        for (Series s : watchedSeries) {
+                            if (s.series_id != null && s.series_id.equals(m.stream_id)) {
+                                openSeriesDetail(s);
+                                break;
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void onMovieFocus(Movie movie) {
+                        updateVodHero(movie);
+                    }
+                }));
+                if (!converted.isEmpty()) {
+                    updateVodHero(converted.get(0));
+                }
+                vodGridRecycler.requestFocus();
+            });
+        } else {
+            ensureMoviesLoaded(() -> {
+                List<String> recentIds = getRecentMovieIds();
+                if (recentIds.isEmpty()) {
+                    Toast.makeText(this, "Nenhum filme assistido recentemente.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                List<Movie> watchedMovies = new ArrayList<>();
+                for (String id : recentIds) {
+                    for (Movie m : cachedMovies) {
+                        if (m.stream_id != null && m.stream_id.equals(id)) {
+                            if (!watchedMovies.contains(m)) {
+                                watchedMovies.add(m);
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (watchedMovies.isEmpty()) {
+                    Toast.makeText(this, "Nenhum filme encontrado no histórico.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+                vodGridRecycler.setAdapter(new MoviePosterAdapter(this, watchedMovies, true, new MoviePosterAdapter.OnMovieActionListener() {
+                    @Override
+                    public void onMovieClick(Movie movie) {
+                        playMovie(movie);
+                    }
+
+                    @Override
+                    public void onMovieFocus(Movie movie) {
+                        updateVodHero(movie);
+                    }
+                }));
+                if (!watchedMovies.isEmpty()) {
+                    updateVodHero(watchedMovies.get(0));
+                }
+                vodGridRecycler.requestFocus();
+            });
+        }
+    }
+
+    private void onPlaybackEnded() {
+        if (isPlayingVod) {
+            if (activeVodSeries != null && activeVodEpisode != null) {
+                String key = activeVodEpisode.id != null ? "episode_" + activeVodEpisode.id :
+                        "series_" + (activeVodSeries.series_id != null ? activeVodSeries.series_id : "") + "_s" + activeVodSeasonNum + "_e" + activeVodEpisode.episode_num;
+                clearVodProgress(key);
+                playNextSeriesEpisode();
+            } else if (activeVodMovie != null) {
+                clearVodProgress(getMovieProgressKey(activeVodMovie));
+                if (activeMoviePlaylistQueue != null && !activeMoviePlaylistQueue.isEmpty()) {
+                    if (activeMoviePlaylistIndex + 1 < activeMoviePlaylistQueue.size()) {
+                        activeMoviePlaylistIndex++;
+                        Movie nextMovie = activeMoviePlaylistQueue.get(activeMoviePlaylistIndex);
+                        Toast.makeText(this, "▶️ Próximo filme: " + nextMovie.getDisplayTitle(), Toast.LENGTH_SHORT).show();
+                        startMoviePlayback(nextMovie, 0);
+                    } else {
+                        Toast.makeText(this, "🏁 Fim da playlist '" + (activeMoviePlaylistName != null ? activeMoviePlaylistName : "") + "'!", Toast.LENGTH_SHORT).show();
+                        activeMoviePlaylistQueue = null;
+                        activeMoviePlaylistIndex = -1;
+                        activeMoviePlaylistName = null;
+                        setScreenMode(ScreenMode.CENTRAL);
+                    }
+                }
+            }
+        }
+    }
+
+    private void playNextSeriesEpisode() {
+        if (activeVodSeries == null || activeVodEpisode == null) return;
+
+        if (currentSeriesEpisodesMap == null || currentSeriesEpisodesMap.isEmpty()) {
+            showLoading("Carregando próximo episódio...");
+            executor.execute(() -> {
+                try {
+                    Map<String, List<Episode>> epMap = ApiClient.getSeriesEpisodes(activeVodSeries.series_id);
+                    mainHandler.post(() -> {
+                        hideLoading();
+                        currentSeriesEpisodesMap = epMap;
+                        proceedToNextSeriesEpisode();
+                    });
+                } catch (Exception e) {
+                    mainHandler.post(() -> {
+                        hideLoading();
+                        Toast.makeText(this, "Erro ao carregar próximo episódio.", Toast.LENGTH_SHORT).show();
+                    });
+                }
+            });
+        } else {
+            proceedToNextSeriesEpisode();
+        }
+    }
+
+    private void proceedToNextSeriesEpisode() {
+        if (activeVodSeries == null || activeVodEpisode == null || currentSeriesEpisodesMap == null) return;
+
+        List<Episode> currentSeasonEps = currentSeriesEpisodesMap.get(activeVodSeasonNum);
+        int currentEpIdx = -1;
+        if (currentSeasonEps != null) {
+            for (int i = 0; i < currentSeasonEps.size(); i++) {
+                Episode ep = currentSeasonEps.get(i);
+                if (ep.id != null && ep.id.equals(activeVodEpisode.id)) {
+                    currentEpIdx = i;
+                    break;
+                }
+            }
+            if (currentEpIdx < 0) {
+                for (int i = 0; i < currentSeasonEps.size(); i++) {
+                    Episode ep = currentSeasonEps.get(i);
+                    if (ep.episode_num == activeVodEpisode.episode_num) {
+                        currentEpIdx = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 1. Próximo episódio da mesma temporada
+        if (currentSeasonEps != null && currentEpIdx >= 0 && currentEpIdx + 1 < currentSeasonEps.size()) {
+            Episode nextEp = currentSeasonEps.get(currentEpIdx + 1);
+            Toast.makeText(this, "▶️ Próximo episódio: " + nextEp.getDisplayTitle(), Toast.LENGTH_SHORT).show();
+            startSeriesEpisodePlayback(activeVodSeries, nextEp, activeVodSeasonNum, 0);
+            return;
+        }
+
+        // 2. Primeira episódio da próxima temporada
+        List<String> seasonKeys = new ArrayList<>(currentSeriesEpisodesMap.keySet());
+        seasonKeys.sort((a, b) -> {
+            try { return Integer.compare(Integer.parseInt(a), Integer.parseInt(b)); }
+            catch (Exception e) { return a.compareTo(b); }
+        });
+
+        int currentSeasonIdx = seasonKeys.indexOf(activeVodSeasonNum);
+        if (currentSeasonIdx >= 0 && currentSeasonIdx + 1 < seasonKeys.size()) {
+            String nextSeasonNum = seasonKeys.get(currentSeasonIdx + 1);
+            List<Episode> nextSeasonEps = currentSeriesEpisodesMap.get(nextSeasonNum);
+            if (nextSeasonEps != null && !nextSeasonEps.isEmpty()) {
+                Episode nextEp = nextSeasonEps.get(0);
+                Toast.makeText(this, "▶️ Nova Temporada (" + nextSeasonNum + "): " + nextEp.getDisplayTitle(), Toast.LENGTH_SHORT).show();
+                startSeriesEpisodePlayback(activeVodSeries, nextEp, nextSeasonNum, 0);
+                return;
+            }
+        }
+
+        // 3. Fim da série
+        Toast.makeText(this, "🏁 Parabéns! Você concluiu todos os episódios desta série!", Toast.LENGTH_LONG).show();
+        setScreenMode(ScreenMode.CENTRAL);
+    }
+
+    private static final String PREF_MOVIE_PLAYLISTS = "andplay_movie_playlists";
+
+    private List<MoviePlaylist> loadMoviePlaylists() {
+        List<MoviePlaylist> list = new ArrayList<>();
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREF_MOVIE_PLAYLISTS, Context.MODE_PRIVATE);
+            String raw = prefs.getString("playlists", "[]");
+            JSONArray arr = new JSONArray(raw);
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject obj = arr.getJSONObject(i);
+                MoviePlaylist pl = new MoviePlaylist();
+                pl.id = obj.optString("id", java.util.UUID.randomUUID().toString());
+                pl.name = obj.optString("name", "Playlist " + (i + 1));
+                JSONArray mArr = obj.optJSONArray("movieIds");
+                if (mArr != null) {
+                    for (int j = 0; j < mArr.length(); j++) {
+                        pl.movieIds.add(mArr.getString(j));
+                    }
+                }
+                list.add(pl);
+            }
+        } catch (Exception e) {
+            Log.e("EPlay", "Erro ao carregar playlists: " + e.getMessage());
+        }
+        return list;
+    }
+
+    private void saveMoviePlaylists(List<MoviePlaylist> list) {
+        try {
+            JSONArray arr = new JSONArray();
+            if (list != null) {
+                for (MoviePlaylist pl : list) {
+                    JSONObject obj = new JSONObject();
+                    obj.put("id", pl.id);
+                    obj.put("name", pl.name);
+                    JSONArray mArr = new JSONArray();
+                    for (String mid : pl.movieIds) {
+                        mArr.put(mid);
+                    }
+                    obj.put("movieIds", mArr);
+                    arr.put(obj);
+                }
+            }
+            SharedPreferences prefs = getSharedPreferences(PREF_MOVIE_PLAYLISTS, Context.MODE_PRIVATE);
+            prefs.edit().putString("playlists", arr.toString()).apply();
+        } catch (Exception e) {
+            Log.e("EPlay", "Erro ao salvar playlists: " + e.getMessage());
+        }
+    }
+
+    private List<Movie> getPlaylistMovies(MoviePlaylist pl) {
+        List<Movie> res = new ArrayList<>();
+        if (pl == null || pl.movieIds == null || cachedMovies == null) return res;
+        for (String id : pl.movieIds) {
+            for (Movie m : cachedMovies) {
+                if (m.stream_id != null && m.stream_id.equals(id)) {
+                    res.add(m);
+                    break;
+                }
+            }
+        }
+        return res;
+    }
+
+    private void showMoviePlaylistsDialog() {
+        ensureMoviesLoaded(() -> {
+            List<MoviePlaylist> playlists = loadMoviePlaylists();
+            List<String> items = new ArrayList<>();
+            items.add("➕ NOVA PLAYLIST");
+            for (MoviePlaylist pl : playlists) {
+                items.add("📋 " + pl.name + " (" + pl.movieIds.size() + " filmes)");
+            }
+            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("🎬 Playlists de Filmes")
+                    .setItems(items.toArray(new String[0]), (dialog, which) -> {
+                        if (which == 0) {
+                            showCreatePlaylistNameDialog();
+                        } else {
+                            MoviePlaylist selected = playlists.get(which - 1);
+                            showPlaylistActionsDialog(selected);
+                        }
+                    })
+                    .setNegativeButton("Fechar", null)
+                    .show();
+        });
+    }
+
+    private void showCreatePlaylistNameDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        builder.setTitle("➕ Nova Playlist de Filmes");
+
+        final EditText input = new EditText(this);
+        input.setHint("Nome da playlist (ex: Minha Fila)");
+        input.setTextColor(Color.WHITE);
+        input.setHintTextColor(Color.LTGRAY);
+        FrameLayout container = new FrameLayout(this);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.leftMargin = 40;
+        params.rightMargin = 40;
+        input.setLayoutParams(params);
+        container.addView(input);
+        builder.setView(container);
+
+        builder.setPositiveButton("Continuar", (dialog, which) -> {
+            String name = input.getText().toString().trim();
+            if (name.isEmpty()) {
+                name = "Minha Playlist";
+            }
+            MoviePlaylist pl = new MoviePlaylist();
+            pl.id = java.util.UUID.randomUUID().toString();
+            pl.name = name;
+            showAddMoviesToPlaylistDialog(pl, true);
+        });
+        builder.setNegativeButton("Cancelar", null);
+        builder.show();
+    }
+
+    private void showAddMoviesToPlaylistDialog(MoviePlaylist playlist, boolean isNew) {
+        String[] options = new String[] {
+                "🔍 BUSCAR E ADICIONAR FILMES",
+                "👀 GERENCIAR FILMES ADICIONADOS (" + playlist.movieIds.size() + ")",
+                "💾 SALVAR PLAYLIST"
+        };
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("📋 Playlist: " + playlist.name + " (" + playlist.movieIds.size() + " filmes)")
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) {
+                        showSearchMovieForPlaylistDialog(playlist, isNew);
+                    } else if (which == 1) {
+                        showManagePlaylistMoviesDialog(playlist, isNew);
+                    } else if (which == 2) {
+                        if (playlist.movieIds.isEmpty()) {
+                            Toast.makeText(this, "Adicione pelo menos 1 filme antes de salvar!", Toast.LENGTH_SHORT).show();
+                            showAddMoviesToPlaylistDialog(playlist, isNew);
+                            return;
+                        }
+                        List<MoviePlaylist> allPl = loadMoviePlaylists();
+                        boolean found = false;
+                        for (int i = 0; i < allPl.size(); i++) {
+                            if (allPl.get(i).id.equals(playlist.id)) {
+                                allPl.set(i, playlist);
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            allPl.add(playlist);
+                        }
+                        saveMoviePlaylists(allPl);
+                        Toast.makeText(this, "Playlist '" + playlist.name + "' salva com sucesso!", Toast.LENGTH_SHORT).show();
+                        showMoviePlaylistsDialog();
+                    }
+                })
+                .setNegativeButton("Cancelar", (d, w) -> {
+                    if (!isNew) {
+                        showMoviePlaylistsDialog();
+                    }
+                })
+                .show();
+    }
+
+    private void showSearchMovieForPlaylistDialog(MoviePlaylist playlist, boolean isNew) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        builder.setTitle("🔍 Buscar Filme para: " + playlist.name);
+
+        final EditText input = new EditText(this);
+        input.setHint("Digite o nome do filme (ou deixe em branco)");
+        input.setTextColor(Color.WHITE);
+        input.setHintTextColor(Color.LTGRAY);
+        FrameLayout container = new FrameLayout(this);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.leftMargin = 40;
+        params.rightMargin = 40;
+        input.setLayoutParams(params);
+        container.addView(input);
+        builder.setView(container);
+
+        builder.setPositiveButton("Buscar", (dialog, which) -> {
+            String query = input.getText().toString().trim().toLowerCase();
+            showMovieSearchResultsForPlaylist(playlist, query, isNew);
+        });
+        builder.setNegativeButton("Voltar", (dialog, which) -> {
+            showAddMoviesToPlaylistDialog(playlist, isNew);
+        });
+        builder.show();
+    }
+
+    private void showMovieSearchResultsForPlaylist(MoviePlaylist playlist, String query, boolean isNew) {
+        if (cachedMovies == null || cachedMovies.isEmpty()) {
+            Toast.makeText(this, "Nenhum filme carregado no catálogo.", Toast.LENGTH_SHORT).show();
+            showAddMoviesToPlaylistDialog(playlist, isNew);
+            return;
+        }
+
+        List<Movie> matched = new ArrayList<>();
+        for (Movie m : cachedMovies) {
+            if (isDemoMovie(m)) continue;
+            if (query.isEmpty() || (m.getDisplayTitle() != null && m.getDisplayTitle().toLowerCase().contains(query))) {
+                matched.add(m);
+                if (matched.size() >= 100) break;
+            }
+        }
+
+        if (matched.isEmpty()) {
+            Toast.makeText(this, "Nenhum filme encontrado para '" + query + "'", Toast.LENGTH_SHORT).show();
+            showSearchMovieForPlaylistDialog(playlist, isNew);
+            return;
+        }
+
+        String[] titles = new String[matched.size()];
+        for (int i = 0; i < matched.size(); i++) {
+            Movie m = matched.get(i);
+            boolean inPlaylist = playlist.movieIds.contains(m.stream_id);
+            titles[i] = (inPlaylist ? "✅ " : "➕ ") + m.getDisplayTitle();
+        }
+
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Selecione para adicionar (" + matched.size() + " filmes):")
+                .setItems(titles, (d, idx) -> {
+                    Movie selected = matched.get(idx);
+                    if (!playlist.movieIds.contains(selected.stream_id)) {
+                        playlist.movieIds.add(selected.stream_id);
+                        Toast.makeText(this, "Adicionado: " + selected.getDisplayTitle() + " (" + playlist.movieIds.size() + " na fila)", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(this, "Filme já está na playlist!", Toast.LENGTH_SHORT).show();
+                    }
+                    showMovieSearchResultsForPlaylist(playlist, query, isNew);
+                })
+                .setPositiveButton("🔍 Nova Busca", (d, w) -> {
+                    showSearchMovieForPlaylistDialog(playlist, isNew);
+                })
+                .setNegativeButton("Concluir Adição", (d, w) -> {
+                    showAddMoviesToPlaylistDialog(playlist, isNew);
+                })
+                .show();
+    }
+
+    private void showManagePlaylistMoviesDialog(MoviePlaylist playlist, boolean isNew) {
+        if (playlist.movieIds.isEmpty()) {
+            Toast.makeText(this, "A playlist está vazia!", Toast.LENGTH_SHORT).show();
+            showAddMoviesToPlaylistDialog(playlist, isNew);
+            return;
+        }
+        List<Movie> pMovies = getPlaylistMovies(playlist);
+        String[] items = new String[pMovies.size()];
+        for (int i = 0; i < pMovies.size(); i++) {
+            items[i] = (i + 1) + ". " + pMovies.get(i).getDisplayTitle() + "  [❌ Remover]";
+        }
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Gerenciar Filmes (" + playlist.movieIds.size() + ") - Clique para remover:")
+                .setItems(items, (dialog, which) -> {
+                    Movie removed = pMovies.get(which);
+                    playlist.movieIds.remove(removed.stream_id);
+                    Toast.makeText(this, "Removido: " + removed.getDisplayTitle(), Toast.LENGTH_SHORT).show();
+                    if (!playlist.movieIds.isEmpty()) {
+                        showManagePlaylistMoviesDialog(playlist, isNew);
+                    } else {
+                        showAddMoviesToPlaylistDialog(playlist, isNew);
+                    }
+                })
+                .setNegativeButton("Voltar", (d, w) -> showAddMoviesToPlaylistDialog(playlist, isNew))
+                .show();
+    }
+
+    private void showPlaylistActionsDialog(MoviePlaylist playlist) {
+        String[] actions = new String[] {
+                "▶️ INICIAR REPRODUÇÃO EM SEQUÊNCIA",
+                "📺 EXIBIR FILMES NA GRADE",
+                "➕ ADICIONAR / EDITAR FILMES",
+                "✏️ RENOMEAR PLAYLIST",
+                "🗑️ EXCLUIR PLAYLIST"
+        };
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("📋 " + playlist.name + " (" + playlist.movieIds.size() + " filmes)")
+                .setItems(actions, (dialog, which) -> {
+                    if (which == 0) {
+                        startMoviePlaylist(playlist, 0);
+                    } else if (which == 1) {
+                        displayPlaylistInGrid(playlist);
+                    } else if (which == 2) {
+                        showAddMoviesToPlaylistDialog(playlist, false);
+                    } else if (which == 3) {
+                        showRenamePlaylistDialog(playlist);
+                    } else if (which == 4) {
+                        confirmDeletePlaylist(playlist);
+                    }
+                })
+                .setNegativeButton("Voltar", (d, w) -> showMoviePlaylistsDialog())
+                .show();
+    }
+
+    private void showRenamePlaylistDialog(MoviePlaylist playlist) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        builder.setTitle("✏️ Renomear Playlist");
+        final EditText input = new EditText(this);
+        input.setText(playlist.name);
+        input.setTextColor(Color.WHITE);
+        FrameLayout container = new FrameLayout(this);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.leftMargin = 40;
+        params.rightMargin = 40;
+        input.setLayoutParams(params);
+        container.addView(input);
+        builder.setView(container);
+        builder.setPositiveButton("Salvar", (dialog, which) -> {
+            String newName = input.getText().toString().trim();
+            if (!newName.isEmpty()) {
+                playlist.name = newName;
+                List<MoviePlaylist> all = loadMoviePlaylists();
+                for (int i = 0; i < all.size(); i++) {
+                    if (all.get(i).id.equals(playlist.id)) {
+                        all.set(i, playlist);
+                        break;
+                    }
+                }
+                saveMoviePlaylists(all);
+                Toast.makeText(this, "Playlist renomeada para: " + newName, Toast.LENGTH_SHORT).show();
+            }
+            showPlaylistActionsDialog(playlist);
+        });
+        builder.setNegativeButton("Cancelar", (d, w) -> showPlaylistActionsDialog(playlist));
+        builder.show();
+    }
+
+    private void confirmDeletePlaylist(MoviePlaylist playlist) {
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Excluir Playlist")
+                .setMessage("Deseja realmente excluir a playlist '" + playlist.name + "'?")
+                .setPositiveButton("Excluir", (dialog, which) -> {
+                    List<MoviePlaylist> all = loadMoviePlaylists();
+                    all.removeIf(pl -> pl.id != null && pl.id.equals(playlist.id));
+                    saveMoviePlaylists(all);
+                    Toast.makeText(this, "Playlist excluída!", Toast.LENGTH_SHORT).show();
+                    showMoviePlaylistsDialog();
+                })
+                .setNegativeButton("Cancelar", (d, w) -> showPlaylistActionsDialog(playlist))
+                .show();
+    }
+
+    private void displayPlaylistInGrid(MoviePlaylist playlist) {
+        List<Movie> pMovies = getPlaylistMovies(playlist);
+        if (pMovies.isEmpty()) {
+            Toast.makeText(this, "Playlist vazia ou filmes indisponíveis.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+        vodGridRecycler.setAdapter(new MoviePosterAdapter(this, pMovies, true, new MoviePosterAdapter.OnMovieActionListener() {
+            @Override
+            public void onMovieClick(Movie movie) {
+                int idx = pMovies.indexOf(movie);
+                startMoviePlaylist(playlist, Math.max(0, idx));
+            }
+
+            @Override
+            public void onMovieFocus(Movie movie) {
+                updateVodHero(movie);
+            }
+        }));
+        updateVodHero(pMovies.get(0));
+        vodGridRecycler.requestFocus();
+    }
+
+    public void startMoviePlaylist(MoviePlaylist playlist, int startIndex) {
+        if (playlist == null || playlist.movieIds == null || playlist.movieIds.isEmpty()) return;
+        List<Movie> movies = getPlaylistMovies(playlist);
+        if (movies.isEmpty()) {
+            Toast.makeText(this, "Nenhum filme disponível nesta playlist.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        activeMoviePlaylistQueue = movies;
+        activeMoviePlaylistIndex = Math.max(0, Math.min(startIndex, movies.size() - 1));
+        activeMoviePlaylistName = playlist.name;
+        startMoviePlayback(movies.get(activeMoviePlaylistIndex), 0);
     }
 
     private void showLoading(String msg) {
