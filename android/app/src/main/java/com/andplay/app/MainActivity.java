@@ -2811,6 +2811,12 @@ public class MainActivity extends Activity {
     private void showSportsOverlay() {
         if (sportsStandingsOverlay == null || activeSportsEvent == null) return;
         if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE) return;
+        // Fechar o OSD banner para não coexistir com o overlay
+        if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
+            osdHandler.removeCallbacks(osdHideRunnable);
+            osdBanner.setVisibility(View.GONE);
+            if (topChannelBadge != null) topChannelBadge.setVisibility(View.GONE);
+        }
         standingsOverlayVisible = true;
         sportsStandingsOverlay.setVisibility(View.VISIBLE);
 
@@ -4493,6 +4499,10 @@ public class MainActivity extends Activity {
 
     public void showOsdBanner(int durationMs) {
         if (isMosaicActive) return;
+        // Fechar overlay sports para não coexistir com o OSD
+        if (standingsOverlayVisible) {
+            hideSportsOverlay();
+        }
         osdHandler.removeCallbacks(osdHideRunnable);
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
@@ -6091,6 +6101,52 @@ public class MainActivity extends Activity {
             }
         }
 
+        // ─── GUARD DO OVERLAY SPORTS (independente de action) ───────────────────────────
+        // Deve vir ANTES do bloco ACTION_DOWN para que tanto DOWN quanto UP do BACK sejam
+        // consumidos aqui, impedindo que o ACTION_UP vaze para handleBack() e feche a tela.
+        if (standingsOverlayVisible && sportsStandingsOverlay != null
+                && sportsStandingsOverlay.getVisibility() == View.VISIBLE) {
+            if (keyCode == KeyEvent.KEYCODE_BACK) {
+                // No DOWN: fecha o overlay. No UP: apenas consome — não propaga.
+                if (action == KeyEvent.ACTION_DOWN) {
+                    hideSportsOverlay();
+                }
+                return true; // consome DOWN e UP
+            }
+            // Para qualquer outra tecla, só processa no DOWN para evitar duplo disparo
+            if (action == KeyEvent.ACTION_DOWN) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    switchStandingsTab("standings");
+                    if (tabStandings != null) tabStandings.requestFocus();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    switchStandingsTab("round");
+                    if (tabRound != null) tabRound.requestFocus();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    RecyclerView activeRecycler = "round".equals(standingsActiveTab) ? roundMatchesRecycler : standingsRecycler;
+                    if (activeRecycler != null) {
+                        activeRecycler.smoothScrollBy(0, keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? 140 : -140);
+                    }
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    if ("standings".equals(standingsActiveTab)) {
+                        switchStandingsTab("round");
+                        if (tabRound != null) tabRound.requestFocus();
+                    } else {
+                        switchStandingsTab("standings");
+                        if (tabStandings != null) tabStandings.requestFocus();
+                    }
+                    return true;
+                }
+            }
+            return true; // isola qualquer outra tecla
+        }
+        // ────────────────────────────────────────────────────────────────────────────────
+
         if (action == KeyEvent.ACTION_DOWN) {
             // Teclas de controle de TV por Assinatura / Receptor
             if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP) {
@@ -6159,49 +6215,6 @@ public class MainActivity extends Activity {
                 // LEFT e RIGHT navegam normalmente pela timeline horizontal do guia
                 // Nunca propaga para os outros cenários (evita abrir gaveta lateral)
                 return super.dispatchKeyEvent(event);
-            }
-
-            // CENÁRIO 0.5: OVERLAY DE TABELA / RODADA ESPORTIVA (TELA CHEIA)
-            // Fecha SOMENTE com BACK. Nenhum DPAD fecha o overlay.
-            if (standingsOverlayVisible && sportsStandingsOverlay != null && sportsStandingsOverlay.getVisibility() == View.VISIBLE) {
-                if (keyCode == KeyEvent.KEYCODE_BACK) {
-                    hideSportsOverlay();
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    // D-Pad Esquerdo seleciona a aba TABELA (à esquerda). Nunca fecha o overlay nem abre gaveta.
-                    switchStandingsTab("standings");
-                    if (tabStandings != null) tabStandings.requestFocus();
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                    // D-Pad Direito seleciona a aba RODADA (à direita). Nunca fecha o overlay.
-                    switchStandingsTab("round");
-                    if (tabRound != null) tabRound.requestFocus();
-                    return true;
-                }
-                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    // Rola a lista ativa para cima/baixo sem interferir no vídeo de fundo
-                    RecyclerView activeRecycler = "round".equals(standingsActiveTab) ? roundMatchesRecycler : standingsRecycler;
-                    if (activeRecycler != null) {
-                        int amount = (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) ? 140 : -140;
-                        activeRecycler.smoothScrollBy(0, amount);
-                    }
-                    return true;
-                }
-                // OK/ENTER → alterna entre Tabela e Rodada
-                if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                    if ("standings".equals(standingsActiveTab)) {
-                        switchStandingsTab("round");
-                        if (tabRound != null) tabRound.requestFocus();
-                    } else {
-                        switchStandingsTab("standings");
-                        if (tabStandings != null) tabStandings.requestFocus();
-                    }
-                    return true;
-                }
-                // Consome todas as outras teclas — isolamento total, nada vaza para o player/drawer
-                return true;
             }
 
             // CENÁRIO 1: GAVETA LATERAL ESTÁ ABERTA (qualquer modo de tela)
