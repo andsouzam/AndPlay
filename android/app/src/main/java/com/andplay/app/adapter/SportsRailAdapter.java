@@ -14,7 +14,11 @@ import com.andplay.app.model.SportsEvent;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
 
 public class SportsRailAdapter extends RecyclerView.Adapter<SportsRailAdapter.ViewHolder> {
 
@@ -46,8 +50,46 @@ public class SportsRailAdapter extends RecyclerView.Adapter<SportsRailAdapter.Vi
         holder.title.setText(ev.getDisplayName());
         holder.time.setText(ev.matchTime != null ? ev.matchTime : "VS");
 
-        holder.badge.setText(ev.isLive ? "AO VIVO" : "HOJE");
-        holder.badge.setBackgroundResource(ev.isLive ? R.drawable.badge_live : R.drawable.badge_gold);
+        // Determina badge dinâmico
+        if (ev.isLive) {
+            holder.badge.setText("AO VIVO");
+            holder.badge.setBackgroundResource(R.drawable.badge_live);
+            holder.badge.setTextColor(0xFF000000);
+        } else if (ev.isFinished) {
+            holder.badge.setText("FINALIZADO");
+            holder.badge.setBackgroundResource(R.drawable.badge_gray);
+            holder.badge.setTextColor(0xFFFFFFFF);
+        } else {
+            // Determina se é HOJE ou AMANHÃ comparando o dia do evento com o dia atual
+            String dayLabel = "HOJE";
+            if (ev.startTimestamp > 0) {
+                try {
+                    TimeZone tz = TimeZone.getTimeZone("America/Sao_Paulo");
+                    SimpleDateFormat dayFmt = new SimpleDateFormat("yyyyMMdd", Locale.US);
+                    dayFmt.setTimeZone(tz);
+                    String eventDay = dayFmt.format(new Date(ev.startTimestamp * 1000L));
+                    String todayDay = dayFmt.format(new Date());
+                    String tomorrowDay = dayFmt.format(new Date(System.currentTimeMillis() + 86400000L));
+                    if (eventDay.equals(tomorrowDay)) {
+                        dayLabel = "AMANHÃ";
+                    } else if (!eventDay.equals(todayDay)) {
+                        // Além de amanhã: exibe a data resumida
+                        SimpleDateFormat shortDate = new SimpleDateFormat("dd/MM", Locale.US);
+                        shortDate.setTimeZone(tz);
+                        dayLabel = shortDate.format(new Date(ev.startTimestamp * 1000L));
+                    }
+                } catch (Exception ignored) {}
+            }
+            if ("AMANHÃ".equals(dayLabel)) {
+                holder.badge.setText("AMANHÃ");
+                holder.badge.setBackgroundResource(R.drawable.badge_blue);
+                holder.badge.setTextColor(0xFFFFFFFF);
+            } else {
+                holder.badge.setText(dayLabel);
+                holder.badge.setBackgroundResource(R.drawable.badge_gold);
+                holder.badge.setTextColor(0xFF000000);
+            }
+        }
 
         if (ev.homeLogo != null && !ev.homeLogo.isEmpty()) {
             Glide.with(context).load(ev.homeLogo).diskCacheStrategy(DiskCacheStrategy.ALL).into(holder.homeLogo);

@@ -10,6 +10,8 @@ public class SportsEvent implements Serializable {
     public String league;
     public String matchTime;
     public boolean isLive;
+    public boolean isFinished;
+    public long startTimestamp; // Unix timestamp em segundos (0 se desconhecido)
     public String homeLogo;
     public String awayLogo;
     public String embedUrl;

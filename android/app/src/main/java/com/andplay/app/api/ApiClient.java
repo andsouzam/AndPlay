@@ -625,6 +625,11 @@ public class ApiClient {
                             String competition = optString(item, "competition", optString(item, "category", "Futebol Ao Vivo"));
                             String status = optString(item, "status", "upcoming");
                             boolean isLive = "live".equalsIgnoreCase(status);
+                            boolean isFinished = "finished".equalsIgnoreCase(status)
+                                    || "ended".equalsIgnoreCase(status)
+                                    || "completed".equalsIgnoreCase(status)
+                                    || "ft".equalsIgnoreCase(status)
+                                    || "post".equalsIgnoreCase(status);
 
                             JsonObject teams = item.has("teams") && item.get("teams").isJsonObject() ? item.getAsJsonObject("teams") : null;
                             String homeName = "";
@@ -667,21 +672,50 @@ public class ApiClient {
                                 title = (!homeName.isEmpty() && !awayName.isEmpty()) ? homeName + " x " + awayName : "Evento Esportivo";
                             }
 
-                            String matchTime = isLive ? "AO VIVO" : "EM BREVE";
+                            // Captura o timestamp de início para calcular HOJE/AMANHÃ
+                            long startTs = 0L;
                             if (item.has("start_timestamp") && !item.get("start_timestamp").isJsonNull()) {
+                                try { startTs = item.get("start_timestamp").getAsLong(); } catch (Exception ignored) {}
+                            }
+
+                            // Calcula label de horário e dia
+                            String matchTime = isLive ? "AO VIVO" : (isFinished ? "FINALIZADO" : "EM BREVE");
+                            if (startTs > 0) {
                                 try {
-                                    long ts = item.get("start_timestamp").getAsLong();
-                                    Date d = new Date(ts * 1000L);
-                                    SimpleDateFormat outFmt = new SimpleDateFormat("HH:mm", Locale.US);
-                                    outFmt.setTimeZone(TimeZone.getTimeZone("America/Sao_Paulo"));
-                                    matchTime = isLive ? "AO VIVO" : outFmt.format(d);
+                                    TimeZone tz = TimeZone.getTimeZone("America/Sao_Paulo");
+                                    SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.US);
+                                    timeFmt.setTimeZone(tz);
+
+                                    // Compara data do evento com hoje/amanhã em São Paulo
+                                    SimpleDateFormat dayFmt = new SimpleDateFormat("yyyyMMdd", Locale.US);
+                                    dayFmt.setTimeZone(tz);
+                                    String eventDay = dayFmt.format(new Date(startTs * 1000L));
+                                    String todayDay = dayFmt.format(new Date());
+                                    long nowMs = System.currentTimeMillis();
+                                    Date tomorrowDate = new Date(nowMs + 86400000L);
+                                    String tomorrowDay = dayFmt.format(tomorrowDate);
+
+                                    if (isLive) {
+                                        matchTime = "AO VIVO";
+                                    } else if (isFinished) {
+                                        matchTime = timeFmt.format(new Date(startTs * 1000L));
+                                    } else if (eventDay.equals(todayDay)) {
+                                        matchTime = timeFmt.format(new Date(startTs * 1000L));
+                                    } else if (eventDay.equals(tomorrowDay)) {
+                                        matchTime = timeFmt.format(new Date(startTs * 1000L));
+                                    } else {
+                                        matchTime = timeFmt.format(new Date(startTs * 1000L));
+                                    }
                                 } catch (Exception ignored) {}
                             } else if (item.has("start_time") && !item.get("start_time").isJsonNull()) {
                                 String st = item.get("start_time").getAsString();
-                                if (st.length() >= 16) {
-                                    matchTime = isLive ? "AO VIVO" : st.substring(11, 16);
+                                if (st.length() >= 16 && !isLive && !isFinished) {
+                                    matchTime = st.substring(11, 16);
                                 }
                             }
+
+                            // Determina label de dia para o badge (HOJE / AMANHÃ / AO VIVO / FINALIZADO)
+                            // Será calculado no adapter com base em startTimestamp e isFinished
 
                             if (isLive && !homeScore.isEmpty() && !awayScore.isEmpty()) {
                                 title = homeName + " " + homeScore + " x " + awayScore + " " + awayName;
@@ -692,6 +726,8 @@ public class ApiClient {
                             ev.name = title;
                             ev.league = competition;
                             ev.isLive = isLive;
+                            ev.isFinished = isFinished;
+                            ev.startTimestamp = startTs;
                             ev.matchTime = matchTime;
                             ev.homeLogo = homeLogo;
                             ev.awayLogo = awayLogo;
@@ -794,8 +830,14 @@ public class ApiClient {
             e.printStackTrace();
         }
 
-        // Partidas ao vivo no topo, seguidas pelas próximas
-        Collections.sort(events, (a, b) -> (b.isLive ? 1 : 0) - (a.isLive ? 1 : 0));
+        // Ordena: AO VIVO → Próximos (por horário de início crescente) → Finalizados
+        Collections.sort(events, (a, b) -> {
+            int rankA = a.isLive ? 0 : (a.isFinished ? 2 : 1);
+            int rankB = b.isLive ? 0 : (b.isFinished ? 2 : 1);
+            if (rankA != rankB) return rankA - rankB;
+            // Mesmo grupo: ordena por horário de início crescente
+            return Long.compare(a.startTimestamp, b.startTimestamp);
+        });
         return events;
     }
 
