@@ -48,11 +48,30 @@ public class SportsRailAdapter extends RecyclerView.Adapter<SportsRailAdapter.Vi
         SportsEvent ev = events.get(position);
         holder.league.setText(ev.getDisplayLeague());
         holder.title.setText(ev.getDisplayName());
-        holder.time.setText(ev.matchTime != null ? ev.matchTime : "VS");
+
+        // Exibe o placar ou o horário no centro entre os escudos
+        if (ev.score != null && !ev.score.isEmpty()) {
+            holder.time.setText(ev.score);
+            if (ev.isLive) {
+                holder.time.setTextColor(0xFF00E676); // Verde chamativo para jogo ao vivo
+            } else if (ev.isFinished) {
+                holder.time.setTextColor(0xFFFFFFFF); // Branco para placar final
+            } else {
+                holder.time.setTextColor(0xFFFFC107);
+            }
+        } else {
+            String centerTime = ev.matchTime != null ? ev.matchTime : "VS";
+            if (ev.isLive && "AO VIVO".equalsIgnoreCase(centerTime)) {
+                centerTime = "VS";
+            }
+            holder.time.setText(centerTime);
+            holder.time.setTextColor(0xFFFFC107);
+        }
 
         // Determina badge dinâmico
         if (ev.isLive) {
-            holder.badge.setText("AO VIVO");
+            String badgeText = (ev.clock != null && !ev.clock.isEmpty()) ? "AO VIVO " + ev.clock : "AO VIVO";
+            holder.badge.setText(badgeText);
             holder.badge.setBackgroundResource(R.drawable.badge_live);
             holder.badge.setTextColor(0xFF000000);
         } else if (ev.isFinished) {

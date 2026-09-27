@@ -14,6 +14,12 @@ public class SportsEvent implements Serializable {
     public long startTimestamp; // Unix timestamp em segundos (0 se desconhecido)
     public String homeLogo;
     public String awayLogo;
+    public String homeName;
+    public String awayName;
+    public String homeScore;
+    public String awayScore;
+    public String score; // e.g. "2 x 2"
+    public String clock; // e.g. "75'", "HT", "FT"
     public String embedUrl;
     public String hlsUrl;
     public List<String> candidateChannels = new ArrayList<>();

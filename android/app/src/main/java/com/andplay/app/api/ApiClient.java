@@ -21,14 +21,17 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
@@ -717,11 +720,6 @@ public class ApiClient {
                             // Determina label de dia para o badge (HOJE / AMANHÃ / AO VIVO / FINALIZADO)
                             // Será calculado no adapter com base em startTimestamp e isFinished
 
-                            // Exibe placar para jogos ao vivo e finalizados
-                            if ((isLive || isFinished) && !homeScore.isEmpty() && !awayScore.isEmpty()) {
-                                title = homeName + " " + homeScore + " x " + awayScore + " " + awayName;
-                            }
-
                             SportsEvent ev = new SportsEvent();
                             ev.id = id;
                             ev.name = title;
@@ -732,6 +730,8 @@ public class ApiClient {
                             ev.matchTime = matchTime;
                             ev.homeLogo = homeLogo;
                             ev.awayLogo = awayLogo;
+                            ev.homeName = homeName;
+                            ev.awayName = awayName;
 
                             // 1. Mapeia canais StreamVerde e lista de canais candidatos para as transmissões oficiais da partida
                             List<String> detectedSvSlugs = new ArrayList<>();
@@ -831,6 +831,9 @@ public class ApiClient {
             e.printStackTrace();
         }
 
+        // Enriquece partidas com placares em tempo real via ESPN (ao vivo e finalizados)
+        enrichSportsWithScores(events);
+
         // Ordena: AO VIVO → Próximos (por horário de início crescente) → Finalizados
         Collections.sort(events, (a, b) -> {
             int rankA = a.isLive ? 0 : (a.isFinished ? 2 : 1);
@@ -840,6 +843,258 @@ public class ApiClient {
             return Long.compare(a.startTimestamp, b.startTimestamp);
         });
         return events;
+    }
+
+    private static class EspnMatch {
+        String homeName;
+        String awayName;
+        String homeScore;
+        String awayScore;
+        String clock;
+        String state;
+    }
+
+    private static final Map<String, String> TEAM_ALIASES = new HashMap<>();
+    static {
+        TEAM_ALIASES.put("eslovenia", "slovenia");
+        TEAM_ALIASES.put("escocia", "scotland");
+        TEAM_ALIASES.put("islandia", "iceland");
+        TEAM_ALIASES.put("estonia", "estonia");
+        TEAM_ALIASES.put("bulgaria", "bulgaria");
+        TEAM_ALIASES.put("luxemburgo", "luxembourg");
+        TEAM_ALIASES.put("san marino", "san marino");
+        TEAM_ALIASES.put("finlandia", "finland");
+        TEAM_ALIASES.put("ilhas faroe", "faroe islands");
+        TEAM_ALIASES.put("cazaquistao", "kazakhstan");
+        TEAM_ALIASES.put("eslovaquia", "slovakia");
+        TEAM_ALIASES.put("moldavia", "moldova");
+        TEAM_ALIASES.put("macedonia do norte", "north macedonia");
+        TEAM_ALIASES.put("suica", "switzerland");
+        TEAM_ALIASES.put("inglaterra", "england");
+        TEAM_ALIASES.put("espanha", "spain");
+        TEAM_ALIASES.put("republica tcheca", "czechia");
+        TEAM_ALIASES.put("croacia", "croatia");
+        TEAM_ALIASES.put("albania", "albania");
+        TEAM_ALIASES.put("belarus", "belarus");
+        TEAM_ALIASES.put("eua", "united states");
+        TEAM_ALIASES.put("estados unidos", "united states");
+        TEAM_ALIASES.put("peru", "peru");
+        TEAM_ALIASES.put("lituania", "lithuania");
+        TEAM_ALIASES.put("azerbaijao", "azerbaijan");
+        TEAM_ALIASES.put("servia", "serbia");
+        TEAM_ALIASES.put("holanda", "netherlands");
+        TEAM_ALIASES.put("italia", "italy");
+        TEAM_ALIASES.put("alemanha", "germany");
+        TEAM_ALIASES.put("franca", "france");
+        TEAM_ALIASES.put("portugal", "portugal");
+        TEAM_ALIASES.put("belgica", "belgium");
+        TEAM_ALIASES.put("austria", "austria");
+        TEAM_ALIASES.put("dinamarca", "denmark");
+        TEAM_ALIASES.put("suecia", "sweden");
+        TEAM_ALIASES.put("noruega", "norway");
+        TEAM_ALIASES.put("polonia", "poland");
+        TEAM_ALIASES.put("ucrania", "ukraine");
+        TEAM_ALIASES.put("turquia", "turkey");
+        TEAM_ALIASES.put("grecia", "greece");
+        TEAM_ALIASES.put("russia", "russia");
+        TEAM_ALIASES.put("uruguai", "uruguay");
+        TEAM_ALIASES.put("paraguai", "paraguay");
+        TEAM_ALIASES.put("colombia", "colombia");
+        TEAM_ALIASES.put("argentina", "argentina");
+        TEAM_ALIASES.put("chile", "chile");
+
+        TEAM_ALIASES.put("sj earthquakes", "san jose earthquakes");
+        TEAM_ALIASES.put("dc united", "dc united");
+        TEAM_ALIASES.put("d.c. united", "dc united");
+        TEAM_ALIASES.put("sport recife", "sport");
+        TEAM_ALIASES.put("sporting kc", "sporting kansas city");
+        TEAM_ALIASES.put("los angeles fc", "lafc");
+        TEAM_ALIASES.put("new york rb", "red bull new york");
+        TEAM_ALIASES.put("st. louis city", "st. louis city sc");
+        TEAM_ALIASES.put("operario-pr", "operario");
+        TEAM_ALIASES.put("operario pr", "operario");
+        TEAM_ALIASES.put("atletico goianiense", "atletico goianiense");
+        TEAM_ALIASES.put("atletico-go", "atletico goianiense");
+        TEAM_ALIASES.put("athletico-pr", "athletico");
+        TEAM_ALIASES.put("athletico pr", "athletico");
+    }
+
+    private static String cleanAndNormalizeTeam(String name) {
+        if (name == null) return "";
+        String s = Normalizer.normalize(name.toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+                .replaceAll("[^a-z0-9 ]", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        if (TEAM_ALIASES.containsKey(s)) {
+            return TEAM_ALIASES.get(s);
+        }
+        s = s.replaceAll("\\b(fc|sc|cf|ec|ac)\\b", "").replaceAll("\\s+", " ").trim();
+        return s;
+    }
+
+    private static boolean matchTeamName(String evTeam, String espnTeam) {
+        if (evTeam == null || espnTeam == null) return false;
+        String a = cleanAndNormalizeTeam(evTeam);
+        String b = cleanAndNormalizeTeam(espnTeam);
+        if (a.isEmpty() || b.isEmpty()) return false;
+        if (a.equals(b)) return true;
+        if (a.length() >= 4 && b.contains(a)) return true;
+        if (b.length() >= 4 && a.contains(b)) return true;
+        return false;
+    }
+
+    private static void parseEspnEventsArray(JsonArray eventsArr, List<EspnMatch> out) {
+        for (int j = 0; j < eventsArr.size(); j++) {
+            JsonElement el = eventsArr.get(j);
+            if (!el.isJsonObject()) continue;
+            JsonObject eObj = el.getAsJsonObject();
+            if (!eObj.has("competitions") || !eObj.get("competitions").isJsonArray()) continue;
+            JsonArray comps = eObj.getAsJsonArray("competitions");
+            if (comps.size() == 0) continue;
+            JsonObject comp = comps.get(0).getAsJsonObject();
+
+            String state = "";
+            String clock = "";
+            if (comp.has("status") && comp.get("status").isJsonObject()) {
+                JsonObject st = comp.getAsJsonObject("status");
+                if (st.has("type") && st.get("type").isJsonObject()) {
+                    JsonObject t = st.getAsJsonObject("type");
+                    state = optString(t, "state", "");
+                    clock = optString(t, "shortDetail", "");
+                }
+            }
+
+            if (!comp.has("competitors") || !comp.get("competitors").isJsonArray()) continue;
+            JsonArray compsArr = comp.getAsJsonArray("competitors");
+            EspnMatch m = new EspnMatch();
+            m.state = state;
+            m.clock = clock;
+
+            for (int k = 0; k < compsArr.size(); k++) {
+                JsonObject c = compsArr.get(k).getAsJsonObject();
+                String ha = optString(c, "homeAway", "");
+                String sc = optString(c, "score", "");
+                String name = "";
+                if (c.has("team") && c.get("team").isJsonObject()) {
+                    JsonObject tm = c.getAsJsonObject("team");
+                    name = optString(tm, "displayName", optString(tm, "name", ""));
+                }
+                if ("home".equalsIgnoreCase(ha)) {
+                    m.homeName = name;
+                    m.homeScore = sc;
+                } else {
+                    m.awayName = name;
+                    m.awayScore = sc;
+                }
+            }
+            if (m.homeName != null && m.awayName != null) {
+                out.add(m);
+            }
+        }
+    }
+
+    private static void fetchEspnScorepanel(String date, List<EspnMatch> out) {
+        String url = "https://site.api.espn.com/apis/site/v2/sports/soccer/scorepanel?dates=" + date + "&lang=pt&region=br";
+        try {
+            Request request = new Request.Builder()
+                    .url(url)
+                    .header("Accept", "application/json")
+                    .header("User-Agent", "Mozilla/5.0")
+                    .build();
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (response.isSuccessful() && response.body() != null) {
+                    String json = response.body().string();
+                    JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+                    if (root.has("scores") && root.get("scores").isJsonArray()) {
+                        JsonArray scoresArr = root.getAsJsonArray("scores");
+                        for (int i = 0; i < scoresArr.size(); i++) {
+                            JsonObject sObj = scoresArr.get(i).getAsJsonObject();
+                            if (sObj.has("events") && sObj.get("events").isJsonArray()) {
+                                parseEspnEventsArray(sObj.getAsJsonArray("events"), out);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private static void fetchEspnScoreboard(String league, String date, List<EspnMatch> out) {
+        String url = "https://site.api.espn.com/apis/site/v2/sports/soccer/" + league + "/scoreboard?dates=" + date + "&lang=pt&region=br";
+        try {
+            Request request = new Request.Builder()
+                    .url(url)
+                    .header("Accept", "application/json")
+                    .header("User-Agent", "Mozilla/5.0")
+                    .build();
+            try (Response response = httpClient.newCall(request).execute()) {
+                if (response.isSuccessful() && response.body() != null) {
+                    String json = response.body().string();
+                    JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+                    if (root.has("events") && root.get("events").isJsonArray()) {
+                        parseEspnEventsArray(root.getAsJsonArray("events"), out);
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+    }
+
+    private static void enrichSportsWithScores(List<SportsEvent> events) {
+        if (events == null || events.isEmpty()) return;
+        try {
+            TimeZone tz = TimeZone.getTimeZone("America/Sao_Paulo");
+            SimpleDateFormat df = new SimpleDateFormat("yyyyMMdd", Locale.US);
+            df.setTimeZone(tz);
+            String todayStr = df.format(new Date());
+            String yestStr = df.format(new Date(System.currentTimeMillis() - 86400000L));
+
+            Set<String> dates = new HashSet<>();
+            dates.add(todayStr);
+            dates.add(yestStr);
+            for (SportsEvent ev : events) {
+                if (ev.startTimestamp > 0) {
+                    dates.add(df.format(new Date(ev.startTimestamp * 1000L)));
+                }
+            }
+
+            List<EspnMatch> espnMatches = new ArrayList<>();
+            for (String d : dates) {
+                fetchEspnScorepanel(d, espnMatches);
+                fetchEspnScoreboard("bra.2", d, espnMatches);
+                fetchEspnScoreboard("bra.1", d, espnMatches);
+            }
+
+            for (SportsEvent ev : events) {
+                if (ev.homeName == null || ev.awayName == null) continue;
+                for (EspnMatch em : espnMatches) {
+                    boolean directMatch = matchTeamName(ev.homeName, em.homeName) && matchTeamName(ev.awayName, em.awayName);
+                    boolean revMatch = matchTeamName(ev.homeName, em.awayName) && matchTeamName(ev.awayName, em.homeName);
+
+                    if (directMatch || revMatch) {
+                        String hScore = directMatch ? em.homeScore : em.awayScore;
+                        String aScore = directMatch ? em.awayScore : em.homeScore;
+                        if (hScore != null && aScore != null && !hScore.isEmpty() && !aScore.isEmpty()) {
+                            ev.homeScore = hScore;
+                            ev.awayScore = aScore;
+                            ev.score = hScore + " x " + aScore;
+                            ev.clock = em.clock;
+
+                            if ("post".equalsIgnoreCase(em.state) || "FT".equalsIgnoreCase(em.clock)) {
+                                ev.isFinished = true;
+                                ev.isLive = false;
+                            } else if ("in".equalsIgnoreCase(em.state)) {
+                                ev.isLive = true;
+                                ev.isFinished = false;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     public static List<SportsEvent> getDefaultSportsFallbacks() {

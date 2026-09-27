@@ -3316,9 +3316,16 @@ public class MainActivity extends Activity {
         // Atualiza OSD sem trocar a transmissão ainda (preview por 3s)
         osdChNum.setText("JOGO");
         osdChName.setText(activeSportsEvent.getDisplayName());
-        osdNowTitle.setText("⚽ " + activeSportsEvent.getDisplayLeague());
-        osdSynopsis.setText(activeSportsEvent.getDisplayName() + " - Transmissão via " + fb.name);
-        osdRemaining.setText(activeSportsEvent.matchTime != null ? activeSportsEvent.matchTime : "Ao Vivo");
+        String leagueInfo = "⚽ " + activeSportsEvent.getDisplayLeague();
+        if (activeSportsEvent.score != null && !activeSportsEvent.score.isEmpty()) {
+            leagueInfo += " • Placar: " + activeSportsEvent.score;
+            if (activeSportsEvent.clock != null && !activeSportsEvent.clock.isEmpty()) {
+                leagueInfo += " (" + activeSportsEvent.clock + ")";
+            }
+        }
+        osdNowTitle.setText(leagueInfo);
+        osdSynopsis.setText(activeSportsEvent.getDisplayName() + (activeSportsEvent.score != null ? " [" + activeSportsEvent.score + "]" : "") + " - Transmissão via " + fb.name);
+        osdRemaining.setText(activeSportsEvent.clock != null && !activeSportsEvent.clock.isEmpty() ? activeSportsEvent.clock : (activeSportsEvent.matchTime != null ? activeSportsEvent.matchTime : "Ao Vivo"));
         showOsdBanner(5000);
 
         zapHandler.removeCallbacks(zapConfirmRunnable);
@@ -3621,13 +3628,20 @@ public class MainActivity extends Activity {
         Channel.StreamFallback fb = ev.fallbacks.get(currentFallbackIdx);
         playStream(fb.url, fb.isEmbed);
 
-        topChNum.setText("AO VIVO");
-        topChName.setText(ev.getDisplayName());
+        topChNum.setText(ev.isLive ? "AO VIVO" : (ev.isFinished ? "FINALIZADO" : "JOGO"));
+        topChName.setText(ev.getDisplayName() + (ev.score != null ? " (" + ev.score + ")" : ""));
         osdChNum.setText("JOGO");
         osdChName.setText(ev.getDisplayName());
-        osdNowTitle.setText("⚽ " + ev.getDisplayLeague());
-        osdRemaining.setText(ev.matchTime != null ? ev.matchTime : "Ao Vivo");
-        osdSynopsis.setText(ev.getDisplayName() + " - Transmissão via " + fb.name);
+        String leagueInfo = "⚽ " + ev.getDisplayLeague();
+        if (ev.score != null && !ev.score.isEmpty()) {
+            leagueInfo += " • Placar: " + ev.score;
+            if (ev.clock != null && !ev.clock.isEmpty()) {
+                leagueInfo += " (" + ev.clock + ")";
+            }
+        }
+        osdNowTitle.setText(leagueInfo);
+        osdRemaining.setText(ev.clock != null && !ev.clock.isEmpty() ? ev.clock : (ev.isLive ? "Ao Vivo" : (ev.matchTime != null ? ev.matchTime : "Esportes")));
+        osdSynopsis.setText(ev.getDisplayName() + (ev.score != null ? " [" + ev.score + "]" : "") + " - Transmissão via " + fb.name);
         osdNextProgram.setText("Compactos e melhores momentos ao final da partida.");
         osdProgressBar.setProgress(100);
 
