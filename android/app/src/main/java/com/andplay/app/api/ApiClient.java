@@ -1185,20 +1185,37 @@ public class ApiClient {
                             && (matchTeamName(ev.awayName, em.homeName) || matchTeamName(ev.awayName, em.homeShortName));
 
                     if (directMatch || revMatch) {
+                        // Se o jogo ainda não começou ("pre"), é jogo agendado (HOJE/AMANHÃ), portanto não define placar
+                        if ("pre".equalsIgnoreCase(em.state)) {
+                            ev.isLive = false;
+                            ev.isFinished = false;
+                            ev.score = null;
+                            ev.clock = null;
+                            break;
+                        }
+
                         String hScore = directMatch ? em.homeScore : em.awayScore;
                         String aScore = directMatch ? em.awayScore : em.homeScore;
-                        if (hScore != null && aScore != null && !hScore.isEmpty() && !aScore.isEmpty()) {
-                            ev.homeScore = hScore;
-                            ev.awayScore = aScore;
-                            ev.score = hScore + " x " + aScore;
-                            ev.clock = em.clock;
+                        boolean isPost = "post".equalsIgnoreCase(em.state) || "FT".equalsIgnoreCase(em.clock) || "F".equalsIgnoreCase(em.clock) || ev.isFinished;
+                        boolean isIn = "in".equalsIgnoreCase(em.state) || ev.isLive;
 
-                            if ("post".equalsIgnoreCase(em.state) || "FT".equalsIgnoreCase(em.clock) || "F".equalsIgnoreCase(em.clock)) {
-                                ev.isFinished = true;
-                                ev.isLive = false;
-                            } else if ("in".equalsIgnoreCase(em.state)) {
-                                ev.isLive = true;
-                                ev.isFinished = false;
+                        if (isPost && !isIn) {
+                            ev.isFinished = true;
+                            ev.isLive = false;
+                            if (hScore != null && aScore != null && !hScore.isEmpty() && !aScore.isEmpty()) {
+                                ev.homeScore = hScore;
+                                ev.awayScore = aScore;
+                                ev.score = hScore + " x " + aScore;
+                                ev.clock = em.clock;
+                            }
+                        } else if (isIn) {
+                            ev.isLive = true;
+                            ev.isFinished = false;
+                            if (hScore != null && aScore != null && !hScore.isEmpty() && !aScore.isEmpty()) {
+                                ev.homeScore = hScore;
+                                ev.awayScore = aScore;
+                                ev.score = hScore + " x " + aScore;
+                                ev.clock = em.clock;
                             }
                         }
                         break;

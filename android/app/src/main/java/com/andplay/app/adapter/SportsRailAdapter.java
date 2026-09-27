@@ -49,15 +49,13 @@ public class SportsRailAdapter extends RecyclerView.Adapter<SportsRailAdapter.Vi
         holder.league.setText(ev.getDisplayLeague());
         holder.title.setText(ev.getDisplayName());
 
-        // Exibe o placar ou o horário no centro entre os escudos
-        if (ev.score != null && !ev.score.isEmpty()) {
+        // Exibe o placar para jogos AO VIVO ou FINALIZADOS, e o horário para jogos agendados
+        if ((ev.isLive || ev.isFinished) && ev.score != null && !ev.score.isEmpty()) {
             holder.time.setText(ev.score);
             if (ev.isLive) {
                 holder.time.setTextColor(0xFF00E676); // Verde chamativo para jogo ao vivo
-            } else if (ev.isFinished) {
-                holder.time.setTextColor(0xFFFFFFFF); // Branco para placar final
             } else {
-                holder.time.setTextColor(0xFFFFC107);
+                holder.time.setTextColor(0xFFFFFFFF); // Branco para placar final
             }
         } else {
             String centerTime = ev.matchTime != null ? ev.matchTime : "VS";
