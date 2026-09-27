@@ -717,7 +717,8 @@ public class ApiClient {
                             // Determina label de dia para o badge (HOJE / AMANHÃ / AO VIVO / FINALIZADO)
                             // Será calculado no adapter com base em startTimestamp e isFinished
 
-                            if (isLive && !homeScore.isEmpty() && !awayScore.isEmpty()) {
+                            // Exibe placar para jogos ao vivo e finalizados
+                            if ((isLive || isFinished) && !homeScore.isEmpty() && !awayScore.isEmpty()) {
                                 title = homeName + " " + homeScore + " x " + awayScore + " " + awayName;
                             }
 

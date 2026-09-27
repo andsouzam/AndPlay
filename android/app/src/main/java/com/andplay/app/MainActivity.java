@@ -2497,20 +2497,29 @@ public class MainActivity extends Activity {
         }));
     }
 
-    // Periodic Sports Refresh (a cada 10 minutos)
-    private static final long SPORTS_REFRESH_INTERVAL_MS = 10 * 60 * 1000L;
+    // Periodic Sports Refresh — adaptativo: 1 min com jogos ao vivo, 5 min sem
+    private static final long SPORTS_REFRESH_LIVE_MS   = 60 * 1000L;       // 1 minuto
+    private static final long SPORTS_REFRESH_IDLE_MS   = 5 * 60 * 1000L;   // 5 minutos
     private final Handler sportsRefreshHandler = new Handler(Looper.getMainLooper());
     private final Runnable sportsRefreshRunnable = new Runnable() {
         @Override
         public void run() {
             refreshSportsEvents();
-            sportsRefreshHandler.postDelayed(this, SPORTS_REFRESH_INTERVAL_MS);
+            // Agenda próximo ciclo com intervalo adaptativo
+            boolean hasLive = false;
+            for (SportsEvent ev : allSports) { if (ev.isLive) { hasLive = true; break; } }
+            long nextDelay = hasLive ? SPORTS_REFRESH_LIVE_MS : SPORTS_REFRESH_IDLE_MS;
+            sportsRefreshHandler.postDelayed(this, nextDelay);
         }
     };
 
     private void startSportsRefreshTicker() {
         sportsRefreshHandler.removeCallbacks(sportsRefreshRunnable);
-        sportsRefreshHandler.postDelayed(sportsRefreshRunnable, SPORTS_REFRESH_INTERVAL_MS);
+        // Começa com intervalo curto — ajusta após o primeiro refresh
+        boolean hasLive = false;
+        for (SportsEvent ev : allSports) { if (ev.isLive) { hasLive = true; break; } }
+        long firstDelay = hasLive ? SPORTS_REFRESH_LIVE_MS : SPORTS_REFRESH_IDLE_MS;
+        sportsRefreshHandler.postDelayed(sportsRefreshRunnable, firstDelay);
     }
 
     private void stopSportsRefreshTicker() {
