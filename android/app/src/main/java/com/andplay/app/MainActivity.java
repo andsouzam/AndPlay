@@ -4335,18 +4335,33 @@ public class MainActivity extends Activity {
 
     private Channel findChannelByCandidate(String cand) {
         if (cand == null || cand.trim().isEmpty()) return null;
+        if (!ApiClient.isRealTvChannel(cand)) return null;
+
         String cNorm = EpgEngine.normalizeForMatch(cand).replace(" ", "");
+        if (cNorm.length() < 3) return null;
+
+        // 1. Match exato prioritário
         for (Channel ch : allChannels) {
             if (ch.name != null) {
                 String chNorm = EpgEngine.normalizeForMatch(ch.name).replace(" ", "");
-                if (chNorm.equals(cNorm) || chNorm.contains(cNorm) || cNorm.contains(chNorm)) {
-                    return ch;
-                }
+                if (chNorm.equals(cNorm)) return ch;
             }
             if (ch.id != null) {
                 String idNorm = EpgEngine.normalizeForMatch(ch.id).replace("-", "");
-                if (idNorm.equals(cNorm) || idNorm.contains(cNorm) || cNorm.contains(idNorm)) {
-                    return ch;
+                if (idNorm.equals(cNorm)) return ch;
+            }
+        }
+
+        // 2. Match por contenção estrita (apenas se cNorm estiver contido em chNorm e tiver tamanho >= 4)
+        if (cNorm.length() >= 4) {
+            for (Channel ch : allChannels) {
+                if (ch.name != null) {
+                    String chNorm = EpgEngine.normalizeForMatch(ch.name).replace(" ", "");
+                    if (chNorm.contains(cNorm)) return ch;
+                }
+                if (ch.id != null) {
+                    String idNorm = EpgEngine.normalizeForMatch(ch.id).replace("-", "");
+                    if (idNorm.contains(cNorm)) return ch;
                 }
             }
         }

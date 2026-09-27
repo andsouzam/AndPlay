@@ -833,12 +833,17 @@ public class EpgEngine {
             teamB = parts[1].replaceAll("[0-9]", "").replace("fc", "").replace("ec", "").replace("cr", "").trim();
         }
 
+        boolean hasBothTeams = (!teamA.isEmpty() && !teamB.isEmpty() && teamA.length() >= 3 && teamB.length() >= 3);
+
         // 1. Verifica no LiveSchedule atual do canal
         LiveSchedule live = getLiveSchedule(ch);
         if (live != null) {
             String schedText = normalizeForMatch(live.nowTitle + " " + live.synopsis + " " + live.nextTitle);
-            if (!teamA.isEmpty() && teamA.length() >= 4 && schedText.contains(teamA)) return true;
-            if (!teamB.isEmpty() && teamB.length() >= 4 && schedText.contains(teamB)) return true;
+            if (hasBothTeams) {
+                if (schedText.contains(teamA) && schedText.contains(teamB)) return true;
+            } else if (evName.length() >= 6 && schedText.contains(evName)) {
+                return true;
+            }
         }
 
         // 2. Verifica na grade completa de programas
@@ -858,16 +863,22 @@ public class EpgEngine {
             for (ProgramInfo p : progs) {
                 if (p.stopMs < windowStart || p.startMs > windowEnd) continue;
                 String pText = normalizeForMatch(p.title + " " + (p.desc != null ? p.desc : ""));
-                if (!teamA.isEmpty() && teamA.length() >= 4 && pText.contains(teamA)) return true;
-                if (!teamB.isEmpty() && teamB.length() >= 4 && pText.contains(teamB)) return true;
+                if (hasBothTeams) {
+                    if (pText.contains(teamA) && pText.contains(teamB)) return true;
+                } else if (evName.length() >= 6 && pText.contains(evName)) {
+                    return true;
+                }
             }
         }
 
         // 3. Verifica dados embutidos (ch.now)
         if (ch.now != null) {
             String chNow = normalizeForMatch(ch.now);
-            if (!teamA.isEmpty() && teamA.length() >= 4 && chNow.contains(teamA)) return true;
-            if (!teamB.isEmpty() && teamB.length() >= 4 && chNow.contains(teamB)) return true;
+            if (hasBothTeams) {
+                if (chNow.contains(teamA) && chNow.contains(teamB)) return true;
+            } else if (evName.length() >= 6 && chNow.contains(evName)) {
+                return true;
+            }
         }
 
         return false;

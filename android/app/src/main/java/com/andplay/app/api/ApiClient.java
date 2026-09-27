@@ -761,7 +761,11 @@ public class ApiClient {
                                     JsonObject emb = embEl.getAsJsonObject();
                                     String provider = optString(emb, "provider", "");
                                     if (!provider.isEmpty() && !ev.candidateChannels.contains(provider)) {
-                                        ev.candidateChannels.add(provider);
+                                        if (isRealTvChannel(provider)) {
+                                            ev.candidateChannels.add(0, provider); // Canais de TV reais sempre na frente!
+                                        } else {
+                                            ev.candidateChannels.add(provider);
+                                        }
                                     }
 
                                     String provLow = provider.toLowerCase(Locale.ROOT);
@@ -2180,14 +2184,7 @@ public class ApiClient {
                             if (matched == null) matched = liveByKey.get(key2);
                             if (matched != null) {
                                 rm.channelId = matched.id;
-                                String chLabel = null;
-                                if (matched.candidateChannels != null && !matched.candidateChannels.isEmpty()) {
-                                    chLabel = matched.candidateChannels.get(0);
-                                }
-                                if (chLabel == null || chLabel.isEmpty()) {
-                                    chLabel = "AO VIVO";
-                                }
-                                rm.channelName = chLabel;
+                                rm.channelName = formatCandidateChannelsLabel(matched.candidateChannels);
                             }
                             rm.isCurrent = false;
                         }
@@ -2221,6 +2218,59 @@ public class ApiClient {
             e.printStackTrace();
         }
         return result;
+    }
+
+    public static boolean isRealTvChannel(String name) {
+        if (name == null || name.trim().isEmpty()) return false;
+        String n = name.toLowerCase(Locale.ROOT).trim();
+        if (n.contains("xsport") || n.contains("opcao") || n.contains("opção")
+                || n.contains("embed") || n.contains("stream") || n.contains("server")
+                || n.contains("web") || n.contains("player")) {
+            return false;
+        }
+        return n.contains("sportv") || n.contains("premiere") || n.contains("espn")
+                || n.contains("globo") || n.contains("band") || n.contains("sbt")
+                || n.contains("record") || n.contains("cazé") || n.contains("caze")
+                || n.contains("tnt") || n.contains("combate") || n.contains("max")
+                || n.contains("prime") || n.contains("paramount") || n.contains("dazn")
+                || n.contains("goat") || n.contains("nosso futebol") || n.contains("bandsports");
+    }
+
+    public static String formatCandidateChannelsLabel(List<String> candidates) {
+        if (candidates == null || candidates.isEmpty()) return "AO VIVO";
+
+        List<String> realTv = new ArrayList<>();
+        List<String> webOptions = new ArrayList<>();
+
+        for (String cand : candidates) {
+            if (cand == null || cand.trim().isEmpty()) continue;
+            String clean = cand.trim();
+            if (isRealTvChannel(clean)) {
+                if (!realTv.contains(clean)) realTv.add(clean);
+            } else {
+                if (!webOptions.contains(clean)) webOptions.add(clean);
+            }
+        }
+
+        if (!realTv.isEmpty()) {
+            if (realTv.size() == 1) {
+                return realTv.get(0);
+            } else if (realTv.size() == 2) {
+                return realTv.get(0) + " • " + realTv.get(1);
+            } else {
+                return realTv.get(0) + " • " + realTv.get(1) + " (+" + (realTv.size() - 2) + ")";
+            }
+        }
+
+        if (!webOptions.isEmpty()) {
+            String first = webOptions.get(0);
+            if (first.toLowerCase(Locale.ROOT).contains("xsport")) {
+                return "Transmissão Web";
+            }
+            return first;
+        }
+
+        return "AO VIVO";
     }
 
     private static String normalize(String s) {
