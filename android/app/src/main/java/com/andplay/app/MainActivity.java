@@ -2744,6 +2744,19 @@ public class MainActivity extends Activity {
                 }
             }
         }
+
+        // Se a gaveta lateral estiver aberta, atualiza os títulos dos canais com placar
+        if (epgDrawer != null && epgDrawer.getVisibility() == View.VISIBLE
+                && drawerChannelsRecycler != null && drawerChannelsRecycler.getAdapter() != null) {
+            drawerChannelsRecycler.getAdapter().notifyDataSetChanged();
+        }
+        // Se o banner OSD estiver visível em tela cheia, atualiza as informações do jogo no ar
+        if (currentMode == ScreenMode.FULLSCREEN && osdBanner != null && osdBanner.getVisibility() == View.VISIBLE
+                && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
+            Channel curCh = allChannels.get(currentChannelIdx);
+            LiveSchedule epg = EpgEngine.getLiveSchedule(curCh);
+            updateOsd(curCh, currentChannelIdx, epg);
+        }
     }
 
     /** Abre o hub de jogos (SportsHubActivity) */
@@ -2808,9 +2821,9 @@ public class MainActivity extends Activity {
             }
         }
 
-        // Mostra a aba padrão (tabela)
-        standingsActiveTab = "standings";
-        applyTabStyle();
+        // Limpa adapters anteriores para jamais exibir a última tabela mostrada
+        if (standingsRecycler != null) standingsRecycler.setAdapter(null);
+        if (roundMatchesRecycler != null) roundMatchesRecycler.setAdapter(null);
 
         // Mostra loading e busca dados em background
         if (standingsProgress != null) standingsProgress.setVisibility(View.VISIBLE);
@@ -2837,7 +2850,15 @@ public class MainActivity extends Activity {
                     return;
                 }
 
-                // Popula standings
+                // Configura visibilidade das abas: campeonatos sem tabela ocultam a guia TABELA
+                if (tabStandings != null) {
+                    tabStandings.setVisibility(hasStandings ? View.VISIBLE : View.GONE);
+                }
+                if (tabRound != null) {
+                    tabRound.setVisibility(hasRound ? View.VISIBLE : View.GONE);
+                }
+
+                // Popula standings se houver
                 if (standingsRecycler != null && hasStandings) {
                     standingsRecycler.setAdapter(new StandingsAdapter(standings));
                     if (standingsLeagueName != null && !standings.isEmpty()) {
@@ -2848,24 +2869,55 @@ public class MainActivity extends Activity {
                     }
                 }
 
-                // Popula rodada
+                // Popula rodada e posiciona inteligentemente no 1º jogo ao vivo ou próximo jogo
                 if (roundMatchesRecycler != null && hasRound) {
                     roundMatchesRecycler.setAdapter(new RoundMatchesAdapter(roundMatches));
+
+                    int targetPos = -1;
+                    int firstUpcomingPos = -1;
+                    for (int i = 0; i < roundMatches.size(); i++) {
+                        ApiClient.RoundMatch rm = roundMatches.get(i);
+                        boolean isLive = "in".equalsIgnoreCase(rm.state);
+                        boolean isFinished = "post".equalsIgnoreCase(rm.state);
+                        boolean isUpcoming = !isFinished && !isLive;
+
+                        if (isLive && targetPos < 0) {
+                            targetPos = i;
+                            break;
+                        }
+                        if (isUpcoming && firstUpcomingPos < 0) {
+                            firstUpcomingPos = i;
+                        }
+                    }
+                    if (targetPos < 0 && firstUpcomingPos >= 0) {
+                        targetPos = firstUpcomingPos;
+                    }
+                    if (targetPos < 0 && !roundMatches.isEmpty()) {
+                        targetPos = roundMatches.size() - 1;
+                    }
+                    if (targetPos >= 0) {
+                        final int scrollPos = targetPos;
+                        roundMatchesRecycler.post(() -> {
+                            LinearLayoutManager lm = (LinearLayoutManager) roundMatchesRecycler.getLayoutManager();
+                            if (lm != null) {
+                                lm.scrollToPositionWithOffset(scrollPos, 0);
+                            }
+                        });
+                    }
                 }
 
-                // Escolhe qual aba mostrar (tabela tem prioridade, mas se não existe vai direto p/ rodada)
+                // Escolhe qual aba mostrar: se tem tabela, mostra tabela; senão vai direto para rodada
                 if (hasStandings) {
                     standingsActiveTab = "standings";
+                    if (tabStandings != null) tabStandings.requestFocus();
                 } else {
                     standingsActiveTab = "round";
+                    if (tabRound != null) tabRound.requestFocus();
                 }
                 applyTabStyle();
                 renderActiveTab(hasStandings, hasRound);
             });
         });
-
-        // Foca na aba de tabela
-        if (tabStandings != null) tabStandings.requestFocus();
     }
 
     private void hideSportsOverlay() {
@@ -2877,7 +2929,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private SportsEvent detectSportsEventForChannel(Channel ch) {
+    public SportsEvent detectSportsEventForChannel(Channel ch) {
         if (ch == null) return null;
         // 1. Match direto por candidateChannels em allSports
         if (ch.id != null && !allSports.isEmpty()) {
@@ -2941,6 +2993,9 @@ public class MainActivity extends Activity {
     }
 
     private void switchStandingsTab(String tab) {
+        if ("standings".equals(tab) && (tabStandings == null || tabStandings.getVisibility() != View.VISIBLE)) {
+            return;
+        }
         standingsActiveTab = tab;
         applyTabStyle();
         boolean hasStandings = standingsRecycler != null && standingsRecycler.getAdapter() != null
@@ -4283,20 +4338,45 @@ public class MainActivity extends Activity {
 
     private void updateOsd(Channel ch, int chIdx, LiveSchedule epg) {
         if (ch == null) return;
+
+        if (activeSportsEvent == null) {
+            activeSportsEvent = detectSportsEventForChannel(ch);
+        }
+
+        String displayName = ch.name;
+        if (activeSportsEvent != null && activeSportsEvent.score != null && !activeSportsEvent.score.isEmpty()) {
+            displayName = ch.name + " • " + activeSportsEvent.score;
+        }
+
         topChNum.setText(String.format("CH %03d", chIdx + 1));
-        topChName.setText(ch.name);
+        topChName.setText(displayName);
 
         osdChNum.setText(String.format("%03d", chIdx + 1));
-        osdChName.setText(ch.name);
+        osdChName.setText(displayName);
 
         if (epg != null && !"SEM DADOS DE PROGRAMAÇÃO".equals(epg.nowTitle)) {
-            osdNowTitle.setText("🔴 NO AR: " + epg.nowTitle);
+            String liveText = "🔴 NO AR: " + epg.nowTitle;
+            if (activeSportsEvent != null && activeSportsEvent.score != null && !activeSportsEvent.score.isEmpty()) {
+                if (activeSportsEvent.isLive) {
+                    liveText = "🔴 NO AR: " + epg.nowTitle + "  •  " + activeSportsEvent.score +
+                            (activeSportsEvent.clock != null && !activeSportsEvent.clock.isEmpty() ? " (" + activeSportsEvent.clock + ")" : "");
+                } else if (activeSportsEvent.isFinished) {
+                    liveText = "🏁 FIM: " + epg.nowTitle + "  •  Placar Final: " + activeSportsEvent.score;
+                }
+            }
+            osdNowTitle.setText(liveText);
             osdRemaining.setText(String.format("Restam ~%d min (%s)", epg.remainingMinutes, epg.timeRange));
             osdSynopsis.setText(epg.synopsis);
             osdNextProgram.setText("A Seguir: " + epg.nextStart + " • " + epg.nextTitle);
             osdProgressBar.setProgress(epg.progress);
         } else {
-            osdNowTitle.setText("🔴 NO AR: SEM DADOS DE PROGRAMAÇÃO");
+            String noEpgText = "🔴 NO AR: SEM DADOS DE PROGRAMAÇÃO";
+            if (activeSportsEvent != null) {
+                noEpgText = "🔴 NO AR: " + activeSportsEvent.getDisplayName() +
+                        (activeSportsEvent.score != null ? "  •  " + activeSportsEvent.score : "") +
+                        (activeSportsEvent.clock != null && !activeSportsEvent.clock.isEmpty() ? " (" + activeSportsEvent.clock + ")" : "");
+            }
+            osdNowTitle.setText(noEpgText);
             osdRemaining.setText("--:--");
             osdSynopsis.setText("Grade de programação indisponível para este canal no momento.");
             osdNextProgram.setText("A Seguir: SEM DADOS DE PROGRAMAÇÃO");
@@ -4310,7 +4390,7 @@ public class MainActivity extends Activity {
                 if (activeSportsEvent.isLive && activeSportsEvent.score != null && !activeSportsEvent.score.isEmpty()) {
                     hintText += "  " + activeSportsEvent.score;
                 }
-                hintText += "  —  DPAD DIREITO: ver tabela";
+                hintText += "  —  DPAD DIREITO: ver tabela/rodada";
                 osdSportsHint.setText(hintText);
                 osdSportsHint.setVisibility(View.VISIBLE);
             } else {

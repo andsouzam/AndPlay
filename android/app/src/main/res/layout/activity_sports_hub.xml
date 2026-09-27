@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Sports Hub — Layout com sidebar lateral de ligas
-  Estrutura: [Sidebar 168dp | Divider | Content]
+  Sports Hub — Layout com sidebar lateral de ligas (modo gaveta/acordeão)
+  Estrutura: [Sidebar 180dp | Divider | Content]
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -9,9 +9,9 @@
     android:background="#080F1E"
     android:orientation="horizontal">
 
-    <!-- ── SIDEBAR ESQUERDA: lista de ligas ───────────────────────────── -->
+    <!-- ── SIDEBAR ESQUERDA: lista de ligas com sub-abas expansíveis ── -->
     <LinearLayout
-        android:layout_width="168dp"
+        android:layout_width="180dp"
         android:layout_height="match_parent"
         android:background="#0C1428"
         android:orientation="vertical">
@@ -49,15 +49,15 @@
             android:layout_height="1dp"
             android:background="#1AFFFFFF" />
 
-        <!-- Lista de ligas -->
+        <!-- Lista de ligas (acordeão: liga + sub-abas TABELA/CALENDÁRIO) -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/leagueTabsRv"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:clipToPadding="false"
-            android:paddingTop="8dp"
-            android:paddingBottom="8dp" />
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp" />
 
         <!-- Dica de tecla -->
         <TextView
@@ -66,7 +66,7 @@
             android:gravity="center"
             android:paddingTop="8dp"
             android:paddingBottom="10dp"
-            android:text="← VOLTAR: Fechar"
+            android:text="VOLTAR: Fechar"
             android:textColor="#40FFFFFF"
             android:textSize="9sp" />
     </LinearLayout>
@@ -84,16 +84,16 @@
         android:layout_weight="1"
         android:orientation="vertical">
 
-        <!-- Barra de contexto: nome da liga + sub-tabs + dicas -->
+        <!-- Barra de contexto: nome da liga + guia ativa + dica -->
         <LinearLayout
-            android:id="@+id/subTabsBar"
+            android:id="@+id/hubHeaderBar"
             android:layout_width="match_parent"
             android:layout_height="44dp"
             android:background="#0A1020"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <!-- Nome da liga ativa -->
+            <!-- Nome da liga ativa e guia -->
             <TextView
                 android:id="@+id/hubLeagueName"
                 android:layout_width="0dp"
@@ -107,52 +107,18 @@
                 android:singleLine="true"
                 android:ellipsize="end" />
 
-            <!-- Sub-tab CALENDÁRIO -->
-            <TextView
-                android:id="@+id/subTabSchedule"
-                android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:layout_gravity="center_vertical"
-                android:layout_marginEnd="6dp"
-                android:gravity="center"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:text="📅 CALENDÁRIO"
-                android:textSize="11sp"
-                android:textColor="#FFFFFF"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:background="@drawable/sports_hub_tab_bg" />
-
-            <!-- Sub-tab TABELA -->
-            <TextView
-                android:id="@+id/subTabStandings"
-                android:layout_width="wrap_content"
-                android:layout_height="30dp"
-                android:layout_gravity="center_vertical"
-                android:layout_marginEnd="12dp"
-                android:gravity="center"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:text="🏆 TABELA"
-                android:textSize="11sp"
-                android:textColor="#FFFFFF"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:background="@drawable/sports_hub_tab_bg" />
-
             <!-- Dica de navegação -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="12dp"
-                android:paddingStart="6dp"
-                android:paddingEnd="6dp"
-                android:paddingTop="2dp"
-                android:paddingBottom="2dp"
-                android:text="◀ Ligas   ▲▼ Navegar"
-                android:textColor="#33FFFFFF"
-                android:textSize="9sp"
+                android:layout_marginEnd="16dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:text="◀ Voltar para Sidebar   ▲▼ Rolar"
+                android:textColor="#55FFFFFF"
+                android:textSize="10sp"
                 android:background="#11FFFFFF" />
         </LinearLayout>
 

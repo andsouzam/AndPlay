@@ -1,20 +1,78 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Item da sidebar de ligas com highlight igual aos cards da tela inicial -->
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Item da sidebar de ligas com gaveta expansível para TABELA e CALENDÁRIO -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginStart="8dp"
-    android:layout_marginEnd="8dp"
-    android:layout_marginTop="2dp"
-    android:layout_marginBottom="2dp"
-    android:paddingStart="12dp"
-    android:paddingEnd="10dp"
-    android:paddingTop="9dp"
-    android:paddingBottom="9dp"
-    android:textSize="12sp"
-    android:textColor="#CCFFFFFF"
-    android:singleLine="true"
-    android:ellipsize="end"
-    android:focusable="true"
-    android:focusableInTouchMode="true"
-    android:background="@drawable/sports_hub_item_bg" />
+    android:orientation="vertical"
+    android:descendantFocusability="afterDescendants">
+
+    <!-- Cabeçalho da Liga (ex: 🇧🇷 Brasileirão A) -->
+    <TextView
+        android:id="@+id/leagueHeader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="2dp"
+        android:paddingStart="12dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="9dp"
+        android:paddingBottom="9dp"
+        android:textSize="12sp"
+        android:textColor="#CCFFFFFF"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:background="@drawable/sports_hub_item_bg" />
+
+    <!-- Gaveta de Sub-opções (visível apenas na liga ativa) -->
+    <LinearLayout
+        android:id="@+id/leagueDrawer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:paddingStart="22dp"
+        android:paddingEnd="8dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="4dp">
+
+        <!-- Sub-opção TABELA (oculta em copas/torneios sem tabela) -->
+        <TextView
+            android:id="@+id/btnSubStandings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="2dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="7dp"
+            android:paddingBottom="7dp"
+            android:text="🏆 TABELA"
+            android:textSize="11sp"
+            android:textColor="#CCFFFFFF"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:background="@drawable/sports_hub_tab_bg" />
+
+        <!-- Sub-opção CALENDÁRIO -->
+        <TextView
+            android:id="@+id/btnSubSchedule"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:layout_marginBottom="2dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="7dp"
+            android:paddingBottom="7dp"
+            android:text="📅 CALENDÁRIO"
+            android:textSize="11sp"
+            android:textColor="#CCFFFFFF"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:background="@drawable/sports_hub_tab_bg" />
+    </LinearLayout>
+</LinearLayout>

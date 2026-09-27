@@ -105,6 +105,19 @@ public class ChannelRailAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             String progTitle = (epg != null && epg.nowTitle != null && !epg.nowTitle.isEmpty())
                     ? epg.nowTitle
                     : (ch.now != null && !ch.now.isEmpty() ? ch.now : "SEM DADOS DE PROGRAMAÇÃO");
+
+            if (context instanceof com.andplay.app.MainActivity) {
+                com.andplay.app.MainActivity ma = (com.andplay.app.MainActivity) context;
+                com.andplay.app.model.SportsEvent sev = ma.detectSportsEventForChannel(ch);
+                if (sev != null && sev.score != null && !sev.score.isEmpty()) {
+                    if (sev.isLive) {
+                        progTitle = progTitle + "  •  " + sev.score +
+                                (sev.clock != null && !sev.clock.isEmpty() ? " (" + sev.clock + ")" : "");
+                    } else if (sev.isFinished) {
+                        progTitle = progTitle + "  •  Fim [" + sev.score + "]";
+                    }
+                }
+            }
             vh.program.setText(progTitle);
 
             boolean isPlaying = (position == currentPlayingIdx);
