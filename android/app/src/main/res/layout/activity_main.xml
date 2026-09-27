@@ -631,6 +631,23 @@
                 android:text="A Seguir: 21:20 • Novela das Nove"
                 android:textColor="#888888"
                 android:textSize="11sp" />
+
+            <!-- HINT DE ESPORTE: visível apenas quando há match ao vivo -->
+            <TextView
+                android:id="@+id/osdSportsHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:text="▶  DPAD DIREITO: Tabela &amp; Rodada"
+                android:textColor="#00C853"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:background="#1A00C853"
+                android:visibility="gone" />
         </LinearLayout>
     </FrameLayout>
 

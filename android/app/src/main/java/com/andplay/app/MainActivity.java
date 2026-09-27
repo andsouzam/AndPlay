@@ -164,7 +164,7 @@ public class MainActivity extends Activity {
     private LinearLayout topChannelBadge;
     private TextView topChNum, topChName;
     private LinearLayout osdBanner;
-    private TextView osdChNum, osdChName, osdClock, osdNowTitle, osdRemaining, osdSynopsis, osdNextProgram;
+    private TextView osdChNum, osdChName, osdClock, osdNowTitle, osdRemaining, osdSynopsis, osdNextProgram, osdSportsHint;
     private ProgressBar osdProgressBar;
 
     // Lateral EPG Drawer
@@ -392,6 +392,7 @@ public class MainActivity extends Activity {
         osdRemaining = findViewById(R.id.osdRemaining);
         osdSynopsis = findViewById(R.id.osdSynopsis);
         osdNextProgram = findViewById(R.id.osdNextProgram);
+        osdSportsHint  = findViewById(R.id.osdSportsHint);
         osdProgressBar = findViewById(R.id.osdProgressBar);
 
         // EPG Drawer
@@ -2651,6 +2652,24 @@ public class MainActivity extends Activity {
             }
         }
 
+        // Re-match de canal normal: se estiver em tela cheia assistindo um canal regular,
+        // re-verifica se o canal passou a transmitir (ou parou de transmitir) um evento ao vivo
+        if (!isPlayingSportsEvent && currentMode == ScreenMode.FULLSCREEN
+                && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
+            Channel curCh = allChannels.get(currentChannelIdx);
+            if (curCh.id != null) {
+                SportsEvent newMatch = null;
+                for (SportsEvent fev : fresh) {
+                    if (fev.isLive && fev.candidateChannels != null
+                            && fev.candidateChannels.contains(curCh.id)) {
+                        newMatch = fev;
+                        break;
+                    }
+                }
+                activeSportsEvent = newMatch; // null se o jogo terminou ou não há mais match
+            }
+        }
+
         // Verifica se a lista tem a mesma quantidade e os mesmos IDs na mesma ordem
         boolean sameOrderAndSize = (allSports.size() == fresh.size());
         if (sameOrderAndSize) {
@@ -3775,6 +3794,17 @@ public class MainActivity extends Activity {
         isPlayingSportsEvent = false;
         activeSportsEvent = null;
 
+        // Detectar match esportivo: verifica se este canal está transmitindo um evento ao vivo
+        // Se sim, ativa activeSportsEvent para habilitar o overlay via D-pad Direito
+        if (ch.id != null && !allSports.isEmpty()) {
+            for (SportsEvent ev : allSports) {
+                if (ev.isLive && ev.candidateChannels != null && ev.candidateChannels.contains(ch.id)) {
+                    activeSportsEvent = ev;
+                    break;
+                }
+            }
+        }
+
         try {
             SharedPreferences sp = getSharedPreferences(PREF_APP_STATE, Context.MODE_PRIVATE);
             sp.edit()
@@ -4224,6 +4254,21 @@ public class MainActivity extends Activity {
             osdSynopsis.setText("Grade de programação indisponível para este canal no momento.");
             osdNextProgram.setText("A Seguir: SEM DADOS DE PROGRAMAÇÃO");
             osdProgressBar.setProgress(0);
+        }
+
+        // Hint esportivo: mostrar quando há jogo ao vivo neste canal
+        if (osdSportsHint != null) {
+            if (activeSportsEvent != null) {
+                String hintText = "▶  " + activeSportsEvent.getDisplayName();
+                if (activeSportsEvent.isLive && activeSportsEvent.score != null && !activeSportsEvent.score.isEmpty()) {
+                    hintText += "  " + activeSportsEvent.score;
+                }
+                hintText += "  —  DPAD DIREITO: ver tabela";
+                osdSportsHint.setText(hintText);
+                osdSportsHint.setVisibility(View.VISIBLE);
+            } else {
+                osdSportsHint.setVisibility(View.GONE);
+            }
         }
     }
 
@@ -6143,9 +6188,11 @@ public class MainActivity extends Activity {
                             return true;
                         }
 
-                        // D-pad Direito: abre overlay de tabela + rodada (apenas em modo esportivo, se gaveta fechada)
+                        // D-pad Direito: abre overlay de tabela + rodada
+                        // Funciona tanto ao entrar via playSportsEvent quanto ao navegar num
+                        // canal normal que está transmitindo um evento ao vivo com match EPG
                         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                            if (isPlayingSportsEvent && activeSportsEvent != null) {
+                            if (activeSportsEvent != null) {
                                 if (epgDrawer == null || epgDrawer.getVisibility() != View.VISIBLE) {
                                     showSportsOverlay();
                                     return true;
