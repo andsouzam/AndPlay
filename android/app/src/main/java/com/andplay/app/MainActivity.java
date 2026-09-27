@@ -4,7 +4,12 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.SharedPreferences;
+import android.graphics.Typeface;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.widget.Button;
 import com.andplay.app.provider.ProviderManager;
 import java.util.Arrays;
 import java.util.Collections;
@@ -565,21 +570,62 @@ public class MainActivity extends Activity {
         }
     }
 
+    private AlertDialog.Builder createThemedDialogBuilder() {
+        return new AlertDialog.Builder(this, R.style.Theme_EPlay_Dialog);
+    }
+
+    private void styleDialogButtons(AlertDialog dialog) {
+        if (dialog == null) return;
+        dialog.setOnShowListener(d -> {
+            Button pos = dialog.getButton(DialogInterface.BUTTON_POSITIVE);
+            Button neg = dialog.getButton(DialogInterface.BUTTON_NEGATIVE);
+            Button neu = dialog.getButton(DialogInterface.BUTTON_NEUTRAL);
+            View.OnFocusChangeListener focusListener = (v, hasFocus) -> {
+                if (v instanceof Button) {
+                    ((Button) v).setTextColor(hasFocus ? Color.BLACK : Color.WHITE);
+                }
+            };
+            if (pos != null) {
+                pos.setBackgroundResource(R.drawable.pill_focus_bg);
+                pos.setTextColor(pos.hasFocus() ? Color.BLACK : Color.WHITE);
+                pos.setTextSize(12);
+                pos.setTypeface(null, Typeface.BOLD);
+                pos.setOnFocusChangeListener(focusListener);
+            }
+            if (neg != null) {
+                neg.setBackgroundResource(R.drawable.pill_focus_bg);
+                neg.setTextColor(neg.hasFocus() ? Color.BLACK : Color.WHITE);
+                neg.setTextSize(12);
+                neg.setTypeface(null, Typeface.BOLD);
+                neg.setOnFocusChangeListener(focusListener);
+            }
+            if (neu != null) {
+                neu.setBackgroundResource(R.drawable.pill_focus_bg);
+                neu.setTextColor(neu.hasFocus() ? Color.BLACK : Color.WHITE);
+                neu.setTextSize(12);
+                neu.setTypeface(null, Typeface.BOLD);
+                neu.setOnFocusChangeListener(focusListener);
+            }
+        });
+    }
+
     private void showMosaicDialog() {
         closeDrawer();
         String[] options = new String[] {
                 "2 Telas (Lado a Lado)",
                 "4 Telas (Grade 2x2)"
         };
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog dialog = createThemedDialogBuilder()
                 .setTitle("⊞ Modo Mosaico (Multi-View)")
-                .setItems(options, (dialog, which) -> {
-                    dialog.dismiss();
+                .setItems(options, (d, which) -> {
+                    d.dismiss();
                     int count = (which == 0) ? 2 : 4;
                     enterMosaicMode(count);
                 })
                 .setNegativeButton("Cancelar", null)
-                .show();
+                .create();
+        styleDialogButtons(dialog);
+        dialog.show();
     }
 
     private void enterMosaicMode(int screenCount) {
@@ -3259,10 +3305,10 @@ public class MainActivity extends Activity {
                     "▶️ CONTINUAR DE ONDE PAROU (" + formatDuration(savedPos) + ")",
                     "🔄 VOLTAR AO INÍCIO"
             };
-            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog dialog = createThemedDialogBuilder()
                     .setTitle("🎬 " + movie.getDisplayTitle() + "\n(Parou em " + formatDuration(savedPos) + ")")
-                    .setItems(options, (dialog, which) -> {
-                        dialog.dismiss();
+                    .setItems(options, (d, which) -> {
+                        d.dismiss();
                         if (which == 0) {
                             startMoviePlayback(movie, savedPos);
                         } else {
@@ -3271,7 +3317,9 @@ public class MainActivity extends Activity {
                         }
                     })
                     .setNegativeButton("Cancelar", null)
-                    .show();
+                    .create();
+            styleDialogButtons(dialog);
+            dialog.show();
         } else {
             startMoviePlayback(movie, 0);
         }
@@ -3326,10 +3374,10 @@ public class MainActivity extends Activity {
                     "▶️ CONTINUAR DE ONDE PAROU (" + formatDuration(savedPos) + ")",
                     "🔄 VOLTAR AO INÍCIO"
             };
-            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog dialog = createThemedDialogBuilder()
                     .setTitle("🍿 " + fullTitle + "\n(Parou em " + formatDuration(savedPos) + ")")
-                    .setItems(options, (dialog, which) -> {
-                        dialog.dismiss();
+                    .setItems(options, (d, which) -> {
+                        d.dismiss();
                         if (which == 0) {
                             startSeriesEpisodePlayback(series, ep, seasonNum, savedPos);
                         } else {
@@ -3338,7 +3386,9 @@ public class MainActivity extends Activity {
                         }
                     })
                     .setNegativeButton("Cancelar", null)
-                    .show();
+                    .create();
+            styleDialogButtons(dialog);
+            dialog.show();
         } else {
             startSeriesEpisodePlayback(series, ep, seasonNum, 0);
         }
@@ -3455,14 +3505,16 @@ public class MainActivity extends Activity {
                     names[i] = "📺 " + fb.name;
                 }
 
-                new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog dialog = createThemedDialogBuilder()
                         .setTitle("⚽ " + ev.getDisplayName() + "\nEscolha a transmissão:")
-                        .setItems(names, (dialog, which) -> {
-                            dialog.dismiss();
+                        .setItems(names, (d, which) -> {
+                            d.dismiss();
                             startSportsPlayback(ev, which);
                         })
                         .setNegativeButton("Cancelar", null)
-                        .show();
+                        .create();
+                styleDialogButtons(dialog);
+                dialog.show();
             }
             return;
         }
@@ -3896,7 +3948,7 @@ public class MainActivity extends Activity {
     }
 
     private void showVodSearchDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        AlertDialog.Builder builder = createThemedDialogBuilder();
         builder.setTitle(isViewingSeries ? "🔍 Buscar Séries" : "🔍 Buscar Filmes");
 
         final EditText input = new EditText(this);
@@ -3965,6 +4017,7 @@ public class MainActivity extends Activity {
             return false;
         });
 
+        styleDialogButtons(dialog);
         dialog.show();
         input.requestFocus();
     }
@@ -4571,9 +4624,10 @@ public class MainActivity extends Activity {
             for (MoviePlaylist pl : playlists) {
                 items.add("📋 " + pl.name + " (" + pl.movieIds.size() + " filmes)");
             }
-            new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            AlertDialog dialog = createThemedDialogBuilder()
                     .setTitle("🎬 Playlists de Filmes")
-                    .setItems(items.toArray(new String[0]), (dialog, which) -> {
+                    .setItems(items.toArray(new String[0]), (d, which) -> {
+                        d.dismiss();
                         if (which == 0) {
                             showCreatePlaylistNameDialog();
                         } else {
@@ -4582,28 +4636,43 @@ public class MainActivity extends Activity {
                         }
                     })
                     .setNegativeButton("Fechar", null)
-                    .show();
+                    .create();
+            styleDialogButtons(dialog);
+            dialog.show();
         });
     }
 
     private void showCreatePlaylistNameDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
-        builder.setTitle("➕ Nova Playlist de Filmes");
+        AlertDialog dialog = createThemedDialogBuilder()
+                .setTitle("➕ Nova Playlist")
+                .setMessage("Digite o nome da sua playlist de filmes:")
+                .create();
 
         final EditText input = new EditText(this);
-        input.setHint("Nome da playlist (ex: Minha Fila)");
+        input.setHint("Ex: Filmes de Ação, Fim de Semana...");
+        input.setBackgroundResource(R.drawable.edit_text_dark_bg);
         input.setTextColor(Color.WHITE);
-        input.setHintTextColor(Color.LTGRAY);
+        input.setHintTextColor(Color.parseColor("#7A899C"));
+        input.setTextSize(14);
+        input.setTypeface(Typeface.DEFAULT_BOLD);
+        int pad = (int) (14 * getResources().getDisplayMetrics().density);
+        input.setPadding(pad, pad, pad, pad);
+        input.setSingleLine(true);
+        input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+
         FrameLayout container = new FrameLayout(this);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.leftMargin = 40;
-        params.rightMargin = 40;
+        int margin = (int) (16 * getResources().getDisplayMetrics().density);
+        params.leftMargin = margin;
+        params.rightMargin = margin;
+        params.topMargin = margin / 2;
+        params.bottomMargin = margin / 2;
         input.setLayoutParams(params);
         container.addView(input);
-        builder.setView(container);
+        dialog.setView(container);
 
-        builder.setPositiveButton("Continuar", (dialog, which) -> {
+        dialog.setButton(DialogInterface.BUTTON_POSITIVE, "Continuar", (d, which) -> {
             String name = input.getText().toString().trim();
             if (name.isEmpty()) {
                 name = "Minha Playlist";
@@ -4611,177 +4680,308 @@ public class MainActivity extends Activity {
             MoviePlaylist pl = new MoviePlaylist();
             pl.id = java.util.UUID.randomUUID().toString();
             pl.name = name;
-            showAddMoviesToPlaylistDialog(pl, true);
+            showPlaylistEditorDialog(pl, true);
         });
-        builder.setNegativeButton("Cancelar", null);
-        builder.show();
+        dialog.setButton(DialogInterface.BUTTON_NEGATIVE, "Cancelar", (d, which) -> d.dismiss());
+
+        styleDialogButtons(dialog);
+        dialog.show();
+        input.requestFocus();
     }
 
-    private void showAddMoviesToPlaylistDialog(MoviePlaylist playlist, boolean isNew) {
-        String[] options = new String[] {
-                "🔍 BUSCAR E ADICIONAR FILMES",
-                "👀 GERENCIAR FILMES ADICIONADOS (" + playlist.movieIds.size() + ")",
-                "💾 SALVAR PLAYLIST"
-        };
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("📋 Playlist: " + playlist.name + " (" + playlist.movieIds.size() + " filmes)")
-                .setItems(options, (dialog, which) -> {
-                    if (which == 0) {
-                        showSearchMovieForPlaylistDialog(playlist, isNew);
-                    } else if (which == 1) {
-                        showManagePlaylistMoviesDialog(playlist, isNew);
-                    } else if (which == 2) {
-                        if (playlist.movieIds.isEmpty()) {
-                            Toast.makeText(this, "Adicione pelo menos 1 filme antes de salvar!", Toast.LENGTH_SHORT).show();
-                            showAddMoviesToPlaylistDialog(playlist, isNew);
-                            return;
-                        }
-                        List<MoviePlaylist> allPl = loadMoviePlaylists();
-                        boolean found = false;
-                        for (int i = 0; i < allPl.size(); i++) {
-                            if (allPl.get(i).id.equals(playlist.id)) {
-                                allPl.set(i, playlist);
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) {
-                            allPl.add(playlist);
-                        }
-                        saveMoviePlaylists(allPl);
-                        Toast.makeText(this, "Playlist '" + playlist.name + "' salva com sucesso!", Toast.LENGTH_SHORT).show();
-                        showMoviePlaylistsDialog();
-                    }
-                })
-                .setNegativeButton("Cancelar", (d, w) -> {
-                    if (!isNew) {
-                        showMoviePlaylistsDialog();
-                    }
-                })
-                .show();
-    }
+    private static class PlaylistMovieSelectAdapter extends RecyclerView.Adapter<PlaylistMovieSelectAdapter.ViewHolder> {
+        private final Context context;
+        private final List<Movie> movies;
+        private final MoviePlaylist playlist;
+        private final View sidebarTarget;
+        private final Runnable onSelectionChanged;
 
-    private void showSearchMovieForPlaylistDialog(MoviePlaylist playlist, boolean isNew) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
-        builder.setTitle("🔍 Buscar Filme para: " + playlist.name);
-
-        final EditText input = new EditText(this);
-        input.setHint("Digite o nome do filme (ou deixe em branco)");
-        input.setTextColor(Color.WHITE);
-        input.setHintTextColor(Color.LTGRAY);
-        FrameLayout container = new FrameLayout(this);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.leftMargin = 40;
-        params.rightMargin = 40;
-        input.setLayoutParams(params);
-        container.addView(input);
-        builder.setView(container);
-
-        builder.setPositiveButton("Buscar", (dialog, which) -> {
-            String query = input.getText().toString().trim().toLowerCase();
-            showMovieSearchResultsForPlaylist(playlist, query, isNew);
-        });
-        builder.setNegativeButton("Voltar", (dialog, which) -> {
-            showAddMoviesToPlaylistDialog(playlist, isNew);
-        });
-        builder.show();
-    }
-
-    private void showMovieSearchResultsForPlaylist(MoviePlaylist playlist, String query, boolean isNew) {
-        if (cachedMovies == null || cachedMovies.isEmpty()) {
-            Toast.makeText(this, "Nenhum filme carregado no catálogo.", Toast.LENGTH_SHORT).show();
-            showAddMoviesToPlaylistDialog(playlist, isNew);
-            return;
+        public PlaylistMovieSelectAdapter(Context context, List<Movie> movies, MoviePlaylist playlist, View sidebarTarget, Runnable onSelectionChanged) {
+            this.context = context;
+            this.movies = movies;
+            this.playlist = playlist;
+            this.sidebarTarget = sidebarTarget;
+            this.onSelectionChanged = onSelectionChanged;
         }
 
-        List<Movie> matched = new ArrayList<>();
-        for (Movie m : cachedMovies) {
-            if (isDemoMovie(m)) continue;
-            if (query.isEmpty() || (m.getDisplayTitle() != null && m.getDisplayTitle().toLowerCase().contains(query))) {
-                matched.add(m);
-                if (matched.size() >= 100) break;
+        @NonNull
+        @Override
+        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View v = LayoutInflater.from(context).inflate(R.layout.item_playlist_movie_select, parent, false);
+            return new ViewHolder(v);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+            Movie movie = movies.get(position);
+            holder.tvNum.setText(String.valueOf(position + 1));
+            holder.tvTitle.setText(movie.getDisplayTitle());
+            String meta = "";
+            if (movie.year != null && !movie.year.isEmpty()) meta += movie.year;
+            if (movie.genre != null && !movie.genre.isEmpty()) {
+                if (!meta.isEmpty()) meta += " • ";
+                meta += movie.genre;
+            }
+            holder.tvMeta.setText(meta);
+
+            boolean isAdded = playlist.movieIds.contains(movie.stream_id);
+            updateBadge(holder, isAdded);
+
+            holder.itemView.setOnClickListener(v -> {
+                if (playlist.movieIds.contains(movie.stream_id)) {
+                    playlist.movieIds.remove(movie.stream_id);
+                    updateBadge(holder, false);
+                } else {
+                    playlist.movieIds.add(movie.stream_id);
+                    updateBadge(holder, true);
+                }
+                if (onSelectionChanged != null) onSelectionChanged.run();
+            });
+
+            holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
+                holder.tvTitle.setTextColor(hasFocus ? Color.BLACK : Color.WHITE);
+                holder.tvNum.setTextColor(hasFocus ? Color.BLACK : Color.parseColor("#8899AA"));
+                holder.tvMeta.setTextColor(hasFocus ? Color.DKGRAY : Color.parseColor("#7A899C"));
+            });
+
+            // DPAD_RIGHT envia o foco diretamente para a barra lateral de ações!
+            holder.itemView.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                    if (sidebarTarget != null) {
+                        sidebarTarget.requestFocus();
+                        return true;
+                    }
+                }
+                return false;
+            });
+        }
+
+        private void updateBadge(ViewHolder holder, boolean isAdded) {
+            if (isAdded) {
+                holder.tvBadge.setText("✓ NA FILA");
+                holder.tvBadge.setTextColor(Color.parseColor("#FFC107"));
+            } else {
+                holder.tvBadge.setText("+ Adicionar");
+                holder.tvBadge.setTextColor(Color.parseColor("#CCCCCC"));
             }
         }
 
-        if (matched.isEmpty()) {
-            Toast.makeText(this, "Nenhum filme encontrado para '" + query + "'", Toast.LENGTH_SHORT).show();
-            showSearchMovieForPlaylistDialog(playlist, isNew);
-            return;
+        @Override
+        public int getItemCount() {
+            return movies.size();
         }
 
-        String[] titles = new String[matched.size()];
-        for (int i = 0; i < matched.size(); i++) {
-            Movie m = matched.get(i);
-            boolean inPlaylist = playlist.movieIds.contains(m.stream_id);
-            titles[i] = (inPlaylist ? "✅ " : "➕ ") + m.getDisplayTitle();
+        static class ViewHolder extends RecyclerView.ViewHolder {
+            TextView tvNum, tvTitle, tvMeta, tvBadge;
+            ViewHolder(View itemView) {
+                super(itemView);
+                tvNum = itemView.findViewById(R.id.tvSelectMovieNumber);
+                tvTitle = itemView.findViewById(R.id.tvSelectMovieTitle);
+                tvMeta = itemView.findViewById(R.id.tvSelectMovieMeta);
+                tvBadge = itemView.findViewById(R.id.tvSelectMovieBadge);
+            }
         }
-
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Selecione para adicionar (" + matched.size() + " filmes):")
-                .setItems(titles, (d, idx) -> {
-                    Movie selected = matched.get(idx);
-                    if (!playlist.movieIds.contains(selected.stream_id)) {
-                        playlist.movieIds.add(selected.stream_id);
-                        Toast.makeText(this, "Adicionado: " + selected.getDisplayTitle() + " (" + playlist.movieIds.size() + " na fila)", Toast.LENGTH_SHORT).show();
-                    } else {
-                        Toast.makeText(this, "Filme já está na playlist!", Toast.LENGTH_SHORT).show();
-                    }
-                    showMovieSearchResultsForPlaylist(playlist, query, isNew);
-                })
-                .setPositiveButton("🔍 Nova Busca", (d, w) -> {
-                    showSearchMovieForPlaylistDialog(playlist, isNew);
-                })
-                .setNegativeButton("Concluir Adição", (d, w) -> {
-                    showAddMoviesToPlaylistDialog(playlist, isNew);
-                })
-                .show();
     }
 
-    private void showManagePlaylistMoviesDialog(MoviePlaylist playlist, boolean isNew) {
-        if (playlist.movieIds.isEmpty()) {
-            Toast.makeText(this, "A playlist está vazia!", Toast.LENGTH_SHORT).show();
-            showAddMoviesToPlaylistDialog(playlist, isNew);
+    private void showPlaylistEditorDialog(MoviePlaylist playlist, boolean isNew) {
+        if (cachedMovies == null || cachedMovies.isEmpty()) {
+            Toast.makeText(this, "Nenhum filme carregado no catálogo.", Toast.LENGTH_SHORT).show();
             return;
         }
-        List<Movie> pMovies = getPlaylistMovies(playlist);
-        String[] items = new String[pMovies.size()];
-        for (int i = 0; i < pMovies.size(); i++) {
-            items[i] = (i + 1) + ". " + pMovies.get(i).getDisplayTitle() + "  [❌ Remover]";
-        }
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Gerenciar Filmes (" + playlist.movieIds.size() + ") - Clique para remover:")
-                .setItems(items, (dialog, which) -> {
-                    Movie removed = pMovies.get(which);
-                    playlist.movieIds.remove(removed.stream_id);
-                    Toast.makeText(this, "Removido: " + removed.getDisplayTitle(), Toast.LENGTH_SHORT).show();
-                    if (!playlist.movieIds.isEmpty()) {
-                        showManagePlaylistMoviesDialog(playlist, isNew);
-                    } else {
-                        showAddMoviesToPlaylistDialog(playlist, isNew);
-                    }
-                })
-                .setNegativeButton("Voltar", (d, w) -> showAddMoviesToPlaylistDialog(playlist, isNew))
-                .show();
+
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_playlist_editor, null);
+        AlertDialog dialog = createThemedDialogBuilder()
+                .setView(dialogView)
+                .setCancelable(true)
+                .create();
+
+        TextView tvTitle = dialogView.findViewById(R.id.tvPlaylistEditorTitle);
+        TextView tvCount = dialogView.findViewById(R.id.tvPlaylistEditorCount);
+        TextView tvListHeader = dialogView.findViewById(R.id.tvPlaylistListHeader);
+        EditText etSearch = dialogView.findViewById(R.id.etPlaylistSearch);
+        TextView btnSearch = dialogView.findViewById(R.id.btnPlaylistSearchAction);
+        RecyclerView rvMovies = dialogView.findViewById(R.id.rvPlaylistMovies);
+
+        TextView btnSidebarNewSearch = dialogView.findViewById(R.id.btnSidebarNewSearch);
+        TextView btnSidebarCatalog = dialogView.findViewById(R.id.btnSidebarCatalog);
+        TextView btnSidebarViewQueue = dialogView.findViewById(R.id.btnSidebarViewQueue);
+        TextView btnSidebarSave = dialogView.findViewById(R.id.btnSidebarSavePlaylist);
+        TextView btnSidebarCancel = dialogView.findViewById(R.id.btnSidebarCancel);
+
+        tvTitle.setText("📋 " + (isNew ? "Nova Playlist: " : "Editar: ") + playlist.name);
+
+        Runnable updateCounters = () -> {
+            int total = playlist.movieIds.size();
+            tvCount.setText(total + " filmes na playlist");
+            btnSidebarViewQueue.setText("👁️ Ver Fila (" + total + ")");
+        };
+        updateCounters.run();
+
+        View.OnFocusChangeListener buttonFocus = (v, hasFocus) -> {
+            if (v instanceof TextView) {
+                ((TextView) v).setTextColor(hasFocus ? Color.BLACK : Color.WHITE);
+            }
+        };
+        btnSearch.setOnFocusChangeListener(buttonFocus);
+        btnSidebarNewSearch.setOnFocusChangeListener(buttonFocus);
+        btnSidebarCatalog.setOnFocusChangeListener(buttonFocus);
+        btnSidebarViewQueue.setOnFocusChangeListener(buttonFocus);
+        btnSidebarSave.setOnFocusChangeListener(buttonFocus);
+        btnSidebarCancel.setOnFocusChangeListener(buttonFocus);
+
+        final List<Movie> currentDisplayed = new ArrayList<>();
+        rvMovies.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
+
+        Runnable refreshAdapter = () -> {
+            PlaylistMovieSelectAdapter adapter = new PlaylistMovieSelectAdapter(
+                    this,
+                    currentDisplayed,
+                    playlist,
+                    btnSidebarSave,
+                    updateCounters
+            );
+            rvMovies.setAdapter(adapter);
+        };
+
+        Runnable populateAll = () -> {
+            currentDisplayed.clear();
+            for (Movie m : cachedMovies) {
+                if (!isDemoMovie(m)) currentDisplayed.add(m);
+            }
+            refreshAdapter.run();
+        };
+        populateAll.run();
+
+        // Teclas no sidebar: DPAD_LEFT retorna para a lista de filmes
+        View.OnKeyListener sidebarLeftListener = (v, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                if (rvMovies.getChildCount() > 0) {
+                    rvMovies.requestFocus();
+                    return true;
+                }
+            }
+            return false;
+        };
+        btnSidebarNewSearch.setOnKeyListener(sidebarLeftListener);
+        btnSidebarCatalog.setOnKeyListener(sidebarLeftListener);
+        btnSidebarViewQueue.setOnKeyListener(sidebarLeftListener);
+        btnSidebarSave.setOnKeyListener(sidebarLeftListener);
+        btnSidebarCancel.setOnKeyListener(sidebarLeftListener);
+
+        Runnable doSearch = () -> {
+            String q = etSearch.getText().toString().trim().toLowerCase();
+            if (q.isEmpty()) {
+                tvListHeader.setText("Todos os Filmes do Catálogo (" + cachedMovies.size() + "):");
+                populateAll.run();
+                return;
+            }
+            List<Movie> matched = new ArrayList<>();
+            for (Movie m : cachedMovies) {
+                if (isDemoMovie(m)) continue;
+                String title = m.getDisplayTitle() != null ? m.getDisplayTitle().toLowerCase() : "";
+                String genre = m.genre != null ? m.genre.toLowerCase() : "";
+                if (title.contains(q) || genre.contains(q)) {
+                    matched.add(m);
+                }
+            }
+            currentDisplayed.clear();
+            currentDisplayed.addAll(matched);
+            refreshAdapter.run();
+            tvListHeader.setText("Resultados para '" + q + "' (" + matched.size() + " encontrados):");
+            if (matched.isEmpty()) {
+                Toast.makeText(this, "Nenhum filme encontrado para '" + q + "'", Toast.LENGTH_SHORT).show();
+            } else {
+                rvMovies.requestFocus();
+            }
+        };
+
+        btnSearch.setOnClickListener(v -> doSearch.run());
+        etSearch.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE
+                    || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_DOWN)) {
+                doSearch.run();
+                return true;
+            }
+            return false;
+        });
+
+        btnSidebarNewSearch.setOnClickListener(v -> {
+            etSearch.requestFocus();
+            etSearch.selectAll();
+        });
+
+        btnSidebarCatalog.setOnClickListener(v -> {
+            etSearch.setText("");
+            tvListHeader.setText("Todos os Filmes do Catálogo (" + cachedMovies.size() + "):");
+            populateAll.run();
+            rvMovies.requestFocus();
+        });
+
+        btnSidebarViewQueue.setOnClickListener(v -> {
+            List<Movie> queueMovies = getPlaylistMovies(playlist);
+            currentDisplayed.clear();
+            currentDisplayed.addAll(queueMovies);
+            refreshAdapter.run();
+            tvListHeader.setText("Filmes na Fila da Playlist (" + queueMovies.size() + "):");
+            if (queueMovies.isEmpty()) {
+                Toast.makeText(this, "A playlist ainda não possui filmes adicionados.", Toast.LENGTH_SHORT).show();
+            } else {
+                rvMovies.requestFocus();
+            }
+        });
+
+        btnSidebarSave.setOnClickListener(v -> {
+            if (playlist.movieIds.isEmpty()) {
+                Toast.makeText(this, "Selecione pelo menos 1 filme para salvar a playlist!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            List<MoviePlaylist> all = loadMoviePlaylists();
+            boolean found = false;
+            for (int i = 0; i < all.size(); i++) {
+                if (all.get(i).id != null && all.get(i).id.equals(playlist.id)) {
+                    all.set(i, playlist);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                all.add(playlist);
+            }
+            saveMoviePlaylists(all);
+            Toast.makeText(this, "Playlist '" + playlist.name + "' salva com sucesso! (" + playlist.movieIds.size() + " filmes)", Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
+            showMoviePlaylistsDialog();
+        });
+
+        btnSidebarCancel.setOnClickListener(v -> {
+            dialog.dismiss();
+            if (!isNew) {
+                showMoviePlaylistsDialog();
+            }
+        });
+
+        dialog.show();
+        etSearch.requestFocus();
     }
 
     private void showPlaylistActionsDialog(MoviePlaylist playlist) {
         String[] actions = new String[] {
                 "▶️ INICIAR REPRODUÇÃO EM SEQUÊNCIA",
                 "📺 EXIBIR FILMES NA GRADE",
-                "➕ ADICIONAR / EDITAR FILMES",
-                "✏️ RENOMEAR PLAYLIST",
+                "✏️ ADICIONAR / EDITAR FILMES",
+                "🏷️ RENOMEAR PLAYLIST",
                 "🗑️ EXCLUIR PLAYLIST"
         };
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog dialog = createThemedDialogBuilder()
                 .setTitle("📋 " + playlist.name + " (" + playlist.movieIds.size() + " filmes)")
-                .setItems(actions, (dialog, which) -> {
+                .setItems(actions, (d, which) -> {
+                    d.dismiss();
                     if (which == 0) {
                         startMoviePlaylist(playlist, 0);
                     } else if (which == 1) {
                         displayPlaylistInGrid(playlist);
                     } else if (which == 2) {
-                        showAddMoviesToPlaylistDialog(playlist, false);
+                        showPlaylistEditorDialog(playlist, false);
                     } else if (which == 3) {
                         showRenamePlaylistDialog(playlist);
                     } else if (which == 4) {
@@ -4789,24 +4989,42 @@ public class MainActivity extends Activity {
                     }
                 })
                 .setNegativeButton("Voltar", (d, w) -> showMoviePlaylistsDialog())
-                .show();
+                .create();
+        styleDialogButtons(dialog);
+        dialog.show();
     }
 
     private void showRenamePlaylistDialog(MoviePlaylist playlist) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
-        builder.setTitle("✏️ Renomear Playlist");
+        AlertDialog dialog = createThemedDialogBuilder()
+                .setTitle("🏷️ Renomear Playlist")
+                .setMessage("Digite o novo nome:")
+                .create();
+
         final EditText input = new EditText(this);
         input.setText(playlist.name);
+        input.setBackgroundResource(R.drawable.edit_text_dark_bg);
         input.setTextColor(Color.WHITE);
+        input.setHintTextColor(Color.parseColor("#7A899C"));
+        input.setTextSize(14);
+        input.setTypeface(Typeface.DEFAULT_BOLD);
+        int pad = (int) (14 * getResources().getDisplayMetrics().density);
+        input.setPadding(pad, pad, pad, pad);
+        input.setSingleLine(true);
+        input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+
         FrameLayout container = new FrameLayout(this);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.leftMargin = 40;
-        params.rightMargin = 40;
+        int margin = (int) (16 * getResources().getDisplayMetrics().density);
+        params.leftMargin = margin;
+        params.rightMargin = margin;
+        params.topMargin = margin / 2;
+        params.bottomMargin = margin / 2;
         input.setLayoutParams(params);
         container.addView(input);
-        builder.setView(container);
-        builder.setPositiveButton("Salvar", (dialog, which) -> {
+        dialog.setView(container);
+
+        dialog.setButton(DialogInterface.BUTTON_POSITIVE, "Salvar", (d, which) -> {
             String newName = input.getText().toString().trim();
             if (!newName.isEmpty()) {
                 playlist.name = newName;
@@ -4822,23 +5040,28 @@ public class MainActivity extends Activity {
             }
             showPlaylistActionsDialog(playlist);
         });
-        builder.setNegativeButton("Cancelar", (d, w) -> showPlaylistActionsDialog(playlist));
-        builder.show();
+        dialog.setButton(DialogInterface.BUTTON_NEGATIVE, "Cancelar", (d, which) -> showPlaylistActionsDialog(playlist));
+
+        styleDialogButtons(dialog);
+        dialog.show();
+        input.requestFocus();
     }
 
     private void confirmDeletePlaylist(MoviePlaylist playlist) {
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Excluir Playlist")
+        AlertDialog dialog = createThemedDialogBuilder()
+                .setTitle("🗑️ Excluir Playlist")
                 .setMessage("Deseja realmente excluir a playlist '" + playlist.name + "'?")
-                .setPositiveButton("Excluir", (dialog, which) -> {
+                .setPositiveButton("Excluir", (d, which) -> {
                     List<MoviePlaylist> all = loadMoviePlaylists();
                     all.removeIf(pl -> pl.id != null && pl.id.equals(playlist.id));
                     saveMoviePlaylists(all);
                     Toast.makeText(this, "Playlist excluída!", Toast.LENGTH_SHORT).show();
                     showMoviePlaylistsDialog();
                 })
-                .setNegativeButton("Cancelar", (d, w) -> showPlaylistActionsDialog(playlist))
-                .show();
+                .setNegativeButton("Cancelar", (d, which) -> showPlaylistActionsDialog(playlist))
+                .create();
+        styleDialogButtons(dialog);
+        dialog.show();
     }
 
     private void displayPlaylistInGrid(MoviePlaylist playlist) {
@@ -5313,15 +5536,17 @@ public class MainActivity extends Activity {
             long now = SystemClock.elapsedRealtime();
             if (now - lastMosaicBackAt < 3000) {
                 lastMosaicBackAt = 0;
-                new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                AlertDialog dialog = createThemedDialogBuilder()
                         .setTitle("Sair do Mosaico")
                         .setMessage("Deseja realmente sair do modo Mosaico e voltar à exibição padrão?")
-                        .setPositiveButton("Sim, Sair", (dialog, which) -> {
-                            dialog.dismiss();
+                        .setPositiveButton("Sim, Sair", (d, which) -> {
+                            d.dismiss();
                             exitMosaicMode(true);
                         })
-                        .setNegativeButton("Continuar no Mosaico", (dialog, which) -> dialog.dismiss())
-                        .show();
+                        .setNegativeButton("Continuar no Mosaico", (d, which) -> d.dismiss())
+                        .create();
+                styleDialogButtons(dialog);
+                dialog.show();
             } else {
                 lastMosaicBackAt = now;
                 Toast.makeText(this, "Pressione Voltar novamente para sair do Mosaico", Toast.LENGTH_SHORT).show();
@@ -5379,17 +5604,19 @@ public class MainActivity extends Activity {
     }
 
     private void showExitConfirmDialog() {
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Sair do AndPlay")
-                .setMessage("Deseja realmente fechar o aplicativo?")
-                .setPositiveButton("Sim, Sair", (dialog, which) -> {
-                    dialog.dismiss();
+        AlertDialog dialog = createThemedDialogBuilder()
+                .setTitle("🚪 Sair do EPlay")
+                .setMessage("Deseja realmente fechar o aplicativo EPlay?")
+                .setPositiveButton("Sim, Sair", (d, which) -> {
+                    d.dismiss();
                     finish();
                 })
-                .setNegativeButton("Cancelar", (dialog, which) -> {
-                    dialog.dismiss();
+                .setNegativeButton("Cancelar", (d, which) -> {
+                    d.dismiss();
                 })
-                .show();
+                .create();
+        styleDialogButtons(dialog);
+        dialog.show();
     }
 
     public void openFullGuide() {
@@ -5660,7 +5887,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog dialog1 = createThemedDialogBuilder()
                 .setTitle("⚙️ Prioridade dos Provedores de TV")
                 .setSingleChoiceItems(options, selectedIndex, (dialog, which) -> {
                     dialog.dismiss();
@@ -5697,7 +5924,9 @@ public class MainActivity extends Activity {
                     }
                 })
                 .setNegativeButton("Fechar", null)
-                .show();
+                .create();
+        styleDialogButtons(dialog1);
+        dialog1.show();
     }
 
     private void showCustomProviderOrderDialog() {
@@ -5712,14 +5941,16 @@ public class MainActivity extends Activity {
                 ProviderManager.PROVIDER_RDEMBED
         };
 
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog dialog2 = createThemedDialogBuilder()
                 .setTitle("Escolha o 1º Provedor (Primário)")
                 .setItems(providers, (dialog, which) -> {
                     String chosen1 = provIds[which];
                     showSecondaryProviderDialog(chosen1);
                 })
                 .setNegativeButton("Cancelar", null)
-                .show();
+                .create();
+        styleDialogButtons(dialog2);
+        dialog2.show();
     }
 
     private void showSecondaryProviderDialog(String primaryId) {
@@ -5733,7 +5964,7 @@ public class MainActivity extends Activity {
             labels[i] = ProviderManager.getProviderDisplayName(remaining.get(i));
         }
 
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        AlertDialog dialog3 = createThemedDialogBuilder()
                 .setTitle("Escolha o 2º Provedor (Secundário)")
                 .setItems(labels, (dialog, which) -> {
                     String chosen2 = remaining.get(which);
@@ -5748,7 +5979,9 @@ public class MainActivity extends Activity {
                     applyProviderChange(ProviderManager.getProviderDisplayName(primaryId));
                 })
                 .setNegativeButton("Cancelar", null)
-                .show();
+                .create();
+        styleDialogButtons(dialog3);
+        dialog3.show();
     }
 
     private void applyProviderChange(String primaryName) {

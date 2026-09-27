@@ -7,4 +7,14 @@
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowContentOverlay">@null</item>
     </style>
+
+    <style name="Theme.EPlay.Dialog" parent="@android:style/Theme.DeviceDefault.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_dark_bg</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textColorPrimary">#FFFFFF</item>
+        <item name="android:textColorSecondary">#AAAAAA</item>
+        <item name="android:colorAccent">#FFC107</item>
+        <item name="android:colorControlActivated">#FFC107</item>
+        <item name="android:colorControlHighlight">#33FFC107</item>
+    </style>
 </resources>
