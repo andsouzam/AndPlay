@@ -13,6 +13,19 @@
   <!-- Escudo Zero Anúncios (Ad-Shield) -->
   <script>
     (function initZeroAdsShield() {
+      // URLs do próprio site devem ser comparadas por origin, nunca por substring.
+      // Isso impede falsos positivos como "attacker.example/?ref=andsouzam.github.io".
+      const isSameOriginUrl = function (rawHref) {
+        const href = String(rawHref || '').trim();
+        if (!href || href.startsWith('#')) return true;
+        if (/^javascript:/i.test(href)) return false;
+        try {
+          return new URL(href, window.location.href).origin === window.location.origin;
+        } catch (e) {
+          return false;
+        }
+      };
+
       // 1. Bloqueia qualquer tentativa de abertura de popups / popunders com trava definitiva
       const blockPopup = function (url) {
         console.warn('[AdShield] Bloqueado popup/popunder externo:', url);
@@ -37,8 +50,8 @@
         const a = e.target && e.target.closest ? e.target.closest('a') : null;
         if (a) {
           if (a.hasAttribute('data-adshield-allow')) return; // link legítimo do app
-          const href = String(a.href || '').trim().toLowerCase();
-          const isSafe = !href || href.startsWith('#') || href.startsWith('javascript:') || href.includes(window.location.hostname);
+          const href = String(a.href || '').trim();
+          const isSafe = isSameOriginUrl(href);
           if (!isSafe || a.target === '_blank') {
             console.warn('[AdShield] Bloqueado clique em link externo / popup:', href);
             e.preventDefault();
@@ -53,8 +66,8 @@
         if (this.hasAttribute && this.hasAttribute('data-adshield-allow')) {
           return _origClick.apply(this, arguments); // link legítimo do app
         }
-        const href = String(this.href || '').toLowerCase();
-        const isSafe = !href || href.startsWith('#') || href.startsWith('javascript:') || href.includes(window.location.hostname);
+        const href = String(this.href || '').trim();
+        const isSafe = isSameOriginUrl(href);
         if (!isSafe) {
           console.warn('[AdShield] Bloqueado clique automático em anúncio:', href);
           return;
@@ -2907,8 +2920,8 @@
       <div id="tvIframeShield" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:90;background:transparent;cursor:default;">
       </div>
       <iframe id="tvEmbedPlayer" allowfullscreen="true"
-        allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *; clipboard-write *; accelerometer *; gyroscope *"
-        referrerpolicy="no-referrer"></iframe>
+        allow="autoplay *; fullscreen *; encrypted-media *; picture-in-picture *"
+        referrerpolicy="no-referrer" title="Reprodutor de transmissão ao vivo"></iframe>
       <div id="tvLiveBadge" class="tv-player-live-badge"><span class="tv-pulse"></span> NO AR</div>
       <div id="tvChannelWatermark" class="tv-watermark"></div>
       <!-- Overlay invisível que captura o foco do teclado impedindo o iframe de roubar os eventos keydown -->
@@ -3473,6 +3486,7 @@
     };
 
     const BATCH_SIZE = 60;
+    const API_TIMEOUT_MS = 15000;
 
     // Estado da aplicação
     let currentMode = 'movies'; // 'movies', 'series' ou 'live'
@@ -3483,6 +3497,8 @@
     let moviePosterMap = new Map(); // Mapa inteligente para recuperar imagens 4K
     let movieCategories = [];
     let seriesCategories = [];
+    let _loadingMovieCategoriesPromise = null;
+    let _loadingSeriesCategoriesPromise = null;
     let _loadingMoviesPromise = null;
     let _loadingSeriesPromise = null;
 
@@ -3490,6 +3506,8 @@
     let currentFilteredList = [];
     let renderedCount = 0;
     let activeVideoUrl = '';
+    let searchDebounceTimer = null;
+    let infiniteScrollRaf = null;
 
     // Instância HLS ativa
     let activeHls = null;
@@ -4108,7 +4126,14 @@
 
       // Eventos
       elements.categorySelect.addEventListener('change', (e) => onCategoryChange(e.target.value));
-      elements.searchInput.addEventListener('input', (e) => onSearch(e.target.value));
+      elements.searchInput.addEventListener('input', (e) => {
+        const value = e.target.value;
+        if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+          searchDebounceTimer = null;
+          onSearch(value);
+        }, 180);
+      });
       elements.resetCategoryBtn.addEventListener('click', selectAllMedia);
       elements.logoBtn.addEventListener('click', selectAllMedia);
       elements.loadMoreBtn.addEventListener('click', renderNextBatch);
@@ -4187,14 +4212,18 @@
 
       setupTvRemoteNavigation();
 
-      // Infinite scroll
+      // Infinite scroll: limita o trabalho a no máximo um ciclo por frame.
       window.addEventListener('scroll', () => {
-        if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 600) {
-          if (renderedCount < currentFilteredList.length) {
-            renderNextBatch();
+        if (infiniteScrollRaf !== null) return;
+        infiniteScrollRaf = requestAnimationFrame(() => {
+          infiniteScrollRaf = null;
+          if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 600) {
+            if (renderedCount < currentFilteredList.length) {
+              renderNextBatch();
+            }
           }
-        }
-      });
+        });
+      }, { passive: true });
 
       initSidebarState();
 
@@ -4427,6 +4456,10 @@
       }
 
       if (forceReload) {
+        if (searchDebounceTimer) {
+          clearTimeout(searchDebounceTimer);
+          searchDebounceTimer = null;
+        }
         elements.searchInput.value = '';
       }
 
@@ -4484,32 +4517,72 @@
     // ==========================================
     async function xtreamApi(action, extraParams = '') {
       const url = `${CONFIG.server}/player_api.php?username=${CONFIG.user}&password=${CONFIG.pass}&action=${action}${extraParams}`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error(`Falha na API Xtream (${action}): HTTP ${res.status}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) {
+          throw new Error(`Falha na API Xtream (${action}): HTTP ${res.status}`);
+        }
+        return await res.json();
+      } catch (err) {
+        if (err && err.name === 'AbortError') {
+          throw new Error(`Tempo limite da API Xtream excedido (${API_TIMEOUT_MS / 1000}s).`);
+        }
+        throw err;
+      } finally {
+        clearTimeout(timeoutId);
       }
-      return res.json();
     }
 
     // ==========================================
     // CATEGORIAS
     // ==========================================
     async function loadMovieCategories() {
-      try {
-        movieCategories = await xtreamApi('get_vod_categories');
+      if (movieCategories.length > 0) {
         populateCategoriesSelect(movieCategories, 'Filmes');
-      } catch (err) {
-        console.error('Erro ao carregar categorias de filmes:', err);
+        return movieCategories;
       }
+      if (_loadingMovieCategoriesPromise) return _loadingMovieCategoriesPromise;
+
+      _loadingMovieCategoriesPromise = (async () => {
+        try {
+          movieCategories = await xtreamApi('get_vod_categories');
+          populateCategoriesSelect(movieCategories, 'Filmes');
+          return movieCategories;
+        } catch (err) {
+          console.error('Erro ao carregar categorias de filmes:', err);
+          return [];
+        } finally {
+          _loadingMovieCategoriesPromise = null;
+        }
+      })();
+
+      return _loadingMovieCategoriesPromise;
     }
 
     async function loadSeriesCategories() {
-      try {
-        seriesCategories = await xtreamApi('get_series_categories');
+      if (seriesCategories.length > 0) {
         populateCategoriesSelect(seriesCategories, 'Séries');
-      } catch (err) {
-        console.error('Erro ao carregar categorias de séries:', err);
+        return seriesCategories;
       }
+      if (_loadingSeriesCategoriesPromise) return _loadingSeriesCategoriesPromise;
+
+      _loadingSeriesCategoriesPromise = (async () => {
+        try {
+          seriesCategories = await xtreamApi('get_series_categories');
+          populateCategoriesSelect(seriesCategories, 'Séries');
+          return seriesCategories;
+        } catch (err) {
+          console.error('Erro ao carregar categorias de séries:', err);
+          return [];
+        } finally {
+          _loadingSeriesCategoriesPromise = null;
+        }
+      })();
+
+      return _loadingSeriesCategoriesPromise;
     }
 
     function populateCategoriesSelect(categories, typeLabel) {
@@ -4520,8 +4593,12 @@
       optAll.textContent = `🌟 Todas as ${typeLabel} (Catálogo Completo)`;
       elements.categorySelect.appendChild(optAll);
 
-      // Oculta categorias DEMO / testes
-      const filteredCategories = categories.filter(cat => !cat.category_name.toLowerCase().includes('demo'));
+      // Oculta categorias DEMO / testes e tolera respostas incompletas da API.
+      const sourceCategories = Array.isArray(categories) ? categories : [];
+      const filteredCategories = sourceCategories.filter(cat => {
+        const name = cat && typeof cat.category_name === 'string' ? cat.category_name : '';
+        return name && !name.toLowerCase().includes('demo');
+      });
 
       filteredCategories.forEach(cat => {
         const opt = document.createElement('option');
@@ -5673,7 +5750,7 @@
 
         card.innerHTML = `
           <div class="poster-wrap">
-            ${poster ? `<img src="${escapeHtml(poster)}" alt="${escapeHtml(title)}" loading="lazy" onerror="onPosterError(this, '${escapeHtml(title)}')">` : ''}
+            ${poster ? `<img src="${escapeHtml(poster)}" alt="${escapeHtml(title)}" loading="lazy" decoding="async" onerror="onPosterError(this, '${escapeHtml(title)}')">` : ''}
             <div class="poster-fallback" style="${poster ? 'display:none;' : ''}">🎬<br>${escapeHtml(title)}</div>
             ${badgeHtml}
             ${rating ? `<div class="rating-badge">★ ${rating}</div>` : ''}
@@ -5941,7 +6018,9 @@
 
         elements.videoPlayer.style.display = 'block';
 
-        if (window.Hls && Hls.isSupported() && (streamUrl.includes('.m3u8') || streamUrl.startsWith('http'))) {
+        const isHlsStream = /\.m3u8(?:$|[?#])/i.test(streamUrl);
+
+        if (window.Hls && Hls.isSupported() && isHlsStream) {
           const hlsConfig = liveBufferMinimizationEnabled ? {
             enableWorker: true,
             lowLatencyMode: true,
@@ -8144,6 +8223,7 @@
       let tvCurrentIdx = 0;
       let tvCurrentMode = 'central'; // 'central' | 'fullscreen' | 'vod'
       let tvOsdTimer = null;
+      let tvClockTimer = null;
       let tvDrawerAutoCloseTimer = null;
       let tvVodList = [];
       let tvVodMode = 'movies';
@@ -8161,6 +8241,7 @@
 
       // Relógio
       function updateTvClock() {
+        if (!tvApp || tvApp.style.display === 'none') return;
         const clockEl = document.getElementById('tvClock');
         const dateEl = document.getElementById('tvDate');
         const osdClock = document.getElementById('tvOsdClock');
@@ -8173,12 +8254,24 @@
         if (osdClock) osdClock.textContent = timeStr;
         if (osdDate) osdDate.textContent = dateStr.toUpperCase();
       }
-      setInterval(updateTvClock, 1000);
-      updateTvClock();
+
+      // O relógio só fica ativo enquanto o modo TV estiver aberto.
+      function startTvClock() {
+        if (tvClockTimer !== null) return;
+        updateTvClock();
+        tvClockTimer = setInterval(updateTvClock, 1000);
+      }
+
+      function stopTvClock() {
+        if (tvClockTimer === null) return;
+        clearInterval(tvClockTimer);
+        tvClockTimer = null;
+      }
 
       // Inicializa canais e eventos
       window.initTvCableBox = async function () {
         tvApp.style.display = 'flex';
+        startTvClock();
 
         // Carrega canais sob demanda (cacheado após a primeira vez nesta sessão)
         tvChannels = await getLiveChannelsData();
@@ -9855,6 +9948,7 @@
           img.src = poster;
           img.alt = safeTitle;
           img.loading = 'lazy';
+          img.decoding = 'async';
           img.onerror = function () { this.style.opacity = '0.2'; };
           card.appendChild(img);
 
@@ -10574,7 +10668,8 @@
               const grid = document.getElementById('tvSeriesEpisodesGrid');
               if (grid && epCards.length > 0) {
                 const cardW = epCards[0].offsetWidth || 220;
-                cols = Math.max(1, Math.round(grid.clientWidth / (cardW + 14)));
+                const gap = 16;
+                cols = Math.max(1, Math.floor((grid.clientWidth + gap) / (cardW + gap)));
               }
 
               if (key === 'ArrowRight') {
@@ -10758,7 +10853,8 @@
             const grid = document.querySelector('#tvVodRailsContainer .tv-vod-grid');
             if (grid && vodCards.length > 0) {
               const cardW = vodCards[0].offsetWidth || 140;
-              cols = Math.max(1, Math.round(grid.clientWidth / (cardW + 16)));
+              const gap = 16;
+              cols = Math.max(1, Math.floor((grid.clientWidth + gap) / (cardW + gap)));
             }
 
             if (key === 'ArrowRight') {
@@ -10861,6 +10957,7 @@
       window.exitTvMode = function () {
         if (!isTvMode) return;
         isTvMode = false;
+        stopTvClock();
         console.log('[AndPlay TV] Saindo do modo TV, voltando para interface Web');
         document.body.classList.remove('tv-mode');
         const tvApp = document.getElementById('tvCableApp');
