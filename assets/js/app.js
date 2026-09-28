@@ -5437,6 +5437,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.downloadBtn.style.display = 'inline-flex';
 
       const lastMeta = currentPlaybackMeta;
+      window.EPlaySeriesNavigation = null;
+      window.dispatchEvent(new CustomEvent('eplay:series-context'));
       currentPlaybackMeta = null;
 
       elements.videoModal.style.display = 'none';
@@ -5483,7 +5485,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         clearTimeout(videoLoadTimeout);
         videoLoadTimeout = null;
       }
-      showVideoErrorOverlay('error', 'O servidor de transmissão reportou que este arquivo está temporariamente indisponível (Erro 503 / Stream Temporarily Unavailable).');
+      const mediaError = elements.videoPlayer.error;
+      const errorMessage = mediaError?.code === 2
+        ? 'A conexão com o servidor foi interrompida. Tente novamente ou use outra fonte.'
+        : mediaError?.code === 3
+          ? 'O navegador não conseguiu decodificar este vídeo. Tente outra versão ou fonte.'
+          : mediaError?.code === 4
+            ? 'Este formato de vídeo não é compatível com o navegador.'
+            : 'Não foi possível iniciar a reprodução desta fonte. Tente novamente ou escolha outra versão.';
+      showVideoErrorOverlay('error', errorMessage);
     });
 
     elements.videoPlayer.addEventListener('loadeddata', () => {
@@ -6947,6 +6957,24 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const epPlot = ep.info?.plot || sInfo.plot || '';
       const epDuration = ep.info?.duration || ep.info?.duration_secs || sInfo.episode_run_time || '';
       const sPoster = ep.info?.movie_image || currentSeriesGroup?.poster || sInfo.cover || '';
+
+      window.EPlaySeriesNavigation = {
+        seasonNum: Number(seasonNum) || 0,
+        episodeNum: Number(ep.episode_num) || 0,
+        next: () => {
+          const eps = currentSeriesData?.episodes?.[seasonNum] || [];
+          const nextEp = eps.find(e => Number(e.episode_num) === Number(ep.episode_num) + 1);
+          if (nextEp) playSeriesEpisode(nextEp, seasonNum);
+          return !!nextEp;
+        },
+        previous: () => {
+          const eps = currentSeriesData?.episodes?.[seasonNum] || [];
+          const previousEp = eps.find(e => Number(e.episode_num) === Number(ep.episode_num) - 1);
+          if (previousEp) playSeriesEpisode(previousEp, seasonNum);
+          return !!previousEp;
+        }
+      };
+      window.dispatchEvent(new CustomEvent('eplay:series-context'));
 
       const startPlayback = (startPosition) => {
         saveWatchedId('series', watchedId);
