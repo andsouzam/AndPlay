@@ -4151,80 +4151,6 @@
       episodesList: document.getElementById('episodesList')
     };
 
-    // Download real dos vídeos: o atributo HTML "download" é ignorado por muitos
-    // navegadores quando o arquivo está em outro domínio. Fazemos a requisição,
-    // criamos um Blob local e só então acionamos o download no navegador.
-    async function downloadMediaFile(url, filename, triggerEl = null) {
-      const mediaUrl = String(url || '').trim();
-      if (!mediaUrl || mediaUrl === '#') return;
-
-      const originalText = triggerEl ? triggerEl.innerHTML : '';
-      if (triggerEl) {
-        triggerEl.setAttribute('aria-busy', 'true');
-        triggerEl.style.pointerEvents = 'none';
-        triggerEl.innerHTML = '⏳ Preparando download...';
-      }
-
-      try {
-        const response = await fetch(mediaUrl, { method: 'GET', mode: 'cors', credentials: 'omit' });
-        if (!response.ok) throw new Error('HTTP ' + response.status);
-        const blob = await response.blob();
-        if (!blob || blob.size === 0) throw new Error('Arquivo vazio');
-
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = String(filename || 'AndPlay-video.mp4').replace(/[\\\\/:*?"<>|]+/g, '_').trim() || 'AndPlay-video.mp4';
-        link.rel = 'noopener';
-        link.setAttribute('data-adshield-allow', '');
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-      } catch (err) {
-        console.error('[AndPlay] Falha no download:', err);
-        if (triggerEl) {
-          triggerEl.innerHTML = '⚠ Download bloqueado pelo servidor';
-          setTimeout(() => {
-            triggerEl.innerHTML = originalText || '📥 Baixar';
-          }, 3500);
-        }
-        return;
-      } finally {
-        if (triggerEl) {
-          triggerEl.removeAttribute('aria-busy');
-          triggerEl.style.pointerEvents = '';
-          if (triggerEl.innerHTML === '⏳ Preparando download...') {
-            triggerEl.innerHTML = originalText;
-          }
-        }
-      }
-    }
-
-    // Links de download dinâmicos (episódios) usam o mesmo fluxo do botão do player.
-    document.addEventListener('click', function (e) {
-      const link = e.target && e.target.closest ? e.target.closest('[data-media-download]') : null;
-      if (!link) return;
-      const url = link.getAttribute('data-media-url') || link.href;
-      if (!url || url === '#') return;
-      e.preventDefault();
-      e.stopPropagation();
-      const filename = link.getAttribute('data-media-filename') || 'AndPlay-video.mp4';
-      downloadMediaFile(url, filename, link);
-    });
-
-    // Botão de download dentro do player principal.
-    if (elements.downloadBtn) {
-      elements.downloadBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        const url = this.getAttribute('data-media-url') || this.href;
-        if (!url || url === '#' || this.style.display === 'none') return;
-        const filename = this.getAttribute('data-media-filename') || 'AndPlay-video.mp4';
-        downloadMediaFile(url, filename, this);
-      });
-    }
-
     // ==========================================
     // FUNÇÕES DE TRATAMENTO DE TÍTULO E IMAGEM (4K)
     // ==========================================
@@ -6916,10 +6842,6 @@
       activeVideoUrl = newUrl;
       elements.modalTitle.textContent = newTitle;
       elements.downloadBtn.href = newUrl;
-      elements.downloadBtn.setAttribute('data-media-url', newUrl);
-      const newDownloadExt = (String(newUrl).split('?')[0].split('.').pop() || 'mp4').toLowerCase();
-      const newDownloadName = String(newTitle || 'AndPlay-video').replace(/[\\\\/:*?"<>|]+/g, '_').trim() || 'AndPlay-video';
-      elements.downloadBtn.setAttribute('data-media-filename', newDownloadName + '.' + newDownloadExt);
       elements.videoPlayer.src = newUrl;
 
       if (currentSubContext && currentSubContext.mediaMeta) {
@@ -7227,10 +7149,6 @@
       elements.modalTitle.textContent = title;
       elements.videoPlayer.src = url;
       elements.downloadBtn.href = url;
-      elements.downloadBtn.setAttribute('data-media-url', url);
-      const downloadExt = (String(url).split('?')[0].split('.').pop() || 'mp4').toLowerCase();
-      const downloadBase = String(title || 'AndPlay-video').replace(/[\\\\/:*?"<>|]+/g, '_').trim() || 'AndPlay-video';
-      elements.downloadBtn.setAttribute('data-media-filename', downloadBase + '.' + downloadExt);
       elements.videoModal.style.display = 'flex';
       elements.modalFormat.textContent = 'Carregando vídeo...';
 
@@ -8731,8 +8649,6 @@
 
         const ext = ep.container_extension || 'mp4';
         const epUrl = `${CONFIG.server}/series/${CONFIG.user}/${CONFIG.pass}/${ep.id}.${ext}`;
-        const safeEpFile = (ep.title || `Episódio ${ep.episode_num}`).replace(/[\\\\/:*?"<>|]+/g, '_').trim() || ('episodio-' + ep.episode_num);
-        const epFilename = safeEpFile + '.' + ext;
         const epTitle = ep.title || `Episódio ${ep.episode_num}`;
         const thumb = (ep.info && ep.info.movie_image) ? ep.info.movie_image : '';
         const duration = (ep.info && ep.info.duration) ? ep.info.duration : '';
