@@ -1,4 +1,4 @@
-// Configuração pública da conta AndPlay via Supabase.
+// Configuração pública da conta EPlay via Supabase.
 // A Publishable Key é destinada ao código do navegador.
 // NUNCA coloque uma secret/service_role key neste arquivo.
 window.ANDPLAY_SUPABASE_CONFIG = {

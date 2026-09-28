@@ -1,4 +1,4 @@
--- AndPlay Web / Supabase Free
+-- EPlay Web / Supabase Free
 -- Não armazena vídeos nem catálogo. Apenas dados pessoais da conta.
 
 create table if not exists public.user_preferences (

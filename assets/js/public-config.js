@@ -1,4 +1,4 @@
-// Configuração pública do servidor de catálogo/conteúdo do AndPlay.
+// Configuração pública do servidor de catálogo/conteúdo do EPlay.
 // Estes valores são enviados ao navegador e, portanto, NÃO são segredos.
 window.ANDPLAY_PUBLIC_CONFIG = {
   server: 'https://2kbrfonte.space',

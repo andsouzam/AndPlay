@@ -2543,7 +2543,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             '<span class="home-featured-kicker">NOVIDADE NO CATÁLOGO • ' + typeLabel + '</span>' +
             '<h1>' + escapeHtml(item.title) + '</h1>' +
             '<div class="home-featured-meta">' + escapeHtml(meta) + '</div>' +
-            '<p>' + escapeHtml(item.plot || 'Acabou de chegar ao catálogo do AndPlay.') + '</p>' +
+            '<p>' + escapeHtml(item.plot || 'Acabou de chegar ao catálogo do EPlay.') + '</p>' +
             '<button class="home-featured-watch" type="button">▶ Assistir</button>' +
           '</div>' +
           '<div class="home-featured-poster-wrap"><img class="home-featured-poster" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async"></div>';

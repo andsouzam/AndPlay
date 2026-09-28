@@ -1,6 +1,6 @@
-# Conta AndPlay Web — configuração gratuita
+# Conta EPlay Web — configuração gratuita
 
-A conta é opcional. Sem Supabase configurado, o AndPlay continua funcionando
+A conta é opcional. Sem Supabase configurado, o EPlay continua funcionando
 normalmente e mantém dados localmente no navegador.
 
 ## 1. Criar o projeto

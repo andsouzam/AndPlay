@@ -272,7 +272,7 @@
       button.title = 'Conta sincronizada • ' + currentSession.user.email;
     } else {
       if (label) label.textContent = 'Entrar';
-      button.title = 'Entrar para sincronizar seu AndPlay';
+      button.title = 'Entrar para sincronizar seu EPlay';
     }
   }
 
@@ -388,7 +388,7 @@
       <div class="andplay-account-dialog" role="dialog" aria-modal="true" aria-labelledby="andplayAccountTitle">
         <button class="andplay-account-close" type="button" aria-label="Fechar">×</button>
         <div class="andplay-account-head">
-          <div class="andplay-account-kicker">ANDPLAY</div>
+          <div class="andplay-account-kicker">EPLAY</div>
           <h2 id="andplayAccountTitle">Minha conta</h2>
           <p>Sincronize histórico, progresso e preferências entre seus dispositivos.</p>
         </div>
@@ -432,7 +432,7 @@
         </div>
 
         <div id="andplayAccountStatus" class="andplay-account-status" aria-live="polite"></div>
-        <div class="andplay-account-foot">O AndPlay continua funcionando sem login. A conta sincroniza somente seus dados de uso; vídeos e catálogo continuam fora da nuvem.</div>
+        <div class="andplay-account-foot">O EPlay continua funcionando sem login. A conta sincroniza somente seus dados de uso; vídeos e catálogo continuam fora da nuvem.</div>
       </div>
     `;
     document.body.appendChild(modal);
