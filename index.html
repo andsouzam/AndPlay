@@ -282,44 +282,23 @@
   </div>
 
   <section id="homeDashboard" class="home-dashboard" aria-label="Início">
-    <div class="home-hero">
-      <div class="home-hero-copy">
-        <div class="home-eyebrow">SEU CONTEÚDO, DO SEU JEITO</div>
-        <h1>Continue de onde parou.</h1>
-        <p>Encontre rapidamente o que você estava assistindo ou entre direto no catálogo.</p>
-        <div class="home-hero-actions">
-          <button class="home-primary-btn" id="homeGoMoviesBtn" type="button">🎬 Explorar filmes</button>
-          <button class="home-secondary-btn" id="homeGoSeriesBtn" type="button">📺 Explorar séries</button>
-        </div>
-      </div>
-      <div class="home-hero-art" aria-hidden="true">
-        <span>▶</span>
-      </div>
-    </div>
-
-    <section class="home-section">
-      <div class="home-section-head">
-        <div>
-          <span class="home-section-kicker">RETOMAR</span>
-          <h2>Continuar assistindo</h2>
-        </div>
-      </div>
-      <div id="homeContinueRail" class="home-continue-rail"></div>
+    <section class="home-featured">
+      <div id="homeFeaturedTrack" class="home-featured-track" aria-live="polite"></div>
+      <button class="home-featured-arrow home-featured-prev" id="homeFeaturedPrev" type="button" aria-label="Novidade anterior">‹</button>
+      <button class="home-featured-arrow home-featured-next" id="homeFeaturedNext" type="button" aria-label="Próxima novidade">›</button>
+      <div id="homeFeaturedDots" class="home-featured-dots" aria-label="Selecionar novidade"></div>
+      <div id="homeFeaturedLoading" class="home-featured-loading">Carregando novidades...</div>
     </section>
 
     <section class="home-section">
       <div class="home-section-head">
         <div>
-          <span class="home-section-kicker">ACESSO RÁPIDO</span>
-          <h2>Explore o AndPlay</h2>
+          <span class="home-section-kicker">HISTÓRICO</span>
+          <h2>Últimos assistidos</h2>
         </div>
+        <button class="home-section-link" id="homeWatchedAllBtn" type="button">Ver tudo →</button>
       </div>
-      <div class="home-quick-grid">
-        <button class="home-quick-card" id="homeQuickMovies" type="button"><strong>🎬</strong><span>Filmes</span><small>Catálogo completo</small></button>
-        <button class="home-quick-card" id="homeQuickSeries" type="button"><strong>📺</strong><span>Séries</span><small>Temporadas e episódios</small></button>
-        <button class="home-quick-card" id="homeQuickLive" type="button"><strong>🔴</strong><span>Ao Vivo</span><small>TV e jogos</small></button>
-        <button class="home-quick-card" id="homeQuickWatched" type="button"><strong>👁</strong><span>Assistidos</span><small>Seu histórico</small></button>
-      </div>
+      <div id="homeWatchedRail" class="home-watched-rail"></div>
     </section>
   </section>
 
@@ -657,7 +636,7 @@
   <!-- Versão do bundle para evitar cache antigo no GitHub Pages -->
   <script src="./assets/js/supabase-config.js?v=google-login-20260928"></script>
   <script src="./assets/js/account.js?v=google-login-20260928"></script>
-  <script src="./assets/js/app.js"></script>
+  <script src="./assets/js/app.js?v=home-20260928"></script>
 </body>
 
 </html>

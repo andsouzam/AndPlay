@@ -12,6 +12,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let isWatchedView = false;
     const WATCHED_MOVIES_STORAGE_KEY = 'andplay_web_recent_movies';
     const WATCHED_SERIES_STORAGE_KEY = 'andplay_web_recent_series';
+    const WATCHED_ACTIVITY_KEY = 'andplay_web_recent_activity_v1';
     const WATCHED_LIMIT = 500;
 
     let fullMoviesCache = null;
@@ -94,6 +95,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let searchDebounceTimer = null;
     let infiniteScrollRaf = null;
 
+    // Home: novidades e histórico mistos.
+    let homeCatalogPromise = null;
+    let homeFeaturedItems = [];
+    let homeFeaturedIndex = 0;
+    let homeFeaturedTimer = null;
+    const HOME_FEATURED_LIMIT = 10;
+    const HOME_WATCHED_LIMIT = 12;
+
     // Instância HLS ativa
     let activeHls = null;
 
@@ -111,13 +120,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       mobileWatchedBtn: document.getElementById('mobileWatchedBtn'),
       mobileAccountBtn: document.getElementById('mobileAccountBtn'),
       homeDashboard: document.getElementById('homeDashboard'),
-      homeContinueRail: document.getElementById('homeContinueRail'),
-      homeGoMoviesBtn: document.getElementById('homeGoMoviesBtn'),
-      homeGoSeriesBtn: document.getElementById('homeGoSeriesBtn'),
-      homeQuickMovies: document.getElementById('homeQuickMovies'),
-      homeQuickSeries: document.getElementById('homeQuickSeries'),
-      homeQuickLive: document.getElementById('homeQuickLive'),
-      homeQuickWatched: document.getElementById('homeQuickWatched'),
+      homeFeaturedTrack: document.getElementById('homeFeaturedTrack'),
+      homeFeaturedPrev: document.getElementById('homeFeaturedPrev'),
+      homeFeaturedNext: document.getElementById('homeFeaturedNext'),
+      homeFeaturedDots: document.getElementById('homeFeaturedDots'),
+      homeFeaturedLoading: document.getElementById('homeFeaturedLoading'),
+      homeWatchedRail: document.getElementById('homeWatchedRail'),
+      homeWatchedAllBtn: document.getElementById('homeWatchedAllBtn'),
       tabSeriesBtn: document.getElementById('tabSeriesBtn'),
       tabLiveBtn: document.getElementById('tabLiveBtn'),
       tabWatchedBtn: document.getElementById('tabWatchedBtn'),
@@ -793,12 +802,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
       });
       elements.mobileAccountBtn?.addEventListener('click', () => window.AndPlayAccount?.open());
-      elements.homeGoMoviesBtn?.addEventListener('click', () => switchMode('movies', true));
-      elements.homeGoSeriesBtn?.addEventListener('click', () => switchMode('series', true));
-      elements.homeQuickMovies?.addEventListener('click', () => switchMode('movies', true));
-      elements.homeQuickSeries?.addEventListener('click', () => switchMode('series', true));
-      elements.homeQuickLive?.addEventListener('click', () => switchMode('live', true));
-      elements.homeQuickWatched?.addEventListener('click', () => {
+      elements.homeFeaturedPrev?.addEventListener('click', () => moveHomeFeatured(-1));
+      elements.homeFeaturedNext?.addEventListener('click', () => moveHomeFeatured(1));
+      elements.homeFeaturedDots?.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-home-slide]');
+        if (button) showHomeFeatured(Number(button.dataset.homeSlide));
+      });
+      elements.homeWatchedAllBtn?.addEventListener('click', () => {
         switchMode('movies', true).then(() => showWatchedContent('movies')).catch(() => {});
       });
 
@@ -1164,6 +1174,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const list = getWatchedIds(type).filter(item => item !== normalizedId);
         list.unshift(normalizedId);
         localStorage.setItem(getWatchedStorageKey(type), JSON.stringify(list.slice(0, WATCHED_LIMIT)));
+
+        const activityRaw = localStorage.getItem(WATCHED_ACTIVITY_KEY);
+        const activity = activityRaw ? JSON.parse(activityRaw) : [];
+        const nextActivity = Array.isArray(activity)
+          ? activity.filter(item => !(item && item.type === type && String(item.id) === normalizedId))
+          : [];
+        nextActivity.unshift({ type, id: normalizedId, updatedAt: Date.now() });
+        localStorage.setItem(WATCHED_ACTIVITY_KEY, JSON.stringify(nextActivity.slice(0, WATCHED_LIMIT)));
+
         window.dispatchEvent(new CustomEvent('andplay:local-change', {
           detail: { kind: 'watched', mediaType: type, id: normalizedId }
         }));
@@ -1813,64 +1832,257 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     // ==========================================
     // HOME / DASHBOARD
     // ==========================================
-    function getHomeProgressItems() {
-      const items = [];
+    function getHomeItemPoster(item) {
+      if (!item) return '';
+      if (item.type === 'movie') return getBestPosterUrl(item.primaryItem || item);
+      return item.cover || item.stream_icon || '';
+    }
+
+    function getHomeItemTime(item) {
+      return Number(item?.added || item?.last_modified || item?.primaryItem?.added || item?.primaryItem?.last_modified || 0);
+    }
+
+    function getHomeFeaturedItems() {
+      const movies = (Array.isArray(fullMoviesCache) ? fullMoviesCache : []).map(item => ({
+        type: 'movie',
+        id: String(item.stream_id || item.primaryItem?.stream_id || ''),
+        item,
+        title: item.name || item.title || 'Filme',
+        year: item.year || '',
+        rating: item.rating || '',
+        poster: getHomeItemPoster({ type: 'movie', primaryItem: item }),
+        plot: item.plot || '',
+        added: getHomeItemTime(item)
+      })).filter(item => item.id);
+
+      const series = (Array.isArray(fullSeriesCache) ? fullSeriesCache : []).map(item => ({
+        type: 'series',
+        id: String(item.series_id || ''),
+        item,
+        title: item.name || item.title || 'Série',
+        year: item.year || '',
+        rating: item.rating || '',
+        poster: getHomeItemPoster({ type: 'series', cover: item.cover, stream_icon: item.stream_icon }),
+        plot: item.plot || '',
+        added: getHomeItemTime(item)
+      })).filter(item => item.id);
+
+      return [...movies, ...series].sort((a, b) => b.added - a.added).slice(0, HOME_FEATURED_LIMIT);
+    }
+
+    function resolveHomeWatchedItem(type, id) {
+      if (type === 'movie') {
+        const group = (fullMoviesCache || []).find(x => movieGroupMatchesWatchedId(x, id));
+        if (!group) return null;
+        return {
+          type: 'movie',
+          id: String(id),
+          item: group,
+          title: group.name || 'Filme',
+          year: group.year || '',
+          rating: group.rating || '',
+          poster: getBestPosterUrl(group.primaryItem || group),
+          progress: getVodProgress('movie', id)
+        };
+      }
+
+      const group = (fullSeriesCache || []).find(x => String(x.series_id) === String(id)) ||
+        (fullSeriesCache || []).find(x => (x.versions || []).some(v => String(v.streamId) === String(id)));
+      if (!group) return null;
+
+      return {
+        type: 'series',
+        id: String(id),
+        item: group,
+        title: group.name || 'Série',
+        year: group.year || '',
+        rating: group.rating || '',
+        poster: group.cover || group.stream_icon || '',
+        progress: getVodProgress('series', id)
+      };
+    }
+
+    function getHomeWatchedItems() {
+      let activity = [];
       try {
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (!key || !key.startsWith(VOD_PROGRESS_PREFIX)) continue;
-          const suffix = key.slice(VOD_PROGRESS_PREFIX.length);
-          const type = suffix.startsWith('series_') ? 'series' : 'movie';
-          const id = suffix.replace(/^(series_|movie_)/, '');
-          if (!id) continue;
-          const progress = getVodProgress(type, id);
-          if (progress && progress.position > 5) {
-            items.push({ ...progress, type, id });
-          }
-        }
+        const raw = localStorage.getItem(WATCHED_ACTIVITY_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        activity = Array.isArray(parsed) ? parsed : [];
       } catch (e) {}
-      return items.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0)).slice(0, 8);
+
+      if (!activity.length) {
+        const movies = getWatchedIds('movies').map((id, index) => ({
+          type: 'movie', id, updatedAt: 0, fallbackOrder: index * 2
+        }));
+        const series = getWatchedIds('series').map((id, index) => ({
+          type: 'series', id, updatedAt: 0, fallbackOrder: index * 2 + 1
+        }));
+        activity = [...movies, ...series];
+      }
+
+      return activity.slice(0, HOME_WATCHED_LIMIT * 2)
+        .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0) ||
+          Number(a.fallbackOrder || 0) - Number(b.fallbackOrder || 0))
+        .map(entry => resolveHomeWatchedItem(entry.type === 'movies' ? 'movie' : 'series', entry.id))
+        .filter(Boolean)
+        .slice(0, HOME_WATCHED_LIMIT);
     }
 
-    function getHomePoster(item) {
-      if (item.poster) return item.poster;
-      if (item.type === 'movie' && Array.isArray(fullMoviesCache)) {
-        const group = fullMoviesCache.find(x => movieGroupMatchesWatchedId(x, item.id));
-        return group ? getBestPosterUrl(group.primaryItem || group) : '';
+    function renderHomeFeatured() {
+      if (!elements.homeFeaturedTrack) return;
+      homeFeaturedItems = getHomeFeaturedItems();
+      homeFeaturedIndex = Math.min(homeFeaturedIndex, Math.max(0, homeFeaturedItems.length - 1));
+      elements.homeFeaturedTrack.innerHTML = '';
+      if (elements.homeFeaturedDots) elements.homeFeaturedDots.innerHTML = '';
+
+      if (!homeFeaturedItems.length) {
+        if (elements.homeFeaturedLoading) {
+          elements.homeFeaturedLoading.style.display = 'flex';
+          elements.homeFeaturedLoading.textContent = 'Carregando novidades...';
+        }
+        return;
       }
-      if (item.type === 'series' && Array.isArray(fullSeriesCache)) {
-        const group = fullSeriesCache.find(x => String(x.series_id) === String(item.seriesId));
-        return group?.cover || '';
-      }
-      return '';
+
+      if (elements.homeFeaturedLoading) elements.homeFeaturedLoading.style.display = 'none';
+
+      homeFeaturedItems.forEach((item, index) => {
+        const slide = document.createElement('article');
+        slide.className = 'home-featured-slide';
+        const typeLabel = item.type === 'movie' ? 'FILME' : 'SÉRIE';
+        const meta = [
+          typeLabel,
+          item.year,
+          item.rating && Number(item.rating) > 0 ? '★ ' + Number(item.rating).toFixed(1) : ''
+        ].filter(Boolean).join('  •  ');
+
+        slide.innerHTML =
+          '<img class="home-featured-backdrop" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async">' +
+          '<div class="home-featured-shade"></div>' +
+          '<div class="home-featured-content">' +
+            '<span class="home-featured-kicker">NOVIDADE NO CATÁLOGO • ' + typeLabel + '</span>' +
+            '<h1>' + escapeHtml(item.title) + '</h1>' +
+            '<div class="home-featured-meta">' + escapeHtml(meta) + '</div>' +
+            '<p>' + escapeHtml(item.plot || 'Acabou de chegar ao catálogo do AndPlay.') + '</p>' +
+            '<button class="home-featured-watch" type="button">▶ Assistir</button>' +
+          '</div>' +
+          '<div class="home-featured-poster-wrap"><img class="home-featured-poster" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async"></div>';
+
+        slide.querySelector('.home-featured-watch')?.addEventListener('click', () => {
+          if (item.type === 'movie') onMovieCardClick(item.item);
+          else openSeriesModal(item.item);
+        });
+        elements.homeFeaturedTrack.appendChild(slide);
+
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.dataset.homeSlide = String(index);
+        dot.className = 'home-featured-dot';
+        dot.setAttribute('aria-label', 'Mostrar ' + item.title);
+        elements.homeFeaturedDots?.appendChild(dot);
+      });
+
+      updateHomeFeaturedPosition();
+      startHomeFeaturedTimer();
     }
 
-    function renderHomeDashboard() {
-      if (!elements.homeContinueRail) return;
-      const items = getHomeProgressItems();
-      elements.homeContinueRail.innerHTML = '';
+    function updateHomeFeaturedPosition() {
+      if (!elements.homeFeaturedTrack) return;
+      elements.homeFeaturedTrack.style.transform = 'translate3d(-' + (homeFeaturedIndex * 100) + '%, 0, 0)';
+      elements.homeFeaturedDots?.querySelectorAll('.home-featured-dot').forEach((dot, index) => {
+        dot.classList.toggle('active', index === homeFeaturedIndex);
+      });
+    }
+
+    function showHomeFeatured(index) {
+      if (!homeFeaturedItems.length) return;
+      const total = homeFeaturedItems.length;
+      homeFeaturedIndex = ((Number(index) || 0) % total + total) % total;
+      updateHomeFeaturedPosition();
+      startHomeFeaturedTimer();
+    }
+
+    function moveHomeFeatured(delta) {
+      showHomeFeatured(homeFeaturedIndex + Number(delta || 0));
+    }
+
+    function startHomeFeaturedTimer() {
+      clearInterval(homeFeaturedTimer);
+      homeFeaturedTimer = null;
+      if (homeFeaturedItems.length < 2) return;
+      homeFeaturedTimer = setInterval(() => {
+        if (currentMode === 'home' && !document.hidden) moveHomeFeatured(1);
+      }, 7000);
+    }
+
+    function renderHomeWatched() {
+      if (!elements.homeWatchedRail) return;
+      const items = getHomeWatchedItems();
+      elements.homeWatchedRail.innerHTML = '';
 
       if (!items.length) {
-        elements.homeContinueRail.innerHTML = '<div class="home-empty">Você ainda não tem nenhum título em andamento.<br><span>Comece um filme ou episódio e ele aparecerá aqui.</span></div>';
+        elements.homeWatchedRail.innerHTML = '<div class="home-empty">Seus filmes e séries assistidos aparecerão aqui.</div>';
         return;
       }
 
       items.forEach(item => {
         const card = document.createElement('button');
         card.type = 'button';
-        card.className = 'home-continue-card';
-        const percent = item.duration > 0 ? Math.max(2, Math.min(100, (item.position / item.duration) * 100)) : 4;
-        const poster = getHomePoster(item);
-        const title = item.title || (item.type === 'series' ? 'Episódio' : 'Filme');
-        const extra = item.type === 'series' && item.seasonNum && item.episodeNum
-          ? `T${item.seasonNum} • E${item.episodeNum}`
-          : `Retomar em ${formatResumeTime(item.position)}`;
-        card.innerHTML = poster
-          ? `<img src="${escapeHtml(poster)}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'"><div class="home-continue-overlay"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(extra)}</small><div class="home-progress"><span style="width:${percent}%"></span></div></div>`
-          : `<div class="home-continue-overlay" style="inset:0;background:linear-gradient(145deg,#151b28,#090c13);padding:22px;display:flex;flex-direction:column;justify-content:end;"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(extra)}</small><div class="home-progress"><span style="width:${percent}%"></span></div></div>`;
-        card.addEventListener('click', () => resumeHomeProgress(item));
-        elements.homeContinueRail.appendChild(card);
+        card.className = 'home-watched-card';
+        const progress = item.progress && item.progress.duration > 0
+          ? Math.max(0, Math.min(100, item.progress.position / item.progress.duration * 100))
+          : 0;
+        const sub = item.type === 'series'
+          ? (item.progress?.seasonNum && item.progress?.episodeNum ? 'T' + item.progress.seasonNum + ' • E' + item.progress.episodeNum : 'Série')
+          : (progress > 0 && progress < 95 ? 'Retomar em ' + formatResumeTime(item.progress.position) : (item.year || 'Filme'));
+
+        card.innerHTML =
+          '<div class="home-watched-poster">' +
+            (item.poster
+              ? '<img src="' + escapeHtml(item.poster) + '" alt="" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">'
+              : '<span>🎬</span>') +
+            (progress > 0 && progress < 95 ? '<div class="home-watched-progress"><span style="width:' + progress + '%"></span></div>' : '') +
+            '<span class="home-watched-type">' + (item.type === 'movie' ? 'FILME' : 'SÉRIE') + '</span>' +
+          '</div>' +
+          '<strong>' + escapeHtml(item.title) + '</strong>' +
+          '<small>' + escapeHtml(sub) + '</small>';
+
+        card.addEventListener('click', () => {
+          if (item.type === 'movie') {
+            const version = (item.item.versions || []).find(v => String(v.streamId) === String(item.id)) || item.item.versions?.[0];
+            if (version) playMovieVersion(item.item, version, item.item.versions || [version]);
+          } else {
+            openSeriesModal(item.item);
+          }
+        });
+        elements.homeWatchedRail.appendChild(card);
       });
+    }
+
+    async function loadHomeDashboardData() {
+      if (homeCatalogPromise) return homeCatalogPromise;
+      homeCatalogPromise = (async () => {
+        renderHomeDashboard();
+        try {
+          await Promise.all([
+            loadMovieCategories().catch(() => []),
+            loadSeriesCategories().catch(() => [])
+          ]);
+          await Promise.all([
+            loadFullMovies().catch(() => []),
+            loadFullSeries().catch(() => [])
+          ]);
+        } finally {
+          if (currentMode === 'home') renderHomeDashboard();
+        }
+      })().finally(() => {
+        homeCatalogPromise = null;
+      });
+      return homeCatalogPromise;
+    }
+
+    function renderHomeDashboard() {
+      renderHomeFeatured();
+      renderHomeWatched();
     }
 
     async function resumeHomeProgress(item) {
@@ -1930,6 +2142,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       document.querySelector('main')?.style.setProperty('display', 'none');
       if (elements.categorySelect) elements.categorySelect.disabled = true;
       renderHomeDashboard();
+      startHomeFeaturedTimer();
+      loadHomeDashboardData().catch(error => console.warn('[AndPlay Home] Catálogo:', error));
     }
 
     // ==========================================
@@ -1940,6 +2154,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         showHome();
         return;
       }
+      clearInterval(homeFeaturedTimer);
+      homeFeaturedTimer = null;
       if (currentMode === mode && !forceReload && !isWatchedView) return;
       isWatchedView = false;
       elements.tabWatchedBtn?.classList.remove('active');
@@ -2929,7 +3145,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           }
         } catch (e) {}
 
-        if (!hasPersistentCache && !document.body.classList.contains('tv-mode')) {
+        if (!hasPersistentCache && currentMode === 'movies' && !document.body.classList.contains('tv-mode')) {
           showLoading('Carregando catálogo de filmes e recuperando capas 4K...');
         }
         try {
@@ -3051,7 +3267,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           }
         } catch (e) {}
 
-        if (!hasPersistentCache && !document.body.classList.contains('tv-mode')) {
+        if (!hasPersistentCache && currentMode === 'series' && !document.body.classList.contains('tv-mode')) {
           showLoading('Carregando catálogo de séries completas...');
         }
         try {
