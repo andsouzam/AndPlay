@@ -4,7 +4,7 @@
 #videoModal .modal-header h3{font-size:15px;text-shadow:0 2px 10px #000;pointer-events:auto}
 #videoModal .modal-header .close-btn{pointer-events:auto;background:rgba(20,20,20,.65);backdrop-filter:blur(8px)}
 #videoModal .player-body-wrapper{height:min(78vh,820px);min-height:420px;max-height:none;background:#000}
-#videoModal .player-info-sidebar{position:absolute;right:0;top:0;height:100%;width:360px;max-width:min(360px,92vw);transform:translateX(0);z-index:70;background:rgba(15,15,15,.97);border-left:1px solid #303030;border-right:0;box-shadow:-20px 0 50px rgba(0,0,0,.45);transition:transform .25s ease,opacity .2s ease}
+#videoModal .player-info-sidebar{position:absolute;right:0;top:0;height:100%;width:min(320px,28vw);min-width:280px;max-width:320px;transform:translateX(0);z-index:70;background:rgba(15,15,15,.97);border-left:1px solid #303030;border-right:0;box-shadow:-20px 0 50px rgba(0,0,0,.45);transition:transform .25s ease,opacity .2s ease}
 #videoModal .player-info-sidebar.collapsed{width:360px!important;min-width:360px!important;max-width:min(360px,92vw)!important;padding:18px 20px!important;transform:translateX(105%);opacity:0}
 #videoModal .player-main-area{width:100%;height:100%;background:#000}
 #videoModal .video-container{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden}
@@ -13,6 +13,9 @@
 #videoModal .eplay-player-ui{position:absolute;inset:0;z-index:40;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none;opacity:1;transition:opacity .22s ease}
 #videoModal .eplay-player-ui.idle{opacity:0;cursor:none}
 #videoModal .eplay-player-ui>*{pointer-events:auto}
+#videoModal .eplay-player-center{pointer-events:none}
+#videoModal .eplay-player-center .eplay-center-play{pointer-events:auto}
+#videoModal .eplay-player-ui.embed-active{display:none!important}
 .eplay-player-top{display:flex;align-items:flex-start;justify-content:space-between;padding:72px 22px 55px;background:linear-gradient(180deg,rgba(0,0,0,.78),rgba(0,0,0,0))}
 .eplay-player-title{max-width:70%;font-size:15px;font-weight:700;color:#fff;text-shadow:0 2px 8px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .eplay-player-meta{font-size:11px;color:#bbb;margin-top:3px}

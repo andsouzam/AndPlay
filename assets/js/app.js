@@ -5613,21 +5613,21 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
 
       try {
-        localStorage.setItem('andplay_sidebar_open', movieSidebarOpen ? '1' : '0');
+        localStorage.setItem('andplay_sidebar_open_v2', movieSidebarOpen ? '1' : '0');
       } catch (e) { }
       saveLocalPreference('sidebar_open', !!movieSidebarOpen);
     }
 
     function initSidebarState() {
       try {
-        const saved = localStorage.getItem('andplay_sidebar_open');
-        if (saved !== null) {
-          movieSidebarOpen = saved === '1';
+        const saved = localStorage.getItem('andplay_sidebar_open_v2');
+        if (saved === '1') {
+          movieSidebarOpen = true;
         } else {
-          movieSidebarOpen = window.innerWidth > 920;
+          movieSidebarOpen = false;
         }
       } catch (e) {
-        movieSidebarOpen = window.innerWidth > 920;
+        movieSidebarOpen = false;
       }
       toggleMovieInfoSidebar(movieSidebarOpen);
     }

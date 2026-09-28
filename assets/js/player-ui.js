@@ -106,6 +106,21 @@
     ui=$('eplayPlayerUi'); seek=$('eplaySeek'); currentTime=$('eplayCurrentTime'); duration=$('eplayDuration'); playBtn=$('eplayPlay'); center=$('eplayCenterPlay'); menu=$('eplayMenu'); resume=$('eplayResume');
   }
   build();
+  function syncPlaybackSurface() {
+    const embedVisible = !!(window.getComputedStyle($('embedPlayer')).display !== 'none');
+    const videoVisible = !!(window.getComputedStyle(video).display !== 'none');
+    if (embedVisible || !videoVisible) {
+      ui.classList.add('embed-active');
+      video.controls = false;
+    } else {
+      ui.classList.remove('embed-active');
+      video.controls = false;
+    }
+  }
+  const sourceObserver = new MutationObserver(syncPlaybackSurface);
+  sourceObserver.observe(video, { attributes: true, attributeFilter: ['style', 'src'] });
+  sourceObserver.observe($('embedPlayer'), { attributes: true, attributeFilter: ['style', 'src'] });
+  syncPlaybackSurface();
   const $on=(id,ev,fn)=>$(id)?.addEventListener(ev,fn);
   $on('eplayPlay','click',playPause); $on('eplayCenterPlay','click',playPause);
   $on('eplayBack10','click',()=>seekBy(-10)); $on('eplayForward10','click',()=>seekBy(10));
