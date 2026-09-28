@@ -481,17 +481,38 @@
     }
 
     .match-teams-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: 52px minmax(28px, 1fr) 52px;
       align-items: center;
-      justify-content: space-around;
+      justify-items: center;
+      gap: 6px;
       width: 100%;
+      min-width: 0;
     }
 
     .match-team-logo {
-      width: 52px;
-      height: 52px;
+      width: 44px;
+      height: 44px;
+      max-width: 44px;
+      max-height: 44px;
+      display: block;
       object-fit: contain;
+      object-position: center;
       filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.7));
+    }
+
+    .match-team-fallback {
+      width: 38px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: #1A2035;
+      border: 1px solid #2B3450;
+      color: #AAAAAA;
+      font-size: 9px;
+      font-weight: 800;
     }
 
     .match-vs-tag {
@@ -5697,8 +5718,8 @@
             name: 'Grêmio x Palmeiras',
             homeTeam: 'Grêmio',
             awayTeam: 'Palmeiras',
-            homeLogo: 'https://cdn.sportmonks.com/images/soccer/teams/13/2925.png',
-            awayLogo: 'https://cdn.sportmonks.com/images/soccer/teams/30/3422.png',
+            homeLogo: 'https://images.fotmob.com/image_resources/logo/teamlogo/9769.png',
+            awayLogo: 'https://images.fotmob.com/image_resources/logo/teamlogo/10283.png',
             poster: '',
             hasTeams: true,
             matchTime: 'AO VIVO',
@@ -5717,8 +5738,8 @@
             name: 'Palmeiras x Flamengo',
             homeTeam: 'Palmeiras',
             awayTeam: 'Flamengo',
-            homeLogo: 'https://cdn.sportmonks.com/images/soccer/teams/30/3422.png',
-            awayLogo: 'https://cdn.sportmonks.com/images/soccer/teams/18/3442.png',
+            homeLogo: 'https://images.fotmob.com/image_resources/logo/teamlogo/10283.png',
+            awayLogo: 'https://images.fotmob.com/image_resources/logo/teamlogo/9770.png',
             poster: '',
             hasTeams: true,
             matchTime: 'AO VIVO',
@@ -5737,8 +5758,8 @@
             name: 'Corinthians x São Paulo',
             homeTeam: 'Corinthians',
             awayTeam: 'São Paulo',
-            homeLogo: 'https://cdn.sportmonks.com/images/soccer/teams/23/3415.png',
-            awayLogo: 'https://cdn.sportmonks.com/images/soccer/teams/13/3437.png',
+            homeLogo: 'https://images.fotmob.com/image_resources/logo/teamlogo/9808.png',
+            awayLogo: 'https://images.fotmob.com/image_resources/logo/teamlogo/10277.png',
             poster: '',
             hasTeams: true,
             matchTime: 'AO VIVO',
@@ -5757,8 +5778,8 @@
             name: 'Manchester City x Sunderland',
             homeTeam: 'Manchester City',
             awayTeam: 'Sunderland',
-            homeLogo: 'https://cdn.sportmonks.com/images/soccer/teams/9/9.png',
-            awayLogo: 'https://cdn.sportmonks.com/images/soccer/teams/3/3.png',
+            homeLogo: 'https://images.fotmob.com/image_resources/logo/teamlogo/8456.png',
+            awayLogo: 'https://images.fotmob.com/image_resources/logo/teamlogo/8472.png',
             poster: '',
             hasTeams: true,
             matchTime: '10:00',
@@ -5777,8 +5798,8 @@
             name: 'Real Madrid x Barcelona',
             homeTeam: 'Real Madrid',
             awayTeam: 'Barcelona',
-            homeLogo: 'https://cdn.sportmonks.com/images/soccer/teams/12/3468.png',
-            awayLogo: 'https://cdn.sportmonks.com/images/soccer/teams/27/83.png',
+            homeLogo: 'https://images.fotmob.com/image_resources/logo/teamlogo/8633.png',
+            awayLogo: 'https://images.fotmob.com/image_resources/logo/teamlogo/8634.png',
             poster: '',
             hasTeams: true,
             matchTime: '16:00',
@@ -6182,8 +6203,8 @@
             const isNow = item.isLiveNow;
             // SVG inline como fallback garantido (sem dependência de rede)
             const defaultMatchLogo = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23333'/%3E%3Ctext x='32' y='42' text-anchor='middle' fill='%23888' font-size='28'%3E%E2%9A%BD%3C/text%3E%3C/svg%3E`;
-            const homeLogo = (item.homeLogo && !item.homeLogo.includes('8Q8Q4zE') && !item.homeLogo.includes('logodetimes.com')) ? item.homeLogo : '';
-            const awayLogo = (item.awayLogo && !item.awayLogo.includes('8Q8Q4zE') && !item.awayLogo.includes('logodetimes.com')) ? item.awayLogo : '';
+            const homeLogo = getTvTeamLogoUrl(item.homeTeam, item.homeLogo);
+            const awayLogo = getTvTeamLogoUrl(item.awayTeam, item.awayLogo);
             let posterVisualHtml = '';
             if (item.poster && (!homeLogo || !awayLogo)) {
               posterVisualHtml = `
@@ -6219,7 +6240,7 @@
           } else {
             // Filtra logos de domínios bloqueados pelo ISP (reidosembeds.online sem DNS)
             const rawLogo = item.logo || item.stream_icon || '';
-            const logoUrl = (rawLogo && !rawLogo.includes('reidosembeds.online')) ? rawLogo : '';
+            const logoUrl = getTvLogoUrl(rawLogo);
             card.innerHTML = `
               <div class="poster-wrap" style="background: radial-gradient(circle, #252525 0%, #121212 100%); display: flex; align-items: center; justify-content: center; padding: 18px;">
                 ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(title)}" style="max-width: 85%; max-height: 85px; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.8));" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" loading="lazy">` : ''}
@@ -6634,7 +6655,9 @@
 
       const title = item.name || item.title || '';
       const category = item.categoryLabel || (item.isLiveMatch ? 'Futebol Ao Vivo' : 'TV Ao Vivo');
-      const logo = (item.poster && !item.poster.includes('8Q8Q4zE')) ? item.poster : ((item.logo && !item.logo.includes('8Q8Q4zE') && !item.logo.includes('reidosembeds.online') && !item.logo.includes('logodetimes.com')) ? item.logo : ((item.homeLogo && !item.homeLogo.includes('8Q8Q4zE') && !item.homeLogo.includes('logodetimes.com')) ? item.homeLogo : DEFAULT_LIVE_LOGO));
+      const teamLogo = item.isLiveMatch ? getTvTeamLogoUrl(item.homeTeam, item.homeLogo) : '';
+      const channelLogo = getTvLogoUrl(item.logo || item.stream_icon || '');
+      const logo = (item.poster && !item.poster.includes('8Q8Q4zE')) ? item.poster : (channelLogo || teamLogo || DEFAULT_LIVE_LOGO);
 
       if (elements.sidebarPoster) {
         elements.sidebarPoster.onerror = () => { elements.sidebarPoster.src = DEFAULT_LIVE_LOGO; };
@@ -8745,21 +8768,48 @@
     // Alguns logos antigos apontam para reidosembeds.online, que pode ficar
     // indisponível por DNS/ISP. Para os canais mais comuns usamos uma origem pública
     // estável; os demais passam pelo cache/proxy e, por fim, recebem fallback visual.
+    // Logos locais para os canais mais exibidos. O APK nativo carrega ch.logo
+    // diretamente; na web usamos cópias locais para os logos conhecidos e
+    // preservamos a URL original para os demais canais.
     const TV_LOGO_FALLBACKS = {
-      globo: 'https://i.imgur.com/O02TF2r.png',
-      sbt: 'https://i.imgur.com/tc1ALuu.png',
-      record: 'https://i.imgur.com/sz9gTTr.png',
-      band: 'https://i.imgur.com/1r5T6Pw.png',
-      sportv: 'https://i.postimg.cc/gr9x3z71/Spor-TV-2021.png',
-      sportv2: 'https://i.postimg.cc/gr9x3z71/Spor-TV-2021.png',
-      sportv3: 'https://i.postimg.cc/gr9x3z71/Spor-TV-2021.png',
-      premiere: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/Premiere_(2017)_logo.png/960px-Premiere_(2017)_logo.png',
-      espn: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_wordmark.svg/960px-ESPN_wordmark.svg.png',
-      hbo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/HBO_logo.svg/960px-HBO_logo.svg.png',
-      hbo2: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/HBO2_logo.svg/960px-HBO2_logo.svg.png',
-      warner: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Warner_Channel_2026.svg/960px-Warner_Channel_2026.svg.png',
-      tntsports: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/TNT_Sports_2021_logo.svg/960px-TNT_Sports_2021_logo.svg.png',
-      tvbrasil: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/TvBrasil2023.png/960px-TvBrasil2023.png'
+      globo: './assets/logos/tv/globo.png',
+      sbt: './assets/logos/tv/sbt.png',
+      record: './assets/logos/tv/record.png',
+      band: './assets/logos/tv/band.png',
+      sportv: './assets/logos/tv/sportv.png',
+      sportv2: './assets/logos/tv/sportv2.png',
+      sportv3: './assets/logos/tv/sportv3.png',
+      premiere: './assets/logos/tv/premiere.png',
+      espn: './assets/logos/tv/espn.png',
+      cnnbrasil: './assets/logos/tv/cnnbrasil.png',
+      globonews: './assets/logos/tv/globonews.png',
+      gloob: './assets/logos/tv/gloob.png',
+      cartoonnetwork: './assets/logos/tv/cartoonnetwork.png',
+      discoverykids: './assets/logos/tv/discoverykids.png',
+      futura: './assets/logos/tv/futura.png',
+      hbo: './assets/logos/tv/hbo.png',
+      hbo2: './assets/logos/tv/hbo2.png',
+      warner: './assets/logos/tv/warner.png',
+      tntseries: './assets/logos/tv/tntseries.png',
+      tntsports: './assets/logos/tv/tntsports.png',
+      tvbrasil: './assets/logos/tv/tvbrasil.png',
+      multishow: './assets/logos/tv/multishow.png',
+      recordnews: './assets/logos/tv/recordnews.png',
+      redetv: './assets/logos/tv/redetv.png',
+      space: './assets/logos/tv/space.png',
+      tnt: './assets/logos/tv/tnt.png'
+    };
+
+    const TV_TEAM_LOGO_FALLBACKS = {
+      flamengo: 'https://images.fotmob.com/image_resources/logo/teamlogo/9770.png',
+      palmeiras: 'https://images.fotmob.com/image_resources/logo/teamlogo/10283.png',
+      corinthians: 'https://images.fotmob.com/image_resources/logo/teamlogo/9808.png',
+      'sao-paulo': 'https://images.fotmob.com/image_resources/logo/teamlogo/10277.png',
+      gremio: 'https://images.fotmob.com/image_resources/logo/teamlogo/9769.png',
+      'real-madrid': 'https://images.fotmob.com/image_resources/logo/teamlogo/8633.png',
+      barcelona: 'https://images.fotmob.com/image_resources/logo/teamlogo/8634.png',
+      'manchester-city': 'https://images.fotmob.com/image_resources/logo/teamlogo/8456.png',
+      sunderland: 'https://images.fotmob.com/image_resources/logo/teamlogo/8472.png'
     };
 
     function getTvLogoFallbackByKey(rawUrl) {
@@ -8772,20 +8822,27 @@
       } catch (e) { return ''; }
     }
 
-    // Logos de TV vindos do domínio antigo podem falhar no navegador/ISP.
-    // Usa wsrv.nl como cache/proxy somente quando não temos uma origem pública direta.
+    // Mantém o comportamento do APK: URL original quando não existe cópia local.
     function getTvLogoUrl(rawUrl, width = 160, height = 100) {
       const url = String(rawUrl || '').trim();
       if (!url || /^data:/i.test(url)) return url;
       const knownFallback = getTvLogoFallbackByKey(url);
-      if (knownFallback) return knownFallback;
-      try {
-        const parsed = new URL(url, window.location.href);
-        if (parsed.hostname.toLowerCase() === 'reidosembeds.online') {
-          return 'https://wsrv.nl/?url=' + encodeURIComponent(parsed.href) + '&w=' + width + '&h=' + height;
-        }
-      } catch (e) { }
-      return url;
+      return knownFallback || url;
+    }
+
+    function normalizeTeamLogoKey(name) {
+      return String(name || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/&/g, 'e')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    }
+
+    function getTvTeamLogoUrl(teamName, rawUrl) {
+      const key = normalizeTeamLogoKey(teamName);
+      return TV_TEAM_LOGO_FALLBACKS[key] || getTvLogoUrl(rawUrl, 90, 90) || '';
     }
 
     function getTvLogoFallback(name) {
@@ -10203,8 +10260,8 @@
           card.className = 'tv-match-card tv-focusable';
           card.tabIndex = 0;
           const isNow = ev.isLiveNow;
-          const homeLogo = getTvLogoUrl(ev.homeLogo, 90, 90);
-          const awayLogo = getTvLogoUrl(ev.awayLogo, 90, 90);
+          const homeLogo = getTvTeamLogoUrl(ev.homeTeam, ev.homeLogo);
+          const awayLogo = getTvTeamLogoUrl(ev.awayTeam, ev.awayLogo);
           const homeName = ev.homeTeam || 'Time 1';
           const awayName = ev.awayTeam || 'Time 2';
           const homeFallback = escapeHtml(homeName.slice(0, 3).toUpperCase());
