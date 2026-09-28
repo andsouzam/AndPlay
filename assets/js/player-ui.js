@@ -83,21 +83,38 @@
     document.querySelectorAll('[data-speed]').forEach(b => b.classList.toggle('active', Number(b.dataset.speed) === v));
     const label = $('eplaySpeedLabel'); if (label) label.textContent = v + 'x';
   }
-  function openSubtitles() { const b=$('toggleSubPanelBtn'); if(b) b.click(); else showToast('Opções de legenda indisponíveis'); }
-  function openInfo() { const b=$('toggleMovieInfoBtn'); if(b) b.click(); else $('movieInfoSidebar')?.classList.toggle('collapsed'); }
+  function openSubtitles() { menu?.classList.remove('open'); const b=$('toggleSubPanelBtn'); if(b) b.click(); else showToast('Opções de legenda indisponíveis'); }
+  function openInfo() { menu?.classList.remove('open'); const b=$('toggleMovieInfoBtn'); if(b) b.click(); else $('movieInfoSidebar')?.classList.toggle('collapsed'); }
+  function downloadVideo() {
+    menu?.classList.remove('open');
+    const anchor = $('downloadBtn');
+    if (!anchor || !anchor.href || anchor.href.endsWith('#')) {
+      showToast('Download indisponível para este vídeo');
+      return;
+    }
+    try {
+      anchor.click();
+      showToast('Download iniciado');
+    } catch {
+      window.open(anchor.href, '_blank', 'noopener');
+    }
+  }
   function build() {
-    video.controls = false; video.setAttribute('playsinline','');
+    video.controls = false;
+  video.removeAttribute('title');
+  video.removeAttribute('aria-label');
+  video.setAttribute('playsinline', '');
     const html = [
       '<div class="eplay-player-ui" id="eplayPlayerUi" aria-label="Controles do player">',
       '<div class="eplay-player-top"><div><div class="eplay-player-title" id="eplayPlayerTitle">EPlay</div><div class="eplay-player-meta" id="eplayPlayerMeta">Preparando reprodução...</div></div><div><span class="eplay-live-badge" id="eplayLiveBadge">● AO VIVO</span></div></div>',
       '<div class="eplay-player-center"><button class="eplay-center-play" id="eplayCenterPlay" aria-label="Reproduzir">▶</button></div>',
       '<div class="eplay-player-bottom"><div class="eplay-seek-wrap"><span class="eplay-time" id="eplayCurrentTime">00:00</span><input id="eplaySeek" class="eplay-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="Posição da reprodução"><span class="eplay-time" id="eplayDuration">00:00</span></div>',
-      '<div class="eplay-controls"><button class="eplay-control small eplay-series-nav" id="eplayPrevEpisode" aria-label="Episódio anterior" style="display:none">‹E</button><button class="eplay-control" id="eplayPlay" aria-label="Reproduzir">▶</button><button class="eplay-control small" id="eplayBack10" aria-label="Voltar 10 segundos">↶10</button><button class="eplay-control small" id="eplayForward10" aria-label="Avançar 10 segundos">10↷</button><button class="eplay-control small eplay-series-nav" id="eplayNextEpisode" aria-label="Próximo episódio" style="display:none">E›</button>',
+      '<div class="eplay-controls"><button class="eplay-control small eplay-series-nav" id="eplayPrevEpisode" aria-label="Episódio anterior" style="display:none">Ant</button><button class="eplay-control small" id="eplayBack10" aria-label="Voltar 10 segundos">↶10</button><button class="eplay-control" id="eplayPlay" aria-label="Reproduzir">▶</button><button class="eplay-control small" id="eplayForward10" aria-label="Avançar 10 segundos">10↷</button><button class="eplay-control small eplay-series-nav" id="eplayNextEpisode" aria-label="Próximo episódio" style="display:none">Pro</button>',
       '<div class="eplay-volume"><button class="eplay-control" id="eplayVolumeBtn" aria-label="Volume">🔊</button><input id="eplayVolume" class="eplay-range" type="range" min="0" max="100" value="85" aria-label="Volume"></div><div class="eplay-spacer"></div>',
-      '<button class="eplay-control small" id="eplaySubtitle" aria-label="Legendas">CC</button><button class="eplay-control small" id="eplayInfo" aria-label="Ficha técnica">ⓘ</button><button class="eplay-control small" id="eplayPip" aria-label="Picture-in-Picture">▣</button><button class="eplay-control" id="eplaySettings" aria-label="Configurações">⚙</button><button class="eplay-control" id="eplayFullscreen" aria-label="Tela cheia">⛶</button></div></div>',
+      '<button class="eplay-control small eplay-download" id="eplayDownload" aria-label="Baixar vídeo" title="Baixar vídeo">⇩</button><button class="eplay-control small" id="eplaySubtitle" aria-label="Legendas">CC</button><button class="eplay-control small" id="eplayInfo" aria-label="Ficha técnica">ⓘ</button><button class="eplay-control small" id="eplayPip" aria-label="Picture-in-Picture">▣</button><button class="eplay-control" id="eplaySettings" aria-label="Configurações">⚙</button><button class="eplay-control" id="eplayFullscreen" aria-label="Tela cheia">⛶</button></div></div>',
       '<div class="eplay-menu" id="eplayMenu"><h4>Configurações de reprodução</h4><div class="eplay-menu-row"><span>Velocidade</span><strong id="eplaySpeedLabel">1x</strong></div>',
       '<div class="eplay-speed-list"><button data-speed="0.75">0.75x</button><button data-speed="1">1x</button><button data-speed="1.25">1.25x</button><button data-speed="1.5">1.5x</button><button data-speed="1.75">1.75x</button><button data-speed="2">2x</button></div>',
-      '<button id="eplayInfoMenu">ⓘ Ficha técnica</button><button id="eplaySubMenu">💬 Legendas e sincronização</button><button id="eplayPipMenu">▣ Picture-in-Picture</button><button id="eplayFsMenu">⛶ Tela cheia</button></div>',
+      '<button id="eplayDownloadMenu">⇩ Baixar vídeo</button><button id="eplayInfoMenu">ⓘ Ficha técnica</button><button id="eplaySubMenu">💬 Legendas e sincronização</button><button id="eplayPipMenu">▣ Picture-in-Picture</button><button id="eplayFsMenu">⛶ Tela cheia</button></div>',
       '<div class="eplay-toast" id="eplayPlayerToast"></div>',
       '<div class="eplay-resume" id="eplayResume"><span id="eplayResumeText">Continuar reprodução?</span><button class="continue" id="eplayResumeContinue">Continuar</button><button class="restart" id="eplayResumeRestart">Do início</button></div>',
       '</div>'
@@ -125,11 +142,17 @@
   $on('eplayPlay','click',playPause); $on('eplayCenterPlay','click',playPause);
   $on('eplayBack10','click',()=>seekBy(-10)); $on('eplayForward10','click',()=>seekBy(10));
   $on('eplayPrevEpisode','click',()=>window.EPlaySeriesNavigation?.previous?.()); $on('eplayNextEpisode','click',()=>window.EPlaySeriesNavigation?.next?.());
-  function syncSeriesNav(){const n=window.EPlaySeriesNavigation;const p=$('eplayPrevEpisode'),x=$('eplayNextEpisode');if(!n){if(p)p.style.display='none';if(x)x.style.display='none';return}const season=String(n.seasonNum||'');const ep=Number(n.episodeNum||0);if(p)p.style.display=ep>1?'inline-flex':'none';if(x)x.style.display='inline-flex';}
+  function syncSeriesNav(){const n=window.EPlaySeriesNavigation;const p=$('eplayPrevEpisode'),x=$('eplayNextEpisode');if(!n){if(p)p.style.display='none';if(x)x.style.display='none';return}const hasPrev=n.hasPrevious !== undefined ? !!n.hasPrevious : Number(n.episodeNum||0)>1;const hasNext=n.hasNext !== undefined ? !!n.hasNext : true;if(p)p.style.display=hasPrev?'inline-flex':'none';if(x)x.style.display=hasNext?'inline-flex':'none';}
   window.addEventListener('eplay:series-context',syncSeriesNav); syncSeriesNav();
   $on('eplayVolumeBtn','click',toggleMute); $on('eplayVolume','input',e=>setVolume(Number(e.target.value)/100));
-  $on('eplaySubtitle','click',openSubtitles); $on('eplayInfo','click',openInfo); $on('eplayPip','click',pip);
-  $on('eplaySettings','click',toggleMenu); $on('eplayInfoMenu','click',openInfo); $on('eplaySubMenu','click',openSubtitles); $on('eplayPipMenu','click',pip); $on('eplayFsMenu','click',fullscreen); $on('eplayFullscreen','click',fullscreen);
+  $on('eplayDownload','click',downloadVideo); $on('eplaySubtitle','click',openSubtitles); $on('eplayInfo','click',openInfo); $on('eplayPip','click',pip);
+  $on('eplaySettings','click',toggleMenu); $on('eplayDownloadMenu','click',downloadVideo); $on('eplayInfoMenu','click',openInfo); $on('eplaySubMenu','click',openSubtitles); $on('eplayPipMenu','click',pip); $on('eplayFsMenu','click',fullscreen); $on('eplayFullscreen','click',fullscreen);
+  document.addEventListener('click', e => {
+    if (!menu.classList.contains('open')) return;
+    if (!e.target.closest('#eplayMenu') && !e.target.closest('#eplaySettings')) {
+      menu.classList.remove('open');
+    }
+  }, true);
   seek.addEventListener('input',()=>{if(Number.isFinite(video.duration))video.currentTime=Number(seek.value);setRange();reveal();});
   document.querySelectorAll('[data-speed]').forEach(b=>b.addEventListener('click',()=>applySpeed(b.dataset.speed)));
   container.addEventListener('mousemove',reveal); container.addEventListener('touchstart',reveal,{passive:true});

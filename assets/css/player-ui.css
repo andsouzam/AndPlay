@@ -66,6 +66,10 @@
 #videoModal .modal-footer .btn{font-size:11px!important;padding:6px 10px!important}
 #videoModal .modal-footer #toggleMovieInfoBtn{display:none!important}
 #videoModal .modal-footer #toggleSubPanelBtn{display:none!important}
+#videoModal .modal-footer #downloadBtn{display:none!important}
+#videoModal .eplay-player-top{display:none!important}
+#videoModal .eplay-player-ui .eplay-download{font-size:15px}
+#videoModal .eplay-series-nav{min-width:42px;font-weight:800;letter-spacing:.01em}
 @media(max-width:920px){
 #videoModal{padding:0}
 #videoModal .modal-content{width:100vw;height:100vh;max-height:none;border:0;border-radius:0}

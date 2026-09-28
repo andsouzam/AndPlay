@@ -1826,6 +1826,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     const SKIP_INTRO_AUTO_STORAGE_KEY = 'andplay_web_skip_intro_auto';
     const SKIPDB_SEGMENTS_URL = 'https://api.skipdb.tv/api/segments';
     const ANISKIP_TIMES_URL = 'https://api.aniskip.com/v2/skip-times';
+    let skipIntroLookupTimer = null;
+    let skipIntroLookupKey = '';
+    let skipIntroEventCleanup = null;
 
     function isValidImdbId(value) {
       return /^tt\d+$/.test(String(value || '').trim());
@@ -2017,6 +2020,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       } catch (e) {}
       saveLocalPreference('skip_intro_auto', !!enabled);
       if (elements.skipIntroAutoToggle) elements.skipIntroAutoToggle.checked = !!enabled;
+      if (enabled) {
+        scheduleSkipIntroLookup(0);
+        maybeAutoSkipIntro();
+      }
     }
 
     function updateSkipIntroAutoUi(mediaType = currentPlaybackMeta?.mediaType) {
@@ -2027,6 +2034,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function resetSkipIntroUi() {
       skipIntroRequestSeq++;
+      skipIntroLookupKey = '';
+      if (typeof skipIntroEventCleanup === 'function') {
+        skipIntroEventCleanup();
+        skipIntroEventCleanup = null;
+      }
+      if (skipIntroLookupTimer) {
+        clearTimeout(skipIntroLookupTimer);
+        skipIntroLookupTimer = null;
+      }
       updateSkipIntroAutoUi();
       skipIntroState = { segment: null, source: '', used: false };
       if (elements.skipIntroBtn) {
@@ -2125,6 +2141,42 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         skipIntroState = { segment: null, source: '', used: false };
         updateSkipIntroButton();
       }
+    }
+
+    function scheduleSkipIntroLookup(delay = 180) {
+      if (skipIntroLookupTimer) {
+        clearTimeout(skipIntroLookupTimer);
+        skipIntroLookupTimer = null;
+      }
+
+      skipIntroLookupTimer = setTimeout(() => {
+        skipIntroLookupTimer = null;
+
+        const playback = currentPlaybackMeta;
+        const player = elements.videoPlayer;
+        if (!playback || playback.mediaType !== 'series' || !player) return;
+
+        const duration = Number(player.duration);
+        if (!Number.isFinite(duration) || duration <= 0) return;
+
+        const ids = getExactSeriesExternalIds(playback.mediaMeta);
+        const seasonNum = normalizePositiveId(playback.seasonNum);
+        const episodeNum = normalizePositiveId(playback.episodeNum);
+        if (!seasonNum || !episodeNum || (!ids.imdbId && !ids.malId)) return;
+
+        const key = [
+          playback.streamId || '',
+          ids.imdbId || '',
+          ids.malId || '',
+          seasonNum,
+          episodeNum,
+          Math.round(duration)
+        ].join(':');
+
+        if (skipIntroLookupKey === key && skipIntroState.segment) return;
+        skipIntroLookupKey = key;
+        loadSkipIntroForCurrentEpisode().catch(() => {});
+      }, Math.max(0, Number(delay) || 0));
     }
 
     function maybeAutoSkipIntro() {
@@ -5401,9 +5453,19 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
 
       if (mediaType === 'series') {
-        const scheduleSkipIntroLookup = () => setTimeout(() => loadSkipIntroForCurrentEpisode(), 0);
-        elements.videoPlayer.addEventListener('loadedmetadata', scheduleSkipIntroLookup, { once: true });
-        if (elements.videoPlayer.readyState >= 1) scheduleSkipIntroLookup();
+        skipIntroLookupKey = '';
+        const triggerSkipIntroLookup = () => scheduleSkipIntroLookup(150);
+        elements.videoPlayer.addEventListener('loadedmetadata', triggerSkipIntroLookup, { once: true });
+        elements.videoPlayer.addEventListener('durationchange', triggerSkipIntroLookup);
+        elements.videoPlayer.addEventListener('loadeddata', triggerSkipIntroLookup, { once: true });
+        elements.videoPlayer.addEventListener('canplay', triggerSkipIntroLookup, { once: true });
+        skipIntroEventCleanup = () => {
+          elements.videoPlayer.removeEventListener('loadedmetadata', triggerSkipIntroLookup);
+          elements.videoPlayer.removeEventListener('durationchange', triggerSkipIntroLookup);
+          elements.videoPlayer.removeEventListener('loadeddata', triggerSkipIntroLookup);
+          elements.videoPlayer.removeEventListener('canplay', triggerSkipIntroLookup);
+        };
+        if (elements.videoPlayer.readyState >= 1) triggerSkipIntroLookup();
       }
 
       elements.videoPlayer.play().catch(() => { });
@@ -6971,9 +7033,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const epDuration = ep.info?.duration || ep.info?.duration_secs || sInfo.episode_run_time || '';
       const sPoster = ep.info?.movie_image || currentSeriesGroup?.poster || sInfo.cover || '';
 
+      const seasonEpisodes = currentSeriesData?.episodes?.[seasonNum] || [];
+      const hasPrevious = seasonEpisodes.some(e => Number(e.episode_num) === Number(ep.episode_num) - 1);
+      const hasNext = seasonEpisodes.some(e => Number(e.episode_num) === Number(ep.episode_num) + 1);
+
       window.EPlaySeriesNavigation = {
         seasonNum: Number(seasonNum) || 0,
         episodeNum: Number(ep.episode_num) || 0,
+        hasPrevious,
+        hasNext,
         next: () => {
           const eps = currentSeriesData?.episodes?.[seasonNum] || [];
           const nextEp = eps.find(e => Number(e.episode_num) === Number(ep.episode_num) + 1);
