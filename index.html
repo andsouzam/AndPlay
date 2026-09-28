@@ -3978,6 +3978,12 @@
         <div style="font-size: 13px; color: #aaa;" id="modalFormat">Formato: MP4 • Link Direto</div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
           <div id="movieVersionSwitcher" style="display: none; gap: 6px; align-items: center;"></div>
+          <button class="btn btn-secondary" id="skipIntroBtn"
+            style="display: none; padding: 7px 14px; font-size: 12px; font-weight: 700; align-items: center; gap: 6px; cursor: pointer; border: 1px solid #ffc107; color: #ffc107; border-radius: 16px;"
+            title="Pular a abertura usando timestamps comunitários verificados">
+            ⏭️ Pular abertura
+          </button>
+          <span id="skipIntroSource" style="display: none; font-size: 10px; color: #888; white-space: nowrap;"></span>
           <button class="btn" id="syncLiveBtn"
             style="display: none; padding: 7px 14px; font-size: 12px; font-weight: 700; background: #ff9800; color: #000; border: none; align-items: center; gap: 6px; cursor: pointer; border-radius: 16px; box-shadow: 0 2px 8px rgba(255,152,0,0.4);"
             title="Sincronizar instantaneamente com a borda ao vivo (zero delay)">
@@ -4178,6 +4184,8 @@
       embedPlayer: document.getElementById('embedPlayer'),
       closeVideoModal: document.getElementById('closeVideoModal'),
       downloadBtn: document.getElementById('downloadBtn'),
+      skipIntroBtn: document.getElementById('skipIntroBtn'),
+      skipIntroSource: document.getElementById('skipIntroSource'),
       modalFormat: document.getElementById('modalFormat'),
       subOptionsPanel: document.getElementById('subOptionsPanel'),
       toggleSubPanelBtn: document.getElementById('toggleSubPanelBtn'),
@@ -4687,6 +4695,14 @@
           if (!matchedGroup.cover && item.cover && item.cover.startsWith('http')) {
             matchedGroup.cover = item.cover;
           }
+          if (!matchedGroup.imdbId && isValidImdbId(item.imdb_id || item.imdbId)) {
+            matchedGroup.imdbId = item.imdb_id || item.imdbId;
+            matchedGroup.imdb_id = matchedGroup.imdbId;
+          }
+          if (!matchedGroup.malId && normalizePositiveId(item.mal_id || item.malId)) {
+            matchedGroup.malId = item.mal_id || item.malId;
+            matchedGroup.mal_id = matchedGroup.malId;
+          }
           if (!matchedGroup.year && itemYear) {
             matchedGroup.year = itemYear;
           }
@@ -4722,6 +4738,10 @@
             added: item.added,
             last_modified: item.last_modified,
             series_id: item.series_id,
+            imdbId: isValidImdbId(item.imdb_id || item.imdbId) ? (item.imdb_id || item.imdbId) : '',
+            imdb_id: isValidImdbId(item.imdb_id || item.imdbId) ? (item.imdb_id || item.imdbId) : '',
+            malId: normalizePositiveId(item.mal_id || item.malId),
+            mal_id: normalizePositiveId(item.mal_id || item.malId),
             plot: item.plot,
             genre: item.genre,
             cover: item.cover || item.stream_icon || '',
@@ -4800,6 +4820,9 @@
       });
       elements.toggleSubPanelBtn.addEventListener('click', toggleSubOptionsPanel);
       elements.closeSubPanelBtn.addEventListener('click', closeSubOptionsPanel);
+      if (elements.skipIntroBtn) {
+        elements.skipIntroBtn.addEventListener('click', handleSkipIntroClick);
+      }
 
       // Painel Lateral de Informações (Ficha Técnica)
       if (elements.toggleMovieInfoBtn) {
@@ -5214,6 +5237,313 @@
       if (save) saveCurrentVodProgress();
       if (vodProgressSaveTimer) clearInterval(vodProgressSaveTimer);
       vodProgressSaveTimer = null;
+    }
+
+    // ==========================================
+    // PULAR ABERTURA — timestamps comunitários reais
+    // Não usa tempo fixo nem estimativa de duração.
+    // SkipDB é a fonte geral (IMDb); AniSkip é fallback para
+    // anime quando o catálogo fornecer um MAL ID exato.
+    // ==========================================
+    const SKIP_INTRO_CACHE_KEY = 'andplay_web_skip_intro_cache_v1';
+    const SKIP_INTRO_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+    const SKIP_INTRO_CACHE_MAX_ENTRIES = 200;
+    const SKIPDB_SEGMENTS_URL = 'https://api.skipdb.tv/api/segments';
+    const ANISKIP_TIMES_URL = 'https://api.aniskip.com/v2/skip-times';
+
+    function isValidImdbId(value) {
+      return /^tt\d+$/.test(String(value || '').trim());
+    }
+
+    function normalizePositiveId(value) {
+      const n = Number(value);
+      return Number.isInteger(n) && n > 0 ? String(n) : '';
+    }
+
+    function getExactSeriesExternalIds(mediaMeta) {
+      const meta = mediaMeta || {};
+      const imdbCandidates = [
+        meta.imdbId,
+        meta.imdb_id,
+        meta.seriesImdbId,
+        meta.groupOrMovie?.imdbId,
+        meta.groupOrMovie?.imdb_id,
+        meta.selectedVersion?.item?.imdb_id
+      ];
+
+      let imdbId = imdbCandidates.find(isValidImdbId) || '';
+      if (!imdbId) {
+        try {
+          const saved = getSavedMediaMatch('series', { seriesName: meta.seriesName || meta.title || '' });
+          if (saved && isValidImdbId(saved.id)) imdbId = String(saved.id).trim();
+        } catch (e) {}
+      }
+
+      const malCandidates = [
+        meta.malId,
+        meta.mal_id,
+        meta.malID,
+        meta.seriesMalId,
+        meta.ep?.info?.malId,
+        meta.ep?.info?.mal_id
+      ];
+      const malId = malCandidates.map(normalizePositiveId).find(Boolean) || '';
+
+      return { imdbId, malId };
+    }
+
+    function getSkipIntroCache() {
+      try {
+        const raw = localStorage.getItem(SKIP_INTRO_CACHE_KEY);
+        const cache = raw ? JSON.parse(raw) : {};
+        return cache && typeof cache === 'object' ? cache : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function getCachedSkipIntro(cacheKey) {
+      const cache = getSkipIntroCache();
+      const entry = cache[cacheKey];
+      if (!entry || !Number.isFinite(Number(entry.savedAt))) return null;
+      if (Date.now() - Number(entry.savedAt) > SKIP_INTRO_CACHE_TTL_MS) return null;
+      return entry.segment || null;
+    }
+
+    function saveCachedSkipIntro(cacheKey, segment) {
+      try {
+        const cache = getSkipIntroCache();
+        cache[cacheKey] = { savedAt: Date.now(), segment };
+
+        const keys = Object.keys(cache);
+        if (keys.length > SKIP_INTRO_CACHE_MAX_ENTRIES) {
+          keys.sort((a, b) => Number(cache[a]?.savedAt || 0) - Number(cache[b]?.savedAt || 0));
+          keys.slice(0, keys.length - SKIP_INTRO_CACHE_MAX_ENTRIES).forEach(k => delete cache[k]);
+        }
+
+        localStorage.setItem(SKIP_INTRO_CACHE_KEY, JSON.stringify(cache));
+      } catch (e) {}
+    }
+
+    async function fetchJsonWithTimeout(url, timeoutMs = 8000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          signal: controller.signal,
+          cache: 'no-store'
+        });
+        if (!response.ok) return null;
+        return await response.json();
+      } catch (e) {
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function validateSkipSegment(startSeconds, endSeconds, durationSeconds) {
+      const start = Number(startSeconds);
+      const end = Number(endSeconds);
+      const duration = Number(durationSeconds);
+
+      if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(duration)) return null;
+      if (duration <= 0 || start < 0 || end <= start || start >= duration) return null;
+
+      const safeEnd = Math.min(end, duration);
+      if (safeEnd <= start) return null;
+
+      return {
+        start: start,
+        end: safeEnd
+      };
+    }
+
+    async function fetchSkipDbIntro(imdbId, seasonNum, episodeNum, durationSeconds) {
+      const duration = Number(durationSeconds);
+      const cacheKey = ['skipdb', imdbId, seasonNum, episodeNum, Math.round(duration)].join(':');
+      const cached = getCachedSkipIntro(cacheKey);
+      if (cached) return cached;
+
+      const params = new URLSearchParams({
+        imdb_id: imdbId,
+        season: String(Number(seasonNum)),
+        episode: String(Number(episodeNum)),
+        duration: String(duration),
+        type: 'intro',
+        adjust: 'conservative'
+      });
+
+      const data = await fetchJsonWithTimeout(SKIPDB_SEGMENTS_URL + '?' + params.toString());
+      const intro = data?.segments?.intro;
+      if (!intro) return null;
+
+      // Só aceitamos correspondências que o próprio serviço conseguiu relacionar
+      // com a duração real deste stream. "out-of-range" e "agnostic" não entram.
+      if (!['exact', 'shifted'].includes(String(intro.match || ''))) return null;
+      const confidence = Number(intro.confidence);
+
+      const valid = validateSkipSegment(Number(intro.start_ms) / 1000, Number(intro.end_ms) / 1000, duration);
+      if (!valid) return null;
+
+      const segment = {
+        ...valid,
+        source: 'SkipDB',
+        confidence,
+        match: String(intro.match)
+      };
+      saveCachedSkipIntro(cacheKey, segment);
+      return segment;
+    }
+
+    async function fetchAniSkipIntro(malId, episodeNum, durationSeconds) {
+      const duration = Number(durationSeconds);
+      const cacheKey = ['aniskip', malId, episodeNum, Math.round(duration)].join(':');
+      const cached = getCachedSkipIntro(cacheKey);
+      if (cached) return cached;
+
+      const params = new URLSearchParams({
+        episodeLength: String(duration),
+        types: 'op'
+      });
+      const url = ANISKIP_TIMES_URL + '/' + encodeURIComponent(malId) + '/' + encodeURIComponent(Number(episodeNum)) + '?' + params.toString();
+      const data = await fetchJsonWithTimeout(url);
+      if (!data?.found || !Array.isArray(data.results)) return null;
+
+      const op = data.results.find(item => item?.skipType === 'op' && item?.interval);
+      if (!op) return null;
+
+      const valid = validateSkipSegment(op.interval.startTime, op.interval.endTime, duration);
+      if (!valid) return null;
+
+      const segment = {
+        ...valid,
+        source: 'AniSkip',
+        confidence: null,
+        match: 'community'
+      };
+      saveCachedSkipIntro(cacheKey, segment);
+      return segment;
+    }
+
+    function resetSkipIntroUi() {
+      skipIntroRequestSeq++;
+      skipIntroState = { segment: null, source: '', used: false };
+      if (elements.skipIntroBtn) {
+        elements.skipIntroBtn.style.display = 'none';
+        elements.skipIntroBtn.disabled = false;
+        elements.skipIntroBtn.textContent = '⏭️ Pular abertura';
+        elements.skipIntroBtn.title = 'Pular a abertura usando timestamps comunitários verificados';
+      }
+      if (elements.skipIntroSource) {
+        elements.skipIntroSource.style.display = 'none';
+        elements.skipIntroSource.textContent = '';
+        elements.skipIntroSource.title = '';
+      }
+    }
+
+    function updateSkipIntroButton() {
+      const btn = elements.skipIntroBtn;
+      const segment = skipIntroState.segment;
+      const player = elements.videoPlayer;
+
+      if (!btn || !segment || currentPlaybackMeta?.mediaType !== 'series' || !player) {
+        if (btn) btn.style.display = 'none';
+        return;
+      }
+
+      const currentTime = Number(player.currentTime);
+      if (!Number.isFinite(currentTime)) {
+        btn.style.display = 'none';
+        return;
+      }
+
+      if (currentTime < segment.start) {
+        skipIntroState.used = false;
+      }
+
+      const insideSegment = currentTime >= segment.start && currentTime < segment.end;
+      const shouldShow = insideSegment && !skipIntroState.used;
+
+      btn.style.display = shouldShow ? 'inline-flex' : 'none';
+      if (shouldShow) {
+        const sourceText = segment.source === 'SkipDB'
+          ? `SkipDB • confiança ${Math.round((segment.confidence || 0) * 100)}%`
+          : 'AniSkip • dados da comunidade';
+        btn.title = `Pular de ${formatResumeTime(segment.start)} até ${formatResumeTime(segment.end)} • ${sourceText}`;
+      }
+    }
+
+    async function loadSkipIntroForCurrentEpisode() {
+      const playback = currentPlaybackMeta;
+      if (!playback || playback.mediaType !== 'series' || !elements.videoPlayer) {
+        resetSkipIntroUi();
+        return;
+      }
+
+      const duration = Number(elements.videoPlayer.duration);
+      if (!Number.isFinite(duration) || duration <= 0) return;
+
+      const ids = getExactSeriesExternalIds(playback.mediaMeta);
+      const seasonNum = normalizePositiveId(playback.seasonNum);
+      const episodeNum = normalizePositiveId(playback.episodeNum);
+      if (!seasonNum || !episodeNum || (!ids.imdbId && !ids.malId)) {
+        resetSkipIntroUi();
+        return;
+      }
+
+      const requestSeq = ++skipIntroRequestSeq;
+      skipIntroState = { segment: null, source: '', used: false };
+
+      let segment = null;
+      try {
+        if (ids.imdbId) {
+          segment = await fetchSkipDbIntro(ids.imdbId, seasonNum, episodeNum, duration);
+        }
+        if (!segment && ids.malId) {
+          segment = await fetchAniSkipIntro(ids.malId, episodeNum, duration);
+        }
+      } catch (e) {
+        segment = null;
+      }
+
+      if (requestSeq !== skipIntroRequestSeq || currentPlaybackMeta !== playback) return;
+
+      if (segment) {
+        skipIntroState = {
+          segment,
+          source: segment.source,
+          used: false
+        };
+        if (elements.skipIntroSource) {
+          elements.skipIntroSource.style.display = 'inline';
+          elements.skipIntroSource.textContent = segment.source === 'SkipDB'
+            ? 'Dados comunitários via SkipDB • ODbL 1.0'
+            : 'Dados comunitários via AniSkip';
+          elements.skipIntroSource.title = 'Timestamp fornecido por uma base comunitária de skip times.';
+        }
+        updateSkipIntroButton();
+      } else {
+        skipIntroState = { segment: null, source: '', used: false };
+        updateSkipIntroButton();
+      }
+    }
+
+    function handleSkipIntroClick() {
+      const segment = skipIntroState.segment;
+      const player = elements.videoPlayer;
+      if (!segment || !player || currentPlaybackMeta?.mediaType !== 'series') return;
+
+      const target = Math.min(segment.end, Number(player.duration) || segment.end);
+      if (!Number.isFinite(target) || target <= segment.start) return;
+
+      try {
+        player.currentTime = target;
+        skipIntroState.used = true;
+        updateSkipIntroButton();
+        saveCurrentVodProgress();
+      } catch (e) {}
     }
 
     function formatResumeTime(seconds) {
@@ -7401,6 +7731,9 @@
 
     let videoLoadTimeout = null;
     let currentPlaybackMeta = null;
+    let skipIntroRequestSeq = 0;
+    let skipIntroState = { segment: null, source: '', used: false };
+
 
     function startVideoLoadTimeout() {
       if (videoLoadTimeout) clearTimeout(videoLoadTimeout);
@@ -7579,6 +7912,7 @@
         streamId: mediaMeta?.streamId || mediaMeta?.stream_id,
         startPosition: safeStartPosition
       };
+      resetSkipIntroUi();
       hideVideoErrorOverlay();
 
       elements.modalTitle.textContent = title;
@@ -7630,6 +7964,12 @@
         if (elements.videoPlayer.readyState >= 1) setTimeout(applyResumePosition, 0);
       }
 
+      if (mediaType === 'series') {
+        const scheduleSkipIntroLookup = () => setTimeout(() => loadSkipIntroForCurrentEpisode(), 0);
+        elements.videoPlayer.addEventListener('loadedmetadata', scheduleSkipIntroLookup, { once: true });
+        if (elements.videoPlayer.readyState >= 1) scheduleSkipIntroLookup();
+      }
+
       elements.videoPlayer.play().catch(() => { });
       startVodProgressTracking();
 
@@ -7661,6 +8001,7 @@
       if (elements.liveSyncToast) elements.liveSyncToast.style.display = 'none';
 
       stopVodProgressTracking();
+      resetSkipIntroUi();
 
       if (elements.embedPlayer) {
         elements.embedPlayer.src = 'about:blank';
@@ -7742,6 +8083,9 @@
       const sid = currentPlaybackMeta?.streamId;
       if (sid) clearStreamBroken(sid);
     });
+
+    elements.videoPlayer.addEventListener('timeupdate', updateSkipIntroButton);
+    elements.videoPlayer.addEventListener('seeking', updateSkipIntroButton);
 
     elements.videoPlayer.addEventListener('ended', () => {
       const meta = getCurrentVodProgressMeta();
@@ -9194,6 +9538,10 @@
           genre: sInfo.genre || '',
           rating: sInfo.rating || sInfo.rating_5based || '',
           duration: epDuration,
+          imdbId: sInfo.imdb_id || sInfo.imdbId || currentSeriesGroup?.imdbId || currentSeriesGroup?.imdb_id || '',
+          imdb_id: sInfo.imdb_id || sInfo.imdbId || currentSeriesGroup?.imdb_id || currentSeriesGroup?.imdbId || '',
+          malId: sInfo.mal_id || sInfo.malId || currentSeriesGroup?.malId || currentSeriesGroup?.mal_id || '',
+          mal_id: sInfo.mal_id || sInfo.malId || currentSeriesGroup?.mal_id || currentSeriesGroup?.malId || '',
           selectedVersion: currentActiveSeriesVersion,
           versionInfo: currentActiveSeriesVersion ? currentActiveSeriesVersion.versionInfo : null,
           streamId: ep.id,
