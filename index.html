@@ -3984,6 +3984,10 @@
             ⏭️ Pular abertura
           </button>
           <span id="skipIntroSource" style="display: none; font-size: 10px; color: #888; white-space: nowrap;"></span>
+          <label id="skipIntroAutoLabel" style="display: none; align-items: center; gap: 5px; font-size: 11px; color: #aaa; cursor: pointer; white-space: nowrap;" title="Quando houver um timestamp comunitário válido, pula a abertura automaticamente">
+            <input type="checkbox" id="skipIntroAutoToggle" style="accent-color: #ffc107; cursor: pointer;">
+            Pular automaticamente
+          </label>
           <button class="btn" id="syncLiveBtn"
             style="display: none; padding: 7px 14px; font-size: 12px; font-weight: 700; background: #ff9800; color: #000; border: none; align-items: center; gap: 6px; cursor: pointer; border-radius: 16px; box-shadow: 0 2px 8px rgba(255,152,0,0.4);"
             title="Sincronizar instantaneamente com a borda ao vivo (zero delay)">
@@ -4186,6 +4190,8 @@
       downloadBtn: document.getElementById('downloadBtn'),
       skipIntroBtn: document.getElementById('skipIntroBtn'),
       skipIntroSource: document.getElementById('skipIntroSource'),
+      skipIntroAutoLabel: document.getElementById('skipIntroAutoLabel'),
+      skipIntroAutoToggle: document.getElementById('skipIntroAutoToggle'),
       modalFormat: document.getElementById('modalFormat'),
       subOptionsPanel: document.getElementById('subOptionsPanel'),
       toggleSubPanelBtn: document.getElementById('toggleSubPanelBtn'),
@@ -4823,6 +4829,12 @@
       if (elements.skipIntroBtn) {
         elements.skipIntroBtn.addEventListener('click', handleSkipIntroClick);
       }
+      if (elements.skipIntroAutoToggle) {
+        elements.skipIntroAutoToggle.addEventListener('change', (e) => {
+          setAutoSkipIntroEnabled(e.target.checked);
+          updateSkipIntroButton();
+        });
+      }
 
       // Painel Lateral de Informações (Ficha Técnica)
       if (elements.toggleMovieInfoBtn) {
@@ -5248,6 +5260,7 @@
     const SKIP_INTRO_CACHE_KEY = 'andplay_web_skip_intro_cache_v1';
     const SKIP_INTRO_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
     const SKIP_INTRO_CACHE_MAX_ENTRIES = 200;
+    const SKIP_INTRO_AUTO_STORAGE_KEY = 'andplay_web_skip_intro_auto';
     const SKIPDB_SEGMENTS_URL = 'https://api.skipdb.tv/api/segments';
     const ANISKIP_TIMES_URL = 'https://api.aniskip.com/v2/skip-times';
 
@@ -5427,8 +5440,30 @@
       return segment;
     }
 
+    function isAutoSkipIntroEnabled() {
+      try {
+        return localStorage.getItem(SKIP_INTRO_AUTO_STORAGE_KEY) === '1';
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function setAutoSkipIntroEnabled(enabled) {
+      try {
+        localStorage.setItem(SKIP_INTRO_AUTO_STORAGE_KEY, enabled ? '1' : '0');
+      } catch (e) {}
+      if (elements.skipIntroAutoToggle) elements.skipIntroAutoToggle.checked = !!enabled;
+    }
+
+    function updateSkipIntroAutoUi(mediaType = currentPlaybackMeta?.mediaType) {
+      const visible = mediaType === 'series';
+      if (elements.skipIntroAutoLabel) elements.skipIntroAutoLabel.style.display = visible ? 'inline-flex' : 'none';
+      if (elements.skipIntroAutoToggle) elements.skipIntroAutoToggle.checked = isAutoSkipIntroEnabled();
+    }
+
     function resetSkipIntroUi() {
       skipIntroRequestSeq++;
+      updateSkipIntroAutoUi();
       skipIntroState = { segment: null, source: '', used: false };
       if (elements.skipIntroBtn) {
         elements.skipIntroBtn.style.display = 'none';
@@ -5457,10 +5492,6 @@
       if (!Number.isFinite(currentTime)) {
         btn.style.display = 'none';
         return;
-      }
-
-      if (currentTime < segment.start) {
-        skipIntroState.used = false;
       }
 
       const insideSegment = currentTime >= segment.start && currentTime < segment.end;
@@ -5495,6 +5526,7 @@
 
       const requestSeq = ++skipIntroRequestSeq;
       skipIntroState = { segment: null, source: '', used: false };
+      updateSkipIntroAutoUi('series');
 
       let segment = null;
       try {
@@ -5523,11 +5555,30 @@
             : 'Dados comunitários via AniSkip';
           elements.skipIntroSource.title = 'Timestamp fornecido por uma base comunitária de skip times.';
         }
+        maybeAutoSkipIntro();
         updateSkipIntroButton();
       } else {
         skipIntroState = { segment: null, source: '', used: false };
         updateSkipIntroButton();
       }
+    }
+
+    function maybeAutoSkipIntro() {
+      const segment = skipIntroState.segment;
+      const player = elements.videoPlayer;
+      if (!segment || !isAutoSkipIntroEnabled() || skipIntroState.used || !player || player.paused || currentPlaybackMeta?.mediaType !== 'series') return;
+
+      const currentTime = Number(player.currentTime);
+      if (!Number.isFinite(currentTime) || currentTime < segment.start || currentTime >= segment.end) return;
+
+      const target = Math.min(segment.end, Number(player.duration) || segment.end);
+      if (!Number.isFinite(target) || target <= currentTime) return;
+
+      skipIntroState.used = true;
+      try {
+        player.currentTime = target;
+        saveCurrentVodProgress();
+      } catch (e) {}
     }
 
     function handleSkipIntroClick() {
@@ -7913,6 +7964,7 @@
         startPosition: safeStartPosition
       };
       resetSkipIntroUi();
+      updateSkipIntroAutoUi(mediaType);
       hideVideoErrorOverlay();
 
       elements.modalTitle.textContent = title;
@@ -8084,7 +8136,10 @@
       if (sid) clearStreamBroken(sid);
     });
 
-    elements.videoPlayer.addEventListener('timeupdate', updateSkipIntroButton);
+    elements.videoPlayer.addEventListener('timeupdate', () => {
+      maybeAutoSkipIntro();
+      updateSkipIntroButton();
+    });
     elements.videoPlayer.addEventListener('seeking', updateSkipIntroButton);
 
     elements.videoPlayer.addEventListener('ended', () => {
