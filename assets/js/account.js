@@ -313,6 +313,21 @@
     }
   }
 
+  async function signInWithProvider(provider) {
+    try {
+      setStatus('Abrindo login...');
+      const client = await getClient();
+      const redirectTo = window.location.origin + window.location.pathname;
+      const { error } = await client.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo }
+      });
+      if (error) throw error;
+    } catch (error) {
+      setStatus(error.message || 'Não foi possível iniciar o login.');
+    }
+  }
+
   async function signUp() {
     try {
       const email = document.getElementById('accountEmail')?.value.trim();
@@ -322,7 +337,13 @@
       }
       setStatus('Criando conta...');
       const client = await getClient();
-      const { data, error } = await client.auth.signUp({ email, password });
+      const { data, error } = await client.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: window.location.origin + window.location.pathname
+        }
+      });
       if (error) throw error;
       currentSession = data.session;
       if (currentSession) {

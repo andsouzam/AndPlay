@@ -1,7 +1,7 @@
-// Configuração opcional da conta AndPlay.
-// Crie um projeto Supabase Free e preencha os dois campos abaixo.
-// A publishable key é própria para código público; NUNCA coloque uma secret key aqui.
+// Configuração pública da conta AndPlay via Supabase.
+// A Publishable Key é destinada ao código do navegador.
+// NUNCA coloque uma secret/service_role key neste arquivo.
 window.ANDPLAY_SUPABASE_CONFIG = {
-  url: '',
-  publishableKey: ''
+  url: 'https://zfawwhqogtynuygniskz.supabase.co',
+  publishableKey: 'sb_publishable_naUBrBzRCU_SQbSiNtpQQQ_7Q8h1VoJ'
 };
