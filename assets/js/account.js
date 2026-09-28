@@ -116,7 +116,7 @@
     const watchRows = [];
     ['movies', 'series'].forEach(type => {
       readWatched(type).forEach((id, index) => watchRows.push({
-        content_type: type,
+        content_type: type === 'movies' ? 'movie' : 'series',
         content_id: String(id),
         sort_order: index,
         updated_at: now
