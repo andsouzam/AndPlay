@@ -127,6 +127,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       homeFeaturedLoading: document.getElementById('homeFeaturedLoading'),
       homeWatchedRail: document.getElementById('homeWatchedRail'),
       homeWatchedAllBtn: document.getElementById('homeWatchedAllBtn'),
+      homeSeriesSection: document.getElementById('homeSeriesSection'),
+      homeSeriesRails: document.getElementById('homeSeriesRails'),
+      homeMoviesSection: document.getElementById('homeMoviesSection'),
+      homeMoviesRails: document.getElementById('homeMoviesRails'),
       tabSeriesBtn: document.getElementById('tabSeriesBtn'),
       tabLiveBtn: document.getElementById('tabLiveBtn'),
       tabWatchedBtn: document.getElementById('tabWatchedBtn'),
@@ -1923,9 +1927,188 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return activity.slice(0, HOME_WATCHED_LIMIT * 2)
         .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0) ||
           Number(a.fallbackOrder || 0) - Number(b.fallbackOrder || 0))
-        .map(entry => resolveHomeWatchedItem(entry.type === 'movies' ? 'movie' : 'series', entry.id))
+        .map(entry => resolveHomeWatchedItem(
+          entry.type === 'movies' || entry.type === 'movie' ? 'movie' : 'series',
+          entry.id
+        ))
         .filter(Boolean)
         .slice(0, HOME_WATCHED_LIMIT);
+    }
+
+    const HOME_RAIL_ITEM_LIMIT = 12;
+    const HOME_THEME_COUNT = 6;
+    const HOME_THEME_SOURCE_LIMIT = 220;
+    const HOME_THEME_MIN_ITEMS = 5;
+
+    const HOME_THEME_ALIASES = [
+      { keys: ['action', 'ação', 'adventure', 'aventura'], label: 'Ação e Aventura' },
+      { keys: ['comedy', 'comédia', 'comedia'], label: 'Comédia' },
+      { keys: ['crime'], label: 'Crime' },
+      { keys: ['drama'], label: 'Drama' },
+      { keys: ['horror', 'terror'], label: 'Terror' },
+      { keys: ['thriller', 'suspense'], label: 'Suspense' },
+      { keys: ['romance'], label: 'Romance' },
+      { keys: ['science fiction', 'sci-fi', 'ficção científica', 'ficcao cientifica'], label: 'Ficção Científica' },
+      { keys: ['fantasy', 'fantasia'], label: 'Fantasia' },
+      { keys: ['animation', 'animação', 'animacao'], label: 'Animação' },
+      { keys: ['documentary', 'documentário', 'documentario'], label: 'Documentários' },
+      { keys: ['family', 'família', 'familia'], label: 'Família' }
+    ];
+
+    function getHomeCatalogItems(type) {
+      if (type === 'series') {
+        return (Array.isArray(fullSeriesCache) ? fullSeriesCache : [])
+          .map(item => ({
+            type: 'series',
+            id: String(item.series_id || ''),
+            item,
+            title: item.name || item.title || 'Série',
+            year: item.year || '',
+            rating: item.rating || '',
+            poster: getHomeItemPoster({ type: 'series', cover: item.cover, stream_icon: item.stream_icon }),
+            plot: item.plot || '',
+            genre: item.genre || item.genre_name || '',
+            added: getHomeItemTime(item)
+          }))
+          .filter(item => item.id && item.poster);
+      }
+
+      return (Array.isArray(fullMoviesCache) ? fullMoviesCache : [])
+        .map(item => ({
+          type: 'movie',
+          id: String(item.stream_id || item.primaryItem?.stream_id || ''),
+          item,
+          title: item.name || item.title || 'Filme',
+          year: item.year || '',
+          rating: item.rating || '',
+          poster: getHomeItemPoster({ type: 'movie', primaryItem: item }),
+          plot: item.plot || '',
+          genre: item.genre || item.primaryItem?.genre || item.genre_name || '',
+          added: getHomeItemTime(item)
+        }))
+        .filter(item => item.id && item.poster);
+    }
+
+    function normalizeHomeThemeLabel(raw) {
+      const value = String(raw || '').trim();
+      if (!value) return '';
+      const normalized = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const alias = HOME_THEME_ALIASES.find(theme =>
+        theme.keys.some(key => normalized.includes(String(key).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')))
+      );
+      return alias ? alias.label : value;
+    }
+
+    function getHomeThemesForItem(item) {
+      const raw = String(item?.genre || '').trim();
+      if (!raw) return [];
+      const parts = raw
+        .replace(/[\[\]"]+/g, '')
+        .split(/[,;|/]+/)
+        .map(part => normalizeHomeThemeLabel(part))
+        .filter(Boolean);
+
+      return [...new Set(parts)];
+    }
+
+    function buildHomeCatalogRails(type) {
+      const items = getHomeCatalogItems(type).sort((a, b) => b.added - a.added);
+      if (!items.length) return [];
+
+      const rails = [{
+        key: 'latest',
+        title: type === 'series' ? 'Novidades em Séries' : 'Novidades em Filmes',
+        items: items.slice(0, HOME_RAIL_ITEM_LIMIT)
+      }];
+
+      const themeCounts = new Map();
+      items.slice(0, HOME_THEME_SOURCE_LIMIT).forEach(item => {
+        getHomeThemesForItem(item).forEach(theme => {
+          themeCounts.set(theme, (themeCounts.get(theme) || 0) + 1);
+        });
+      });
+
+      const themes = [...themeCounts.entries()]
+        .filter(([, count]) => count >= HOME_THEME_MIN_ITEMS)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'))
+        .slice(0, HOME_THEME_COUNT)
+        .map(([theme]) => theme);
+
+      themes.forEach(theme => {
+        const themedItems = items
+          .filter(item => getHomeThemesForItem(item).includes(theme))
+          .slice(0, HOME_RAIL_ITEM_LIMIT);
+
+        if (themedItems.length >= HOME_THEME_MIN_ITEMS) {
+          rails.push({
+            key: theme,
+            title: 'Mais recentes • ' + theme,
+            items: themedItems
+          });
+        }
+      });
+
+      return rails;
+    }
+
+    function renderHomeTitleCard(item) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'home-title-card';
+
+      const meta = [
+        item.year,
+        item.rating && Number(item.rating) > 0 ? '★ ' + Number(item.rating).toFixed(1) : ''
+      ].filter(Boolean).join(' • ');
+
+      card.innerHTML =
+        '<div class="home-title-poster">' +
+          '<img src="' + escapeHtml(item.poster) + '" alt="" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">' +
+          '<span class="home-title-type">' + (item.type === 'series' ? 'SÉRIE' : 'FILME') + '</span>' +
+          (item.rating && Number(item.rating) > 0 ? '<span class="home-title-rating">★ ' + Number(item.rating).toFixed(1) + '</span>' : '') +
+        '</div>' +
+        '<strong title="' + escapeHtml(item.title) + '">' + escapeHtml(item.title) + '</strong>' +
+        '<small>' + escapeHtml(meta || (item.type === 'series' ? 'Série' : 'Filme')) + '</small>';
+
+      card.addEventListener('click', () => {
+        if (item.type === 'movie') onMovieCardClick(item.item);
+        else openSeriesModal(item.item);
+      });
+
+      return card;
+    }
+
+    function renderHomeCatalogRails(type, railElement, sectionElement) {
+      if (!railElement || !sectionElement) return;
+      railElement.innerHTML = '';
+
+      const rails = buildHomeCatalogRails(type);
+      sectionElement.style.display = rails.length ? '' : 'none';
+      if (!rails.length) return;
+
+      rails.forEach(rail => {
+        const block = document.createElement('section');
+        block.className = 'home-theme-rail';
+
+        const heading = document.createElement('div');
+        heading.className = 'home-theme-heading';
+        heading.innerHTML =
+          '<h3>' + escapeHtml(rail.title) + '</h3>' +
+          '<span>' + rail.items.length + ' títulos</span>';
+        block.appendChild(heading);
+
+        const scroller = document.createElement('div');
+        scroller.className = 'home-theme-scroller';
+        rail.items.forEach(item => scroller.appendChild(renderHomeTitleCard(item)));
+        block.appendChild(scroller);
+
+        railElement.appendChild(block);
+      });
+    }
+
+    function renderHomeCatalogSections() {
+      renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection);
+      renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection);
     }
 
     function renderHomeFeatured() {
@@ -2083,6 +2266,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     function renderHomeDashboard() {
       renderHomeFeatured();
       renderHomeWatched();
+      renderHomeCatalogSections();
     }
 
     async function resumeHomeProgress(item) {
