@@ -3468,6 +3468,78 @@
     }
 
   </style>
+<style>
+      /* Diálogo de retomada de reprodução — equivalente ao APK */
+      .andplay-resume-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background: rgba(0, 0, 0, 0.82);
+        backdrop-filter: blur(4px);
+      }
+      .andplay-resume-dialog {
+        width: min(460px, 100%);
+        padding: 26px;
+        border: 1px solid #242b40;
+        border-radius: 14px;
+        background: linear-gradient(180deg, #121622 0%, #0a0e1a 100%);
+        box-shadow: 0 20px 60px rgba(0,0,0,.55);
+        color: #fff;
+      }
+      .andplay-resume-title {
+        font-size: 18px;
+        line-height: 1.35;
+        font-weight: 800;
+        margin-bottom: 8px;
+      }
+      .andplay-resume-info {
+        color: #aaa;
+        font-size: 13px;
+        line-height: 1.5;
+        margin-bottom: 20px;
+      }
+      .andplay-resume-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .andplay-resume-actions button {
+        min-height: 42px;
+        border: 1px solid #242b40;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 800;
+        cursor: pointer;
+        color: #fff;
+        background: #121622;
+      }
+      .andplay-resume-actions button.primary {
+        border-color: #ffc107;
+        color: #070709;
+        background: #ffc107;
+      }
+      .andplay-resume-actions button.cancel {
+        grid-column: 1 / -1;
+        min-height: 36px;
+        color: #aaa;
+        background: transparent;
+      }
+      .andplay-resume-actions button:focus-visible {
+        outline: 2px solid #ffc107;
+        outline-offset: 2px;
+      }
+      @media (max-width: 520px) {
+        .andplay-resume-dialog { padding: 20px; }
+        .andplay-resume-actions { grid-template-columns: 1fr; }
+        .andplay-resume-actions button.cancel { grid-column: auto; }
+      }
+    </style>
 </head>
 
 <body>
@@ -5046,6 +5118,168 @@
         list.unshift(normalizedId);
         localStorage.setItem(getWatchedStorageKey(type), JSON.stringify(list.slice(0, WATCHED_LIMIT)));
       } catch (e) {}
+    }
+
+    // ==========================================
+    // CONTINUAR DE ONDE PAROU — equivalente ao APK
+    // Salva progresso VOD localmente no navegador.
+    // ==========================================
+    const VOD_PROGRESS_PREFIX = 'andplay_web_vod_progress_';
+    const VOD_PROGRESS_MIN_SECONDS = 5;
+    const VOD_PROGRESS_COMPLETE_REMAINING_SECONDS = 30;
+    const VOD_PROGRESS_COMPLETE_PERCENT = 0.95;
+    let vodProgressSaveTimer = null;
+
+    function getVodProgressKey(type, id) {
+      if (id === null || id === undefined || String(id).trim() === '') return '';
+      return VOD_PROGRESS_PREFIX + (type === 'series' ? 'series_' : 'movie_') + String(id);
+    }
+
+    function getVodProgress(type, id) {
+      const key = getVodProgressKey(type, id);
+      if (!key) return null;
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !Number.isFinite(Number(parsed.position))) return null;
+        return {
+          position: Math.max(0, Number(parsed.position)),
+          duration: Number(parsed.duration) > 0 ? Number(parsed.duration) : 0,
+          updatedAt: Number(parsed.updatedAt) || 0,
+          title: String(parsed.title || '')
+        };
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function clearVodProgress(type, id) {
+      const key = getVodProgressKey(type, id);
+      if (!key) return;
+      try {
+        localStorage.removeItem(key);
+      } catch (e) {}
+    }
+
+    function saveVodProgress(type, id, position, duration, title = '') {
+      const key = getVodProgressKey(type, id);
+      const pos = Number(position);
+      const dur = Number(duration);
+      if (!key || !Number.isFinite(pos) || pos <= VOD_PROGRESS_MIN_SECONDS) return;
+
+      try {
+        if (dur > 0 && (pos >= Math.max(0, dur - VOD_PROGRESS_COMPLETE_REMAINING_SECONDS) || pos >= dur * VOD_PROGRESS_COMPLETE_PERCENT)) {
+          localStorage.removeItem(key);
+          return;
+        }
+
+        localStorage.setItem(key, JSON.stringify({
+          position: pos,
+          duration: dur > 0 ? dur : 0,
+          updatedAt: Date.now(),
+          title: String(title || '')
+        }));
+      } catch (e) {}
+    }
+
+    function getCurrentVodProgressMeta() {
+      const meta = currentPlaybackMeta;
+      if (!meta || (meta.mediaType !== 'movie' && meta.mediaType !== 'series')) return null;
+      const id = meta.streamId || meta.mediaMeta?.streamId || meta.mediaMeta?.stream_id;
+      if (id === null || id === undefined || String(id).trim() === '') return null;
+      return {
+        type: meta.mediaType,
+        id: String(id),
+        title: meta.title || meta.mediaMeta?.title || ''
+      };
+    }
+
+    function saveCurrentVodProgress() {
+      const meta = getCurrentVodProgressMeta();
+      if (!meta || !elements.videoPlayer) return;
+      saveVodProgress(meta.type, meta.id, elements.videoPlayer.currentTime, elements.videoPlayer.duration, meta.title);
+    }
+
+    function startVodProgressTracking() {
+      if (vodProgressSaveTimer) clearInterval(vodProgressSaveTimer);
+      vodProgressSaveTimer = null;
+      if (!getCurrentVodProgressMeta() || !elements.videoPlayer) return;
+      vodProgressSaveTimer = setInterval(() => {
+        saveCurrentVodProgress();
+      }, 5000);
+    }
+
+    function stopVodProgressTracking(save = true) {
+      if (save) saveCurrentVodProgress();
+      if (vodProgressSaveTimer) clearInterval(vodProgressSaveTimer);
+      vodProgressSaveTimer = null;
+    }
+
+    function formatResumeTime(seconds) {
+      const total = Math.max(0, Math.floor(Number(seconds) || 0));
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = total % 60;
+      if (h > 0) return [h, String(m).padStart(2, '0'), String(s).padStart(2, '0')].join(':');
+      return [String(m).padStart(2, '0'), String(s).padStart(2, '0')].join(':');
+    }
+
+    function showResumePrompt(title, savedPos, onContinue, onRestart, onCancel = () => {}) {
+      const oldOverlay = document.querySelector('.andplay-resume-overlay');
+      if (oldOverlay) oldOverlay.remove();
+
+      const overlay = document.createElement('div');
+      overlay.className = 'andplay-resume-overlay';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.innerHTML = `
+        <div class="andplay-resume-dialog">
+          <div class="andplay-resume-title">${escapeHtml(title || 'Conteúdo')}</div>
+          <div class="andplay-resume-info">Você parou em <strong style="color:#ffc107;">${formatResumeTime(savedPos)}</strong>. Deseja continuar de onde parou?</div>
+          <div class="andplay-resume-actions">
+            <button type="button" class="primary" data-resume-continue>▶ Continuar de onde parou</button>
+            <button type="button" data-resume-restart>🔄 Voltar ao início</button>
+            <button type="button" class="cancel" data-resume-cancel>Cancelar</button>
+          </div>
+        </div>
+      `;
+
+      const close = (callback) => {
+        document.removeEventListener('keydown', onKeyDown);
+        overlay.remove();
+        callback();
+      };
+      const onKeyDown = (event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          close(onCancel);
+        }
+      };
+
+      overlay.querySelector('[data-resume-continue]').addEventListener('click', () => close(() => onContinue(savedPos)));
+      overlay.querySelector('[data-resume-restart]').addEventListener('click', () => close(() => onRestart()));
+      overlay.querySelector('[data-resume-cancel]').addEventListener('click', () => close(onCancel));
+      document.addEventListener('keydown', onKeyDown);
+      document.body.appendChild(overlay);
+      setTimeout(() => overlay.querySelector('[data-resume-continue]')?.focus(), 0);
+    }
+
+    function startVodWithResume(type, id, title, onStart) {
+      const saved = getVodProgress(type, id);
+      if (saved && saved.position > VOD_PROGRESS_MIN_SECONDS) {
+        showResumePrompt(
+          title,
+          saved.position,
+          (position) => onStart(position),
+          () => {
+            clearVodProgress(type, id);
+            onStart(0);
+          }
+        );
+        return;
+      }
+      onStart(0);
     }
 
     function movieGroupMatchesWatchedId(group, id) {
@@ -6953,27 +7187,32 @@
       const rating = groupOrMovie.rating || item.rating || groupOrMovie.rating_5based || item.rating_5based || '';
       const duration = groupOrMovie.duration || item.duration || groupOrMovie.episode_run_time || item.episode_run_time || '';
 
-      openPlayer(displayTitle, videoUrl, 'movie', {
-        ...item,
-        rawTitle: baseTitle,
-        title: baseTitle,
-        groupOrMovie,
-        selectedVersion,
-        allVersions,
-        poster,
-        year,
-        plot,
-        cast,
-        director,
-        genre,
-        rating,
-        duration,
-        streamId: selectedVersion.streamId
-      });
+      const startPlayback = (startPosition) => {
+        saveWatchedId('movies', watchedId);
+        openPlayer(displayTitle, videoUrl, 'movie', {
+          ...item,
+          rawTitle: baseTitle,
+          title: baseTitle,
+          groupOrMovie,
+          selectedVersion,
+          allVersions,
+          poster,
+          year,
+          plot,
+          cast,
+          director,
+          genre,
+          rating,
+          duration,
+          streamId: selectedVersion.streamId
+        }, startPosition);
 
-      if (isLegendadoMedia(selectedVersion)) {
-        disableActiveSubtitle('Formato: MP4 • Legenda impressa no frame');
-      }
+        if (isLegendadoMedia(selectedVersion)) {
+          disableActiveSubtitle('Formato: MP4 • Legenda impressa no frame');
+        }
+      };
+
+      startVodWithResume('movie', selectedVersion.streamId, displayTitle, startPlayback);
     }
 
     function setupPlayerVersionSwitcher(groupOrMovie, activeVersion, allVersions) {
@@ -7017,6 +7256,8 @@
     function switchLiveMovieVersion(groupOrMovie, targetVersion, allVersions) {
       const currentPos = elements.videoPlayer ? elements.videoPlayer.currentTime : 0;
       const wasPaused = elements.videoPlayer ? elements.videoPlayer.paused : false;
+      saveCurrentVodProgress();
+      stopVodProgressTracking(false);
 
       const ext = targetVersion.ext || 'mp4';
       const newUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${targetVersion.streamId}.${ext}`;
@@ -7030,6 +7271,12 @@
 
       if (currentSubContext && currentSubContext.mediaMeta) {
         currentSubContext.mediaMeta.selectedVersion = targetVersion;
+      }
+      if (currentPlaybackMeta) {
+        currentPlaybackMeta.streamId = targetVersion.streamId;
+        currentPlaybackMeta.url = newUrl;
+        currentPlaybackMeta.title = newTitle;
+        if (currentPlaybackMeta.mediaMeta) currentPlaybackMeta.mediaMeta.selectedVersion = targetVersion;
       }
 
       setupPlayerVersionSwitcher(groupOrMovie, targetVersion, allVersions);
@@ -7054,6 +7301,7 @@
         if (!wasPaused) {
           elements.videoPlayer.play().catch(() => { });
         }
+        startVodProgressTracking();
       }
 
       elements.videoPlayer.addEventListener('loadedmetadata', onLoaded);
@@ -7317,7 +7565,9 @@
       }
     }
 
-    function openPlayer(title, url, mediaType = 'movie', mediaMeta = null) {
+    function openPlayer(title, url, mediaType = 'movie', mediaMeta = null, startPosition = 0) {
+      stopVodProgressTracking();
+      const safeStartPosition = Number.isFinite(Number(startPosition)) ? Math.max(0, Number(startPosition)) : 0;
       activeVideoUrl = url;
       currentPlaybackMeta = {
         title,
@@ -7326,7 +7576,8 @@
         mediaMeta,
         seasonNum: mediaMeta?.seasonNum || mediaMeta?.season,
         episodeNum: mediaMeta?.episodeNum,
-        streamId: mediaMeta?.streamId || mediaMeta?.stream_id
+        streamId: mediaMeta?.streamId || mediaMeta?.stream_id,
+        startPosition: safeStartPosition
       };
       hideVideoErrorOverlay();
 
@@ -7363,7 +7614,24 @@
         }
       }
 
+      const applyResumePosition = () => {
+        const target = currentPlaybackMeta?.startPosition || 0;
+        if (target <= 0 || !elements.videoPlayer) return;
+        const duration = elements.videoPlayer.duration;
+        if (!Number.isFinite(duration) || duration <= 0 || target >= duration - 1) return;
+        try {
+          elements.videoPlayer.currentTime = Math.min(target, Math.max(0, duration - 1));
+          if (elements.modalFormat) elements.modalFormat.textContent = `Retomando em ${formatResumeTime(target)}...`;
+        } catch (e) {}
+      };
+
+      if (safeStartPosition > 0) {
+        elements.videoPlayer.addEventListener('loadedmetadata', applyResumePosition, { once: true });
+        if (elements.videoPlayer.readyState >= 1) setTimeout(applyResumePosition, 0);
+      }
+
       elements.videoPlayer.play().catch(() => { });
+      startVodProgressTracking();
 
       // Popular a barra lateral esquerda de informações (Ficha Técnica)
       populateMovieSidebar(mediaMeta);
@@ -7391,6 +7659,8 @@
       if (elements.syncLiveBtn) elements.syncLiveBtn.style.display = 'none';
       if (elements.toggleLatencyModeBtn) elements.toggleLatencyModeBtn.style.display = 'none';
       if (elements.liveSyncToast) elements.liveSyncToast.style.display = 'none';
+
+      stopVodProgressTracking();
 
       if (elements.embedPlayer) {
         elements.embedPlayer.src = 'about:blank';
@@ -7471,6 +7741,24 @@
       hideVideoErrorOverlay();
       const sid = currentPlaybackMeta?.streamId;
       if (sid) clearStreamBroken(sid);
+    });
+
+    elements.videoPlayer.addEventListener('ended', () => {
+      const meta = getCurrentVodProgressMeta();
+      if (meta) clearVodProgress(meta.type, meta.id);
+      stopVodProgressTracking(false);
+    });
+
+    window.addEventListener('pagehide', () => {
+      saveCurrentVodProgress();
+      if (typeof saveCurrentTvVodProgress === 'function') saveCurrentTvVodProgress();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        saveCurrentVodProgress();
+        if (typeof saveCurrentTvVodProgress === 'function') saveCurrentTvVodProgress();
+      }
     });
 
     // ==========================================
@@ -8889,27 +9177,32 @@
       const epDuration = ep.info?.duration || ep.info?.duration_secs || sInfo.episode_run_time || '';
       const sPoster = ep.info?.movie_image || currentSeriesGroup?.poster || sInfo.cover || '';
 
-      openPlayer(`${sName} - ${epTitle}${versionLabel}`, epUrl, 'series', {
-        title: `${sName} - ${epTitle}`,
-        seriesName: sName,
-        episodeTitle: epTitle,
-        season: seasonNum,
-        seasonNum: seasonNum,
-        episodeNum: ep.episode_num,
-        year: sInfo.release_date ? String(sInfo.release_date).substring(0, 4) : (sInfo.year || ''),
-        poster: sPoster,
-        plot: epPlot,
-        cast: sInfo.cast || sInfo.actors || '',
-        director: sInfo.director || '',
-        genre: sInfo.genre || '',
-        rating: sInfo.rating || sInfo.rating_5based || '',
-        duration: epDuration,
-        selectedVersion: currentActiveSeriesVersion,
-        versionInfo: currentActiveSeriesVersion ? currentActiveSeriesVersion.versionInfo : null,
-        streamId: ep.id,
-        stream_id: ep.id,
-        ep
-      });
+      const startPlayback = (startPosition) => {
+        saveWatchedId('series', watchedId);
+        openPlayer(`${sName} - ${epTitle}${versionLabel}`, epUrl, 'series', {
+          title: `${sName} - ${epTitle}`,
+          seriesName: sName,
+          episodeTitle: epTitle,
+          season: seasonNum,
+          seasonNum: seasonNum,
+          episodeNum: ep.episode_num,
+          year: sInfo.release_date ? String(sInfo.release_date).substring(0, 4) : (sInfo.year || ''),
+          poster: sPoster,
+          plot: epPlot,
+          cast: sInfo.cast || sInfo.actors || '',
+          director: sInfo.director || '',
+          genre: sInfo.genre || '',
+          rating: sInfo.rating || sInfo.rating_5based || '',
+          duration: epDuration,
+          selectedVersion: currentActiveSeriesVersion,
+          versionInfo: currentActiveSeriesVersion ? currentActiveSeriesVersion.versionInfo : null,
+          streamId: ep.id,
+          stream_id: ep.id,
+          ep
+        }, startPosition);
+      };
+
+      startVodWithResume('series', ep.id, `${sName} - ${epTitle}${versionLabel}`, startPlayback);
     }
 
     function closeSeriesModal() {
@@ -9227,6 +9520,8 @@
       let tvCurrentSeriesItem = null;
       let tvCurrentSeason = '1';
       let tvPlayingSeriesMeta = null; // { seriesItem, ep, seasonNum, seriesId, episodesBySeason }
+      let tvVodProgressMeta = null;
+      let tvVodProgressSaveTimer = null;
 
       // Helper para formatação de segundos (ex: 01:25:30)
       function formatTvSeconds(sec) {
@@ -9236,6 +9531,35 @@
         const s = Math.floor(sec % 60);
         if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      }
+
+      function saveCurrentTvVodProgress() {
+        if (!tvVodProgressMeta || !tvVideo) return;
+        saveVodProgress(
+          tvVodProgressMeta.type,
+          tvVodProgressMeta.id,
+          tvVideo.currentTime,
+          tvVideo.duration,
+          tvVodProgressMeta.title
+        );
+      }
+
+      function startTvVodProgressTracking(type, id, title) {
+        if (tvVodProgressSaveTimer) clearInterval(tvVodProgressSaveTimer);
+        tvVodProgressSaveTimer = null;
+        tvVodProgressMeta = null;
+        if (id === null || id === undefined || String(id).trim() === '' || !tvVideo) return;
+        tvVodProgressMeta = { type, id: String(id), title: title || '' };
+        tvVodProgressSaveTimer = setInterval(() => {
+          if (tvPlayingType === 'vod') saveCurrentTvVodProgress();
+        }, 5000);
+      }
+
+      function stopTvVodProgressTracking(save = true) {
+        if (save) saveCurrentTvVodProgress();
+        if (tvVodProgressSaveTimer) clearInterval(tvVodProgressSaveTimer);
+        tvVodProgressSaveTimer = null;
+        tvVodProgressMeta = null;
       }
 
       // Tenta iniciar a tag <video>. Se o navegador bloquear autoplay com áudio,
@@ -9263,10 +9587,12 @@
       }
 
       // Carrega efetivamente a transmissão no reprodutor unificado (iframe embed ou tag de vídeo)
-      // fallbackIdx permite tentar automaticamente o próximo servidor em ch.fallbacks quando o atual falha
-      function tvLoadStream(ch, fallbackIdx = 0) {
+      // fallbackIdx permite tentar automaticamente o próximo servidor em ch.fallbacks quando o atual falha.
+      // startPosition é usado apenas para VOD.
+      function tvLoadStream(ch, fallbackIdx = 0, startPosition = 0) {
         if (!ch) return;
         const hasExplicitFallbacks = ch.fallbacks && ch.fallbacks.length > 0;
+        const resumePosition = Number.isFinite(Number(startPosition)) ? Math.max(0, Number(startPosition)) : 0;
         const fallback = hasExplicitFallbacks
           ? ch.fallbacks[fallbackIdx]
           : (fallbackIdx === 0 ? { url: 'https://rdcanais.net/' + (ch.channelSlug || ch.id), isEmbed: true } : null);
@@ -9284,6 +9610,9 @@
         }
 
         if (fallback.isEmbed) {
+          if (resumePosition > 0) {
+            console.warn('[AndPlay TV] Retomada ignorada para transmissão em embed.');
+          }
           if (window._tvActiveHls) {
             window._tvActiveHls.destroy();
             window._tvActiveHls = null;
@@ -9297,7 +9626,7 @@
           tvEmbed.src = 'about:blank';
           tvEmbed.onerror = function () {
             console.warn(`[AndPlay TV] Servidor ${fallbackIdx + 1} inacessível, alternando automaticamente...`);
-            tvLoadStream(ch, fallbackIdx + 1);
+            tvLoadStream(ch, fallbackIdx + 1, resumePosition);
           };
           requestAnimationFrame(() => { tvEmbed.src = embedUrl; });
         } else {
@@ -9313,9 +9642,23 @@
             }
             tvVideo.onerror = null;
             window._tvActiveHls = new Hls({ enableWorker: true });
+            if (resumePosition > 0) {
+              tvVideo.addEventListener('loadedmetadata', () => {
+                const dur = tvVideo.duration;
+                if (Number.isFinite(dur) && dur > 0 && resumePosition < dur - 1) {
+                  try { tvVideo.currentTime = Math.min(resumePosition, dur - 1); } catch (e) {}
+                }
+              }, { once: true });
+            }
             window._tvActiveHls.loadSource(fallback.url);
             window._tvActiveHls.attachMedia(tvVideo);
             window._tvActiveHls.on(Hls.Events.MANIFEST_PARSED, () => {
+              if (resumePosition > 0) {
+                const dur = tvVideo.duration;
+                if (Number.isFinite(dur) && dur > 0 && resumePosition < dur - 1) {
+                  try { tvVideo.currentTime = Math.min(resumePosition, dur - 1); } catch (e) {}
+                }
+              }
               tryTvVideoAutoplay();
             });
             window._tvActiveHls.on(Hls.Events.ERROR, (event, data) => {
@@ -9325,7 +9668,7 @@
                   try { window._tvActiveHls.destroy(); } catch (e) { }
                   window._tvActiveHls = null;
                 }
-                tvLoadStream(ch, fallbackIdx + 1);
+                tvLoadStream(ch, fallbackIdx + 1, resumePosition);
               }
             });
           } else {
@@ -9336,12 +9679,20 @@
             tvVideo.autoplay = true;
             tvVideo.playsInline = true;
             tvVideo.muted = false;
+            if (resumePosition > 0) {
+              tvVideo.addEventListener('loadedmetadata', () => {
+                const dur = tvVideo.duration;
+                if (Number.isFinite(dur) && dur > 0 && resumePosition < dur - 1) {
+                  try { tvVideo.currentTime = Math.min(resumePosition, dur - 1); } catch (e) {}
+                }
+              }, { once: true });
+            }
             tvVideo.src = fallback.url;
             tvVideo.load();
             // Único handler (atribuição direta evita empilhar listeners a cada troca de canal)
             tvVideo.onerror = function () {
               console.warn(`[AndPlay TV] Erro ao carregar servidor ${fallbackIdx + 1}, alternando automaticamente...`);
-              tvLoadStream(ch, fallbackIdx + 1);
+              tvLoadStream(ch, fallbackIdx + 1, resumePosition);
             };
 
             const tryPlay = () => {
@@ -9383,6 +9734,15 @@
             if (remaining) remaining.textContent = `Restam ~${Math.max(0, Math.round((dur - cur) / 60))} min`;
             if (timeRange) timeRange.textContent = `${curStr} • ${durStr}`;
           });
+
+          if (!tvVideo._hasTvEndedHandler) {
+            tvVideo._hasTvEndedHandler = true;
+            tvVideo.addEventListener('ended', () => {
+              if (tvPlayingType !== 'vod' || !tvVodProgressMeta) return;
+              clearVodProgress(tvVodProgressMeta.type, tvVodProgressMeta.id);
+              stopTvVodProgressTracking(false);
+            });
+          }
         }
 
         // Mantém o foco no overlay de teclado após a troca de canal em fullscreen
@@ -9481,7 +9841,6 @@
       function tvPlayMovie(movie) {
         if (!movie) return;
         const watchedId = movie.stream_id || movie.primaryItem?.stream_id || movie.versions?.[0]?.streamId;
-        if (watchedId != null && typeof saveWatchedId === 'function') saveWatchedId('movies', watchedId);
         const versions = movie.versions || [{
           item: movie,
           versionInfo: (typeof detectMovieVersion === 'function') ? detectMovieVersion(movie) : { label: 'Principal' },
@@ -9505,19 +9864,25 @@
           fallbacks: [{ name: 'HD', url: videoUrl, isEmbed: false }]
         };
 
-        tvPlayingType = 'vod';
-        tvPreviousMode = (tvCurrentMode === 'vod') ? 'vod' : 'central';
-        tvPlayingSeriesMeta = null;
-        setTvViewMode('fullscreen');
-        tvLoadStream(pseudoCh);
-        updateTvOsd(pseudoCh, 0, false);
+        const startPlayback = (startPosition) => {
+          stopTvVodProgressTracking();
+          saveWatchedId('movies', watchedId);
+          tvPlayingType = 'vod';
+          tvPreviousMode = (tvCurrentMode === 'vod') ? 'vod' : 'central';
+          tvPlayingSeriesMeta = null;
+          setTvViewMode('fullscreen');
+          startTvVodProgressTracking('movie', streamId, title);
+          tvLoadStream(pseudoCh, 0, startPosition);
+          updateTvOsd(pseudoCh, 0, false);
+        };
+
+        startVodWithResume('movie', streamId, title, startPlayback);
       }
 
       // Reproduzir Episódio de Série VOD no Player de TV
       function tvPlaySeriesEpisode(seriesItem, ep, seasonNum) {
         if (!seriesItem || !ep) return;
         const watchedId = seriesItem.series_id || seriesItem.primaryItem?.series_id || seriesItem.id;
-        if (watchedId != null && typeof saveWatchedId === 'function') saveWatchedId('series', watchedId);
         const ext = ep.container_extension || 'mp4';
         const videoUrl = `${CONFIG.server}/series/${CONFIG.user}/${CONFIG.pass}/${ep.id}.${ext}`;
         const sName = seriesItem.name || seriesItem.title || 'Série';
@@ -9534,18 +9899,25 @@
           fallbacks: [{ name: 'HD', url: videoUrl, isEmbed: false }]
         };
 
-        tvPlayingType = 'vod';
-        tvPreviousMode = 'vod';
-        tvPlayingSeriesMeta = {
-          seriesItem: seriesItem,
-          ep: ep,
-          seasonNum: String(seasonNum),
-          seriesId: seriesItem.series_id || seriesItem.id,
-          episodesBySeason: seriesItem._cachedEpisodes || null
+        const startPlayback = (startPosition) => {
+          stopTvVodProgressTracking();
+          saveWatchedId('series', watchedId);
+          tvPlayingType = 'vod';
+          tvPreviousMode = 'vod';
+          tvPlayingSeriesMeta = {
+            seriesItem: seriesItem,
+            ep: ep,
+            seasonNum: String(seasonNum),
+            seriesId: seriesItem.series_id || seriesItem.id,
+            episodesBySeason: seriesItem._cachedEpisodes || null
+          };
+          setTvViewMode('fullscreen');
+          startTvVodProgressTracking('series', ep.id, fullTitle);
+          tvLoadStream(pseudoCh, 0, startPosition);
+          updateTvOsd(pseudoCh, 0, false);
         };
-        setTvViewMode('fullscreen');
-        tvLoadStream(pseudoCh);
-        updateTvOsd(pseudoCh, 0, false);
+
+        startVodWithResume('series', ep.id, fullTitle, startPlayback);
         // Fecha gaveta se estava aberta (mudança de episódio dentro da gaveta)
         if (tvDrawer && !tvDrawer.classList.contains('closed')) {
           tvDrawer.classList.add('closed');
@@ -10110,6 +10482,9 @@
 
       // Alternar entre Telas (Central x Tela Cheia x VOD)
       function setTvViewMode(mode) {
+        if (mode !== 'fullscreen' && tvPlayingType === 'vod') {
+          stopTvVodProgressTracking();
+        }
         tvCurrentMode = mode;
         try {
           if (mode === 'fullscreen' || mode === 'vod') {
