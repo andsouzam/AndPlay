@@ -2908,6 +2908,535 @@
       transform: scale(1.06);
       outline: none;
     }
+
+    /* ============================================================
+       ANDPLAY WEB 10-FOOT UI — alinhamento visual com o APK
+       (somente interface Web; não altera o projeto Android)
+       ============================================================ */
+    :root {
+      --bg-dark: #070709;
+      --card-bg: #121622;
+      --card-hover: #1A2035;
+      --primary: #e50914;
+      --primary-hover: #b80710;
+      --text: #FFFFFF;
+      --text-muted: #AAAAAA;
+      --border: #242B40;
+      --focus: #FFC107;
+      --focus-bg: #1A2035;
+      --blue-surface: #0A0E1A;
+    }
+
+    /* Web padrão: mesma linguagem cromática do APK, mas preservando foco
+       em Filmes/Séries e uso confortável com mouse/teclado. */
+    body:not(.tv-mode) {
+      background: #070709;
+    }
+
+    body:not(.tv-mode)>header {
+      background: #0A0E1A;
+      border-bottom: 1px solid #1E283D;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.35);
+      backdrop-filter: none;
+      padding: 12px 24px;
+    }
+
+    body:not(.tv-mode) .logo {
+      color: #FFFFFF;
+      font-weight: 900;
+      letter-spacing: 0.8px;
+    }
+
+    body:not(.tv-mode) .nav-tabs {
+      background: #121622;
+      border-color: #242B40;
+    }
+
+    body:not(.tv-mode) .nav-tab {
+      color: #99A4BA;
+      border-radius: 20px;
+    }
+
+    body:not(.tv-mode) .nav-tab.active {
+      background: #FFC107;
+      color: #000000;
+      box-shadow: 0 2px 10px rgba(255,193,7,0.25);
+    }
+
+    body:not(.tv-mode) .nav-tab:hover:not(.active) {
+      background: #1A2035;
+      color: #FFFFFF;
+    }
+
+    body:not(.tv-mode) .search-box input,
+    body:not(.tv-mode) select {
+      background: #121622;
+      border-color: #242B40;
+      color: #FFFFFF;
+    }
+
+    body:not(.tv-mode) .search-box input:focus,
+    body:not(.tv-mode) select:focus {
+      border-color: #FFC107;
+      background: #1A2035;
+      box-shadow: 0 0 12px rgba(255,193,7,0.25);
+    }
+
+    body:not(.tv-mode) .status-bar {
+      background: #0A0E1A;
+      border-bottom-color: #1E283D;
+      color: #99A4BA;
+    }
+
+    body:not(.tv-mode) main {
+      background: #070709;
+    }
+
+    body:not(.tv-mode) .media-card {
+      background: #121622;
+      border-color: #242B40;
+      border-radius: 10px;
+    }
+
+    body:not(.tv-mode) .media-card:hover,
+    body:not(.tv-mode) .media-card:focus {
+      background: #1A2035;
+      border-color: #FFC107;
+      transform: translateY(-4px) scale(1.025);
+      box-shadow: 0 0 18px rgba(255,193,7,0.32), 0 10px 24px rgba(0,0,0,0.75);
+    }
+
+    body:not(.tv-mode) .poster-wrap {
+      background: #0C101B;
+    }
+
+    body:not(.tv-mode) .card-info {
+      background: #121622;
+    }
+
+    body:not(.tv-mode) .card-title {
+      color: #FFFFFF;
+    }
+
+    body:not(.tv-mode) .card-meta {
+      color: #99A4BA;
+    }
+
+    /* TV Central — medidas e cores inspiradas diretamente na Central do APK. */
+    #tvCableApp {
+      background: #070709;
+      color: #FFFFFF;
+    }
+
+    #tvCableApp .tv-central-screen {
+      padding: 0 24px 36px;
+      background: #070709;
+      scroll-padding-top: 54px;
+    }
+
+    #tvCableApp .tv-header,
+    #tvCableApp header.tv-header {
+      position: sticky !important;
+      top: 0 !important;
+      height: 42px !important;
+      min-height: 42px !important;
+      padding: 0 24px !important;
+      margin: 0 -24px 12px !important;
+      width: calc(100% + 48px) !important;
+      background: #0A0E1A !important;
+      border-bottom: 1px solid #1E283D !important;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.45) !important;
+      backdrop-filter: none !important;
+      z-index: 1100 !important;
+    }
+
+    #tvCableApp .tv-brand {
+      gap: 8px;
+    }
+
+    #tvCableApp .tv-logo-icon {
+      font-size: 16px;
+    }
+
+    #tvCableApp .tv-status-pill {
+      background: #FFC107;
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 9px;
+    }
+
+    #tvCableApp .tv-header-right {
+      gap: 10px;
+    }
+
+    #tvCableApp .tv-clock {
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    #tvCableApp .tv-date {
+      font-size: 12px;
+      color: #AAAAAA;
+    }
+
+    #tvCableApp .tv-hero-row {
+      grid-template-columns: minmax(350px, 392px) minmax(0, 1fr);
+      gap: 14px;
+      height: 220px;
+      min-height: 220px;
+      margin-bottom: 16px;
+    }
+
+    #tvCableApp .tv-pip-frame {
+      height: 220px;
+      border-radius: 10px;
+      border: 2px solid #242B40;
+      background: #000;
+      box-shadow: none;
+    }
+
+    #tvCableApp .tv-pip-placeholder {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+    }
+
+    /* No APK, nome e programa ficam sobre o vídeo; não há rodapé dedicado. */
+    #tvCableApp .tv-pip-footer {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      right: 3px;
+      min-height: 0;
+      padding: 6px;
+      background: rgba(0,0,0,0.69);
+      border-top: none;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+
+    #tvCableApp .tv-pip-info {
+      min-width: 0;
+    }
+
+    #tvCableApp .tv-pip-name {
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    #tvCableApp .tv-pip-epg {
+      font-size: 10px;
+      color: #FFC107;
+    }
+
+    #tvCableApp .tv-pip-cta {
+      background: rgba(255,193,7,0.92);
+      color: #000;
+      border-radius: 5px;
+      padding: 4px 7px;
+      font-size: 9px;
+      font-weight: 800;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    #tvCableApp .tv-pip-frame:focus .tv-pip-cta {
+      opacity: 1;
+    }
+
+    #tvCableApp .tv-menu-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    #tvCableApp .tv-menu-grid > .tv-menu-item:nth-child(1),
+    #tvCableApp .tv-menu-grid > .tv-menu-item:nth-child(2),
+    #tvCableApp .tv-menu-grid > .tv-menu-item:nth-child(3),
+    #tvCableApp .tv-menu-grid > .tv-menu-item:nth-child(4) {
+      grid-column: auto;
+    }
+
+    #tvCableApp .tv-menu-item {
+      background: #121622;
+      border: 1px solid #242B40;
+      border-radius: 10px;
+      padding: 10px;
+      min-height: 0;
+      box-shadow: none;
+    }
+
+    #tvCableApp .tv-menu-item:hover,
+    #tvCableApp .tv-menu-item:focus,
+    #tvCableApp .tv-menu-item.focused {
+      background: #1A2035 !important;
+      border-color: #FFC107 !important;
+      transform: scale(1.04) !important;
+      box-shadow: 0 0 18px rgba(255,193,7,0.34) !important;
+    }
+
+    #tvCableApp .tv-menu-icon {
+      font-size: 26px;
+      margin-bottom: 5px;
+    }
+
+    #tvCableApp .tv-menu-label {
+      font-size: 13px;
+      letter-spacing: 0.4px;
+    }
+
+    #tvCableApp .tv-rail-block {
+      margin-bottom: 16px;
+    }
+
+    #tvCableApp .tv-rail-heading {
+      font-size: 15px;
+      color: #FFFFFF;
+      margin-bottom: 4px;
+      letter-spacing: 0.35px;
+    }
+
+    #tvCableApp .tv-rail-scroller {
+      gap: 6px;
+      padding: 6px 6px 12px;
+      scroll-padding-left: 28px;
+    }
+
+    #tvCableApp .tv-channel-card {
+      min-width: 155px;
+      max-width: 155px;
+      min-height: 95px;
+      max-height: 95px;
+      padding: 8px;
+      position: relative;
+      background: #121622;
+      border: 1px solid #242B40;
+      border-radius: 10px;
+    }
+
+    #tvCableApp .tv-channel-card:focus,
+    #tvCableApp .tv-channel-card.focused {
+      background: #1A2035 !important;
+      border-color: #FFC107 !important;
+      transform: scale(1.05) !important;
+      box-shadow: 0 0 18px rgba(255,193,7,0.32) !important;
+    }
+
+    #tvCableApp .tv-channel-card.active-channel {
+      background: #162033;
+      border-color: #D4A017;
+      box-shadow: inset 0 -2px 0 #FFC107;
+    }
+
+    #tvCableApp .tv-channel-live-badge {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #FFC107;
+      color: #000;
+      font-size: 8px;
+      font-weight: 900;
+      letter-spacing: 0.4px;
+      text-align: center;
+      z-index: 2;
+    }
+
+    #tvCableApp .tv-match-status {
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #1A2035;
+      border: 1px solid #2B3450;
+      color: #FFC107;
+      font-size: 9px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    #tvCableApp .tv-match-status.live {
+      background: #FFC107;
+      border-color: #FFC107;
+      color: #000;
+    }
+
+    #tvCableApp .tv-match-league {
+      max-width: 110px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #AAAAAA;
+      font-size: 9px;
+      font-weight: 600;
+    }
+
+    #tvCableApp .tv-match-teams {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 48px;
+      margin: 2px 0 3px;
+    }
+
+    #tvCableApp .tv-match-team {
+      width: 38px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 38px;
+    }
+
+    #tvCableApp .tv-match-team img {
+      width: 38px;
+      height: 38px;
+      object-fit: contain;
+    }
+
+    #tvCableApp .tv-match-logo-fallback {
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: #1A2035;
+      border: 1px solid #2B3450;
+      color: #AAAAAA;
+      font-size: 9px;
+      font-weight: 800;
+    }
+
+    #tvCableApp .tv-match-score {
+      min-width: 42px;
+      color: #FFC107;
+      font-size: 14px;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    #tvCableApp .tv-match-title {
+      width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #FFFFFF;
+      font-size: 10px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    #tvCableApp .tv-channel-card .num {
+      color: #FFC107;
+      margin-bottom: 3px;
+    }
+
+    #tvCableApp .tv-channel-card img {
+      width: 48px;
+      height: 34px;
+      margin-bottom: 3px;
+    }
+
+    #tvCableApp .tv-channel-card .name {
+      font-size: 12px;
+    }
+
+    #tvCableApp .tv-match-card {
+      min-width: 220px;
+      max-width: 220px;
+      min-height: 115px;
+      max-height: 115px;
+      padding: 8px;
+      background: #121622;
+      border: 1px solid #242B40;
+      border-radius: 10px;
+    }
+
+    #tvCableApp .tv-match-card:focus,
+    #tvCableApp .tv-match-card.focused {
+      background: #1A2035 !important;
+      border-color: #FFC107 !important;
+      transform: scale(1.05) !important;
+      box-shadow: 0 0 18px rgba(255,193,7,0.32) !important;
+    }
+
+    #tvCableApp .tv-vod-card {
+      min-width: 110px;
+      max-width: 110px;
+      background: #121622;
+      border: 1px solid #242B40;
+      border-radius: 9px;
+    }
+
+    #tvCableApp .tv-vod-card:focus,
+    #tvCableApp .tv-vod-card.focused {
+      background: #1A2035 !important;
+      border-color: #FFC107 !important;
+      transform: scale(1.05) !important;
+      box-shadow: 0 0 18px rgba(255,193,7,0.3) !important;
+    }
+
+    #tvCableApp .tv-vod-card img {
+      height: 150px;
+    }
+
+    #tvCableApp .tv-vod-card .name {
+      padding: 5px;
+      font-size: 10px;
+    }
+
+    #tvCableApp .tv-vod-card-info {
+      padding: 5px;
+    }
+
+    /* OSD/gaveta mais próximos dos painéis do APK. */
+    #tvCableApp .tv-osd-inner {
+      background: #0A0E1A !important;
+      border: 1px solid #1E283D;
+    }
+
+    #tvCableApp .tv-epg-drawer {
+      width: min(390px, 88vw);
+      background: #0A0E1A !important;
+      border-right: 1px solid #1E283D;
+    }
+
+    #tvCableApp .tv-epg-cat-pill:focus,
+    #tvCableApp .tv-epg-cat-pill.focused,
+    #tvCableApp .tv-epg-cat-pill.active {
+      background: #FFC107 !important;
+      color: #000 !important;
+      border-color: #FFFFFF !important;
+    }
+
+    @media (max-width: 900px) {
+      #tvCableApp .tv-hero-row {
+        grid-template-columns: minmax(0, 1fr);
+        height: auto;
+        min-height: 0;
+      }
+
+      #tvCableApp .tv-pip-frame {
+        height: 220px;
+      }
+
+      #tvCableApp .tv-menu-grid {
+        min-height: 170px;
+      }
+    }
+
+    @media (pointer: coarse) {
+      body:not(.tv-mode) .media-card:hover {
+        transform: none;
+      }
+    }
+
   </style>
 </head>
 
@@ -2936,7 +3465,7 @@
       <header class="tv-header">
         <div class="tv-brand">
           <div class="tv-logo-icon">📺</div>
-          <span class="tv-status-pill">🟢 SINAL ATIVO</span>
+          <span class="tv-status-pill">📡 AO VIVO</span>
         </div>
         <div class="tv-header-right">
           <div class="tv-clock" id="tvClock">--:--</div>
@@ -2958,16 +3487,8 @@
           </div>
         </div>
 
-        <!-- Grade de Ações da Central -->
+        <!-- Grade de Ações da Central (mesma hierarquia da Central do APK: 2x2) -->
         <div class="tv-menu-grid">
-          <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavLive">
-            <div class="tv-menu-icon">📺</div>
-            <div class="tv-menu-label">TV</div>
-          </div>
-          <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavSports">
-            <div class="tv-menu-icon">⚽</div>
-            <div class="tv-menu-label">JOGOS</div>
-          </div>
           <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavMovies">
             <div class="tv-menu-icon">🎬</div>
             <div class="tv-menu-label">FILMES</div>
@@ -2975,6 +3496,10 @@
           <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavSeries">
             <div class="tv-menu-icon">🍿</div>
             <div class="tv-menu-label">SÉRIES</div>
+          </div>
+          <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavSports">
+            <div class="tv-menu-icon">⚽</div>
+            <div class="tv-menu-label">JOGOS</div>
           </div>
           <div class="tv-menu-item tv-focusable" tabindex="0" id="tvNavEpg">
             <div class="tv-menu-icon">📋</div>
@@ -2999,6 +3524,12 @@
       <section class="tv-rail-block">
         <h2 class="tv-rail-heading">🎬 FILMES & LANÇAMENTOS</h2>
         <div class="tv-rail-scroller" id="tvMoviesRail"></div>
+      </section>
+
+      <!-- Trilho 4: Destaques de Séries -->
+      <section class="tv-rail-block">
+        <h2 class="tv-rail-heading">🍿 SÉRIES EM DESTAQUE</h2>
+        <div class="tv-rail-scroller" id="tvSeriesRail"></div>
       </section>
     </div>
 
@@ -8225,6 +8756,7 @@
       let tvOsdTimer = null;
       let tvClockTimer = null;
       let tvDrawerAutoCloseTimer = null;
+      const tvPreloadedPosterUrls = new Set();
       let tvVodList = [];
       let tvVodMode = 'movies';
 
@@ -8288,6 +8820,7 @@
         renderTvFeaturedChannels();
         loadTvSportsRail();
         loadTvMoviesRail();
+        loadTvSeriesRail();
         setupTvDrawerCategories();
 
         // Sintoniza primeiro canal no PiP
@@ -8301,10 +8834,19 @@
         // Um pequeno atraso evita competir com a sintonia do primeiro canal.
         if (!fullMoviesCache && typeof loadMovieCategories === 'function' && typeof loadFullMovies === 'function') {
           setTimeout(() => {
-            if (fullMoviesCache) return; // outro fluxo (ex: enterTvMode) já carregou nesse meio-tempo
+            if (fullMoviesCache) return; // outro fluxo já carregou nesse meio-tempo
             const catStep = (movieCategories && movieCategories.length > 0) ? Promise.resolve() : loadMovieCategories();
             catStep.then(() => loadFullMovies()).catch(() => { });
           }, 1200);
+        }
+
+        // Pré-carrega séries de forma independente, como o APK, sem bloquear a sintonia do canal.
+        if (!fullSeriesCache && typeof loadSeriesCategories === 'function' && typeof loadFullSeries === 'function') {
+          setTimeout(() => {
+            if (fullSeriesCache) return;
+            const catStep = (seriesCategories && seriesCategories.length > 0) ? Promise.resolve() : loadSeriesCategories();
+            catStep.then(() => loadFullSeries()).catch(() => { });
+          }, 1800);
         }
 
         // Registra listener de rolagem e redimensionamento para sincronizar o PiP perfeitamente
@@ -8584,6 +9126,7 @@
         if (pipEpg) pipEpg.textContent = `🔴 No Ar: ${tuneTitle}`;
 
         updateTvOsd(ch, tvCurrentIdx, false);
+        updateTvChannelRailState();
         if (showOsdBanner && tvCurrentMode === 'fullscreen') {
           triggerTvOsd();
         }
@@ -9463,6 +10006,7 @@
           card.className = 'tv-channel-card tv-focusable';
           card.tabIndex = 0;
           const realIdx = tvChannels.indexOf(ch);
+          card.dataset.channelIndex = String(realIdx);
           card.innerHTML = `
         <div class="num">CH ${String(realIdx + 1).padStart(3, '0')}</div>
         <img src="${escapeHtml(ch.logo || '')}" alt="${escapeHtml(ch.name)}" onerror="this.style.opacity='0.3'" loading="lazy">
@@ -9480,6 +10024,48 @@
           });
           rail.appendChild(card);
         });
+
+        updateTvChannelRailState();
+      }
+
+      // Mantém o canal sintonizado destacado no rail, como o estado selected do adapter nativo.
+      function updateTvChannelRailState() {
+        const rail = document.getElementById('tvChannelsRail');
+        if (!rail) return;
+
+        rail.querySelectorAll('.tv-channel-card').forEach(card => {
+          const idx = Number(card.dataset.channelIndex);
+          const active = Number.isInteger(idx) && idx === tvCurrentIdx;
+          card.classList.toggle('active-channel', active);
+          card.setAttribute('aria-current', active ? 'true' : 'false');
+
+          let badge = card.querySelector('.tv-channel-live-badge');
+          if (active) {
+            if (!badge) {
+              badge = document.createElement('span');
+              badge.className = 'tv-channel-live-badge';
+              badge.textContent = 'NO AR';
+              card.appendChild(badge);
+            }
+          } else if (badge) {
+            badge.remove();
+          }
+        });
+      }
+
+      // Pré-carrega algumas capas à frente do foco, inspirado no preload do MoviePosterAdapter.
+      function preloadTvRailPosters(cards, currentIndex, limit = 15) {
+        const start = Math.max(0, currentIndex + 1);
+        const end = Math.min(cards.length, start + limit);
+        for (let i = start; i < end; i++) {
+          const img = cards[i].querySelector('img');
+          const src = img && img.currentSrc ? img.currentSrc : (img && img.src ? img.src : '');
+          if (!src || src.startsWith('data:') || tvPreloadedPosterUrls.has(src)) continue;
+          tvPreloadedPosterUrls.add(src);
+          const preload = new Image();
+          preload.decoding = 'async';
+          preload.src = src;
+        }
       }
 
       // Renderiza Trilho de Jogos
@@ -9504,14 +10090,20 @@
           card.className = 'tv-match-card tv-focusable';
           card.tabIndex = 0;
           const isNow = ev.isLiveNow;
-          card.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <span style="font-size:10px; font-weight:800; color:${isNow ? '#e50914' : '#ffc107'}; background:rgba(255,255,255,0.06); padding:2px 8px; border-radius:10px;">${isNow ? '🔴 AO VIVO' : '⏰ ' + ev.matchTime}</span>
-          <span style="font-size:10px; color:#aaa; font-weight:600;">${ev.league || 'Futebol'}</span>
-        </div>
-        <div style="font-size:14px; font-weight:800; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:6px;">${ev.name}</div>
-        <div style="font-size:11px; color:#ffc107; font-weight:600;">▶ Sintonizar Transmissão</div>
-      `;
+          const homeLogo = ev.homeLogo || '';
+          const awayLogo = ev.awayLogo || '';
+          const centerText = ev.score || (isNow && String(ev.matchTime || '').toUpperCase() === 'AO VIVO' ? 'VS' : (ev.matchTime || 'VS'));
+          const homeFallback = escapeHtml((ev.homeTeam || 'T1').slice(0, 3).toUpperCase());
+          const awayFallback = escapeHtml((ev.awayTeam || 'T2').slice(0, 3).toUpperCase());
+          const badgeText = isNow ? '🔴 AO VIVO' : ('⏰ ' + (ev.matchTime || 'HOJE'));
+          card.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">'
+            + '<span class="tv-match-status ' + (isNow ? 'live' : '') + '">' + escapeHtml(badgeText) + '</span>'
+            + '<span class="tv-match-league">' + escapeHtml(ev.league || 'Futebol') + '</span></div>'
+            + '<div class="tv-match-teams">'
+            + (homeLogo ? '<div class="tv-match-team"><img src="' + escapeHtml(homeLogo) + '" alt="' + escapeHtml(ev.homeTeam || '') + '" loading="lazy" decoding="async"></div>' : '<div class="tv-match-team"><span class="tv-match-logo-fallback">' + homeFallback + '</span></div>')
+            + '<span class="tv-match-score">' + escapeHtml(centerText) + '</span>'
+            + (awayLogo ? '<div class="tv-match-team"><img src="' + escapeHtml(awayLogo) + '" alt="' + escapeHtml(ev.awayTeam || '') + '" loading="lazy" decoding="async"></div>' : '<div class="tv-match-team"><span class="tv-match-logo-fallback">' + awayFallback + '</span></div>')
+            + '</div><div class="tv-match-title">' + escapeHtml(ev.name || 'Evento esportivo') + '</div>';
           card.addEventListener('click', () => {
             tvPlayLiveEvent(ev);
           });
@@ -9529,7 +10121,7 @@
       function loadTvMoviesRail() {
         const rail = document.getElementById('tvMoviesRail');
         if (!rail) return;
-        const movies = (typeof fullMoviesCache !== 'undefined' && Array.isArray(fullMoviesCache)) ? fullMoviesCache.slice(0, 20) : [];
+        const movies = (typeof fullMoviesCache !== 'undefined' && Array.isArray(fullMoviesCache)) ? fullMoviesCache.slice(0, 30) : [];
         if (movies.length === 0) {
           setTimeout(loadTvMoviesRail, 1500);
           return;
@@ -9540,16 +10132,61 @@
           const card = document.createElement('div');
           card.className = 'tv-vod-card tv-focusable';
           card.tabIndex = 0;
-          const poster = m.poster || m.stream_icon || '';
+          const poster = m.poster || m.stream_icon || m.cover || '';
+          const name = m.name || m.title || 'Filme';
           card.innerHTML = `
-        <img src="${escapeHtml(poster)}" alt="${escapeHtml(m.name)}" onerror="this.style.opacity='0.2'" loading="lazy">
-        <div class="name">${escapeHtml(m.name)}</div>
+        <img src="${escapeHtml(poster)}" alt="${escapeHtml(name)}" onerror="this.style.opacity='0.2'" loading="lazy" decoding="async">
+        <div class="name">${escapeHtml(name)}</div>
       `;
+          card.addEventListener('focus', () => {
+            const cards = Array.from(rail.querySelectorAll('.tv-vod-card'));
+            preloadTvRailPosters(cards, cards.indexOf(card));
+          });
           card.addEventListener('click', () => tvPlayMovie(m));
           card.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
               tvPlayMovie(m);
+            }
+          });
+          rail.appendChild(card);
+        });
+      }
+
+      // Trilho de séries equivalente ao rail nativo do APK.
+      function loadTvSeriesRail() {
+        const rail = document.getElementById('tvSeriesRail');
+        if (!rail) return;
+        const series = (typeof fullSeriesCache !== 'undefined' && Array.isArray(fullSeriesCache))
+          ? fullSeriesCache.slice(0, 30)
+          : [];
+        if (series.length === 0) {
+          setTimeout(loadTvSeriesRail, 1500);
+          return;
+        }
+
+        rail.innerHTML = '';
+        series.forEach(s => {
+          const card = document.createElement('div');
+          card.className = 'tv-vod-card tv-focusable';
+          card.tabIndex = 0;
+          const poster = s.cover || s.poster || s.stream_icon || '';
+          const name = s.name || s.title || 'Série';
+          card.innerHTML = `
+            <img src="${escapeHtml(poster)}" alt="${escapeHtml(name)}"
+              onerror="this.style.opacity='0.2'" loading="lazy" decoding="async">
+            <div class="name">${escapeHtml(name)}</div>
+          `;
+
+          card.addEventListener('focus', () => {
+            const cards = Array.from(rail.querySelectorAll('.tv-vod-card'));
+            preloadTvRailPosters(cards, cards.indexOf(card));
+          });
+          card.addEventListener('click', () => openTvSeriesDetail(s));
+          card.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              openTvSeriesDetail(s);
             }
           });
           rail.appendChild(card);
@@ -9738,6 +10375,27 @@
         renderEpisodeList(currentSeason);
       }
 
+      // Encerra imediatamente o stream da Central ao entrar no VOD, economizando banda
+      // e mantendo o comportamento do APK (que destrói a conexão ao abrir Filmes/Séries).
+      function tvDestroyCurrentStream() {
+        if (window._tvActiveHls) {
+          try { window._tvActiveHls.destroy(); } catch (e) { }
+          window._tvActiveHls = null;
+        }
+
+        if (tvVideo) {
+          try { tvVideo.pause(); } catch (e) { }
+          tvVideo.onerror = null;
+          tvVideo.removeAttribute('src');
+          try { tvVideo.load(); } catch (e) { }
+        }
+
+        if (tvEmbed) {
+          tvEmbed.onerror = null;
+          tvEmbed.src = 'about:blank';
+        }
+      }
+
       // Navegação da Central (Ações Rápidas)
       document.addEventListener('DOMContentLoaded', () => {
         // Clique no PiP -> Tela Cheia
@@ -9750,11 +10408,6 @@
         }
 
         // Botões de Ação da Central (Enter é acionado de forma unificada pelo keydown da central)
-        const btnLive = document.getElementById('tvNavLive');
-        if (btnLive) {
-          btnLive.addEventListener('click', () => setTvViewMode('fullscreen'));
-        }
-
         const btnSports = document.getElementById('tvNavSports');
         if (btnSports) {
           btnSports.addEventListener('click', () => {
@@ -9771,12 +10424,18 @@
 
         const btnMovies = document.getElementById('tvNavMovies');
         if (btnMovies) {
-          btnMovies.addEventListener('click', () => openTvVodExplorer('movies'));
+          btnMovies.addEventListener('click', () => {
+            tvDestroyCurrentStream();
+            openTvVodExplorer('movies');
+          });
         }
 
         const btnSeries = document.getElementById('tvNavSeries');
         if (btnSeries) {
-          btnSeries.addEventListener('click', () => openTvVodExplorer('series'));
+          btnSeries.addEventListener('click', () => {
+            tvDestroyCurrentStream();
+            openTvVodExplorer('series');
+          });
         }
 
         const btnEpg = document.getElementById('tvNavEpg');
@@ -10299,17 +10958,19 @@
           const getCards = (railId, selector) => Array.from(document.querySelectorAll(`#${railId} ${selector}`));
 
           const pip = document.getElementById('tvPipCard');
-          const menuIds = ['tvNavLive', 'tvNavSports', 'tvNavMovies', 'tvNavSeries', 'tvNavEpg'];
+          const menuIds = ['tvNavMovies', 'tvNavSeries', 'tvNavSports', 'tvNavEpg'];
           const menuItems = menuIds.map(id => document.getElementById(id)).filter(Boolean);
           const menuIdx = menuItems.indexOf(focused);
 
           const chCards = getCards('tvChannelsRail', '.tv-channel-card');
           const spCards = getCards('tvSportsRail', '.tv-match-card');
           const mvCards = getCards('tvMoviesRail', '.tv-vod-card');
+          const svCards = getCards('tvSeriesRail', '.tv-vod-card');
 
           const chIdx = chCards.indexOf(focused);
           const spIdx = spCards.indexOf(focused);
           const mvIdx = mvCards.indexOf(focused);
+          const svIdx = svCards.indexOf(focused);
 
           const scrollCentralToTop = () => {
             if (!tvCentral) return;
@@ -10362,56 +11023,48 @@
             return;
           }
 
-          // 2. Zona Menu Grid (5 cards: Linha 1 = TV, JOGOS, FILMES | Linha 2 = SÉRIES, GUIA)
+          // 2. Zona Menu Grid (4 cards 2x2, mesma disposição da Central do APK)
           if (menuIdx !== -1) {
             if (key === 'ArrowRight') {
               e.preventDefault();
               if (menuIdx === 0 && menuItems[1]) menuItems[1].focus();
-              else if (menuIdx === 1 && menuItems[2]) menuItems[2].focus();
-              else if (menuIdx === 3 && menuItems[4]) menuItems[4].focus();
+              else if (menuIdx === 2 && menuItems[3]) menuItems[3].focus();
               scrollCentralToTop();
               return;
             }
             if (key === 'ArrowLeft') {
               e.preventDefault();
-              if (menuIdx === 2 && menuItems[1]) menuItems[1].focus();
-              else if (menuIdx === 1 && menuItems[0]) menuItems[0].focus();
-              else if (menuIdx === 4 && menuItems[3]) menuItems[3].focus();
-              else if ((menuIdx === 0 || menuIdx === 3) && pip) pip.focus();
+              if (menuIdx === 1 && menuItems[0]) menuItems[0].focus();
+              else if (menuIdx === 3 && menuItems[2]) menuItems[2].focus();
+              else if ((menuIdx === 0 || menuIdx === 2) && pip) pip.focus();
               scrollCentralToTop();
               return;
             }
             if (key === 'ArrowDown') {
               e.preventDefault();
-              if (menuIdx === 0 && menuItems[3]) {
-                menuItems[3].focus();
+              if (menuIdx === 0 && menuItems[2]) {
+                menuItems[2].focus();
                 scrollCentralToTop();
               } else if (menuIdx === 1 && menuItems[3]) {
                 menuItems[3].focus();
                 scrollCentralToTop();
-              } else if (menuIdx === 2 && menuItems[4]) {
-                menuItems[4].focus();
-                scrollCentralToTop();
-              } else {
-                // Sai do menu e desce para o trilho de canais
-                if (chCards.length) {
-                  const targetCh = (menuIdx === 4) ? Math.min(2, chCards.length - 1) : 0;
-                  chCards[targetCh].focus();
-                  scrollCardIntoView(chCards[targetCh], 'center', 'nearest');
-                } else if (spCards.length) {
-                  spCards[0].focus();
-                  scrollCardIntoView(spCards[0], 'center', 'nearest');
-                }
+              } else if (chCards.length) {
+                const targetCh = Math.min(menuIdx, chCards.length - 1);
+                chCards[targetCh].focus();
+                scrollCardIntoView(chCards[targetCh], 'center', 'nearest');
+              } else if (spCards.length) {
+                spCards[0].focus();
+                scrollCardIntoView(spCards[0], 'center', 'nearest');
               }
               return;
             }
             if (key === 'ArrowUp') {
               e.preventDefault();
-              if (menuIdx === 3 && menuItems[0]) {
+              if (menuIdx === 2 && menuItems[0]) {
                 menuItems[0].focus();
                 scrollCentralToTop();
-              } else if (menuIdx === 4 && menuItems[2]) {
-                menuItems[2].focus();
+              } else if (menuIdx === 3 && menuItems[1]) {
+                menuItems[1].focus();
                 scrollCentralToTop();
               } else if (pip) {
                 pip.focus();
@@ -10449,8 +11102,8 @@
             }
             if (key === 'ArrowUp') {
               e.preventDefault();
-              // Sobe para os blocos superiores (PiP ou Menu) e puxa o scroll todo para cima
-              const targetMenu = menuItems[Math.min(chIdx, 2) + 3] || menuItems[0] || pip;
+              // Sobe para o mesmo slot da grade superior (Filmes, Séries, Jogos, Guia).
+              const targetMenu = menuItems[Math.min(chIdx, menuItems.length - 1)] || menuItems[0] || pip;
               if (targetMenu) {
                 targetMenu.focus();
                 scrollCentralToTop();
@@ -10511,7 +11164,7 @@
             }
             if (key === 'ArrowDown') {
               e.preventDefault();
-              // Desce para o trilho de filmes
+              // Desce para o trilho de filmes.
               if (mvCards.length) {
                 const targetMv = Math.min(spIdx, mvCards.length - 1);
                 mvCards[targetMv].focus();
@@ -10558,6 +11211,51 @@
                 scrollCardIntoView(chCards[targetCh], 'center', 'nearest');
               } else {
                 scrollCentralToTop();
+              }
+              return;
+            }
+            if (key === 'ArrowDown') {
+              e.preventDefault();
+              // Desce dos filmes para o trilho de séries, replicando a sequência vertical da Central do APK.
+              if (svCards.length) {
+                const targetSv = Math.min(mvIdx, svCards.length - 1);
+                svCards[targetSv].focus();
+                scrollCardIntoView(svCards[targetSv], 'center', 'nearest');
+              }
+              return;
+            }
+            if (key === 'Enter') {
+              e.preventDefault();
+              focused.click();
+              return;
+            }
+            return;
+          }
+
+          // 6. Zona Trilho de Séries
+          if (svIdx !== -1) {
+            if (key === 'ArrowRight') {
+              e.preventDefault();
+              if (svIdx + 1 < svCards.length) {
+                svCards[svIdx + 1].focus();
+                scrollCardIntoView(svCards[svIdx + 1], 'nearest', 'center');
+              }
+              return;
+            }
+            if (key === 'ArrowLeft') {
+              e.preventDefault();
+              if (svIdx > 0) {
+                svCards[svIdx - 1].focus();
+                scrollCardIntoView(svCards[svIdx - 1], 'nearest', 'center');
+              }
+              return;
+            }
+            if (key === 'ArrowUp') {
+              e.preventDefault();
+              if (mvCards.length) {
+                const targetMv = Math.min(svIdx, mvCards.length - 1);
+                mvCards[targetMv].focus();
+                scrollCardIntoView(mvCards[targetMv], 'center', 'nearest');
               }
               return;
             }
@@ -10962,10 +11660,7 @@
         document.body.classList.remove('tv-mode');
         const tvApp = document.getElementById('tvCableApp');
         if (tvApp) tvApp.style.display = 'none';
-        const tvEmbed = document.getElementById('tvEmbedPlayer');
-        if (tvEmbed) tvEmbed.src = 'about:blank';
-        const tvVideo = document.getElementById('tvVideoPlayer');
-        if (tvVideo) { try { tvVideo.pause(); } catch (e) { } tvVideo.src = ''; }
+        tvDestroyCurrentStream();
       };
 
     })();
