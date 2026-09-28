@@ -97,6 +97,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     // Home: novidades e histórico mistos.
     let homeCatalogPromise = null;
+    let homeCatalogRenderTimer = null;
     let homeFeaturedItems = [];
     let homeFeaturedIndex = 0;
     let homeFeaturedTimer = null;
@@ -2820,8 +2821,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function renderHomeCatalogSections() {
       renderHomeRecommendations();
-      renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection);
-      renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection);
+      requestAnimationFrame(() => {
+        if (currentMode !== 'home') return;
+        renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection);
+        requestAnimationFrame(() => {
+          if (currentMode === 'home') renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection);
+        });
+      });
     }
 
     function renderHomeFeatured() {
@@ -2965,7 +2971,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     async function loadHomeDashboardData() {
       if (homeCatalogPromise) return homeCatalogPromise;
       homeCatalogPromise = (async () => {
-        renderHomeDashboard();
         try {
           await Promise.all([
             loadMovieCategories().catch(() => []),
@@ -2979,12 +2984,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           // O catálogo aparece primeiro com sua nota original; em paralelo, enriquecemos
           // somente uma seleção limitada com a avaliação IMDb via Cinemeta.
           enrichHomeRatings()
-            .then(() => {
-              if (currentMode === 'home') renderHomeDashboard();
-            })
+            .then(() => scheduleHomeCatalogRender())
             .catch(() => {});
         } finally {
-          if (currentMode === 'home') renderHomeDashboard();
+          scheduleHomeCatalogRender();
         }
       })().finally(() => {
         homeCatalogPromise = null;
@@ -2996,6 +2999,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       renderHomeFeatured();
       renderHomeWatched();
       renderHomeCatalogSections();
+    }
+
+    function scheduleHomeCatalogRender() {
+      if (homeCatalogRenderTimer !== null) return;
+      homeCatalogRenderTimer = window.setTimeout(() => {
+        homeCatalogRenderTimer = null;
+        if (currentMode === 'home') renderHomeCatalogSections();
+      }, 0);
     }
 
     async function resumeHomeProgress(item) {
@@ -3054,7 +3065,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       document.querySelector('.status-bar')?.style.setProperty('display', 'none');
       document.querySelector('main')?.style.setProperty('display', 'none');
       if (elements.categorySelect) elements.categorySelect.disabled = true;
-      renderHomeDashboard();
+      renderHomeFeatured();
+      renderHomeWatched();
+      scheduleHomeCatalogRender();
       startHomeFeaturedTimer();
       loadHomeDashboardData().catch(error => console.warn('[EPlay Home] Catálogo:', error));
     }
