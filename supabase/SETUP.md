@@ -23,11 +23,20 @@ Nenhuma delas armazena vídeos ou o catálogo Xtream.
 No painel Supabase, abra Authentication.
 Mantenha o provedor Email habilitado.
 
-Para confirmação por email, configure a URL pública do AndPlay
+Para confirmação por email, configure a URL pública do EPlay
 como URL do site publicado no GitHub Pages.
 
-Exemplo, para este repositório:
+No Authentication → URL Configuration, mantenha como Site URL e Redirect URL permitida:
 `https://andsouzam.github.io/AndPlay/`
+
+Essa mesma URL é usada pelo fluxo de recuperação de senha.
+O usuário escolhe “Esqueci minha senha”, recebe um email e volta para a Home,
+onde o EPlay abre a etapa para definir a nova senha.
+
+O envio de email precisa estar habilitado no provedor Email do Supabase.
+O serviço padrão de email é adequado para testes, mas possui limite de envio;
+para uso público maior, configure SMTP próprio no Supabase.
+
 ## 3. Copiar os dados públicos da API
 
 Em Project Settings → API, copie:

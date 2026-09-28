@@ -318,18 +318,52 @@
     }
   }
 
-  async function signInWithProvider(provider) {
+  function getAuthRedirectUrl() {
+    return window.location.origin + window.location.pathname;
+  }
+
+  async function requestPasswordReset() {
     try {
-      setStatus('Abrindo login...');
+      const email = document.getElementById('accountResetEmail')?.value.trim() ||
+        document.getElementById('accountEmail')?.value.trim() || '';
+      if (!email) throw new Error('Informe seu email para receber o link de redefinição.');
+
+      setStatus('Enviando instruções...');
       const client = await getClient();
-      const redirectTo = window.location.origin + window.location.pathname;
-      const { error } = await client.auth.signInWithOAuth({
-        provider,
-        options: { redirectTo }
+      const { error } = await client.auth.resetPasswordForEmail(email, {
+        redirectTo: getAuthRedirectUrl()
       });
       if (error) throw error;
+
+      setStatus('Se este email estiver cadastrado, você receberá as instruções para redefinir a senha.', true);
     } catch (error) {
-      setStatus(error.message || 'Não foi possível iniciar o login.');
+      setStatus(error.message || 'Não foi possível solicitar a redefinição.');
+    }
+  }
+
+  async function updatePassword() {
+    try {
+      const password = document.getElementById('accountNewPassword')?.value || '';
+      const confirmation = document.getElementById('accountNewPasswordConfirm')?.value || '';
+
+      if (password.length < 6) {
+        throw new Error('Use uma senha de pelo menos 6 caracteres.');
+      }
+      if (password !== confirmation) {
+        throw new Error('As senhas não coincidem.');
+      }
+
+      setStatus('Atualizando senha...');
+      const client = await getClient();
+      const { error } = await client.auth.updateUser({ password });
+      if (error) throw error;
+
+      document.getElementById('accountNewPassword').value = '';
+      document.getElementById('accountNewPasswordConfirm').value = '';
+      setAuthView('account');
+      setStatus('Senha atualizada com sucesso.', true);
+    } catch (error) {
+      setStatus(error.message || 'Não foi possível atualizar a senha.');
     }
   }
 
@@ -402,11 +436,26 @@
           <label>Email<input id="accountEmail" type="email" autocomplete="email" placeholder="seu@email.com"></label>
           <label>Senha<input id="accountPassword" type="password" autocomplete="current-password" placeholder="••••••••"></label>
           <button class="andplay-account-primary" type="button" id="accountLoginBtn">Entrar</button>
+          <button class="andplay-account-forgot" type="button" id="accountForgotBtn">Esqueci minha senha</button>
           <div class="andplay-account-or"><span>ou continue com</span></div>
           <button class="andplay-account-google" type="button" id="accountGoogleBtn">
             <span class="andplay-account-google-icon">G</span>
             Continuar com Google
           </button>
+        </div>
+
+        <div data-account-view="recovery" style="display:none">
+          <label>Email<input id="accountResetEmail" type="email" autocomplete="email" placeholder="seu@email.com"></label>
+          <button class="andplay-account-primary" type="button" id="accountResetBtn">Enviar link de redefinição</button>
+          <button class="andplay-account-secondary" type="button" id="accountRecoveryBackBtn">Voltar para entrar</button>
+          <p class="andplay-account-help">Por segurança, a mensagem é a mesma mesmo quando o email não está cadastrado.</p>
+        </div>
+
+        <div data-account-view="update-password" style="display:none">
+          <div class="andplay-account-recovery-badge">LINK DE RECUPERAÇÃO</div>
+          <label>Nova senha<input id="accountNewPassword" type="password" autocomplete="new-password" placeholder="mínimo 6 caracteres"></label>
+          <label>Confirme a nova senha<input id="accountNewPasswordConfirm" type="password" autocomplete="new-password" placeholder="repita a senha"></label>
+          <button class="andplay-account-primary" type="button" id="accountUpdatePasswordBtn">Atualizar senha</button>
         </div>
 
         <div data-account-view="signup" style="display:none">
@@ -475,6 +524,22 @@
 
     document.getElementById('accountGoogleBtn')?.addEventListener('click', () => signInWithProvider('google'));
 
+    document.getElementById('accountForgotBtn')?.addEventListener('click', () => {
+      const sourceEmail = document.getElementById('accountEmail')?.value.trim() || '';
+      const resetEmail = document.getElementById('accountResetEmail');
+      if (resetEmail && sourceEmail) resetEmail.value = sourceEmail;
+      setAuthView('recovery');
+      setStatus('');
+      resetEmail?.focus();
+    });
+
+    document.getElementById('accountResetBtn')?.addEventListener('click', requestPasswordReset);
+    document.getElementById('accountRecoveryBackBtn')?.addEventListener('click', () => {
+      setAuthView('login');
+      setStatus('');
+    });
+    document.getElementById('accountUpdatePasswordBtn')?.addEventListener('click', updatePassword);
+
     document.getElementById('accountSyncBtn')?.addEventListener('click', syncNow);
     document.getElementById('accountLogoutBtn')?.addEventListener('click', signOut);
 
@@ -507,10 +572,21 @@
       renderUser();
       updateAccountUi();
 
-      client.auth.onAuthStateChange((_event, session) => {
+      client.auth.onAuthStateChange((event, session) => {
         currentSession = session || null;
         renderUser();
         updateAccountUi();
+
+        if (event === 'PASSWORD_RECOVERY') {
+          setTimeout(() => {
+            openModal();
+            setAuthView('update-password');
+            setStatus('Digite sua nova senha abaixo.', true);
+            document.getElementById('accountNewPassword')?.focus();
+          }, 0);
+          return;
+        }
+
         setTimeout(() => {
           if (currentSession) syncNow();
         }, 0);
