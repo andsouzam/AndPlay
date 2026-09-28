@@ -4137,7 +4137,7 @@ header {
 
 .home-featured {
   position: relative;
-  height: clamp(390px, 47vw, 610px);
+  height: clamp(320px, 38vw, 520px);
   overflow: hidden;
   border: 1px solid var(--andplay-border);
   border-radius: 22px;
@@ -4473,7 +4473,7 @@ header {
   }
 
   .home-featured {
-    height: 480px;
+    height: 410px;
     border-radius: 18px;
   }
 
@@ -4498,7 +4498,7 @@ header {
 
 @media (max-width: 620px) {
   .home-featured {
-    height: 430px;
+    height: 360px;
   }
 
   .home-featured-poster-wrap {
