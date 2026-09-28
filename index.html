@@ -3276,12 +3276,15 @@
     }
 
     #tvCableApp .tv-match-teams {
-      display: flex;
+      display: grid;
+      grid-template-columns: 38px minmax(42px, 1fr) 38px;
       align-items: center;
-      justify-content: center;
+      justify-items: center;
       gap: 8px;
       min-height: 48px;
       margin: 2px 0 3px;
+      width: 100%;
+      overflow: hidden;
     }
 
     #tvCableApp .tv-match-team {
@@ -3290,13 +3293,19 @@
       display: flex;
       align-items: center;
       justify-content: center;
+      overflow: hidden;
+      position: relative;
       flex: 0 0 38px;
     }
 
     #tvCableApp .tv-match-team img {
       width: 38px;
       height: 38px;
+      max-width: 38px;
+      max-height: 38px;
+      display: block;
       object-fit: contain;
+      object-position: center;
     }
 
     #tvCableApp .tv-match-logo-fallback {
@@ -3445,7 +3454,7 @@
   <div id="tvCableApp" class="tv-cable-app" style="display: none;">
     <!-- Reprodutor de Vídeo Unificado para TV (Muda entre PiP e Tela Cheia sem reiniciar o vídeo) -->
     <div id="tvPlayerBox" class="tv-player-box pip">
-      <video id="tvVideoPlayer" playsinline preload="auto" autoplay></video>
+      <video id="tvVideoPlayer" playsinline preload="auto" autoplay muted></video>
       <div id="tvIframeShield" style="position:absolute;top:0;left:0;right:0;bottom:0;z-index:90;background:transparent;cursor:default;">
       </div>
       <iframe id="tvEmbedPlayer" allowfullscreen="true"
@@ -4141,6 +4150,80 @@
       seriesVersionSwitcher: document.getElementById('seriesVersionSwitcher'),
       episodesList: document.getElementById('episodesList')
     };
+
+    // Download real dos vídeos: o atributo HTML "download" é ignorado por muitos
+    // navegadores quando o arquivo está em outro domínio. Fazemos a requisição,
+    // criamos um Blob local e só então acionamos o download no navegador.
+    async function downloadMediaFile(url, filename, triggerEl = null) {
+      const mediaUrl = String(url || '').trim();
+      if (!mediaUrl || mediaUrl === '#') return;
+
+      const originalText = triggerEl ? triggerEl.innerHTML : '';
+      if (triggerEl) {
+        triggerEl.setAttribute('aria-busy', 'true');
+        triggerEl.style.pointerEvents = 'none';
+        triggerEl.innerHTML = '⏳ Preparando download...';
+      }
+
+      try {
+        const response = await fetch(mediaUrl, { method: 'GET', mode: 'cors', credentials: 'omit' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const blob = await response.blob();
+        if (!blob || blob.size === 0) throw new Error('Arquivo vazio');
+
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = String(filename || 'AndPlay-video.mp4').replace(/[\\\\/:*?"<>|]+/g, '_').trim() || 'AndPlay-video.mp4';
+        link.rel = 'noopener';
+        link.setAttribute('data-adshield-allow', '');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      } catch (err) {
+        console.error('[AndPlay] Falha no download:', err);
+        if (triggerEl) {
+          triggerEl.innerHTML = '⚠ Download bloqueado pelo servidor';
+          setTimeout(() => {
+            triggerEl.innerHTML = originalText || '📥 Baixar';
+          }, 3500);
+        }
+        return;
+      } finally {
+        if (triggerEl) {
+          triggerEl.removeAttribute('aria-busy');
+          triggerEl.style.pointerEvents = '';
+          if (triggerEl.innerHTML === '⏳ Preparando download...') {
+            triggerEl.innerHTML = originalText;
+          }
+        }
+      }
+    }
+
+    // Links de download dinâmicos (episódios) usam o mesmo fluxo do botão do player.
+    document.addEventListener('click', function (e) {
+      const link = e.target && e.target.closest ? e.target.closest('[data-media-download]') : null;
+      if (!link) return;
+      const url = link.getAttribute('data-media-url') || link.href;
+      if (!url || url === '#') return;
+      e.preventDefault();
+      e.stopPropagation();
+      const filename = link.getAttribute('data-media-filename') || 'AndPlay-video.mp4';
+      downloadMediaFile(url, filename, link);
+    });
+
+    // Botão de download dentro do player principal.
+    if (elements.downloadBtn) {
+      elements.downloadBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const url = this.getAttribute('data-media-url') || this.href;
+        if (!url || url === '#' || this.style.display === 'none') return;
+        const filename = this.getAttribute('data-media-filename') || 'AndPlay-video.mp4';
+        downloadMediaFile(url, filename, this);
+      });
+    }
 
     // ==========================================
     // FUNÇÕES DE TRATAMENTO DE TÍTULO E IMAGEM (4K)
@@ -6833,6 +6916,10 @@
       activeVideoUrl = newUrl;
       elements.modalTitle.textContent = newTitle;
       elements.downloadBtn.href = newUrl;
+      elements.downloadBtn.setAttribute('data-media-url', newUrl);
+      const newDownloadExt = (String(newUrl).split('?')[0].split('.').pop() || 'mp4').toLowerCase();
+      const newDownloadName = String(newTitle || 'AndPlay-video').replace(/[\\\\/:*?"<>|]+/g, '_').trim() || 'AndPlay-video';
+      elements.downloadBtn.setAttribute('data-media-filename', newDownloadName + '.' + newDownloadExt);
       elements.videoPlayer.src = newUrl;
 
       if (currentSubContext && currentSubContext.mediaMeta) {
@@ -6864,6 +6951,13 @@
       }
 
       elements.videoPlayer.addEventListener('loadedmetadata', onLoaded);
+      // Algumas origens não iniciam sozinhas no primeiro carregamento; tenta novamente
+      // assim que houver dados prontos, sem criar múltiplos listeners permanentes.
+      const retryTvLikeAutoplay = () => {
+        elements.videoPlayer.play().catch(() => { });
+        elements.videoPlayer.removeEventListener('canplay', retryTvLikeAutoplay);
+      };
+      elements.videoPlayer.addEventListener('canplay', retryTvLikeAutoplay, { once: true });
       if (!isLeg) {
         elements.modalFormat.textContent = `Versão alterada para ${targetVersion.versionInfo.label}`;
       }
@@ -7133,6 +7227,10 @@
       elements.modalTitle.textContent = title;
       elements.videoPlayer.src = url;
       elements.downloadBtn.href = url;
+      elements.downloadBtn.setAttribute('data-media-url', url);
+      const downloadExt = (String(url).split('?')[0].split('.').pop() || 'mp4').toLowerCase();
+      const downloadBase = String(title || 'AndPlay-video').replace(/[\\\\/:*?"<>|]+/g, '_').trim() || 'AndPlay-video';
+      elements.downloadBtn.setAttribute('data-media-filename', downloadBase + '.' + downloadExt);
       elements.videoModal.style.display = 'flex';
       elements.modalFormat.textContent = 'Carregando vídeo...';
 
@@ -8633,6 +8731,8 @@
 
         const ext = ep.container_extension || 'mp4';
         const epUrl = `${CONFIG.server}/series/${CONFIG.user}/${CONFIG.pass}/${ep.id}.${ext}`;
+        const safeEpFile = (ep.title || `Episódio ${ep.episode_num}`).replace(/[\\\\/:*?"<>|]+/g, '_').trim() || ('episodio-' + ep.episode_num);
+        const epFilename = safeEpFile + '.' + ext;
         const epTitle = ep.title || `Episódio ${ep.episode_num}`;
         const thumb = (ep.info && ep.info.movie_image) ? ep.info.movie_image : '';
         const duration = (ep.info && ep.info.duration) ? ep.info.duration : '';
@@ -8659,7 +8759,7 @@
           </div>
           <div class="episode-actions">
             <button class="${watchBtnClass}" style="padding: 7px 18px; font-size: 12px; font-weight: 700;">${watchBtnText}</button>
-            <a class="btn btn-secondary" style="padding: 7px 16px; font-size: 12px;" href="${epUrl}" target="_blank" download>📥 Baixar</a>
+            <a class="btn btn-secondary" style="padding: 7px 16px; font-size: 12px;" href="${epUrl}" data-media-download data-media-url="${escapeHtml(epUrl)}" data-media-filename="${escapeHtml(epFilename)}" data-adshield-allow>📥 Baixar</a>
           </div>
         `;
 
@@ -8724,6 +8824,60 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    // Alguns logos antigos apontam para reidosembeds.online, que pode ficar
+    // indisponível por DNS/ISP. Para os canais mais comuns usamos uma origem pública
+    // estável; os demais passam pelo cache/proxy e, por fim, recebem fallback visual.
+    const TV_LOGO_FALLBACKS = {
+      globo: 'https://i.imgur.com/O02TF2r.png',
+      sbt: 'https://i.imgur.com/tc1ALuu.png',
+      record: 'https://i.imgur.com/sz9gTTr.png',
+      band: 'https://i.imgur.com/1r5T6Pw.png',
+      sportv: 'https://i.postimg.cc/gr9x3z71/Spor-TV-2021.png',
+      sportv2: 'https://i.postimg.cc/gr9x3z71/Spor-TV-2021.png',
+      sportv3: 'https://i.postimg.cc/gr9x3z71/Spor-TV-2021.png',
+      premiere: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/20/Premiere_(2017)_logo.png/960px-Premiere_(2017)_logo.png',
+      espn: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/ESPN_wordmark.svg/960px-ESPN_wordmark.svg.png',
+      hbo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/HBO_logo.svg/960px-HBO_logo.svg.png',
+      hbo2: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/HBO2_logo.svg/960px-HBO2_logo.svg.png',
+      warner: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Warner_Channel_2026.svg/960px-Warner_Channel_2026.svg.png',
+      tntsports: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/TNT_Sports_2021_logo.svg/960px-TNT_Sports_2021_logo.svg.png',
+      tvbrasil: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/TvBrasil2023.png/960px-TvBrasil2023.png'
+    };
+
+    function getTvLogoFallbackByKey(rawUrl) {
+      try {
+        const parsed = new URL(String(rawUrl || ''), window.location.href);
+        const fileKey = (parsed.pathname.split('/').pop() || '').replace(/\.[^.]+$/, '').toLowerCase();
+        if (TV_LOGO_FALLBACKS[fileKey]) return TV_LOGO_FALLBACKS[fileKey];
+        const matched = Object.keys(TV_LOGO_FALLBACKS).find(k => fileKey.startsWith(k));
+        return matched ? TV_LOGO_FALLBACKS[matched] : '';
+      } catch (e) { return ''; }
+    }
+
+    // Logos de TV vindos do domínio antigo podem falhar no navegador/ISP.
+    // Usa wsrv.nl como cache/proxy somente quando não temos uma origem pública direta.
+    function getTvLogoUrl(rawUrl, width = 160, height = 100) {
+      const url = String(rawUrl || '').trim();
+      if (!url || /^data:/i.test(url)) return url;
+      const knownFallback = getTvLogoFallbackByKey(url);
+      if (knownFallback) return knownFallback;
+      try {
+        const parsed = new URL(url, window.location.href);
+        if (parsed.hostname.toLowerCase() === 'reidosembeds.online') {
+          return 'https://wsrv.nl/?url=' + encodeURIComponent(parsed.href) + '&w=' + width + '&h=' + height;
+        }
+      } catch (e) { }
+      return url;
+    }
+
+    function getTvLogoFallback(name) {
+      const clean = String(name || 'TV').replace(/[^A-Za-zÀ-ÿ0-9 ]/g, ' ').trim();
+      const parts = clean.split(/\\s+/).filter(Boolean);
+      const initials = (parts.length >= 2 ? parts[0][0] + parts[1][0] : clean.slice(0, 3)).toUpperCase() || 'TV';
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><rect width="160" height="90" rx="12" fill="#1A2035"/><text x="80" y="55" text-anchor="middle" font-family="Arial,sans-serif" font-size="34" font-weight="800" fill="#FFC107">' + initials + '</text></svg>';
+      return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
     }
 
 
@@ -8906,6 +9060,7 @@
         if (!window._tvOsdActivityWired) {
           window._tvOsdActivityWired = true;
           const onUserActivity = () => {
+            releaseTvAutoplayMute();
             if (tvCurrentMode === 'fullscreen') {
               triggerTvOsd(5000);
               // Também reinicia a contagem de inatividade da gaveta EPG, se estiver aberta
@@ -8916,7 +9071,9 @@
           };
           window.addEventListener('mousemove', onUserActivity, { passive: true });
           window.addEventListener('click', onUserActivity, { passive: true });
+          window.addEventListener('pointerdown', onUserActivity, { passive: true });
           window.addEventListener('touchstart', onUserActivity, { passive: true });
+          window.addEventListener('keydown', onUserActivity, { passive: true });
         }
       };
 
@@ -8927,6 +9084,7 @@
       // ============================================================
       let tvZapDebounceTimer = null;
       let tvPendingIdx = 0;
+      let tvAutoplayMuted = false;
       let tvPlayingType = 'channel'; // 'channel' | 'event' | 'vod'
       let tvPreviousMode = 'central'; // 'central' | 'vod'
       let tvCurrentSeriesItem = null;
@@ -8941,6 +9099,30 @@
         const s = Math.floor(sec % 60);
         if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      }
+
+      // Tenta iniciar a tag <video>. Se o navegador bloquear autoplay com áudio,
+      // inicia sem som e devolve o áudio ao primeiro gesto do usuário.
+      function tryTvVideoAutoplay() {
+        if (!tvVideo) return;
+        const playPromise = tvVideo.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            tvVideo.muted = true;
+            tvAutoplayMuted = true;
+            const mutedPromise = tvVideo.play();
+            if (mutedPromise !== undefined) mutedPromise.catch(() => { });
+          });
+        }
+      }
+
+      // Libera o áudio após uma interação real do usuário, quando o navegador
+      // exigiu autoplay silencioso para iniciar a transmissão.
+      function releaseTvAutoplayMute() {
+        if (!tvVideo || !tvAutoplayMuted) return;
+        tvVideo.muted = false;
+        tvAutoplayMuted = false;
+        tryTvVideoAutoplay();
       }
 
       // Carrega efetivamente a transmissão no reprodutor unificado (iframe embed ou tag de vídeo)
@@ -8974,7 +9156,7 @@
           tvVideo.onerror = null;
           tvEmbed.style.display = 'block';
           const baseUrl = fallback.url;
-          const embedUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'autoplay=1';
+          const embedUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'autoplay=1&playsinline=1&muted=1';
           tvEmbed.src = 'about:blank';
           tvEmbed.onerror = function () {
             console.warn(`[AndPlay TV] Servidor ${fallbackIdx + 1} inacessível, alternando automaticamente...`);
@@ -8997,7 +9179,7 @@
             window._tvActiveHls.loadSource(fallback.url);
             window._tvActiveHls.attachMedia(tvVideo);
             window._tvActiveHls.on(Hls.Events.MANIFEST_PARSED, () => {
-              tvVideo.play().catch(() => { });
+              tryTvVideoAutoplay();
             });
             window._tvActiveHls.on(Hls.Events.ERROR, (event, data) => {
               if (data.fatal) {
@@ -9015,6 +9197,8 @@
               window._tvActiveHls = null;
             }
             tvVideo.autoplay = true;
+            tvVideo.playsInline = true;
+            tvVideo.muted = false;
             tvVideo.src = fallback.url;
             tvVideo.load();
             // Único handler (atribuição direta evita empilhar listeners a cada troca de canal)
@@ -9024,8 +9208,7 @@
             };
 
             const tryPlay = () => {
-              const p = tvVideo.play();
-              if (p !== undefined) p.catch(() => { });
+              tryTvVideoAutoplay();
             };
 
             const onReady = () => {
@@ -9551,8 +9734,13 @@
 
         if (osdNum) osdNum.textContent = (tvPlayingType === 'vod') ? '🎬' : (tvPlayingType === 'event' ? '⚽' : formattedNum);
         if (osdLogo) {
-          osdLogo.src = ch.logo || '';
-          osdLogo.style.display = ch.logo ? 'block' : 'none';
+          const logoUrl = getTvLogoUrl(ch.logo, 180, 120);
+          osdLogo.src = logoUrl || getTvLogoFallback(ch.name);
+          osdLogo.style.display = 'block';
+          osdLogo.onerror = function () {
+            this.onerror = null;
+            this.src = getTvLogoFallback(ch.name);
+          };
         }
         if (osdName) osdName.textContent = ch.name;
         if (osdCategory) osdCategory.textContent = ch.categoryLabel || (tvPlayingType === 'vod' ? 'Catálogo VOD' : 'TV Ao Vivo');
@@ -10007,11 +10195,20 @@
           card.tabIndex = 0;
           const realIdx = tvChannels.indexOf(ch);
           card.dataset.channelIndex = String(realIdx);
+          const logoUrl = getTvLogoUrl(ch.logo, 140, 90);
+          const logoFallback = getTvLogoFallback(ch.name);
           card.innerHTML = `
         <div class="num">CH ${String(realIdx + 1).padStart(3, '0')}</div>
-        <img src="${escapeHtml(ch.logo || '')}" alt="${escapeHtml(ch.name)}" onerror="this.style.opacity='0.3'" loading="lazy">
+        <img src="${escapeHtml(logoUrl || logoFallback)}" alt="${escapeHtml(ch.name)}" loading="lazy" decoding="async">
         <div class="name">${escapeHtml(ch.name)}</div>
       `;
+          const channelLogo = card.querySelector('img');
+          if (channelLogo) {
+            channelLogo.onerror = function () {
+              this.onerror = null;
+              this.src = logoFallback;
+            };
+          }
           card.addEventListener('click', () => {
             tvTuneChannel(realIdx, true);
             setTvViewMode('fullscreen');
@@ -10090,20 +10287,31 @@
           card.className = 'tv-match-card tv-focusable';
           card.tabIndex = 0;
           const isNow = ev.isLiveNow;
-          const homeLogo = ev.homeLogo || '';
-          const awayLogo = ev.awayLogo || '';
+          const homeLogo = getTvLogoUrl(ev.homeLogo, 90, 90);
+          const awayLogo = getTvLogoUrl(ev.awayLogo, 90, 90);
+          const homeName = ev.homeTeam || 'Time 1';
+          const awayName = ev.awayTeam || 'Time 2';
+          const homeFallback = escapeHtml(homeName.slice(0, 3).toUpperCase());
+          const awayFallback = escapeHtml(awayName.slice(0, 3).toUpperCase());
           const centerText = ev.score || (isNow && String(ev.matchTime || '').toUpperCase() === 'AO VIVO' ? 'VS' : (ev.matchTime || 'VS'));
-          const homeFallback = escapeHtml((ev.homeTeam || 'T1').slice(0, 3).toUpperCase());
-          const awayFallback = escapeHtml((ev.awayTeam || 'T2').slice(0, 3).toUpperCase());
           const badgeText = isNow ? '🔴 AO VIVO' : ('⏰ ' + (ev.matchTime || 'HOJE'));
-          card.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">'
+          const homeCell = '<div class="tv-match-team"><img src="' + escapeHtml(homeLogo || getTvLogoFallback(homeName)) + '" alt="' + escapeHtml(homeName) + '" loading="lazy" decoding="async"><span class="tv-match-logo-fallback" style="display:none;">' + homeFallback + '</span></div>';
+          const awayCell = '<div class="tv-match-team"><img src="' + escapeHtml(awayLogo || getTvLogoFallback(awayName)) + '" alt="' + escapeHtml(awayName) + '" loading="lazy" decoding="async"><span class="tv-match-logo-fallback" style="display:none;">' + awayFallback + '</span></div>';
+          card.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; min-width:0;">'
             + '<span class="tv-match-status ' + (isNow ? 'live' : '') + '">' + escapeHtml(badgeText) + '</span>'
             + '<span class="tv-match-league">' + escapeHtml(ev.league || 'Futebol') + '</span></div>'
-            + '<div class="tv-match-teams">'
-            + (homeLogo ? '<div class="tv-match-team"><img src="' + escapeHtml(homeLogo) + '" alt="' + escapeHtml(ev.homeTeam || '') + '" loading="lazy" decoding="async"></div>' : '<div class="tv-match-team"><span class="tv-match-logo-fallback">' + homeFallback + '</span></div>')
+            + '<div class="tv-match-teams">' + homeCell
             + '<span class="tv-match-score">' + escapeHtml(centerText) + '</span>'
-            + (awayLogo ? '<div class="tv-match-team"><img src="' + escapeHtml(awayLogo) + '" alt="' + escapeHtml(ev.awayTeam || '') + '" loading="lazy" decoding="async"></div>' : '<div class="tv-match-team"><span class="tv-match-logo-fallback">' + awayFallback + '</span></div>')
-            + '</div><div class="tv-match-title">' + escapeHtml(ev.name || 'Evento esportivo') + '</div>';
+            + awayCell + '</div>'
+            + '<div class="tv-match-title">' + escapeHtml(ev.name || (homeName + ' x ' + awayName)) + '</div>';
+          card.querySelectorAll('.tv-match-team img').forEach((img) => {
+            img.addEventListener('error', function () {
+              this.onerror = null;
+              const fallback = this.nextElementSibling;
+              this.style.display = 'none';
+              if (fallback) fallback.style.display = 'flex';
+            });
+          });
           card.addEventListener('click', () => {
             tvPlayLiveEvent(ev);
           });
@@ -10256,13 +10464,20 @@
           item.tabIndex = 0;
           item.innerHTML = `
         <span style="font-size:12px; font-weight:800; color:#ffc107; min-width:32px;">${String(realIdx + 1).padStart(3, '0')}</span>
-        <img src="${escapeHtml(ch.logo || '')}" alt="" style="width:36px; height:24px; object-fit:contain;" loading="lazy">
+        <img src="${escapeHtml(getTvLogoUrl(ch.logo, 100, 70) || getTvLogoFallback(ch.name))}" alt="" style="width:36px; height:24px; object-fit:contain;" loading="lazy" decoding="async">
         <div style="flex:1; overflow:hidden;">
           <div style="font-size:13px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(ch.name)}</div>
           <div style="font-size:10px; color:#ffc107; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(curTitle)}</div>
         </div>
         ${isCur ? '<span style="font-size:9px; font-weight:800; background:#00e676; color:#000; padding:2px 6px; border-radius:4px;">NO AR</span>' : ''}
       `;
+          const drawerLogo = item.querySelector('img');
+          if (drawerLogo) {
+            drawerLogo.onerror = function () {
+              this.onerror = null;
+              this.src = getTvLogoFallback(ch.name);
+            };
+          }
           item.addEventListener('click', () => {
             tvTuneChannel(realIdx, true);
             tvDrawer.classList.add('closed');
