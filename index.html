@@ -3707,6 +3707,7 @@
         <button class="nav-tab active" id="tabMoviesBtn">🎬 Filmes</button>
         <button class="nav-tab" id="tabSeriesBtn">📺 Séries</button>
         <button class="nav-tab" id="tabLiveBtn">🔴 TV & Jogos Ao Vivo</button>
+        <button class="nav-tab" id="tabWatchedBtn" title="Ver histórico de filmes e séries assistidos">👁 Assistidos</button>
       </div>
     </div>
     <div class="controls">
@@ -4051,6 +4052,11 @@
 
     // Estado da aplicação
     let currentMode = 'movies'; // 'movies', 'series' ou 'live'
+    let isWatchedView = false;
+    const WATCHED_MOVIES_STORAGE_KEY = 'andplay_web_recent_movies';
+    const WATCHED_SERIES_STORAGE_KEY = 'andplay_web_recent_series';
+    const WATCHED_LIMIT = 500;
+
     let fullMoviesCache = null;
     let fullSeriesCache = null;
     let fullLiveCache = null;
@@ -4081,6 +4087,7 @@
       tabMoviesBtn: document.getElementById('tabMoviesBtn'),
       tabSeriesBtn: document.getElementById('tabSeriesBtn'),
       tabLiveBtn: document.getElementById('tabLiveBtn'),
+      tabWatchedBtn: document.getElementById('tabWatchedBtn'),
       categorySelect: document.getElementById('categorySelect'),
       searchInput: document.getElementById('searchInput'),
       resetCategoryBtn: document.getElementById('resetCategoryBtn'),
@@ -4681,6 +4688,15 @@
       // Navegação por Abas
       elements.tabMoviesBtn.addEventListener('click', () => switchMode('movies', true));
       elements.tabSeriesBtn.addEventListener('click', () => switchMode('series', true));
+      if (elements.tabWatchedBtn) {
+        elements.tabWatchedBtn.addEventListener('click', () => {
+          if (isWatchedView) {
+            restoreCatalogView();
+          } else if (currentMode === 'movies' || currentMode === 'series') {
+            showWatchedContent(currentMode);
+          }
+        });
+      }
       if (elements.tabLiveBtn) {
         elements.tabLiveBtn.addEventListener('click', () => switchMode('live', true));
       }
@@ -5004,10 +5020,148 @@
     }
 
     // ==========================================
+    // HISTÓRICO "ASSISTIDOS" — equivalente ao APK
+    // Salva somente os IDs, em ordem do mais recente para o mais antigo.
+    // ==========================================
+    function getWatchedStorageKey(type) {
+      return type === 'series' ? WATCHED_SERIES_STORAGE_KEY : WATCHED_MOVIES_STORAGE_KEY;
+    }
+
+    function getWatchedIds(type) {
+      try {
+        const raw = localStorage.getItem(getWatchedStorageKey(type));
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(parsed)) return [];
+        return parsed.map(v => String(v)).filter(Boolean).slice(0, WATCHED_LIMIT);
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveWatchedId(type, id) {
+      if (id === null || id === undefined || String(id).trim() === '') return;
+      const normalizedId = String(id);
+      try {
+        const list = getWatchedIds(type).filter(item => item !== normalizedId);
+        list.unshift(normalizedId);
+        localStorage.setItem(getWatchedStorageKey(type), JSON.stringify(list.slice(0, WATCHED_LIMIT)));
+      } catch (e) {}
+    }
+
+    function movieGroupMatchesWatchedId(group, id) {
+      const wanted = String(id);
+      if (!group) return false;
+      if (group.stream_id != null && String(group.stream_id) === wanted) return true;
+      if (group.primaryItem?.stream_id != null && String(group.primaryItem.stream_id) === wanted) return true;
+      return Array.isArray(group.versions)
+        && group.versions.some(v => v?.streamId != null && String(v.streamId) === wanted);
+    }
+
+    function seriesGroupMatchesWatchedId(group, id) {
+      const wanted = String(id);
+      if (!group) return false;
+      if (group.series_id != null && String(group.series_id) === wanted) return true;
+      if (group.primaryItem?.series_id != null && String(group.primaryItem.series_id) === wanted) return true;
+      return Array.isArray(group.versions)
+        && group.versions.some(v => v?.seriesId != null && String(v.seriesId) === wanted);
+    }
+
+    async function showWatchedContent(type = currentMode) {
+      if (type !== 'movies' && type !== 'series') return;
+
+      isWatchedView = true;
+      elements.tabWatchedBtn?.classList.add('active');
+      elements.tabMoviesBtn.classList.remove('active');
+      elements.tabSeriesBtn.classList.remove('active');
+      elements.tabLiveBtn?.classList.remove('active');
+
+      elements.searchInput.value = '';
+      elements.resetCategoryBtn.style.display = 'none';
+      elements.categorySelect.value = 'ALL';
+      elements.categorySelect.disabled = true;
+
+      try {
+        const catalog = type === 'movies' ? await loadFullMovies() : await loadFullSeries();
+        const ids = getWatchedIds(type);
+        const ordered = [];
+
+        ids.forEach(id => {
+          const match = (catalog || []).find(item => (
+            type === 'movies'
+              ? movieGroupMatchesWatchedId(item, id)
+              : seriesGroupMatchesWatchedId(item, id)
+          ));
+          if (match && !ordered.includes(match)) ordered.push(match);
+        });
+
+        currentMediaList = ordered;
+        elements.categoryLabel.textContent = type === 'movies'
+          ? '👁 Assistidos • Filmes'
+          : '👁 Assistidos • Séries';
+        elements.searchInput.placeholder = type === 'movies'
+          ? 'Pesquisar nos filmes assistidos...'
+          : 'Pesquisar nas séries assistidas...';
+        applyFilterAndRender('');
+        if (ordered.length === 0) {
+          elements.mediaGrid.innerHTML =
+            '<div style="grid-column:1/-1;text-align:center;color:#888;padding:55px 20px;">' +
+            '<div style="font-size:42px;margin-bottom:12px;">👁</div>' +
+            '<div style="font-size:17px;color:#fff;font-weight:700;">' +
+            (type === 'movies' ? 'Nenhum filme assistido recentemente.' : 'Nenhuma série assistida recentemente.') +
+            '</div>' +
+            '<div style="font-size:12px;margin-top:8px;">Os títulos que você iniciar aparecerão aqui automaticamente.</div>' +
+            '</div>';
+          elements.mediaCount.textContent = type === 'movies' ? '0 filmes assistidos' : '0 séries assistidas';
+        }
+      } catch (err) {
+        currentMediaList = [];
+        elements.categoryLabel.textContent = type === 'movies'
+          ? '👁 Assistidos • Filmes'
+          : '👁 Assistidos • Séries';
+        elements.mediaGrid.innerHTML =
+          '<div style="grid-column:1/-1;text-align:center;color:#888;padding:50px 20px;">' +
+          '<div style="font-size:42px;margin-bottom:12px;">👁</div>' +
+          '<div style="font-size:16px;color:#fff;font-weight:700;">Não foi possível carregar os assistidos.</div>' +
+          '<div style="font-size:12px;margin-top:8px;">' + escapeHtml(err.message) + '</div>' +
+          '</div>';
+        elements.mediaCount.textContent = 'Histórico indisponível';
+        elements.loadMoreContainer.style.display = 'none';
+      }
+    }
+
+    function restoreCatalogView() {
+      if (!isWatchedView) return;
+      isWatchedView = false;
+      elements.tabWatchedBtn?.classList.remove('active');
+      elements.searchInput.value = '';
+      elements.resetCategoryBtn.style.display = 'none';
+      elements.categorySelect.value = 'ALL';
+      elements.categorySelect.disabled = false;
+
+      if (currentMode === 'movies') {
+        elements.tabMoviesBtn.classList.add('active');
+        elements.tabSeriesBtn.classList.remove('active');
+        elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
+        elements.searchInput.placeholder = 'Pesquisar filme (ex: Harry Potter, Carros)...';
+        currentMediaList = fullMoviesCache || [];
+      } else if (currentMode === 'series') {
+        elements.tabMoviesBtn.classList.remove('active');
+        elements.tabSeriesBtn.classList.add('active');
+        elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
+        elements.searchInput.placeholder = 'Pesquisar série (ex: Breaking Bad, Stranger Things)...';
+        currentMediaList = fullSeriesCache || [];
+      }
+      applyFilterAndRender('');
+    }
+
+    // ==========================================
     // CONTROLE DE ABAS (FILMES / SÉRIES / AO VIVO)
     // ==========================================
     async function switchMode(mode, forceReload = false) {
-      if (currentMode === mode && !forceReload) return;
+      if (currentMode === mode && !forceReload && !isWatchedView) return;
+      isWatchedView = false;
+      elements.tabWatchedBtn?.classList.remove('active');
+      elements.categorySelect.disabled = false;
       currentMode = mode;
 
       elements.tabMoviesBtn.classList.toggle('active', mode === 'movies');
@@ -6086,6 +6240,10 @@
     }
 
     function selectAllMedia() {
+      if (isWatchedView) {
+        restoreCatalogView();
+        return;
+      }
       elements.categorySelect.value = 'ALL';
       elements.resetCategoryBtn.style.display = 'none';
       elements.searchInput.value = '';
@@ -6773,6 +6931,9 @@
     }
 
     function playMovieVersion(groupOrMovie, selectedVersion, allVersions) {
+      const watchedId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || selectedVersion?.streamId;
+      if (watchedId != null) saveWatchedId('movies', watchedId);
+
       const ext = selectedVersion.ext || 'mp4';
       const videoUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${selectedVersion.streamId}.${ext}`;
       const baseTitle = groupOrMovie.name || groupOrMovie.title || 'Filme';
@@ -8712,6 +8873,9 @@
     }
 
     function playSeriesEpisode(ep, seasonNum) {
+      const watchedId = currentSeriesGroup?.series_id || currentSeriesGroup?.primaryItem?.series_id;
+      if (watchedId != null) saveWatchedId('series', watchedId);
+
       const ext = ep.container_extension || 'mp4';
       const epUrl = `${CONFIG.server}/series/${CONFIG.user}/${CONFIG.pass}/${ep.id}.${ext}`;
       const epTitle = ep.title || `Episódio ${ep.episode_num}`;
@@ -9316,6 +9480,8 @@
       // Reproduzir Filme VOD no Player de TV
       function tvPlayMovie(movie) {
         if (!movie) return;
+        const watchedId = movie.stream_id || movie.primaryItem?.stream_id || movie.versions?.[0]?.streamId;
+        if (watchedId != null && typeof saveWatchedId === 'function') saveWatchedId('movies', watchedId);
         const versions = movie.versions || [{
           item: movie,
           versionInfo: (typeof detectMovieVersion === 'function') ? detectMovieVersion(movie) : { label: 'Principal' },
@@ -9350,6 +9516,8 @@
       // Reproduzir Episódio de Série VOD no Player de TV
       function tvPlaySeriesEpisode(seriesItem, ep, seasonNum) {
         if (!seriesItem || !ep) return;
+        const watchedId = seriesItem.series_id || seriesItem.primaryItem?.series_id || seriesItem.id;
+        if (watchedId != null && typeof saveWatchedId === 'function') saveWatchedId('series', watchedId);
         const ext = ep.container_extension || 'mp4';
         const videoUrl = `${CONFIG.server}/series/${CONFIG.user}/${CONFIG.pass}/${ep.id}.${ext}`;
         const sName = seriesItem.name || seriesItem.title || 'Série';
