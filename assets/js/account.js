@@ -481,6 +481,20 @@
     return window.location.origin + window.location.pathname;
   }
 
+  async function signInWithProvider(provider) {
+    try {
+      setStatus('Abrindo login...');
+      const client = await getClient();
+      const { error } = await client.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo: getAuthRedirectUrl() }
+      });
+      if (error) throw error;
+    } catch (error) {
+      setStatus(error.message || 'Não foi possível iniciar o login.');
+    }
+  }
+
   async function requestPasswordReset() {
     try {
       const email = document.getElementById('accountResetEmail')?.value.trim() ||
