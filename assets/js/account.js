@@ -397,6 +397,11 @@
           <label>Email<input id="accountEmail" type="email" autocomplete="email" placeholder="seu@email.com"></label>
           <label>Senha<input id="accountPassword" type="password" autocomplete="current-password" placeholder="••••••••"></label>
           <button class="andplay-account-primary" type="button" id="accountLoginBtn">Entrar</button>
+          <div class="andplay-account-or"><span>ou continue com</span></div>
+          <button class="andplay-account-google" type="button" id="accountGoogleBtn">
+            <span class="andplay-account-google-icon">G</span>
+            Continuar com Google
+          </button>
         </div>
 
         <div data-account-view="signup" style="display:none">
@@ -462,6 +467,8 @@
       if (passwordLogin && password) passwordLogin.value = password.value;
       await signUp();
     });
+
+    document.getElementById('accountGoogleBtn')?.addEventListener('click', () => signInWithProvider('google'));
 
     document.getElementById('accountSyncBtn')?.addEventListener('click', syncNow);
     document.getElementById('accountLogoutBtn')?.addEventListener('click', signOut);

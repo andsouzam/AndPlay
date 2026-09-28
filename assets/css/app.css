@@ -3896,6 +3896,51 @@ header {
   background: rgba(255,255,255,.03);
   color: #fff;
 }
+.andplay-account-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 10px;
+  color: #777;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.andplay-account-or::before,
+.andplay-account-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,.08);
+}
+.andplay-account-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 10px;
+  background: #fff;
+  color: #1f1f1f;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.andplay-account-google:hover {
+  background: #f3f3f3;
+}
+.andplay-account-google-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #4285f4;
+  font-size: 17px;
+  font-weight: 900;
+}
 .andplay-account-user {
   padding: 16px;
   border-radius: 12px;
