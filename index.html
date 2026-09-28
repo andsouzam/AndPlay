@@ -13,7 +13,7 @@
   <!-- Escudo Zero Anúncios (Ad-Shield) -->
   <script src="./assets/js/security.js"></script>
 
-  <link rel="stylesheet" href="./assets/css/app.css?v=home-themes-20260928">
+  <link rel="stylesheet" href="./assets/css/app.css?v=home-personalized-20260928">
 </head>
 
 <body>
@@ -297,7 +297,23 @@
         </div>
         <button class="home-section-link" id="homeWatchedAllBtn" type="button">Ver tudo →</button>
       </div>
-      <div id="homeWatchedRail" class="home-watched-rail"></div>
+      <div class="home-rail-shell">
+        <div id="homeWatchedRail" class="home-watched-rail"></div>
+        <button class="home-rail-more" id="homeWatchedNext" type="button" aria-label="Mostrar mais títulos assistidos">›</button>
+      </div>
+    </section>
+
+    <section class="home-content-section home-recommendations-section" id="homeRecommendationsSection">
+      <div class="home-section-head home-content-section-head">
+        <div>
+          <span class="home-section-kicker">PERSONALIZADO</span>
+          <h2>✨ Para você</h2>
+        </div>
+      </div>
+      <div class="home-rail-shell">
+        <div id="homeRecommendationsRail" class="home-theme-scroller"></div>
+        <button class="home-rail-more" id="homeRecommendationsNext" type="button" aria-label="Mostrar mais recomendações">›</button>
+      </div>
     </section>
 
     <section class="home-content-section" id="homeSeriesSection">
@@ -654,8 +670,8 @@
   <script src="./assets/js/public-config.js"></script>
   <!-- Versão do bundle para evitar cache antigo no GitHub Pages -->
   <script src="./assets/js/supabase-config.js?v=google-login-20260928"></script>
-  <script src="./assets/js/account.js?v=google-login-20260928"></script>
-  <script src="./assets/js/app.js?v=home-themes-20260928"></script>
+  <script src="./assets/js/account.js?v=home-personalized-20260928"></script>
+  <script src="./assets/js/app.js?v=home-personalized-20260928"></script>
 </body>
 
 </html>

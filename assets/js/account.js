@@ -109,6 +109,11 @@
     if (Object.prototype.hasOwnProperty.call(merged, 'sidebar_open')) {
       try { localStorage.setItem('andplay_sidebar_open', merged.sidebar_open ? '1' : '0'); } catch (e) {}
     }
+    if (merged.taste_profile && typeof merged.taste_profile === 'object') {
+      try {
+        localStorage.setItem('andplay_web_taste_v1', JSON.stringify(merged.taste_profile));
+      } catch (e) {}
+    }
   }
 
   async function pushAllLocal(client) {

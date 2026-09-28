@@ -127,6 +127,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       homeFeaturedLoading: document.getElementById('homeFeaturedLoading'),
       homeWatchedRail: document.getElementById('homeWatchedRail'),
       homeWatchedAllBtn: document.getElementById('homeWatchedAllBtn'),
+      homeWatchedNext: document.getElementById('homeWatchedNext'),
+      homeRecommendationsSection: document.getElementById('homeRecommendationsSection'),
+      homeRecommendationsRail: document.getElementById('homeRecommendationsRail'),
+      homeRecommendationsNext: document.getElementById('homeRecommendationsNext'),
       homeSeriesSection: document.getElementById('homeSeriesSection'),
       homeSeriesRails: document.getElementById('homeSeriesRails'),
       homeMoviesSection: document.getElementById('homeMoviesSection'),
@@ -1156,6 +1160,183 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       } catch (e) {}
     }
 
+    const USER_TASTE_KEY = 'andplay_web_taste_v1';
+    const HOME_RATING_CACHE_KEY = 'andplay_web_imdb_ratings_v1';
+    const HOME_RATING_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+    let homeRatingCacheMemory = null;
+
+    function readTasteProfile() {
+      try {
+        const raw = localStorage.getItem(USER_TASTE_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        return {
+          genres: (parsed && parsed.genres && typeof parsed.genres === 'object') ? parsed.genres : {},
+          types: (parsed && parsed.types && typeof parsed.types === 'object') ? parsed.types : { movie: 0, series: 0 },
+          recent: Array.isArray(parsed?.recent) ? parsed.recent : []
+        };
+      } catch (e) {
+        return { genres: {}, types: { movie: 0, series: 0 }, recent: [] };
+      }
+    }
+
+    function writeTasteProfile(profile) {
+      try {
+        localStorage.setItem(USER_TASTE_KEY, JSON.stringify(profile));
+        saveLocalPreference('taste_profile', profile);
+      } catch (e) {}
+    }
+
+    function findCatalogItemForTaste(type, id) {
+      if (type === 'series') {
+        return (fullSeriesCache || []).find(item => String(item.series_id) === String(id)) || null;
+      }
+      return (fullMoviesCache || []).find(item => movieGroupMatchesWatchedId(item, id)) || null;
+    }
+
+    function recordTasteFromPlayback(type, id) {
+      const normalizedType = type === 'series' ? 'series' : 'movie';
+      const normalizedId = String(id ?? '');
+      if (!normalizedId) return;
+
+      const item = findCatalogItemForTaste(normalizedType, normalizedId);
+      if (!item) return;
+
+      const themeItem = normalizedType === 'series'
+        ? {
+            type: 'series',
+            genre: item.genre || item.genre_name || '',
+            imdbId: item.imdbId || item.imdb_id || '',
+            added: item.added,
+            last_modified: item.last_modified
+          }
+        : {
+            type: 'movie',
+            primaryItem: item.primaryItem || item,
+            genre: item.genre || item.primaryItem?.genre || item.genre_name || '',
+            imdbId: item.imdbId || item.imdb_id || item.primaryItem?.imdbId || item.primaryItem?.imdb_id || '',
+            added: item.added,
+            last_modified: item.last_modified
+          };
+
+      const themes = getHomeThemesForItem(themeItem);
+      if (!themes.length) return;
+
+      const profile = readTasteProfile();
+      const contentKey = normalizedType + ':' + normalizedId;
+      const recentHit = profile.recent.find(entry =>
+        entry && entry.key === contentKey && Date.now() - Number(entry.at || 0) < 12 * 60 * 60 * 1000
+      );
+      if (recentHit) return;
+
+      profile.types[normalizedType] = Number(profile.types[normalizedType] || 0) + 1;
+
+      themes.forEach((theme, index) => {
+        profile.genres[theme] = Number(profile.genres[theme] || 0) + (index === 0 ? 2 : 1);
+      });
+
+      profile.recent.unshift({ key: contentKey, at: Date.now() });
+      profile.recent = profile.recent.slice(0, 80);
+
+      // Evita que um histórico muito antigo domine para sempre as recomendações.
+      const values = Object.entries(profile.genres);
+      if (values.length > 40) {
+        values.sort((a, b) => Number(b[1]) - Number(a[1]));
+        profile.genres = Object.fromEntries(values.slice(0, 40));
+      }
+
+      writeTasteProfile(profile);
+    }
+
+    function getTasteThemeWeight(theme) {
+      return Number(readTasteProfile().genres?.[theme] || 0);
+    }
+
+    function getTasteTopThemes(limit = 5) {
+      const profile = readTasteProfile();
+      return Object.entries(profile.genres || {})
+        .filter(([, weight]) => Number(weight) > 0)
+        .sort((a, b) => Number(b[1]) - Number(a[1]))
+        .slice(0, limit)
+        .map(([theme]) => theme);
+    }
+
+    function readHomeRatingCache() {
+      if (homeRatingCacheMemory) return homeRatingCacheMemory;
+      try {
+        const raw = localStorage.getItem(HOME_RATING_CACHE_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        homeRatingCacheMemory = parsed && typeof parsed === 'object' ? parsed : {};
+      } catch (e) {
+        homeRatingCacheMemory = {};
+      }
+      return homeRatingCacheMemory;
+    }
+
+    function getHomeRatingInfo(item) {
+      const sourceItem = item?.item || item;
+      const imdbId = sourceItem?.imdbId || sourceItem?.imdb_id || item?.imdbId || item?.imdb_id || '';
+      const cache = readHomeRatingCache();
+      const cached = imdbId ? cache[String(imdbId)] : null;
+      const cachedRating = cached && Date.now() - Number(cached.fetchedAt || 0) < HOME_RATING_TTL_MS
+        ? Number(cached.rating || 0)
+        : 0;
+
+      if (cachedRating > 0) {
+        return { value: cachedRating, source: 'IMDb' };
+      }
+
+      const catalogRating = Number(sourceItem?.rating || item?.rating || 0);
+      return catalogRating > 0
+        ? { value: catalogRating, source: 'Catálogo' }
+        : { value: 0, source: '' };
+    }
+
+    async function enrichHomeRatings() {
+      const cache = readHomeRatingCache();
+      const candidates = [...getHomeCatalogItems('series'), ...getHomeCatalogItems('movie')]
+        .filter(item => item.imdbId || item.item?.imdbId || item.item?.imdb_id)
+        .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
+        .slice(0, 36);
+
+      const queue = candidates.filter(item => {
+        const imdbId = item.imdbId || item.item?.imdbId || item.item?.imdb_id;
+        const saved = imdbId ? cache[String(imdbId)] : null;
+        return !saved || Date.now() - Number(saved.fetchedAt || 0) >= HOME_RATING_TTL_MS;
+      });
+
+      let cursor = 0;
+      async function worker() {
+        while (cursor < queue.length) {
+          const item = queue[cursor++];
+          const imdbId = item.imdbId || item.item?.imdbId || item.item?.imdb_id;
+          if (!imdbId) continue;
+
+          try {
+            const catalogType = item.type === 'series' ? 'series' : 'movie';
+            const response = await fetch('https://v3-cinemeta.strem.io/meta/' + catalogType + '/' + encodeURIComponent(imdbId) + '.json');
+            if (!response.ok) continue;
+            const data = await response.json();
+            const meta = data?.meta;
+            if (!meta) continue;
+
+            const rating = Number(meta.imdbRating || 0);
+            const genres = Array.isArray(meta.genres) ? meta.genres : [];
+            cache[String(imdbId)] = {
+              rating: rating > 0 ? rating : 0,
+              genres,
+              fetchedAt: Date.now()
+            };
+          } catch (e) {}
+        }
+      }
+
+      await Promise.all([worker(), worker(), worker(), worker()]);
+      homeRatingCacheMemory = cache;
+      try {
+        localStorage.setItem(HOME_RATING_CACHE_KEY, JSON.stringify(cache));
+      } catch (e) {}
+    }
+
     function getWatchedStorageKey(type) {
       return type === 'series' ? WATCHED_SERIES_STORAGE_KEY : WATCHED_MOVIES_STORAGE_KEY;
     }
@@ -1186,6 +1367,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           : [];
         nextActivity.unshift({ type, id: normalizedId, updatedAt: Date.now() });
         localStorage.setItem(WATCHED_ACTIVITY_KEY, JSON.stringify(nextActivity.slice(0, WATCHED_LIMIT)));
+
+        recordTasteFromPlayback(type, normalizedId);
 
         window.dispatchEvent(new CustomEvent('andplay:local-change', {
           detail: { kind: 'watched', mediaType: type, id: normalizedId }
@@ -1968,6 +2151,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             poster: getHomeItemPoster({ type: 'series', cover: item.cover, stream_icon: item.stream_icon }),
             plot: item.plot || '',
             genre: item.genre || item.genre_name || '',
+            imdbId: item.imdbId || item.imdb_id || '',
             added: getHomeItemTime(item)
           }))
           .filter(item => item.id && item.poster);
@@ -1984,6 +2168,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           poster: getHomeItemPoster({ type: 'movie', primaryItem: item }),
           plot: item.plot || '',
           genre: item.genre || item.primaryItem?.genre || item.genre_name || '',
+          imdbId: item.imdbId || item.imdb_id || item.primaryItem?.imdbId || item.primaryItem?.imdb_id || '',
           added: getHomeItemTime(item)
         }))
         .filter(item => item.id && item.poster);
@@ -2000,15 +2185,90 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function getHomeThemesForItem(item) {
-      const raw = String(item?.genre || '').trim();
-      if (!raw) return [];
-      const parts = raw
+      const sourceItem = item?.item || item;
+      const rawValues = [
+        item?.genre,
+        sourceItem?.genre,
+        sourceItem?.genre_name
+      ].filter(Boolean);
+
+      const imdbId = item?.imdbId || item?.imdb_id || sourceItem?.imdbId || sourceItem?.imdb_id || '';
+      if (imdbId) {
+        const cached = readHomeRatingCache()[String(imdbId)];
+        if (Array.isArray(cached?.genres)) rawValues.push(cached.genres.join(','));
+      }
+
+      const parts = rawValues
+        .join(',')
         .replace(/[\[\]"]+/g, '')
         .split(/[,;|/]+/)
         .map(part => normalizeHomeThemeLabel(part))
         .filter(Boolean);
 
       return [...new Set(parts)];
+    }
+
+    function getHomeItemTasteScore(item) {
+      const themes = getHomeThemesForItem(item);
+      if (!themes.length) return 0;
+      const profile = readTasteProfile();
+      return themes.reduce((score, theme, index) => {
+        const weight = Number(profile.genres?.[theme] || 0);
+        return score + weight * (index === 0 ? 1 : 0.72);
+      }, 0);
+    }
+
+    function getHomeRecommendationMix(items) {
+      if (!items.length) return [];
+      const profile = readTasteProfile();
+      const topThemes = getTasteTopThemes(4);
+      const hasEnoughHistory = Array.isArray(profile.recent) && profile.recent.length >= 3;
+
+      if (!hasEnoughHistory || !topThemes.length) return [];
+
+      const watchedKeys = new Set([
+        ...getWatchedIds('movies').map(id => 'movie:' + id),
+        ...getWatchedIds('series').map(id => 'series:' + id)
+      ]);
+
+      const ranked = items
+        .map(item => {
+          const themes = getHomeThemesForItem(item);
+          const taste = themes.reduce((sum, theme) => sum + Number(profile.genres?.[theme] || 0), 0);
+          const matchesTop = themes.some(theme => topThemes.includes(theme));
+          const rating = getHomeRatingInfo(item).value;
+          return {
+            item,
+            taste: taste + (rating > 0 ? rating * 0.18 : 0),
+            matchesTop
+          };
+        })
+        .filter(entry => entry.taste > 0 && !watchedKeys.has(entry.item.type + ':' + entry.item.id))
+        .sort((a, b) => b.taste - a.taste || b.item.added - a.item.added);
+
+      const personalized = [];
+      const used = new Set();
+
+      ranked.filter(entry => entry.matchesTop).slice(0, 8).forEach(entry => {
+        personalized.push(entry.item);
+        used.add(entry.item.type + ':' + entry.item.id);
+      });
+
+      // Mantém descoberta fora da bolha: pelo menos parte do trilho vem de temas não preferidos.
+      items
+        .filter(item =>
+          !used.has(item.type + ':' + item.id) &&
+          !watchedKeys.has(item.type + ':' + item.id)
+        )
+        .sort((a, b) => b.added - a.added)
+        .filter(item => !getHomeThemesForItem(item).some(theme => topThemes.includes(theme)))
+        .slice(0, 4)
+        .forEach(item => {
+          personalized.push(item);
+          used.add(item.type + ':' + item.id);
+        });
+
+      return personalized.slice(0, HOME_RAIL_ITEM_LIMIT);
     }
 
     function buildHomeCatalogRails(type) {
@@ -2021,6 +2281,21 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         items: items.slice(0, HOME_RAIL_ITEM_LIMIT)
       }];
 
+      const ratedItems = items
+        .map(item => ({ item, rating: getHomeRatingInfo(item).value }))
+        .filter(entry => entry.rating > 0)
+        .sort((a, b) => b.rating - a.rating || b.item.added - a.item.added)
+        .slice(0, HOME_RAIL_ITEM_LIMIT)
+        .map(entry => entry.item);
+
+      if (ratedItems.length >= HOME_THEME_MIN_ITEMS) {
+        rails.push({
+          key: 'top-rated',
+          title: '⭐ Mais bem avaliados',
+          items: ratedItems
+        });
+      }
+
       const themeCounts = new Map();
       items.slice(0, HOME_THEME_SOURCE_LIMIT).forEach(item => {
         getHomeThemesForItem(item).forEach(theme => {
@@ -2028,9 +2303,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         });
       });
 
+      const tasteWeights = readTasteProfile().genres || {};
       const themes = [...themeCounts.entries()]
         .filter(([, count]) => count >= HOME_THEME_MIN_ITEMS)
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'))
+        .sort((a, b) =>
+          Number(tasteWeights[b[0]] || 0) - Number(tasteWeights[a[0]] || 0) ||
+          b[1] - a[1] ||
+          a[0].localeCompare(b[0], 'pt-BR')
+        )
         .slice(0, HOME_THEME_COUNT)
         .map(([theme]) => theme);
 
@@ -2040,9 +2320,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           .slice(0, HOME_RAIL_ITEM_LIMIT);
 
         if (themedItems.length >= HOME_THEME_MIN_ITEMS) {
+          const preferred = Number(tasteWeights[theme] || 0) > 0;
           rails.push({
             key: theme,
-            title: 'Mais recentes • ' + theme,
+            title: preferred ? 'Porque você assiste • ' + theme : 'Mais recentes • ' + theme,
             items: themedItems
           });
         }
@@ -2056,16 +2337,19 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       card.type = 'button';
       card.className = 'home-title-card';
 
+      const ratingInfo = getHomeRatingInfo(item);
       const meta = [
         item.year,
-        item.rating && Number(item.rating) > 0 ? '★ ' + Number(item.rating).toFixed(1) : ''
+        ratingInfo.value > 0 ? '★ ' + ratingInfo.value.toFixed(1) + ' ' + ratingInfo.source : ''
       ].filter(Boolean).join(' • ');
 
       card.innerHTML =
         '<div class="home-title-poster">' +
           '<img src="' + escapeHtml(item.poster) + '" alt="" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">' +
           '<span class="home-title-type">' + (item.type === 'series' ? 'SÉRIE' : 'FILME') + '</span>' +
-          (item.rating && Number(item.rating) > 0 ? '<span class="home-title-rating">★ ' + Number(item.rating).toFixed(1) + '</span>' : '') +
+          (ratingInfo.value > 0
+            ? '<span class="home-title-rating">★ ' + ratingInfo.value.toFixed(1) + ' <em>' + escapeHtml(ratingInfo.source) + '</em></span>'
+            : '') +
         '</div>' +
         '<strong title="' + escapeHtml(item.title) + '">' + escapeHtml(item.title) + '</strong>' +
         '<small>' + escapeHtml(meta || (item.type === 'series' ? 'Série' : 'Filme')) + '</small>';
@@ -2076,6 +2360,39 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       });
 
       return card;
+    }
+
+    function updateHomeRailControls(scroller, prevBtn, nextBtn) {
+      if (!scroller || !prevBtn || !nextBtn) return;
+      const canScrollLeft = scroller.scrollLeft > 4;
+      const canScrollRight = scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 4;
+      prevBtn.disabled = !canScrollLeft;
+      nextBtn.disabled = !canScrollRight;
+      prevBtn.classList.toggle('is-hidden', !canScrollLeft);
+      nextBtn.classList.toggle('is-hidden', !canScrollRight);
+    }
+
+    function setupHomeRailControls(scroller) {
+      const nav = document.createElement('div');
+      nav.className = 'home-rail-nav';
+      nav.innerHTML =
+        '<button type="button" class="home-rail-arrow home-rail-prev" aria-label="Itens anteriores">‹</button>' +
+        '<button type="button" class="home-rail-arrow home-rail-next" aria-label="Mais conteúdo">›</button>';
+
+      const prevBtn = nav.querySelector('.home-rail-prev');
+      const nextBtn = nav.querySelector('.home-rail-next');
+      const step = () => Math.max(260, Math.round(scroller.clientWidth * 0.72));
+
+      prevBtn.addEventListener('click', () => {
+        scroller.scrollBy({ left: -step(), behavior: 'smooth' });
+      });
+      nextBtn.addEventListener('click', () => {
+        scroller.scrollBy({ left: step(), behavior: 'smooth' });
+      });
+      scroller.addEventListener('scroll', () => updateHomeRailControls(scroller, prevBtn, nextBtn), { passive: true });
+
+      requestAnimationFrame(() => updateHomeRailControls(scroller, prevBtn, nextBtn));
+      return nav;
     }
 
     function renderHomeCatalogRails(type, railElement, sectionElement) {
@@ -2092,21 +2409,101 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
         const heading = document.createElement('div');
         heading.className = 'home-theme-heading';
+        const tasteHint = rail.key === 'for-you' ? '<small>Baseado no seu histórico • com espaço para descoberta</small>' : '';
         heading.innerHTML =
-          '<h3>' + escapeHtml(rail.title) + '</h3>' +
+          '<div class="home-theme-title-wrap">' +
+            '<h3>' + escapeHtml(rail.title) + '</h3>' +
+            tasteHint +
+          '</div>' +
           '<span>' + rail.items.length + ' títulos</span>';
         block.appendChild(heading);
 
         const scroller = document.createElement('div');
         scroller.className = 'home-theme-scroller';
         rail.items.forEach(item => scroller.appendChild(renderHomeTitleCard(item)));
+
         block.appendChild(scroller);
+        block.appendChild(setupHomeRailControls(scroller));
 
         railElement.appendChild(block);
       });
     }
 
+    function setupSingleHomeRailArrow(scroller, arrow) {
+      if (!scroller || !arrow) return;
+
+      if (typeof arrow._homeRailCleanup === 'function') {
+        arrow._homeRailCleanup();
+      }
+
+      const update = () => {
+        const canScrollRight = scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 4;
+        arrow.disabled = !canScrollRight;
+        arrow.classList.toggle('is-hidden', !canScrollRight);
+      };
+      const step = () => Math.max(260, Math.round(scroller.clientWidth * 0.72));
+      const onClick = () => scroller.scrollBy({ left: step(), behavior: 'smooth' });
+
+      arrow.addEventListener('click', onClick);
+      scroller.addEventListener('scroll', update, { passive: true });
+
+      let ro = null;
+      if (typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(update);
+        ro.observe(scroller);
+      }
+
+      arrow._homeRailCleanup = () => {
+        arrow.removeEventListener('click', onClick);
+        scroller.removeEventListener('scroll', update);
+        if (ro) ro.disconnect();
+        arrow._homeRailCleanup = null;
+      };
+
+      requestAnimationFrame(update);
+    }
+
+    function renderHomeRecommendations() {
+      const section = elements.homeRecommendationsSection;
+      const rail = elements.homeRecommendationsRail;
+      if (!section || !rail) return;
+
+      const allItems = [
+        ...getHomeCatalogItems('series'),
+        ...getHomeCatalogItems('movie')
+      ].sort((a, b) => b.added - a.added);
+
+      const recommendations = getHomeRecommendationMix(allItems);
+      if (recommendations.length < HOME_THEME_MIN_ITEMS) {
+        section.style.display = 'none';
+        rail.innerHTML = '';
+        if (typeof elements.homeRecommendationsNext?._homeRailCleanup === 'function') {
+          elements.homeRecommendationsNext._homeRailCleanup();
+        }
+        elements.homeRecommendationsNext?.classList.add('is-hidden');
+        if (elements.homeRecommendationsNext) elements.homeRecommendationsNext.disabled = true;
+        return;
+      }
+
+      section.style.display = '';
+      rail.innerHTML = '';
+      recommendations.forEach(item => rail.appendChild(renderHomeTitleCard(item)));
+
+      const topThemes = getTasteTopThemes(2);
+      const title = section.querySelector('h2');
+      const kicker = section.querySelector('.home-section-kicker');
+      if (title) {
+        title.textContent = topThemes.length
+          ? '✨ Para você • ' + topThemes.join(' + ')
+          : '✨ Para você';
+      }
+      if (kicker) kicker.textContent = 'PERSONALIZADO • descoberta';
+
+      setupSingleHomeRailArrow(rail, elements.homeRecommendationsNext);
+    }
+
     function renderHomeCatalogSections() {
+      renderHomeRecommendations();
       renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection);
       renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection);
     }
@@ -2132,10 +2529,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const slide = document.createElement('article');
         slide.className = 'home-featured-slide';
         const typeLabel = item.type === 'movie' ? 'FILME' : 'SÉRIE';
+        const ratingInfo = getHomeRatingInfo(item);
         const meta = [
           typeLabel,
           item.year,
-          item.rating && Number(item.rating) > 0 ? '★ ' + Number(item.rating).toFixed(1) : ''
+          ratingInfo.value > 0 ? '★ ' + ratingInfo.value.toFixed(1) + ' ' + ratingInfo.source : ''
         ].filter(Boolean).join('  •  ');
 
         slide.innerHTML =
@@ -2204,6 +2602,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       if (!items.length) {
         elements.homeWatchedRail.innerHTML = '<div class="home-empty">Seus filmes e séries assistidos aparecerão aqui.</div>';
+        if (typeof elements.homeWatchedNext?._homeRailCleanup === 'function') {
+          elements.homeWatchedNext._homeRailCleanup();
+        }
+        elements.homeWatchedNext?.classList.add('is-hidden');
+        if (elements.homeWatchedNext) elements.homeWatchedNext.disabled = true;
         return;
       }
 
@@ -2239,6 +2642,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         });
         elements.homeWatchedRail.appendChild(card);
       });
+
+      setupSingleHomeRailArrow(elements.homeWatchedRail, elements.homeWatchedNext);
     }
 
     async function loadHomeDashboardData() {
@@ -2254,6 +2659,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             loadFullMovies().catch(() => []),
             loadFullSeries().catch(() => [])
           ]);
+
+          // O catálogo aparece primeiro com sua nota original; em paralelo, enriquecemos
+          // somente uma seleção limitada com a avaliação IMDb via Cinemeta.
+          enrichHomeRatings()
+            .then(() => {
+              if (currentMode === 'home') renderHomeDashboard();
+            })
+            .catch(() => {});
         } finally {
           if (currentMode === 'home') renderHomeDashboard();
         }
