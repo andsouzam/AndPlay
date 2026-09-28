@@ -149,3 +149,41 @@ As chaves e nomes internos `andplay_*`, `AndPlayAccount`, `ANDPLAY_SUPABASE_CONF
 
 ## Não perder em futuras alterações
 Não substituir silenciosamente as chaves de localStorage existentes, não mover a publicação para outro servidor sem decisão explícita e não tocar no APK para resolver problemas Web.
+## Painel de usuário — estado atual
+A conta autenticada possui três subabas:
+- Resumo — quantidade de filmes, séries e canais distintos utilizados; tempo acumulado de reprodução de filmes e séries; gêneros mais assistidos com quantidade de títulos e tempo registrado.
+- Histórico — histórico separado em Filmes, Séries e Canais de TV, com miniatura, nome, categoria e data quando disponível.
+- Minhas Informações — foto de perfil, nome de exibição/apelido, email e alteração de senha.
+
+O avatar usa user_metadata.avatar_url, user_metadata.picture ou user_metadata.avatar quando disponíveis.
+Para usuários Google, esses campos podem vir da identidade OAuth; quando não houver foto válida, o EPlay usa um boneco cinza SVG local.
+## Recuperação e perfil
+A recuperação de senha usa supabase.auth.resetPasswordForEmail() e retorna para a Home.
+Ao receber PASSWORD_RECOVERY, a interface abre a etapa de definição de nova senha.
+Usuários autenticados podem alterar a senha com supabase.auth.updateUser().
+O nome de exibição é salvo no user_metadata.display_name.
+A troca do apelido não altera full_name, name, foto ou outros metadados recebidos do Google.
+
+## Métricas de uso
+O Web mantém um rastreador local em andplay_web_watch_stats_v1.
+O rastreador acumula segundos somente quando a tag de vídeo está efetivamente em reprodução e a aba não está oculta.
+Os dados são organizados por um identificador local de dispositivo para permitir merge entre dispositivos sem somar repetidamente o mesmo contador.
+O histórico de canais fica em andplay_web_live_history_v1, com nome, logo, categoria, data do último acesso e quantidade de sessões.
+Filmes e séries continuam usando watch_history/IDs existentes; o snapshot do painel resolve os títulos a partir do catálogo quando disponível.
+Tempo histórico anterior à ativação do rastreador não pode ser reconstruído com precisão a partir das chaves antigas; não assumir que a posição de retomada representa tempo realmente assistido.
+
+As métricas adicionais e o histórico de canais são enviados na coluna JSONB de user_preferences, mantendo o RLS já existente e evitando nova tabela obrigatória.
+A sincronização faz merge por dispositivo para métricas e merge por conteúdo para canais.
+## UI da conta
+O modal de conta passou a ter largura grande para comportar o dashboard.
+A aba de autenticação (Entrar/Criar conta) fica oculta enquanto a sessão autenticada está aberta.
+As subabas do painel aparecem somente no estado autenticado.
+O botão da conta no cabeçalho passa a exibir o nome de exibição quando disponível.
+O botão de sincronização atualiza os dados e não apresenta sucesso falso quando a chamada falha.
+
+## Última manutenção
+As mudanças do painel de usuário devem ser validadas com:
+1. node --check assets\js\app.js
+2. node --check assets\js\account.js
+3. git diff --check
+4. teste real da Home/conta no navegador quando possível.

@@ -1163,7 +1163,254 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     const USER_TASTE_KEY = 'andplay_web_taste_v1';
     const HOME_RATING_CACHE_KEY = 'andplay_web_imdb_ratings_v1';
     const HOME_RATING_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+    const LIVE_HISTORY_KEY = 'andplay_web_live_history_v1';
+    const WATCH_STATS_KEY = 'andplay_web_watch_stats_v1';
+    const WATCH_DEVICE_ID_KEY = 'andplay_web_device_id_v1';
+    const WATCH_STATS_VERSION = 1;
+    const LIVE_HISTORY_LIMIT = 100;
     let homeRatingCacheMemory = null;
+
+    function getWatchDeviceId() {
+      try {
+        let id = localStorage.getItem(WATCH_DEVICE_ID_KEY);
+        if (!id) {
+          id = (crypto?.randomUUID ? crypto.randomUUID() : 'device-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+          localStorage.setItem(WATCH_DEVICE_ID_KEY, id);
+        }
+        return id;
+      } catch (e) {
+        return 'device-fallback';
+      }
+    }
+
+    function readWatchStats() {
+      try {
+        const raw = localStorage.getItem(WATCH_STATS_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (!parsed || parsed.version !== WATCH_STATS_VERSION || typeof parsed.devices !== 'object') {
+          return { version: WATCH_STATS_VERSION, devices: {} };
+        }
+        return parsed;
+      } catch (e) {
+        return { version: WATCH_STATS_VERSION, devices: {} };
+      }
+    }
+
+    function writeWatchStats(stats) {
+      try {
+        localStorage.setItem(WATCH_STATS_KEY, JSON.stringify(stats));
+        window.AndPlayAccount?.queueSyncProgress?.(30000);
+      } catch (e) {}
+    }
+
+    function getWatchDeviceBucket(stats) {
+      const deviceId = getWatchDeviceId();
+      if (!stats.devices[deviceId] || typeof stats.devices[deviceId] !== 'object') {
+        stats.devices[deviceId] = {
+          movieSeconds: 0,
+          seriesSeconds: 0,
+          liveSeconds: 0,
+          genreSeconds: {},
+          updatedAt: 0
+        };
+      }
+      return stats.devices[deviceId];
+    }
+
+    function getAggregateWatchStats() {
+      const stats = readWatchStats();
+      const aggregate = {
+        movieSeconds: 0,
+        seriesSeconds: 0,
+        liveSeconds: 0,
+        genreSeconds: {}
+      };
+
+      Object.values(stats.devices || {}).forEach(bucket => {
+        aggregate.movieSeconds += Number(bucket?.movieSeconds || 0);
+        aggregate.seriesSeconds += Number(bucket?.seriesSeconds || 0);
+        aggregate.liveSeconds += Number(bucket?.liveSeconds || 0);
+        Object.entries(bucket?.genreSeconds || {}).forEach(([theme, seconds]) => {
+          aggregate.genreSeconds[theme] = Number(aggregate.genreSeconds[theme] || 0) + Number(seconds || 0);
+        });
+      });
+
+      return aggregate;
+    }
+
+    function recordWatchSeconds(type, seconds, item) {
+      const value = Math.max(0, Math.min(Number(seconds) || 0, 30));
+      if (value < 0.5) return;
+
+      const normalizedType = type === 'series' ? 'series' : (type === 'live' ? 'live' : 'movie');
+      const stats = readWatchStats();
+      const bucket = getWatchDeviceBucket(stats);
+      const field = normalizedType === 'series' ? 'seriesSeconds' : (normalizedType === 'live' ? 'liveSeconds' : 'movieSeconds');
+      bucket[field] = Number(bucket[field] || 0) + value;
+
+      if (normalizedType !== 'live' && item) {
+        getHomeThemesForItem(item).forEach((theme, index) => {
+          const weight = index === 0 ? 1 : 0.72;
+          bucket.genreSeconds[theme] = Number(bucket.genreSeconds[theme] || 0) + value * weight;
+        });
+      }
+
+      bucket.updatedAt = Date.now();
+      writeWatchStats(stats);
+    }
+
+    function readLiveHistory() {
+      try {
+        const raw = localStorage.getItem(LIVE_HISTORY_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function writeLiveHistory(history) {
+      try {
+        localStorage.setItem(LIVE_HISTORY_KEY, JSON.stringify(history.slice(0, LIVE_HISTORY_LIMIT)));
+        window.AndPlayAccount?.queueSyncWatched?.(1500);
+      } catch (e) {}
+    }
+
+    function recordLiveChannelHistory(channel) {
+      if (!channel) return;
+      const id = String(channel.id || channel.channelSlug || channel.name || '');
+      if (!id) return;
+
+      const previous = readLiveHistory().filter(item => String(item.id) !== id);
+      previous.unshift({
+        id,
+        name: String(channel.name || 'Canal de TV'),
+        logo: String(channel.logo || ''),
+        category: String(channel.categoryLabel || channel.category || ''),
+        updatedAt: Date.now(),
+        count: Number(readLiveHistory().find(item => String(item.id) === id)?.count || 0) + 1
+      });
+      writeLiveHistory(previous);
+      saveLocalPreference('live_history', previous.slice(0, LIVE_HISTORY_LIMIT));
+    }
+
+    function formatAccountDuration(seconds) {
+      const total = Math.max(0, Math.round(Number(seconds) || 0));
+      const days = Math.floor(total / 86400);
+      const hours = Math.floor((total % 86400) / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      if (days > 0) return days + 'd ' + hours + 'h';
+      if (hours > 0) return hours + 'h ' + minutes + 'min';
+      return minutes + ' min';
+    }
+
+    function getAccountUsageSnapshot() {
+      let activity = [];
+      try {
+        const raw = localStorage.getItem(WATCHED_ACTIVITY_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        activity = Array.isArray(parsed) ? parsed : [];
+      } catch (e) {}
+
+      const activityTime = (type, id) => {
+        const targetType = type === 'movie' ? 'movies' : 'series';
+        const entry = activity.find(item =>
+          item && item.type === targetType && String(item.id) === String(id)
+        );
+        return Number(entry?.updatedAt || 0);
+      };
+
+      const movies = getWatchedIds('movies').map((id, index) => ({
+        id,
+        type: 'movie',
+        order: index,
+        updatedAt: activityTime('movie', id),
+        item: (fullMoviesCache || []).find(x => movieGroupMatchesWatchedId(x, id)) || null
+      }));
+      const series = getWatchedIds('series').map((id, index) => ({
+        id,
+        type: 'series',
+        order: index,
+        updatedAt: activityTime('series', id),
+        item: (fullSeriesCache || []).find(x => String(x.series_id) === String(id)) || null
+      }));
+
+      const allWatched = [...movies, ...series].map(entry => ({
+        ...entry,
+        title: entry.item?.name || entry.item?.title || (entry.type === 'series' ? 'Série ' + entry.id : 'Filme ' + entry.id),
+        poster: entry.type === 'series'
+          ? (entry.item?.cover || entry.item?.stream_icon || '')
+          : getBestPosterUrl(entry.item?.primaryItem || entry.item || {}),
+        genres: getHomeThemesForItem(entry.item || {})
+      }));
+
+      const watchTime = getAggregateWatchStats();
+      const genreCounts = {};
+      allWatched.forEach(entry => {
+        entry.genres.forEach(theme => {
+          genreCounts[theme] = Number(genreCounts[theme] || 0) + 1;
+        });
+      });
+
+      return {
+        totals: {
+          movies: movies.length,
+          series: series.length,
+          liveChannels: readLiveHistory().length,
+          liveSessions: readLiveHistory().reduce((sum, item) => sum + Number(item.count || 0), 0)
+        },
+        watchTime,
+        genres: Object.entries(genreCounts)
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'pt-BR'))
+          .slice(0, 12)
+          .map(([name, count]) => ({
+            name,
+            count,
+            seconds: Number(watchTime.genreSeconds?.[name] || 0)
+          })),
+        history: {
+          movies: movies.map(entry => ({ ...entry, title: entry.item?.name || entry.item?.title || 'Filme ' + entry.id }))
+            .slice(0, 50),
+          series: series.map(entry => ({ ...entry, title: entry.item?.name || entry.item?.title || 'Série ' + entry.id }))
+            .slice(0, 50),
+          channels: readLiveHistory().slice(0, 50)
+        }
+      };
+    }
+
+    function mergeWatchStats(remote) {
+      if (!remote || remote.version !== WATCH_STATS_VERSION || typeof remote.devices !== 'object') return;
+      const local = readWatchStats();
+      Object.entries(remote.devices).forEach(([deviceId, remoteBucket]) => {
+        const localBucket = local.devices[deviceId];
+        if (!localBucket) {
+          local.devices[deviceId] = remoteBucket;
+          return;
+        }
+        ['movieSeconds', 'seriesSeconds', 'liveSeconds', 'updatedAt'].forEach(field => {
+          localBucket[field] = Math.max(Number(localBucket[field] || 0), Number(remoteBucket[field] || 0));
+        });
+        localBucket.genreSeconds = localBucket.genreSeconds || {};
+        Object.entries(remoteBucket.genreSeconds || {}).forEach(([theme, seconds]) => {
+          localBucket.genreSeconds[theme] = Math.max(Number(localBucket.genreSeconds[theme] || 0), Number(seconds || 0));
+        });
+      });
+      writeWatchStats(local);
+    }
+
+    function mergeLiveHistory(remote) {
+      if (!Array.isArray(remote)) return;
+      const map = new Map();
+      [...readLiveHistory(), ...remote].forEach(item => {
+        if (!item?.id) return;
+        const id = String(item.id);
+        const current = map.get(id);
+        if (!current || Number(item.updatedAt || 0) > Number(current.updatedAt || 0)) {
+          map.set(id, { ...item, id });
+        }
+      });
+      writeLiveHistory([...map.values()].sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0)));
+    }
 
     function readTasteProfile() {
       try {
@@ -1476,16 +1723,84 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       };
     }
 
+    let watchTimeTrackingTimer = null;
+    let watchTimeTrackingMeta = null;
+    let watchTimeLastTick = 0;
+
+    function getWatchTimeItem(meta) {
+      if (!meta) return null;
+      const item = findCatalogItemForTaste(meta.type, meta.id);
+      if (!item) return null;
+      return meta.type === 'series'
+        ? { type: 'series', item, genre: item.genre || item.genre_name || '', imdbId: item.imdbId || item.imdb_id || '' }
+        : { type: 'movie', item, primaryItem: item.primaryItem || item, genre: item.genre || item.primaryItem?.genre || item.genre_name || '', imdbId: item.imdbId || item.imdb_id || item.primaryItem?.imdbId || item.primaryItem?.imdb_id || '' };
+    }
+
+    function flushWatchTimeTracking() {
+      if (!watchTimeTrackingMeta) return;
+      const now = Date.now();
+      if (!watchTimeLastTick) {
+        watchTimeLastTick = now;
+        return;
+      }
+
+      const delta = Math.min(15, Math.max(0, (now - watchTimeLastTick) / 1000));
+      watchTimeLastTick = now;
+      if (!delta || document.hidden) return;
+
+      if (watchTimeTrackingMeta.isPlaying && watchTimeTrackingMeta.isPlaying()) {
+        recordWatchSeconds(
+          watchTimeTrackingMeta.type,
+          delta,
+          watchTimeTrackingMeta.item
+        );
+      }
+    }
+
+    function startWatchTimeTracking(type, id, item, isPlaying) {
+      stopWatchTimeTracking(false);
+      if (id === null || id === undefined || String(id).trim() === '') return;
+      watchTimeTrackingMeta = {
+        type: type === 'series' ? 'series' : (type === 'live' ? 'live' : 'movie'),
+        id: String(id),
+        item,
+        isPlaying
+      };
+      watchTimeLastTick = Date.now();
+      watchTimeTrackingTimer = setInterval(flushWatchTimeTracking, 5000);
+    }
+
+    function stopWatchTimeTracking(save = true) {
+      if (save) flushWatchTimeTracking();
+      if (watchTimeTrackingTimer) clearInterval(watchTimeTrackingTimer);
+      watchTimeTrackingTimer = null;
+      watchTimeTrackingMeta = null;
+      watchTimeLastTick = 0;
+    }
+
     function saveCurrentVodProgress() {
       const meta = getCurrentVodProgressMeta();
       if (!meta || !elements.videoPlayer) return;
+      flushWatchTimeTracking();
       saveVodProgress(meta.type, meta.id, elements.videoPlayer.currentTime, elements.videoPlayer.duration, meta.title, meta);
     }
 
     function startVodProgressTracking() {
       if (vodProgressSaveTimer) clearInterval(vodProgressSaveTimer);
       vodProgressSaveTimer = null;
-      if (!getCurrentVodProgressMeta() || !elements.videoPlayer) return;
+      const meta = getCurrentVodProgressMeta();
+      if (!meta || !elements.videoPlayer) {
+        stopWatchTimeTracking(false);
+        return;
+      }
+
+      startWatchTimeTracking(
+        meta.type,
+        meta.id,
+        getWatchTimeItem(meta),
+        () => Boolean(elements.videoPlayer && !elements.videoPlayer.paused && !elements.videoPlayer.ended)
+      );
+
       vodProgressSaveTimer = setInterval(() => {
         saveCurrentVodProgress();
       }, 5000);
@@ -1493,6 +1808,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function stopVodProgressTracking(save = true) {
       if (save) saveCurrentVodProgress();
+      stopWatchTimeTracking(save);
       if (vodProgressSaveTimer) clearInterval(vodProgressSaveTimer);
       vodProgressSaveTimer = null;
     }
@@ -2719,7 +3035,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           playSeriesEpisode(ep, String(item.seasonNum));
         }
       } catch (error) {
-        console.warn('[AndPlay Home] Não foi possível retomar:', error);
+        console.warn('[EPlay Home] Não foi possível retomar:', error);
       }
     }
 
@@ -2740,7 +3056,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (elements.categorySelect) elements.categorySelect.disabled = true;
       renderHomeDashboard();
       startHomeFeaturedTimer();
-      loadHomeDashboardData().catch(error => console.warn('[AndPlay Home] Catálogo:', error));
+      loadHomeDashboardData().catch(error => console.warn('[EPlay Home] Catálogo:', error));
     }
 
     // ==========================================
@@ -7010,6 +7326,20 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         tvVodProgressMeta = null;
         if (id === null || id === undefined || String(id).trim() === '' || !tvVideo) return;
         tvVodProgressMeta = { type, id: String(id), title: title || '' };
+        const catalogItem = type === 'series'
+          ? (tvPlayingSeriesMeta?.seriesItem || null)
+          : findCatalogItemForTaste(type, id);
+        const themeItem = catalogItem
+          ? (type === 'series'
+              ? { type: 'series', item: catalogItem, genre: catalogItem.genre || catalogItem.genre_name || '', imdbId: catalogItem.imdbId || catalogItem.imdb_id || '' }
+              : { type: 'movie', item: catalogItem, primaryItem: catalogItem.primaryItem || catalogItem, genre: catalogItem.genre || catalogItem.primaryItem?.genre || catalogItem.genre_name || '', imdbId: catalogItem.imdbId || catalogItem.imdb_id || catalogItem.primaryItem?.imdbId || catalogItem.primaryItem?.imdb_id || '' })
+          : null;
+        startWatchTimeTracking(
+          type,
+          id,
+          themeItem,
+          () => Boolean(tvPlayingType === 'vod' && tvVideo && !tvVideo.paused && !tvVideo.ended)
+        );
         tvVodProgressSaveTimer = setInterval(() => {
           if (tvPlayingType === 'vod') saveCurrentTvVodProgress();
         }, 5000);
@@ -7017,6 +7347,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       function stopTvVodProgressTracking(save = true) {
         if (save) saveCurrentTvVodProgress();
+        stopWatchTimeTracking(save);
         if (tvVodProgressSaveTimer) clearInterval(tvVodProgressSaveTimer);
         tvVodProgressSaveTimer = null;
         tvVodProgressMeta = null;
@@ -7059,7 +7390,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
         // Todos os servidores/fallbacks foram tentados e falharam
         if (!fallback) {
-          console.warn('[AndPlay TV] Nenhum servidor disponível para o canal:', ch.name);
+          console.warn('[EPlay TV] Nenhum servidor disponível para o canal:', ch.name);
           const osdProgStatus = document.getElementById('tvOsdProgStatus');
           if (osdProgStatus) {
             osdProgStatus.textContent = '⚠ Sinal indisponível no momento. Tente novamente em instantes.';
@@ -7071,7 +7402,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
         if (fallback.isEmbed) {
           if (resumePosition > 0) {
-            console.warn('[AndPlay TV] Retomada ignorada para transmissão em embed.');
+            console.warn('[EPlay TV] Retomada ignorada para transmissão em embed.');
           }
           if (window._tvActiveHls) {
             window._tvActiveHls.destroy();
@@ -7085,7 +7416,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           const embedUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'autoplay=1&playsinline=1&muted=1';
           tvEmbed.src = 'about:blank';
           tvEmbed.onerror = function () {
-            console.warn(`[AndPlay TV] Servidor ${fallbackIdx + 1} inacessível, alternando automaticamente...`);
+            console.warn(`[EPlay TV] Servidor ${fallbackIdx + 1} inacessível, alternando automaticamente...`);
             tvLoadStream(ch, fallbackIdx + 1, resumePosition);
           };
           requestAnimationFrame(() => { tvEmbed.src = embedUrl; });
@@ -7123,7 +7454,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             });
             window._tvActiveHls.on(Hls.Events.ERROR, (event, data) => {
               if (data.fatal) {
-                console.warn(`[AndPlay TV] Erro fatal de HLS no servidor ${fallbackIdx + 1}:`, data.type, '- alternando automaticamente...');
+                console.warn(`[EPlay TV] Erro fatal de HLS no servidor ${fallbackIdx + 1}:`, data.type, '- alternando automaticamente...');
                 if (window._tvActiveHls) {
                   try { window._tvActiveHls.destroy(); } catch (e) { }
                   window._tvActiveHls = null;
@@ -7151,7 +7482,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             tvVideo.load();
             // Único handler (atribuição direta evita empilhar listeners a cada troca de canal)
             tvVideo.onerror = function () {
-              console.warn(`[AndPlay TV] Erro ao carregar servidor ${fallbackIdx + 1}, alternando automaticamente...`);
+              console.warn(`[EPlay TV] Erro ao carregar servidor ${fallbackIdx + 1}, alternando automaticamente...`);
               tvLoadStream(ch, fallbackIdx + 1, resumePosition);
             };
 
@@ -7213,6 +7544,24 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
 
       // Confirma a sintonização do canal pendente (chamado após 3s de inatividade ou ao teclar Enter)
+      function startTvChannelUsageTracking(ch) {
+        if (!ch) return;
+        const id = String(ch.id || ch.channelSlug || ch.name || '');
+        if (!id) return;
+        recordLiveChannelHistory(ch);
+        startWatchTimeTracking(
+          'live',
+          id,
+          null,
+          () => Boolean(
+            tvPlayingType === 'channel' &&
+            tvApp &&
+            tvApp.style.display !== 'none' &&
+            !document.hidden
+          )
+        );
+      }
+
       function tvCommitPendingChannel() {
         if (tvZapDebounceTimer) {
           clearTimeout(tvZapDebounceTimer);
@@ -7227,6 +7576,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         tvPlayingType = 'channel';
         tvPreviousMode = 'central';
         tvPlayingSeriesMeta = null;
+        stopWatchTimeTracking();
+        startTvChannelUsageTracking(ch);
         tvLoadStream(ch);
 
         const pipName = document.getElementById('tvPipName');
@@ -7249,6 +7600,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         tvPlayingType = 'channel';
         tvPreviousMode = 'central';
         tvPlayingSeriesMeta = null;
+        stopWatchTimeTracking();
         tvCurrentIdx = (idx + tvChannels.length) % tvChannels.length;
         tvPendingIdx = tvCurrentIdx;
         const ch = tvChannels[tvCurrentIdx];
@@ -7256,6 +7608,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
         try { localStorage.setItem('andplay_last_tv_ch', tvCurrentIdx); } catch (e) { }
 
+        startTvChannelUsageTracking(ch);
         tvLoadStream(ch);
 
         const pipName = document.getElementById('tvPipName');
@@ -7291,6 +7644,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         tvPlayingType = 'event';
         tvPreviousMode = 'central';
         tvPlayingSeriesMeta = null;
+        stopWatchTimeTracking();
         tvLoadStream(eventChannel);
         updateTvOsd(eventChannel, 0, false);
         setTvViewMode('fullscreen');
@@ -7998,7 +8352,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       // Teclas do Controle Remoto (Hardware Android TV / Box)
       window.onTvRemoteKey = function (key) {
-        console.log('[AndPlay TV Remote]', key);
+        console.log('[EPlay TV Remote]', key);
         if (tvCurrentMode === 'fullscreen') {
           if (tvPlayingType === 'channel') {
             if (key === 'CHANNEL_UP') { tvZap(-1); return; }
@@ -8569,6 +8923,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       // Encerra imediatamente o stream da Central ao entrar no VOD, economizando banda
       // e mantendo o comportamento do APK (que destrói a conexão ao abrir Filmes/Séries).
       function tvDestroyCurrentStream() {
+        stopWatchTimeTracking();
         if (window._tvActiveHls) {
           try { window._tvActiveHls.destroy(); } catch (e) { }
           window._tvActiveHls = null;
@@ -9829,7 +10184,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       window.enterTvMode = async function () {
         if (isTvMode) return; // já está no modo TV
         isTvMode = true;
-        console.log('[AndPlay TV] Entrando no modo TV via atalho do navegador');
+        console.log('[EPlay TV] Entrando no modo TV via atalho do navegador');
         document.body.classList.add('tv-mode');
         // Carrega catálogos se ainda não foram carregados
         if (typeof loadMovieCategories === 'function') {
@@ -9847,7 +10202,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (!isTvMode) return;
         isTvMode = false;
         stopTvClock();
-        console.log('[AndPlay TV] Saindo do modo TV, voltando para interface Web');
+        console.log('[EPlay TV] Saindo do modo TV, voltando para interface Web');
         document.body.classList.remove('tv-mode');
         const tvApp = document.getElementById('tvCableApp');
         if (tvApp) tvApp.style.display = 'none';
@@ -9861,7 +10216,21 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           } else if (isWatchedView && (currentMode === 'movies' || currentMode === 'series')) {
             showWatchedContent(currentMode);
           }
-        }
+        },
+        getAccountUsageSnapshot,
+        async loadAccountUsage() {
+          const tasks = [];
+          if (getWatchedIds('movies').length && !fullMoviesCache) {
+            tasks.push(loadFullMovies().catch(() => []));
+          }
+          if (getWatchedIds('series').length && !fullSeriesCache) {
+            tasks.push(loadFullSeries().catch(() => []));
+          }
+          if (tasks.length) await Promise.all(tasks);
+          return getAccountUsageSnapshot();
+        },
+        mergeWatchStats,
+        mergeLiveHistory
       };
 
     })();

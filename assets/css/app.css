@@ -1353,7 +1353,7 @@
     }
 
     /* ========================================================================= */
-    /* ANDPLAY TV - CABLE BOX & RECEPTOR DE TV POR ASSINATURA (10-FOOT UI)      */
+    /* EPLAY TV - CABLE BOX & RECEPTOR DE TV POR ASSINATURA (10-FOOT UI)      */
     /* ========================================================================= */
     body.tv-mode {
       overflow: hidden !important;
@@ -2847,7 +2847,7 @@
     }
 
     /* ============================================================
-       ANDPLAY WEB 10-FOOT UI — alinhamento visual com o APK
+       EPLAY WEB 10-FOOT UI — alinhamento visual com o APK
        (somente interface Web; não altera o projeto Android)
        ============================================================ */
     :root {
@@ -3794,8 +3794,8 @@ header {
   backdrop-filter: blur(12px);
 }
 .andplay-account-dialog {
-  width: min(460px, 100%);
-  max-height: min(720px, 92vh);
+  width: min(940px, 100%);
+  max-height: min(840px, 92vh);
   overflow: auto;
   padding: 28px;
   border: 1px solid rgba(255,255,255,.1);
@@ -4959,4 +4959,375 @@ body.tv-mode .mobile-bottom-nav {
 
 body.tv-mode {
   padding-bottom: 0 !important;
+}
+.account-profile-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 14px;
+  margin: 18px 0 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255,193,7,.08), rgba(255,255,255,.025));
+}
+.account-profile-avatar {
+  width: 64px;
+  height: 64px;
+  display: block;
+  object-fit: cover;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.1);
+  background: #747b86;
+  box-shadow: 0 8px 24px rgba(0,0,0,.28);
+}
+
+.account-profile-copy {
+  min-width: 0;
+}
+
+.account-profile-copy strong {
+  display: block;
+  overflow: hidden;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-profile-copy span {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: #8f98a6;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-sync-icon {
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(255,193,7,.28);
+  border-radius: 50%;
+  background: rgba(255,193,7,.06);
+  color: var(--andplay-accent);
+  font-size: 21px;
+  cursor: pointer;
+}
+.account-sync-icon:hover,
+.account-sync-icon:focus-visible {
+  border-color: rgba(255,193,7,.62);
+  background: rgba(255,193,7,.12);
+  outline: none;
+}
+
+.account-subtabs,
+.account-history-tabs {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  padding: 4px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 11px;
+  background: rgba(255,255,255,.025);
+  scrollbar-width: none;
+}
+
+.account-subtabs::-webkit-scrollbar,
+.account-history-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.account-subtabs {
+  margin-bottom: 16px;
+}
+
+.account-subtabs button,
+.account-history-tabs button {
+  flex: 1 0 auto;
+  min-height: 35px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #9aa3b1;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.account-subtabs button.active,
+.account-history-tabs button.active {
+  background: var(--andplay-accent);
+  color: #111;
+}
+
+.account-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.account-stat-card {
+  min-width: 0;
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 13px;
+  background: rgba(255,255,255,.025);
+}
+
+.account-stat-icon {
+  flex: 0 0 auto;
+  font-size: 19px;
+}
+.account-stat-card strong {
+  display: block;
+  color: #fff;
+  font-size: 19px;
+  line-height: 1.05;
+}
+
+.account-stat-card small {
+  display: block;
+  margin-top: 4px;
+  color: #8993a2;
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.account-usage-section {
+  margin-top: 20px;
+}
+
+.account-usage-head,
+.account-info-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 11px;
+}
+
+.account-usage-head h3,
+.account-info-head h3 {
+  margin: 0;
+  color: #f3f5f7;
+  font-size: 16px;
+}
+.account-usage-head span,
+.account-info-head span {
+  color: #6f7988;
+  font-size: 9px;
+}
+
+.account-genre-list {
+  display: grid;
+  gap: 10px;
+}
+
+.account-genre-row {
+  display: grid;
+  gap: 5px;
+}
+
+.account-genre-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.account-genre-label strong {
+  color: #dce1e8;
+  font-size: 11px;
+}
+
+.account-genre-label span {
+  color: #7f8998;
+  font-size: 9px;
+}
+
+.account-genre-bar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255,255,255,.07);
+}
+.account-genre-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--andplay-accent);
+}
+
+.account-history-tabs {
+  margin-bottom: 12px;
+}
+
+.account-history-list {
+  display: grid;
+  gap: 6px;
+  max-height: 465px;
+  overflow: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+}
+
+.account-history-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  min-height: 56px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: rgba(255,255,255,.025);
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.account-history-row:hover,
+.account-history-row:focus-visible {
+  border-color: rgba(255,193,7,.35);
+  background: rgba(255,193,7,.055);
+  outline: none;
+}
+
+.account-history-thumb {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #111722;
+}
+
+.account-history-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.account-history-copy {
+  min-width: 0;
+}
+
+.account-history-copy strong {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-history-copy small {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #7f8998;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-history-index {
+  color: var(--andplay-accent);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.account-empty-panel {
+  display: grid;
+  place-items: center;
+  min-height: 150px;
+  padding: 22px;
+  border: 1px dashed rgba(255,255,255,.09);
+  border-radius: 12px;
+  color: #707a89;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.account-info-section {
+  margin-bottom: 15px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 14px;
+  background: rgba(255,255,255,.025);
+}
+
+.account-info-section label {
+  margin-top: 10px;
+}
+
+.account-info-readonly {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  background: rgba(0,0,0,.16);
+  color: #7f8998;
+  font-size: 10px;
+}
+.account-info-readonly strong {
+  overflow: hidden;
+  color: #cbd1da;
+  font-size: 11px;
+  text-overflow: ellipsis;
+}
+
+.account-info-save {
+  min-height: 41px;
+}
+
+.account-optional {
+  color: #6f7988;
+  font-weight: 500;
+}
+
+.account-info-note {
+  margin: 8px 0 0;
+  color: #6f7988;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.account-logout-btn {
+  margin-top: 2px;
+}
+
+@media (max-width: 720px) {
+  .andplay-account-dialog {
+    width: 100%;
+    max-height: 94vh;
+    padding: 20px;
+  }
+
+  .account-profile-avatar {
+    width: 54px;
+    height: 54px;
+  }
+
+  .account-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.account-usage-note {
+  margin: 10px 0 0;
+  color: #657080;
+  font-size: 9px;
+  line-height: 1.45;
 }
