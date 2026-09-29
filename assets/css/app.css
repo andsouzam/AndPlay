@@ -5450,3 +5450,43 @@ body.tv-mode {
   .eplay-version-action { grid-column:2; }
 }
 
+
+/* EPLAY_PLAYER_PAGE_V1 */
+body.eplay-player-open { overflow: hidden; }
+#videoModal.eplay-player-page {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  overflow: hidden;
+  background: #05060a;
+  z-index: 5000;
+}
+#videoModal.eplay-player-page .modal-content {
+  width: 100%;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+#videoModal.eplay-player-page .player-body-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
+}
+#videoModal.eplay-player-page .modal-footer { flex-shrink: 0; }
+#videoModal.eplay-player-page .player-main-area { min-height: 0; }
+@media (max-width: 920px) {
+  #videoModal.eplay-player-page { overflow-y: auto; }
+  #videoModal.eplay-player-page .modal-content { height: auto; min-height: 100vh; }
+  #videoModal.eplay-player-page .player-body-wrapper { flex: 0 0 auto; }
+}

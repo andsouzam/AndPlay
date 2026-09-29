@@ -216,6 +216,14 @@
         localStorage.setItem('andplay_web_taste_v1', JSON.stringify(merged.taste_profile));
       } catch (e) {}
     }
+    if (merged.series_episode_history && typeof merged.series_episode_history === 'object') {
+      try {
+        const local = readJson('andplay_web_series_episode_history_v1', {});
+        const remote = merged.series_episode_history;
+        const combined = { ...(remote || {}), ...(local || {}) };
+        localStorage.setItem('andplay_web_series_episode_history_v1', JSON.stringify(combined));
+      } catch (e) {}
+    }
     if (merged.watch_stats && typeof merged.watch_stats === 'object') {
       mergeWatchStats(merged.watch_stats);
     }

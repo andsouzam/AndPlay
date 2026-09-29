@@ -1805,7 +1805,19 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const meta = getCurrentVodProgressMeta();
       if (!meta || !elements.videoPlayer) return;
       flushWatchTimeTracking();
-      saveVodProgress(meta.type, meta.id, elements.videoPlayer.currentTime, elements.videoPlayer.duration, meta.title, meta);
+
+      const position = Number(elements.videoPlayer.currentTime) || 0;
+      const duration = Number(elements.videoPlayer.duration) || 0;
+      const completed = duration > 0 && (
+        position >= Math.max(0, duration - VOD_PROGRESS_COMPLETE_REMAINING_SECONDS) ||
+        position >= duration * VOD_PROGRESS_COMPLETE_PERCENT
+      );
+
+      if (completed && meta.type === 'series' && meta.mediaMeta?.ep) {
+        markSeriesEpisodeWatched(meta.mediaMeta.ep, meta.seasonNum, duration);
+      }
+
+      saveVodProgress(meta.type, meta.id, position, duration, meta.title, meta);
     }
 
     function startVodProgressTracking() {
@@ -2836,7 +2848,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       card.addEventListener('click', () => {
         if (item.type === 'movie') onMovieCardClick(item.item);
-        else openSeriesModal(item.item);
+        else openSeriesPage(item.item);
       });
 
       return card;
@@ -3155,7 +3167,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         card.addEventListener('click', () => {
           if (item.type === 'movie') {
             const version = (item.item.versions || []).find(v => String(v.streamId) === String(item.id)) || item.item.versions?.[0];
-            if (version) playMovieVersion(item.item, version, item.item.versions || [version]);
+            if (version) openMoviePage(item.item).catch(() => {});
           } else {
             openSeriesPage(item.item);
           }
@@ -5574,6 +5586,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.videoPlayer.src = url;
       elements.downloadBtn.href = url;
       elements.videoModal.classList.add('eplay-player-page');
+      document.body.classList.add('eplay-player-open');
       elements.videoModal.style.display = 'flex';
       elements.modalFormat.textContent = 'Carregando vídeo...';
 
@@ -5691,6 +5704,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       elements.videoModal.style.display = 'none';
       elements.videoModal.classList.remove('eplay-player-page');
+      document.body.classList.remove('eplay-player-open');
       elements.videoPlayer.pause();
       elements.videoPlayer.src = '';
       activeVideoUrl = '';
@@ -5789,6 +5803,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     elements.videoPlayer.addEventListener('ended', () => {
       const meta = getCurrentVodProgressMeta();
+      if (meta?.type === 'series' && currentPlaybackMeta?.mediaMeta?.ep) {
+        markSeriesEpisodeWatched(currentPlaybackMeta.mediaMeta.ep, meta.seasonNum, elements.videoPlayer.duration);
+      }
       if (meta) clearVodProgress(meta.type, meta.id);
       stopVodProgressTracking(false);
     });
@@ -7069,19 +7086,25 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return readSeriesEpisodeHistory()[id] || null;
     }
 
-    function markSeriesEpisodeWatched(ep, seasonNum) {
+    function markSeriesEpisodeWatched(ep, seasonNum, playbackDuration = 0) {
       const id = String(ep?.id || '');
       if (!id) return;
       const history = readSeriesEpisodeHistory();
+      const duration = Number(playbackDuration || ep.info?.duration_secs || ep.info?.duration_seconds || 0) || 0;
       history[id] = {
         status: 'watched',
-        position: Number(ep.info?.duration_secs || ep.info?.duration_seconds || 0) || 0,
-        duration: Number(ep.info?.duration_secs || ep.info?.duration_seconds || 0) || 0,
+        position: duration,
+        duration,
         title: String(ep.title || 'Episódio ' + (ep.episode_num || '')),
         seasonNum: Number(seasonNum) || 0,
         episodeNum: Number(ep.episode_num) || 0,
         updatedAt: Date.now()
       };
+      const ids = Object.keys(history);
+      if (ids.length > 2000) {
+        ids.sort((x, y) => Number(history[y]?.updatedAt || 0) - Number(history[x]?.updatedAt || 0));
+        ids.slice(2000).forEach(key => delete history[key]);
+      }
       writeSeriesEpisodeHistory(history);
       if (contentPageOpen && currentContentPageType === 'series') {
         requestAnimationFrame(() => renderSeasonEpisodes(String(seasonNum)));
@@ -7097,7 +7120,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const position = Number(progress?.position || historyState?.position || 0);
       const duration = Number(progress?.duration || historyState?.duration || 0);
       const hasProgress = position > VOD_PROGRESS_MIN_SECONDS && duration > 0;
-      const watched = historyState?.status === 'watched';
+      const watchedAt = Number(historyState?.updatedAt || 0);
+      const progressIsNewer = Number(progress?.updatedAt || 0) > watchedAt;
+      const watched = historyState?.status === 'watched' && !progressIsNewer;
 
       if (watched) {
         return {
@@ -7202,13 +7227,22 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'eplay-version-card';
+        const progress = getVodProgress('movie', v.streamId);
+        const canResume = progress && progress.position > VOD_PROGRESS_MIN_SECONDS && progress.duration > 0 && progress.position < progress.duration * VOD_PROGRESS_COMPLETE_PERCENT;
+        const actionText = canResume
+          ? '↻ Retomar • ' + formatResumeTime(progress.position)
+          : '▶ Assistir';
+        const progressText = canResume
+          ? 'Você parou em ' + formatResumeTime(progress.position) + ' • restam ' + formatResumeTime(Math.max(0, progress.duration - progress.position))
+          : (v.versionInfo.desc || 'Assistir nesta versão');
+
         btn.innerHTML =
           '<span class="eplay-version-icon">' + escapeHtml(v.versionInfo.icon || '▶') + '</span>' +
           '<span class="eplay-version-copy">' +
             '<strong>' + escapeHtml(v.versionInfo.label || 'Versão') + '</strong>' +
-            '<small>' + escapeHtml(v.versionInfo.desc || 'Assistir nesta versão') + '</small>' +
+            '<small>' + escapeHtml(progressText) + '</small>' +
           '</span>' +
-          '<span class="eplay-version-action">▶ Assistir</span>';
+          '<span class="eplay-version-action">' + escapeHtml(actionText) + '</span>';
         btn.addEventListener('click', () => playMovieVersion(groupOrMovie, v, versions));
         elements.contentMovieVersions.appendChild(btn);
       });
