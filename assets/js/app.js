@@ -101,8 +101,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let homeFeaturedItems = [];
     let homeFeaturedIndex = 0;
     let homeFeaturedTimer = null;
+    let homeDisplayUsage = new Map();
     const HOME_FEATURED_LIMIT = 10;
     const HOME_WATCHED_LIMIT = 12;
+    const HOME_MAX_APPEARANCES_PER_TITLE = 3;
 
     // Instância HLS ativa
     let activeHls = null;
@@ -126,6 +128,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       homeFeaturedNext: document.getElementById('homeFeaturedNext'),
       homeFeaturedDots: document.getElementById('homeFeaturedDots'),
       homeFeaturedLoading: document.getElementById('homeFeaturedLoading'),
+      homeWatchedSection: document.getElementById('homeWatchedSection'),
       homeWatchedRail: document.getElementById('homeWatchedRail'),
       homeWatchedAllBtn: document.getElementById('homeWatchedAllBtn'),
       homeWatchedNext: document.getElementById('homeWatchedNext'),
@@ -1830,8 +1833,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let skipIntroLookupKey = '';
     let skipIntroEventCleanup = null;
 
+    function normalizeImdbId(value) {
+      const match = String(value || '').trim().match(/\btt\d+\b/i);
+      return match ? match[0] : '';
+    }
+
     function isValidImdbId(value) {
-      return /^tt\d+$/.test(String(value || '').trim());
+      return /^tt\d+$/.test(normalizeImdbId(value));
     }
 
     function normalizePositiveId(value) {
@@ -1847,15 +1855,36 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         meta.seriesImdbId,
         meta.groupOrMovie?.imdbId,
         meta.groupOrMovie?.imdb_id,
-        meta.selectedVersion?.item?.imdb_id
+        meta.selectedVersion?.item?.imdb_id,
+        meta.ep?.info?.imdb_id,
+        meta.ep?.info?.imdbId
       ];
 
-      let imdbId = imdbCandidates.find(isValidImdbId) || '';
+      let imdbId = '';
+      for (const candidate of imdbCandidates) {
+        const normalized = normalizeImdbId(candidate);
+        if (normalized) {
+          imdbId = normalized;
+          break;
+        }
+      }
+
       if (!imdbId) {
         try {
           const saved = getSavedMediaMatch('series', { seriesName: meta.seriesName || meta.title || '' });
-          if (saved && isValidImdbId(saved.id)) imdbId = String(saved.id).trim();
+          const savedId = normalizeImdbId(saved?.id || saved?.imdb_id || saved?.imdbId);
+          if (savedId) imdbId = savedId;
         } catch (e) {}
+      }
+
+      if (!imdbId) {
+        const currentGroupId = normalizeImdbId(
+          currentSeriesGroup?.imdbId ||
+          currentSeriesGroup?.imdb_id ||
+          currentActiveSeriesVersion?.item?.imdb_id ||
+          currentActiveSeriesVersion?.item?.imdbId
+        );
+        if (currentGroupId) imdbId = currentGroupId;
       }
 
       const malCandidates = [
@@ -1922,21 +1951,26 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
     }
 
-    function validateSkipSegment(startSeconds, endSeconds, durationSeconds) {
+    function validateSkipSegment(startSeconds, endSeconds, durationSeconds = 0) {
       const start = Number(startSeconds);
       const end = Number(endSeconds);
       const duration = Number(durationSeconds);
 
-      if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(duration)) return null;
-      if (duration <= 0 || start < 0 || end <= start || start >= duration) return null;
+      if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+      if (start < 0 || end <= start) return null;
 
+      // Quando a duração ainda não está disponível, aceita apenas um marcador
+      // plausível de abertura. Assim o lookup pode acontecer antes do playback,
+      // mas não aceita timestamps absurdamente distantes ou longos.
+      if (!Number.isFinite(duration) || duration <= 0) {
+        if (start > 15 * 60 || end - start > 5 * 60) return null;
+        return { start, end };
+      }
+
+      if (start >= duration) return null;
       const safeEnd = Math.min(end, duration);
       if (safeEnd <= start) return null;
-
-      return {
-        start: start,
-        end: safeEnd
-      };
+      return { start, end: safeEnd };
     }
 
     async function fetchSkipDbIntro(imdbId, seasonNum, episodeNum, durationSeconds) {
@@ -1949,18 +1983,21 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         imdb_id: imdbId,
         season: String(Number(seasonNum)),
         episode: String(Number(episodeNum)),
-        duration: String(duration),
         type: 'intro',
         adjust: 'conservative'
       });
+      if (duration > 0) {
+        params.set('duration', String(duration));
+      }
 
       const data = await fetchJsonWithTimeout(SKIPDB_SEGMENTS_URL + '?' + params.toString());
       const intro = data?.segments?.intro;
       if (!intro) return null;
 
-      // Só aceitamos correspondências que o próprio serviço conseguiu relacionar
-      // com a duração real deste stream. "out-of-range" e "agnostic" não entram.
-      if (!['exact', 'shifted'].includes(String(intro.match || ''))) return null;
+      // Quando a duração já existe, preferimos correspondências exact/shifted.
+      // "agnostic" é usado apenas como fallback enquanto a duração ainda não foi conhecida.
+      const matchType = String(intro.match || '');
+      if (!['exact', 'shifted', 'agnostic'].includes(matchType)) return null;
       const confidence = Number(intro.confidence);
 
       const valid = validateSkipSegment(Number(intro.start_ms) / 1000, Number(intro.end_ms) / 1000, duration);
@@ -1970,7 +2007,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         ...valid,
         source: 'SkipDB',
         confidence,
-        match: String(intro.match)
+        match: matchType
       };
       saveCachedSkipIntro(cacheKey, segment);
       return segment;
@@ -1982,16 +2019,34 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const cached = getCachedSkipIntro(cacheKey);
       if (cached) return cached;
 
-      const params = new URLSearchParams({
-        episodeLength: String(duration),
-        types: 'op'
-      });
-      const url = ANISKIP_TIMES_URL + '/' + encodeURIComponent(malId) + '/' + encodeURIComponent(Number(episodeNum)) + '?' + params.toString();
-      const data = await fetchJsonWithTimeout(url);
+      const baseUrl = ANISKIP_TIMES_URL + '/' + encodeURIComponent(malId) + '/' + encodeURIComponent(Number(episodeNum));
+
+      // Primeiro tenta a duração real do arquivo. Se o AniSkip não encontrar
+      // uma correspondência por causa de uma edição/versão diferente, tenta
+      // sem filtro de duração e só aceita um resultado próximo o bastante.
+      const exactParams = new URLSearchParams();
+      exactParams.append('types', 'op');
+      exactParams.set('episodeLength', String(duration));
+      let data = await fetchJsonWithTimeout(baseUrl + '?' + exactParams.toString());
+
+      if (!data?.found || !Array.isArray(data.results)) {
+        const fallbackParams = new URLSearchParams();
+        fallbackParams.append('types', 'op');
+        fallbackParams.set('episodeLength', '0');
+        data = await fetchJsonWithTimeout(baseUrl + '?' + fallbackParams.toString());
+      }
+
       if (!data?.found || !Array.isArray(data.results)) return null;
 
       const op = data.results.find(item => item?.skipType === 'op' && item?.interval);
       if (!op) return null;
+
+      const sourceDuration = Number(op.episodeLength || 0);
+      const durationDelta = sourceDuration > 0 ? Math.abs(duration - sourceDuration) : 0;
+
+      // Sem duração compatível, não fazemos um deslocamento grande no escuro.
+      // Isso evita que um marcador de uma edição diferente provoque um salto errado.
+      if (sourceDuration > 0 && durationDelta > 20) return null;
 
       const valid = validateSkipSegment(op.interval.startTime, op.interval.endTime, duration);
       if (!valid) return null;
@@ -2000,7 +2055,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         ...valid,
         source: 'AniSkip',
         confidence: null,
-        match: 'community'
+        match: sourceDuration > 0 && durationDelta > 0 ? 'community-near' : 'community'
       };
       saveCachedSkipIntro(cacheKey, segment);
       return segment;
@@ -2020,6 +2075,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       } catch (e) {}
       saveLocalPreference('skip_intro_auto', !!enabled);
       if (elements.skipIntroAutoToggle) elements.skipIntroAutoToggle.checked = !!enabled;
+      window.dispatchEvent(new CustomEvent('eplay:skip-auto-changed', {
+        detail: { enabled: !!enabled }
+      }));
       if (enabled) {
         scheduleSkipIntroLookup(0);
         maybeAutoSkipIntro();
@@ -2046,10 +2104,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       updateSkipIntroAutoUi();
       skipIntroState = { segment: null, source: '', used: false };
       if (elements.skipIntroBtn) {
+        const wasVisible = elements.skipIntroBtn.dataset.eplayVisible === '1';
         elements.skipIntroBtn.style.display = 'none';
+        elements.skipIntroBtn.dataset.eplayVisible = '0';
         elements.skipIntroBtn.disabled = false;
         elements.skipIntroBtn.textContent = '⏭️ Pular abertura';
         elements.skipIntroBtn.title = 'Pular a abertura usando timestamps comunitários verificados';
+        if (wasVisible) {
+          window.dispatchEvent(new CustomEvent('eplay:skip-state', { detail: { visible: false } }));
+        }
       }
       if (elements.skipIntroSource) {
         elements.skipIntroSource.style.display = 'none';
@@ -2064,20 +2127,36 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const player = elements.videoPlayer;
 
       if (!btn || !segment || currentPlaybackMeta?.mediaType !== 'series' || !player) {
-        if (btn) btn.style.display = 'none';
+        if (btn) {
+          const wasVisible = btn.dataset.eplayVisible === '1';
+          btn.style.display = 'none';
+          btn.dataset.eplayVisible = '0';
+          if (wasVisible) {
+            window.dispatchEvent(new CustomEvent('eplay:skip-state', { detail: { visible: false } }));
+          }
+        }
         return;
       }
 
       const currentTime = Number(player.currentTime);
       if (!Number.isFinite(currentTime)) {
+        const wasVisible = btn.dataset.eplayVisible === '1';
         btn.style.display = 'none';
+        btn.dataset.eplayVisible = '0';
+        if (wasVisible) {
+          window.dispatchEvent(new CustomEvent('eplay:skip-state', { detail: { visible: false } }));
+        }
         return;
       }
 
       const insideSegment = currentTime >= segment.start && currentTime < segment.end;
       const shouldShow = insideSegment && !skipIntroState.used;
-
+      const wasVisible = btn.dataset.eplayVisible === '1';
       btn.style.display = shouldShow ? 'inline-flex' : 'none';
+      btn.dataset.eplayVisible = shouldShow ? '1' : '0';
+      if (wasVisible !== shouldShow) {
+        window.dispatchEvent(new CustomEvent('eplay:skip-state', { detail: { visible: shouldShow } }));
+      }
       if (shouldShow) {
         const sourceText = segment.source === 'SkipDB'
           ? `SkipDB • confiança ${Math.round((segment.confidence || 0) * 100)}%`
@@ -2093,8 +2172,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         return;
       }
 
-      const duration = Number(elements.videoPlayer.duration);
-      if (!Number.isFinite(duration) || duration <= 0) return;
+      const rawDuration = Number(elements.videoPlayer.duration);
+      const duration = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 0;
 
       const ids = getExactSeriesExternalIds(playback.mediaMeta);
       const seasonNum = normalizePositiveId(playback.seasonNum);
@@ -2137,6 +2216,19 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
         maybeAutoSkipIntro();
         updateSkipIntroButton();
+
+        // O marcador pode chegar alguns instantes depois do início da reprodução.
+        // Rechecamos rapidamente para não perder a janela da abertura por uma condição de corrida.
+        if (isAutoSkipIntroEnabled()) {
+          [0, 250, 800].forEach(delay => {
+            setTimeout(() => {
+              if (currentPlaybackMeta === playback) {
+                maybeAutoSkipIntro();
+                updateSkipIntroButton();
+              }
+            }, delay);
+          });
+        }
       } else {
         skipIntroState = { segment: null, source: '', used: false };
         updateSkipIntroButton();
@@ -2156,8 +2248,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const player = elements.videoPlayer;
         if (!playback || playback.mediaType !== 'series' || !player) return;
 
-        const duration = Number(player.duration);
-        if (!Number.isFinite(duration) || duration <= 0) return;
+        const rawDuration = Number(player.duration);
+        const duration = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 0;
 
         const ids = getExactSeriesExternalIds(playback.mediaMeta);
         const seasonNum = normalizePositiveId(playback.seasonNum);
@@ -2769,10 +2861,17 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       railElement.innerHTML = '';
 
       const rails = buildHomeCatalogRails(type);
-      sectionElement.style.display = rails.length ? '' : 'none';
-      if (!rails.length) return;
+      if (!rails.length) {
+        sectionElement.style.display = 'none';
+        return;
+      }
 
+      let renderedRails = 0;
       rails.forEach(rail => {
+        const visibleItems = getHomeItemsWithinDisplayLimit(rail.items);
+        const minItems = rail.key === 'latest' ? 1 : HOME_THEME_MIN_ITEMS;
+        if (visibleItems.length < minItems) return;
+
         const block = document.createElement('section');
         block.className = 'home-theme-rail';
 
@@ -2784,18 +2883,22 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             '<h3>' + escapeHtml(rail.title) + '</h3>' +
             tasteHint +
           '</div>' +
-          '<span>' + rail.items.length + ' títulos</span>';
+          '<span>' + visibleItems.length + ' títulos</span>';
         block.appendChild(heading);
 
         const scroller = document.createElement('div');
         scroller.className = 'home-theme-scroller';
-        rail.items.forEach(item => scroller.appendChild(renderHomeTitleCard(item)));
+        visibleItems.forEach(item => scroller.appendChild(renderHomeTitleCard(item)));
 
+        registerHomeDisplayItems(visibleItems);
         block.appendChild(scroller);
         block.appendChild(setupHomeRailControls(scroller));
 
         railElement.appendChild(block);
+        renderedRails++;
       });
+
+      sectionElement.style.display = renderedRails ? '' : 'none';
     }
 
     function setupSingleHomeRailArrow(scroller, arrow) {
@@ -2843,7 +2946,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       ].sort((a, b) => b.added - a.added);
 
       const recommendations = getHomeRecommendationMix(allItems);
-      if (recommendations.length < HOME_THEME_MIN_ITEMS) {
+      const visibleRecommendations = getHomeItemsWithinDisplayLimit(recommendations);
+      if (visibleRecommendations.length < HOME_THEME_MIN_ITEMS) {
         section.style.display = 'none';
         rail.innerHTML = '';
         if (typeof elements.homeRecommendationsNext?._homeRailCleanup === 'function') {
@@ -2856,7 +2960,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       section.style.display = '';
       rail.innerHTML = '';
-      recommendations.forEach(item => rail.appendChild(renderHomeTitleCard(item)));
+      visibleRecommendations.forEach(item => rail.appendChild(renderHomeTitleCard(item)));
+      registerHomeDisplayItems(visibleRecommendations);
 
       const topThemes = getTasteTopThemes(2);
       const title = section.querySelector('h2');
@@ -2969,20 +3074,42 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }, 7000);
     }
 
+    function getHomeDisplayKey(item) {
+      return item ? item.type + ':' + String(item.id) : '';
+    }
+
+    function getHomeItemsWithinDisplayLimit(items) {
+      return (Array.isArray(items) ? items : []).filter(item => {
+        const key = getHomeDisplayKey(item);
+        return key && Number(homeDisplayUsage.get(key) || 0) < HOME_MAX_APPEARANCES_PER_TITLE;
+      });
+    }
+
+    function registerHomeDisplayItems(items) {
+      (Array.isArray(items) ? items : []).forEach(item => {
+        const key = getHomeDisplayKey(item);
+        if (!key) return;
+        homeDisplayUsage.set(key, Number(homeDisplayUsage.get(key) || 0) + 1);
+      });
+    }
+
     function renderHomeWatched() {
       if (!elements.homeWatchedRail) return;
       const items = getHomeWatchedItems();
       elements.homeWatchedRail.innerHTML = '';
+      elements.homeWatchedSection?.style.setProperty('display', items.length ? '' : 'none');
 
       if (!items.length) {
-        elements.homeWatchedRail.innerHTML = '<div class="home-empty">Seus filmes e séries assistidos aparecerão aqui.</div>';
         if (typeof elements.homeWatchedNext?._homeRailCleanup === 'function') {
           elements.homeWatchedNext._homeRailCleanup();
         }
         elements.homeWatchedNext?.classList.add('is-hidden');
         if (elements.homeWatchedNext) elements.homeWatchedNext.disabled = true;
+        elements.homeWatchedRail.innerHTML = '<div class="home-empty">Seus filmes e séries assistidos aparecerão aqui.</div>';
         return;
       }
+
+      registerHomeDisplayItems(items);
 
       items.forEach(item => {
         const card = document.createElement('button');
@@ -3048,7 +3175,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function renderHomeDashboard() {
+      homeDisplayUsage = new Map();
       renderHomeFeatured();
+      registerHomeDisplayItems(homeFeaturedItems);
       renderHomeWatched();
       renderHomeCatalogSections();
     }
@@ -3057,7 +3186,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (homeCatalogRenderTimer !== null) return;
       homeCatalogRenderTimer = window.setTimeout(() => {
         homeCatalogRenderTimer = null;
-        if (currentMode === 'home') renderHomeCatalogSections();
+        if (currentMode === 'home') renderHomeDashboard();
       }, 0);
     }
 
@@ -5222,13 +5351,32 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let skipIntroState = { segment: null, source: '', used: false };
 
 
+    function retryCurrentVideoSource(automatic = false) {
+      if (!currentPlaybackMeta || !activeVideoUrl || !elements.videoPlayer) return false;
+      if (automatic) {
+        if (Number(currentPlaybackMeta.autoRetryCount || 0) >= 1) return false;
+        currentPlaybackMeta.autoRetryCount = 1;
+      }
+
+      hideVideoErrorOverlay();
+      const baseUrl = String(activeVideoUrl).split('?retry=')[0];
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      const retryUrl = baseUrl + separator + 'retry=' + Date.now();
+      elements.videoPlayer.src = retryUrl;
+      try { elements.videoPlayer.load(); } catch (e) {}
+      elements.videoPlayer.play().catch(() => {});
+      startVideoLoadTimeout();
+      return true;
+    }
+
     function startVideoLoadTimeout() {
       if (videoLoadTimeout) clearTimeout(videoLoadTimeout);
       if (currentPlaybackMeta?.mediaType === 'live') return;
-      // Se em 14 segundos não carregar metadados ou iniciar playback, detecta timeout/falha no servidor
+      // Uma tentativa automática resolve falhas transitórias que ocorrem no primeiro acesso ao stream.
       videoLoadTimeout = setTimeout(() => {
         if (currentPlaybackMeta?.mediaType === 'live') return;
         if (elements.videoPlayer && elements.videoPlayer.readyState === 0 && elements.videoModal.style.display === 'flex') {
+          if (retryCurrentVideoSource(true)) return;
           showVideoErrorOverlay('timeout', 'O servidor de transmissão demorou muito para responder (tempo limite esgotado). O link pode estar inacessível ou fora do ar.');
         }
       }, 14000);
@@ -5322,14 +5470,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       retryBtn.style.fontSize = '12px';
       retryBtn.innerHTML = '🔄 Tentar Novamente';
       retryBtn.addEventListener('click', () => {
-        hideVideoErrorOverlay();
         elements.modalFormat.textContent = 'Reconectando ao servidor...';
-        const sep = activeVideoUrl.includes('?') ? '&' : '?';
-        const retryUrl = `${activeVideoUrl.split('?retry=')[0]}${sep}retry=${Date.now()}`;
-        elements.videoPlayer.src = retryUrl;
-        elements.videoPlayer.load();
-        elements.videoPlayer.play().catch(() => { });
-        startVideoLoadTimeout();
+        retryCurrentVideoSource(false);
       });
       elements.videoErrorActions.appendChild(retryBtn);
 
@@ -5397,6 +5539,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         seasonNum: mediaMeta?.seasonNum || mediaMeta?.season,
         episodeNum: mediaMeta?.episodeNum,
         streamId: mediaMeta?.streamId || mediaMeta?.stream_id,
+        autoRetryCount: 0,
         startPosition: safeStartPosition
       };
       resetSkipIntroUi();
@@ -5454,6 +5597,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       if (mediaType === 'series') {
         skipIntroLookupKey = '';
+        // Começa a consulta imediatamente com IMDb/MAL, mesmo que a duração
+        // do arquivo ainda não esteja disponível. Depois o resultado é refinado
+        // automaticamente quando metadata/durationchange chegarem.
+        scheduleSkipIntroLookup(0);
+
         const triggerSkipIntroLookup = () => scheduleSkipIntroLookup(150);
         elements.videoPlayer.addEventListener('loadedmetadata', triggerSkipIntroLookup, { once: true });
         elements.videoPlayer.addEventListener('durationchange', triggerSkipIntroLookup);
@@ -5561,13 +5709,18 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         videoLoadTimeout = null;
       }
       const mediaError = elements.videoPlayer.error;
+
+      // Primeira falha transitória: refaz a requisição uma vez antes de expor
+      // o erro. Isso elimina a necessidade de clicar manualmente em "Tentar Novamente".
+      if (retryCurrentVideoSource(true)) return;
+
       const errorMessage = mediaError?.code === 2
         ? 'A conexão com o servidor foi interrompida. Tente novamente ou use outra fonte.'
         : mediaError?.code === 3
           ? 'O navegador não conseguiu decodificar este vídeo. Tente outra versão ou fonte.'
           : mediaError?.code === 4
             ? 'Este formato de vídeo não é compatível com o navegador.'
-            : 'Não foi possível iniciar a reprodução desta fonte. Tente novamente ou escolha outra versão.';
+            : 'Não foi possível iniciar a reprodução desta fonte. Tente novamente ou escolha outra fonte.';
       showVideoErrorOverlay('error', errorMessage);
     });
 
@@ -5590,6 +5743,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       hideVideoErrorOverlay();
       const sid = currentPlaybackMeta?.streamId;
       if (sid) clearStreamBroken(sid);
+      if (currentPlaybackMeta?.mediaType === 'series') {
+        maybeAutoSkipIntro();
+        updateSkipIntroButton();
+        if (!skipIntroState.segment) scheduleSkipIntroLookup(0);
+      }
     });
 
     elements.videoPlayer.addEventListener('timeupdate', () => {

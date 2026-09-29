@@ -11,7 +11,8 @@
 #videoModal #videoPlayer{width:100%;height:100%;object-fit:contain;background:#000;display:block}
 #videoModal #embedPlayer{z-index:5}
 #videoModal .eplay-player-ui{position:absolute;inset:0;z-index:40;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none;opacity:1;transition:opacity .22s ease}
-#videoModal .eplay-player-ui.idle{opacity:0;cursor:none}
+#videoModal .eplay-player-ui.idle{opacity:0;cursor:none;pointer-events:none}
+#videoModal .eplay-player-ui.idle>*{pointer-events:none!important}
 #videoModal .eplay-player-ui>*{pointer-events:auto}
 #videoModal .eplay-player-center{pointer-events:none}
 #videoModal .eplay-player-center .eplay-center-play{pointer-events:auto}
@@ -67,7 +68,18 @@
 #videoModal .modal-footer #toggleMovieInfoBtn{display:none!important}
 #videoModal .modal-footer #toggleSubPanelBtn{display:none!important}
 #videoModal .modal-footer #downloadBtn{display:none!important}
-#videoModal .eplay-player-top{display:none!important}
+#videoModal .eplay-player-top{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 22px 55px;background:linear-gradient(180deg,rgba(0,0,0,.82),rgba(0,0,0,0))}
+.eplay-player-heading{min-width:0;max-width:78%}
+.eplay-player-top-actions{display:flex;align-items:flex-start;gap:10px}
+.eplay-player-close{width:38px;height:38px;padding:0;border:1px solid rgba(255,255,255,.18);border-radius:50%;background:rgba(8,8,8,.62);color:#fff;font-size:23px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(10px);transition:background .15s,border-color .15s,transform .15s}
+.eplay-player-close:hover,.eplay-player-close:focus-visible{background:rgba(0,0,0,.9);border-color:rgba(255,193,7,.65);transform:scale(1.04);outline:none}
+.eplay-auto-skip-row{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid #252525;color:#eee;font-size:12px;cursor:pointer}
+.eplay-auto-skip-row input{width:15px;height:15px;accent-color:#ffc107;cursor:pointer;flex:0 0 auto}
+.eplay-auto-skip-row span{display:flex;flex-direction:column;gap:3px}
+.eplay-auto-skip-row b{font-size:12px;font-weight:700}
+.eplay-auto-skip-row small{color:#777;font-size:9px;font-weight:500}
+#eplaySkipIntroNow{color:#ffc107!important;font-weight:800!important}
+#eplaySkipIntroNow:hover{color:#fff!important;background:#2a2410!important}
 #videoModal .eplay-player-ui .eplay-download{font-size:15px}
 #videoModal .eplay-series-nav{min-width:42px;font-weight:800;letter-spacing:.01em}
 @media(max-width:920px){
@@ -93,6 +105,11 @@
 .eplay-speed-list button.active{border-color:#ffc107!important;color:#ffc107!important;background:#2b2614!important}
 .eplay-player-ui button:focus-visible,.eplay-player-ui input:focus-visible{outline:2px solid #ffc107;outline-offset:2px}
 #videoModal .modal-content{position:relative}
+#videoModal .eplay-native-title-source,
+#videoModal .eplay-native-close-source,
+#videoModal #modalFormat{display:none!important}
+#videoModal .modal-header{display:none!important}
+#videoModal .modal-footer{display:none!important}
 #videoModal #subOptionsPanel{position:absolute;left:0;right:0;bottom:0;z-index:85;max-height:45vh;overflow:auto;background:rgba(17,17,17,.98)!important;backdrop-filter:blur(12px)}
 @media(max-width:920px){
 #videoModal #subOptionsPanel{bottom:0;max-height:55vh;padding:12px!important}

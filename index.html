@@ -291,7 +291,7 @@
       <div id="homeFeaturedLoading" class="home-featured-loading">Carregando novidades...</div>
     </section>
 
-    <section class="home-section">
+    <section class="home-section" id="homeWatchedSection" style="display:none;">
       <div class="home-section-head">
         <div>
           <h2>Últimos assistidos</h2>
@@ -362,10 +362,9 @@
   <!-- Video Player Modal -->
   <div id="videoModal" class="modal-overlay">
     <div class="modal-content">
-      <div class="modal-header">
-        <h3 id="modalTitle">Reproduzindo Vídeo</h3>
-        <button class="close-btn" id="closeVideoModal">&times;</button>
-      </div>
+      <!-- Fontes internas mantidas para compatibilidade com o app; a interface visível usa o EPlay Player UI. -->
+      <div id="modalTitle" class="eplay-native-title-source" aria-hidden="true"></div>
+      <button id="closeVideoModal" class="eplay-native-close-source" type="button" aria-hidden="true" tabindex="-1" hidden></button>
       <!-- Estrutura Principal do Player: Barra Lateral Esquerda + Vídeo na Direita -->
       <div id="playerBodyWrapper" class="player-body-wrapper">
         <!-- Painel Lateral Esquerdo: Informações e Sinopse do Filme / Série -->
@@ -520,7 +519,7 @@
 
       <!-- Barra Inferior do Player (Limpa e Minimalista) -->
       <div class="modal-footer">
-        <div style="display:none;" id="modalFormat" aria-hidden="true"></div>
+        <div id="modalFormat" hidden aria-hidden="true"></div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
           <div id="movieVersionSwitcher" style="display: none; gap: 6px; align-items: center;"></div>
           <button class="btn btn-secondary" id="skipIntroBtn"
