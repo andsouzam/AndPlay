@@ -93,6 +93,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let renderedCount = 0;
     let activeVideoUrl = '';
     let searchDebounceTimer = null;
+    let globalSearchRequestId = 0;
+    let globalSearchCatalogCache = null;
     let infiniteScrollRaf = null;
 
     // Home: novidades e histórico mistos.
@@ -3337,10 +3339,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       document.querySelectorAll('.mobile-bottom-nav button').forEach(button => button.classList.remove('active'));
       elements.mobileHomeBtn?.classList.add('active');
 
+      globalSearchRequestId++;
+      if (elements.searchInput) elements.searchInput.value = '';
       if (elements.homeDashboard) elements.homeDashboard.classList.add('is-active');
       document.querySelector('.status-bar')?.style.setProperty('display', 'none');
       document.querySelector('main')?.style.setProperty('display', 'none');
-      if (elements.categorySelect) elements.categorySelect.disabled = true;
+      if (elements.categorySelect) {
+        elements.categorySelect.disabled = true;
+        elements.categorySelect.style.display = 'none';
+      }
       startViewTransition();
       window.setTimeout(() => {
         if (currentMode !== 'home') return;
@@ -3367,6 +3374,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.tabWatchedBtn?.classList.remove('active');
       elements.tabHomeBtn?.classList.remove('active');
       elements.categorySelect.disabled = false;
+      elements.categorySelect.style.removeProperty('display');
       elements.homeDashboard?.classList.remove('is-active');
       elements.contentPage?.classList.remove('is-active');
       if (elements.contentPage) elements.contentPage.hidden = true;
@@ -4582,9 +4590,72 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     // ==========================================
+    // ==========================================
     // BUSCA INTELIGENTE
     // ==========================================
+    async function performGlobalSearch(term) {
+      const q = normalizeSearch(term);
+      if (!q) {
+        showHome();
+        return;
+      }
+
+      const requestId = ++globalSearchRequestId;
+      currentMode = 'search';
+      isWatchedView = false;
+      elements.homeDashboard?.classList.remove('is-active');
+      elements.contentPage?.classList.remove('is-active');
+      if (elements.contentPage) elements.contentPage.hidden = true;
+      document.querySelector('.status-bar')?.style.removeProperty('display');
+      document.querySelector('main')?.style.removeProperty('display');
+      if (elements.categorySelect) {
+        elements.categorySelect.value = 'ALL';
+        elements.categorySelect.disabled = true;
+        elements.categorySelect.style.display = 'none';
+      }
+      if (elements.resetCategoryBtn) elements.resetCategoryBtn.style.display = 'none';
+      if (elements.categoryLabel) elements.categoryLabel.textContent = 'Resultados da busca';
+      if (elements.searchInput) elements.searchInput.placeholder = 'Pesquisar filmes, séries e canais...';
+      showLoading('Buscando por: ' + term);
+
+      try {
+        const [movies, series, live] = await Promise.all([
+          loadFullMovies(),
+          loadFullSeries(),
+          loadFullLive().catch(() => [])
+        ]);
+        if (requestId !== globalSearchRequestId || normalizeSearch(elements.searchInput?.value || '') !== q) return;
+
+        if (!globalSearchCatalogCache) {
+          globalSearchCatalogCache = [
+            ...(Array.isArray(movies) ? movies : []).map(item => ({ ...item, _searchType: 'movie' })),
+            ...(Array.isArray(series) ? series : []).map(item => ({ ...item, _searchType: 'series' })),
+            ...(Array.isArray(live) ? live : []).map(item => ({ ...item, _searchType: 'live' }))
+          ];
+        }
+        currentMediaList = globalSearchCatalogCache;
+        elements.categorySelect.value = 'ALL';
+        if (elements.categoryLabel) elements.categoryLabel.textContent = 'Busca: ' + term;
+        applyFilterAndRender(term);
+      } catch (error) {
+        if (requestId !== globalSearchRequestId) return;
+        elements.mediaGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#888;padding:60px 20px;">Não foi possível realizar a busca agora.</div>';
+        elements.loadMoreContainer.style.display = 'none';
+        elements.mediaCount.textContent = 'Busca indisponível';
+        console.warn('[EPlay Search] Falha na busca global:', error);
+      }
+    }
+
     function onSearch(term) {
+      const q = normalizeSearch(term);
+      if (currentMode === 'home' || currentMode === 'search') {
+        if (!q) {
+          if (currentMode === 'search') showHome();
+          return;
+        }
+        performGlobalSearch(term);
+        return;
+      }
       applyFilterAndRender(term);
     }
 
@@ -4639,8 +4710,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         card.tabIndex = 0;
         card.setAttribute('role', 'button');
 
-        const isLive = (currentMode === 'live');
-        const isMovie = (currentMode === 'movies');
+        const itemSearchType = item._searchType || item.type || '';
+        const isLive = (currentMode === 'live' || itemSearchType === 'live');
+        const isMovie = (currentMode === 'movies' || itemSearchType === 'movie');
         const title = item.name || item.title || '';
         card.title = title;
 
@@ -4816,7 +4888,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function updateCountDisplay() {
       const total = currentFilteredList.length;
-      const typeLabel = (currentMode === 'movies') ? 'filme(s)' : 'série(s)';
+      const typeLabel = currentMode === 'search' ? 'resultado(s)' : ((currentMode === 'movies') ? 'filme(s)' : 'série(s)');
       if (total === 0) {
         elements.mediaCount.textContent = `0 ${typeLabel}`;
       } else {
