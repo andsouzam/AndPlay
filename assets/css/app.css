@@ -4721,9 +4721,11 @@ header {
 .home-rail-nav {
   position: absolute;
   top: 50%;
+  left: 7px;
   right: 7px;
   z-index: 4;
   display: flex;
+  justify-content: space-between;
   gap: 6px;
   transform: translateY(-10px);
   pointer-events: none;
@@ -4764,6 +4766,27 @@ header {
   box-shadow: 0 10px 28px rgba(0,0,0,.36), -24px 0 44px rgba(5,7,11,.28);
 }
 
+.home-rail-prev {
+  box-shadow: 0 10px 28px rgba(0,0,0,.36), 24px 0 44px rgba(5,7,11,.28);
+}
+
+.home-recommendations-nav {
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  top: 50%;
+  z-index: 4;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transform: translateY(-10px);
+  pointer-events: none;
+}
+
+.home-recommendations-nav .home-rail-arrow {
+  position: static;
+  flex-shrink: 0;
+}
 .home-theme-title-wrap {
   min-width: 0;
 }

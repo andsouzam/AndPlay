@@ -138,6 +138,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       homeRecommendationsSection: document.getElementById('homeRecommendationsSection'),
       homeRecommendationsRail: document.getElementById('homeRecommendationsRail'),
       homeRecommendationsNext: document.getElementById('homeRecommendationsNext'),
+      homeRecommendationsPrev: document.getElementById('homeRecommendationsPrev'),
       homeSeriesSection: document.getElementById('homeSeriesSection'),
       homeSeriesRails: document.getElementById('homeSeriesRails'),
       homeMoviesSection: document.getElementById('homeMoviesSection'),
@@ -2979,22 +2980,34 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       sectionElement.style.display = renderedRails ? '' : 'none';
     }
 
-    function setupSingleHomeRailArrow(scroller, arrow) {
-      if (!scroller || !arrow) return;
+    function setupSingleHomeRailArrow(scroller, nextBtn, prevBtn = null) {
+      if (!scroller || !nextBtn) return;
 
-      if (typeof arrow._homeRailCleanup === 'function') {
-        arrow._homeRailCleanup();
+      if (typeof nextBtn._homeRailCleanup === 'function') {
+        nextBtn._homeRailCleanup();
+      }
+      if (prevBtn && typeof prevBtn._homeRailCleanup === 'function') {
+        prevBtn._homeRailCleanup();
       }
 
       const update = () => {
+        const canScrollLeft = scroller.scrollLeft > 4;
         const canScrollRight = scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 4;
-        arrow.disabled = !canScrollRight;
-        arrow.classList.toggle('is-hidden', !canScrollRight);
+
+        nextBtn.disabled = !canScrollRight;
+        nextBtn.classList.toggle('is-hidden', !canScrollRight);
+
+        if (prevBtn) {
+          prevBtn.disabled = !canScrollLeft;
+          prevBtn.classList.toggle('is-hidden', !canScrollLeft);
+        }
       };
       const step = () => Math.max(260, Math.round(scroller.clientWidth * 0.72));
-      const onClick = () => scroller.scrollBy({ left: step(), behavior: 'smooth' });
+      const onNext = () => scroller.scrollBy({ left: step(), behavior: 'smooth' });
+      const onPrev = () => scroller.scrollBy({ left: -step(), behavior: 'smooth' });
 
-      arrow.addEventListener('click', onClick);
+      nextBtn.addEventListener('click', onNext);
+      if (prevBtn) prevBtn.addEventListener('click', onPrev);
       scroller.addEventListener('scroll', update, { passive: true });
 
       let ro = null;
@@ -3003,12 +3016,17 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         ro.observe(scroller);
       }
 
-      arrow._homeRailCleanup = () => {
-        arrow.removeEventListener('click', onClick);
+      const cleanup = () => {
+        nextBtn.removeEventListener('click', onNext);
+        if (prevBtn) prevBtn.removeEventListener('click', onPrev);
         scroller.removeEventListener('scroll', update);
         if (ro) ro.disconnect();
-        arrow._homeRailCleanup = null;
+        nextBtn._homeRailCleanup = null;
+        if (prevBtn) prevBtn._homeRailCleanup = null;
       };
+
+      nextBtn._homeRailCleanup = cleanup;
+      if (prevBtn) prevBtn._homeRailCleanup = cleanup;
 
       requestAnimationFrame(update);
     }
@@ -3033,6 +3051,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
         elements.homeRecommendationsNext?.classList.add('is-hidden');
         if (elements.homeRecommendationsNext) elements.homeRecommendationsNext.disabled = true;
+        elements.homeRecommendationsPrev?.classList.add('is-hidden');
+        if (elements.homeRecommendationsPrev) elements.homeRecommendationsPrev.disabled = true;
         return;
       }
 
@@ -3046,12 +3066,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const kicker = section.querySelector('.home-section-kicker');
       if (title) {
         title.textContent = topThemes.length
-          ? '✨ Para você • ' + topThemes.join(' + ')
-          : '✨ Para você';
+          ? 'Para você • ' + topThemes.join(' + ')
+          : 'Para você';
       }
-      if (kicker) kicker.textContent = 'PERSONALIZADO • descoberta';
+      if (kicker) kicker.remove();
 
-      setupSingleHomeRailArrow(rail, elements.homeRecommendationsNext);
+      setupSingleHomeRailArrow(rail, elements.homeRecommendationsNext, elements.homeRecommendationsPrev);
     }
 
     function renderHomeCatalogSections() {
