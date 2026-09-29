@@ -1827,12 +1827,30 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         : getVodProgress('movie', id);
     }
 
+    function getSeriesHistoryTitle(progress) {
+      const rawTitle = String(progress?.title || '').trim();
+      if (!rawTitle) return '';
+
+      // O progresso de episódio é salvo como "Nome da série - Episódio".
+      // Para IDs históricos que não existem mais no catálogo/API, a primeira
+      // parte desse título continua sendo uma referência confiável ao nome da série.
+      const separatorIndex = rawTitle.indexOf(' - ');
+      if (separatorIndex > 0) {
+        const seriesTitle = rawTitle.slice(0, separatorIndex).trim();
+        if (seriesTitle) return seriesTitle;
+      }
+      return rawTitle;
+    }
+
     function buildHistoryFallbackGroup(type, id) {
       const key = String(id || '');
       if (!key) return null;
       const metadata = remoteHistoryMetadata[type === 'series' ? 'series' : 'movies'].get(key) || {};
       const progress = getHistoryProgressFallback(type, key);
-      const title = String(metadata.title || progress?.title || '').trim();
+      const progressTitle = type === 'series'
+        ? getSeriesHistoryTitle(progress)
+        : String(progress?.title || '').trim();
+      const title = String(metadata.title || progressTitle || '').trim();
       const poster = String(metadata.poster || progress?.poster || '').trim();
 
       if (type === 'series') {
