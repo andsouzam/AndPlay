@@ -5,13 +5,16 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     };
 
     const BATCH_SIZE = 60;
-    const API_TIMEOUT_MS = 15000;
+    const API_TIMEOUT_MS = 60000;
 
     // Estado da aplicação
     let currentMode = 'home'; // 'home', 'movies', 'series' ou 'live'
     let isWatchedView = false;
     let watchedReturnMode = 'home';
     const WATCHED_LIMIT = 500;
+    const WATCHED_MOVIES_STORAGE_KEY = 'andplay_web_watched_movies_v1';
+    const WATCHED_SERIES_STORAGE_KEY = 'andplay_web_watched_series_v1';
+    const WATCHED_ACTIVITY_KEY = 'andplay_web_watched_activity_v1';
 
     let fullMoviesCache = null;
     let fullSeriesCache = null;
@@ -1844,6 +1847,36 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           }
         }
       } catch (e) {}
+
+      // Fallback para históricos em outro navegador ou em um cache local que
+      // ainda não recebeu o watch_progress remoto. O progresso remoto continua
+      // usando episode_id como content_id e series_id como vínculo da série.
+      if (!latest) {
+        try {
+          const remoteProgress = window.AndPlayAccount?.getRemoteWatchProgress?.() || [];
+          remoteProgress
+            .filter(item =>
+              item?.content_type === 'series' &&
+              String(item?.series_id || '') === target &&
+              Number.isFinite(Date.parse(item?.updated_at || ''))
+            )
+            .sort((a, b) => Date.parse(b.updated_at || '') - Date.parse(a.updated_at || ''))
+            .some(item => {
+              latest = {
+                position: Math.max(0, Number(item.position) || 0),
+                duration: Number(item.duration) > 0 ? Number(item.duration) : 0,
+                updatedAt: Date.parse(item.updated_at || '') || 0,
+                title: String(item.title || ''),
+                poster: String(item.poster || ''),
+                seriesId: target,
+                seasonNum: Number(item.season_num) || 0,
+                episodeNum: Number(item.episode_num) || 0
+              };
+              return true;
+            });
+        } catch (e) {}
+      }
+
       return latest;
     }
 

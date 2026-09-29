@@ -7,10 +7,12 @@
   const PREFERENCES_KEY = 'andplay_web_preferences_v1';
   const WATCH_STATS_KEY = 'andplay_web_watch_stats_v1';
   const LIVE_HISTORY_KEY = 'andplay_web_live_history_v1';
+  const WATCH_HISTORY_PENDING_KEY = 'andplay_web_watch_history_pending_v1';
 
   let supabaseClientPromise = null;
   let currentSession = null;
   let remoteWatchHistory = { movies: [], series: [] };
+  let remoteWatchProgress = [];
   let remoteWatchHistoryLoaded = false;
   let syncing = false;
   let syncQueued = false;
@@ -50,6 +52,78 @@
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch (e) {}
+  }
+
+  function readPendingWatchHistory() {
+    const raw = readJson(WATCH_HISTORY_PENDING_KEY, []);
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map(item => ({
+        type: item?.type === 'series' ? 'series' : 'movie',
+        id: String(item?.id || '').trim(),
+        updatedAt: Number(item?.updatedAt || 0) || Date.now()
+      }))
+      .filter(item => item.id);
+  }
+
+  function writePendingWatchHistory(rows) {
+    const normalized = [];
+    const seen = new Set();
+    rows.forEach(item => {
+      const type = item?.type === 'series' ? 'series' : 'movie';
+      const id = String(item?.id || '').trim();
+      if (!id) return;
+      const key = type + ':' + id;
+      if (seen.has(key)) return;
+      seen.add(key);
+      normalized.push({
+        type,
+        id,
+        updatedAt: Number(item?.updatedAt || 0) || Date.now()
+      });
+    });
+    writeJson(WATCH_HISTORY_PENDING_KEY, normalized.slice(0, REMOTE_WATCH_HISTORY_LIMIT));
+  }
+
+  function addPendingWatchHistory(type, id) {
+    const normalizedType = type === 'series' ? 'series' : 'movie';
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return;
+    const current = readPendingWatchHistory();
+    const next = [
+      { type: normalizedType, id: normalizedId, updatedAt: Date.now() },
+      ...current.filter(item => !(item.type === normalizedType && item.id === normalizedId))
+    ];
+    writePendingWatchHistory(next);
+  }
+
+  function removePendingWatchHistory(type, id) {
+    const normalizedType = type === 'series' ? 'series' : 'movie';
+    const normalizedId = String(id || '').trim();
+    const next = readPendingWatchHistory().filter(item =>
+      !(item.type === normalizedType && item.id === normalizedId)
+    );
+    writePendingWatchHistory(next);
+  }
+
+  function mergePendingWatchHistoryIntoMemory() {
+    const pending = readPendingWatchHistory();
+    if (!pending.length) return;
+
+    pending.forEach(item => {
+      const key = item.type === 'series' ? 'series' : 'movies';
+      remoteWatchHistory[key] = [
+        {
+          id: item.id,
+          updatedAt: Number(item.updatedAt || 0),
+          sortOrder: 0
+        },
+        ...(remoteWatchHistory[key] || []).filter(existing => existing.id !== item.id)
+      ]
+        .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
+        .slice(0, REMOTE_WATCH_HISTORY_LIMIT);
+    });
+    remoteWatchHistoryLoaded = true;
   }
 
   function mergeWatchStats(remote) {
@@ -163,6 +237,7 @@
     next.series = next.series.slice(0, REMOTE_WATCH_HISTORY_LIMIT);
     remoteWatchHistory = next;
     remoteWatchHistoryLoaded = true;
+    mergePendingWatchHistoryIntoMemory();
   }
 
   function getRemoteWatchedIds(type) {
@@ -186,6 +261,7 @@
   async function refreshWatchHistory(client = null) {
     if (!currentSession) {
       remoteWatchHistory = { movies: [], series: [] };
+      remoteWatchProgress = [];
       remoteWatchHistoryLoaded = true;
       return [];
     }
@@ -199,11 +275,59 @@
     return getRemoteWatchHistory();
   }
 
+  async function upsertWatchHistoryRows(client, rows) {
+    const normalizedRows = (Array.isArray(rows) ? rows : [])
+      .map(row => ({
+        content_type: row?.content_type === 'series' ? 'series' : 'movie',
+        content_id: String(row?.content_id || '').trim(),
+        sort_order: Number(row?.sort_order || 0),
+        updated_at: row?.updated_at || new Date().toISOString()
+      }))
+      .filter(row => row.content_id);
+
+    for (const row of normalizedRows) {
+      // A gravação principal usa UPDATE + INSERT para não depender do nome/ordem
+      // exatos de um índice UNIQUE remoto. Continua garantindo uma linha por usuário,
+      // tipo e conteúdo quando o UPDATE encontra a existente.
+      const { data: updated, error: updateError } = await client
+        .from('watch_history')
+        .update({
+          sort_order: row.sort_order,
+          updated_at: row.updated_at
+        })
+        .eq('content_type', row.content_type)
+        .eq('content_id', row.content_id)
+        .select('content_id')
+        .limit(1);
+
+      if (updateError) throw updateError;
+      if (Array.isArray(updated) && updated.length > 0) continue;
+
+      const { error: insertError } = await client.from('watch_history').insert(row);
+      if (insertError) {
+        // Se houve corrida entre UPDATE e INSERT, tenta novamente como UPDATE.
+        const { error: retryUpdateError } = await client
+          .from('watch_history')
+          .update({
+            sort_order: row.sort_order,
+            updated_at: row.updated_at
+          })
+          .eq('content_type', row.content_type)
+          .eq('content_id', row.content_id);
+        if (retryUpdateError) throw insertError;
+      }
+    }
+  }
+
   async function recordWatched(type, id) {
-    if (!currentSession || id === null || id === undefined || String(id).trim() === '') return false;
+    if (id === null || id === undefined || String(id).trim() === '') return false;
     const normalizedType = normalizeWatchType(type) === 'series' ? 'series' : 'movie';
     const normalizedId = String(id).trim();
     const now = new Date().toISOString();
+
+    // Mantém a marcação local até o Supabase confirmar. Isso evita que uma
+    // leitura remota imediatamente posterior apague um assistido recém-marcado.
+    addPendingWatchHistory(normalizedType, normalizedId);
 
     const currentKey = normalizedType === 'series' ? 'series' : 'movies';
     const current = remoteWatchHistory[currentKey] || [];
@@ -215,16 +339,17 @@
 
     try {
       const client = await getClient();
-      const { error } = await client.from('watch_history').upsert({
+      await upsertWatchHistoryRows(client, [{
         content_type: normalizedType,
         content_id: normalizedId,
         sort_order: 0,
         updated_at: now
-      }, { onConflict: 'user_id,content_type,content_id' });
-      if (error) throw error;
+      }]);
+      removePendingWatchHistory(normalizedType, normalizedId);
       return true;
     } catch (error) {
       console.warn('[EPlay Account] Watch history sync:', error);
+      queueSync(1500);
       return false;
     }
   }
@@ -309,6 +434,19 @@
   async function pushAllLocal(client) {
     const now = new Date().toISOString();
     const progressRows = readLocalProgress();
+    const pendingWatchHistory = readPendingWatchHistory();
+    if (pendingWatchHistory.length) {
+      const historyRows = pendingWatchHistory.map(item => ({
+        content_type: item.type,
+        content_id: item.id,
+        sort_order: 0,
+        updated_at: new Date(Number(item.updatedAt || Date.now())).toISOString()
+      }));
+      await upsertWatchHistoryRows(client, historyRows);
+      writePendingWatchHistory([]);
+      mergePendingWatchHistoryIntoMemory();
+    }
+
     if (progressRows.length) {
       const { error } = await client.from('watch_progress').upsert(progressRows, {
         onConflict: 'user_id,content_type,content_id'
@@ -335,6 +473,7 @@
       .select('content_type,content_id,position,duration,title,poster,series_id,season_num,episode_num,updated_at')
       .order('updated_at', { ascending: false });
     if (progress.error) throw progress.error;
+    remoteWatchProgress = Array.isArray(progress.data) ? progress.data.slice() : [];
 
     (progress.data || []).forEach(remote => {
       const localKey = PROGRESS_PREFIX + (remote.content_type === 'series' ? 'series_' : 'movie_') + remote.content_id;
@@ -1111,6 +1250,7 @@
     queueSyncPreference: queueSync,
     getRemoteWatchedIds,
     getRemoteWatchHistory,
+    getRemoteWatchProgress: () => remoteWatchProgress.slice(),
     isRemoteWatchHistoryLoaded: () => remoteWatchHistoryLoaded,
     refreshWatchHistory,
     recordWatched,
