@@ -174,6 +174,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       homeFeaturedLoading: document.getElementById('homeFeaturedLoading'),
       homeWatchedSection: document.getElementById('homeWatchedSection'),
       homeWatchedRail: document.getElementById('homeWatchedRail'),
+      homeWatchedPrev: document.getElementById('homeWatchedPrev'),
       homeWatchedAllBtn: document.getElementById('homeWatchedAllBtn'),
       homeWatchedNext: document.getElementById('homeWatchedNext'),
       homeRecommendationsSection: document.getElementById('homeRecommendationsSection'),
@@ -3632,8 +3633,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (typeof elements.homeWatchedNext?._homeRailCleanup === 'function') {
           elements.homeWatchedNext._homeRailCleanup();
         }
+        if (typeof elements.homeWatchedPrev?._homeRailCleanup === 'function') {
+          elements.homeWatchedPrev._homeRailCleanup();
+        }
         elements.homeWatchedNext?.classList.add('is-hidden');
+        elements.homeWatchedPrev?.classList.add('is-hidden');
         if (elements.homeWatchedNext) elements.homeWatchedNext.disabled = true;
+        if (elements.homeWatchedPrev) elements.homeWatchedPrev.disabled = true;
         elements.homeWatchedRail.innerHTML = '<div class="home-empty">Seus filmes e séries assistidos aparecerão aqui.</div>';
         return;
       }
@@ -3673,7 +3679,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         elements.homeWatchedRail.appendChild(card);
       });
 
-      setupSingleHomeRailArrow(elements.homeWatchedRail, elements.homeWatchedNext);
+      setupSingleHomeRailArrow(elements.homeWatchedRail, elements.homeWatchedNext, elements.homeWatchedPrev);
     }
 
     async function loadHomeDashboardData() {
