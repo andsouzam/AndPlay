@@ -10,6 +10,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     // Estado da aplicação
     let currentMode = 'home'; // 'home', 'movies', 'series' ou 'live'
     let isWatchedView = false;
+    let watchedReturnMode = 'home';
     const WATCHED_LIMIT = 500;
 
     let fullMoviesCache = null;
@@ -836,13 +837,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.tabSeriesBtn.addEventListener('click', () => switchMode('series', true));
       if (elements.tabWatchedBtn) {
         elements.tabWatchedBtn.addEventListener('click', () => {
-          if (isWatchedView) {
-            restoreCatalogView();
-          } else if (currentMode === 'movies' || currentMode === 'series') {
-            showWatchedContent(currentMode);
-          } else {
-            switchMode('movies', true).then(() => showWatchedContent('movies')).catch(() => {});
-          }
+          if (isWatchedView) restoreCatalogView();
+          else showWatchedContent();
         });
       }
       if (elements.tabLiveBtn) {
@@ -880,13 +876,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.mobileSeriesBtn?.addEventListener('click', () => switchMode('series', true));
       elements.mobileLiveBtn?.addEventListener('click', () => switchMode('live', true));
       elements.mobileWatchedBtn?.addEventListener('click', () => {
-        if (isWatchedView) {
-          restoreCatalogView();
-        } else if (currentMode === 'movies' || currentMode === 'series') {
-          showWatchedContent(currentMode);
-        } else {
-          switchMode('movies', true).then(() => showWatchedContent('movies')).catch(() => {});
-        }
+        if (isWatchedView) restoreCatalogView();
+        else showWatchedContent();
       });
       elements.mobileAccountBtn?.addEventListener('click', () => window.AndPlayAccount?.open());
       elements.homeFeaturedPrev?.addEventListener('click', () => moveHomeFeatured(-1));
@@ -896,7 +887,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (button) showHomeFeatured(Number(button.dataset.homeSlide));
       });
       elements.homeWatchedAllBtn?.addEventListener('click', () => {
-        switchMode('movies', true).then(() => showWatchedContent('movies')).catch(() => {});
+        showWatchedContent().catch(() => {});
       });
       elements.contentPageBackBtn?.addEventListener('click', () => restoreFromContentPage());
       elements.contentSeasonSelect?.addEventListener('change', (e) => renderSeasonEpisodes(e.target.value));
@@ -1793,6 +1784,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       movies: new Map(),
       series: new Map()
     };
+    let remoteSeriesHistoryRevalidationAt = 0;
+    const REMOTE_SERIES_HISTORY_REVALIDATION_COOLDOWN_MS = 5 * 60 * 1000;
 
     function getLatestSeriesProgress(seriesId) {
       let latest = null;
@@ -1933,14 +1926,27 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         ...(Array.isArray(fullSeriesCache) ? fullSeriesCache : []),
         ...(Array.isArray(homeWatchedCatalogFallback.series) ? homeWatchedCatalogFallback.series : [])
       ];
-      return catalogs.find(item =>
-        String(item.series_id) === key ||
-        (item.versions || []).some(version => String(version.seriesId) === key)
-      ) || null;
+      return catalogs.find(item => seriesGroupMatchesWatchedId(item, key)) || null;
     }
 
     async function hydrateRemoteHistoryMetadata(limit = 12) {
       const history = window.AndPlayAccount?.getRemoteWatchHistory?.() || [];
+
+      // O cache de séries pode ter sido criado antes de itens históricos entrarem
+      // ou depois de uma atualização do catálogo. Revalida o catálogo completo uma
+      // vez quando houver um series_id do histórico que não esteja nele.
+      const missingSeriesHistory = history.some(entry =>
+        entry.type === 'series' && !findHistoryCatalogItem('series', String(entry.id || ''))
+      );
+      const canRevalidateSeriesHistory =
+        Date.now() - remoteSeriesHistoryRevalidationAt >= REMOTE_SERIES_HISTORY_REVALIDATION_COOLDOWN_MS;
+      if (missingSeriesHistory && canRevalidateSeriesHistory) {
+        remoteSeriesHistoryRevalidationAt = Date.now();
+        try {
+          await loadFullSeries(true);
+        } catch (e) {}
+      }
+
       const targets = history.filter(entry => {
         const type = entry.type === 'series' ? 'series' : 'movie';
         const id = String(entry.id || '');
@@ -2757,12 +2763,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (group.series_id != null && String(group.series_id) === wanted) return true;
       if (group.primaryItem?.series_id != null && String(group.primaryItem.series_id) === wanted) return true;
       return Array.isArray(group.versions)
-        && group.versions.some(v => v?.seriesId != null && String(v.seriesId) === wanted);
+        && group.versions.some(v =>
+          (v?.seriesId != null && String(v.seriesId) === wanted) ||
+          (v?.item?.series_id != null && String(v.item.series_id) === wanted)
+        );
     }
 
-    async function showWatchedContent(type = currentMode) {
-      if (type !== 'movies' && type !== 'series') return;
+    async function showWatchedContent() {
 
+      watchedReturnMode = currentMode;
       isWatchedView = true;
       elements.tabWatchedBtn?.classList.add('active');
       elements.tabMoviesBtn.classList.remove('active');
@@ -2780,43 +2789,79 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           throw new Error('Entre na sua conta para consultar seu histórico de assistidos.');
         }
         await window.AndPlayAccount.refreshWatchHistory?.();
-        const catalog = type === 'movies' ? await loadFullMovies() : await loadFullSeries();
-        const ids = getWatchedIds(type);
-        const ordered = [];
 
-        ids.forEach(id => {
-          const match = (catalog || []).find(item => (
-            type === 'movies'
-              ? movieGroupMatchesWatchedId(item, id)
-              : seriesGroupMatchesWatchedId(item, id)
-          ));
-          if (match && !ordered.includes(match)) ordered.push(match);
+        const [movieCatalog, seriesCatalog] = await Promise.all([
+          loadFullMovies(),
+          loadFullSeries()
+        ]);
+        const history = window.AndPlayAccount.getRemoteWatchHistory?.() || [];
+        const seriesHistory = history.filter(entry => entry.type === 'series');
+
+        // O histórico guarda o series_id. Caso o cache local esteja desatualizado,
+        // atualiza o catálogo de séries uma única vez antes de concluir que o ID não existe.
+        const hasMissingSeries = seriesHistory.some(entry =>
+          !(seriesCatalog || []).some(item => seriesGroupMatchesWatchedId(item, entry.id))
+        );
+        const resolvedSeriesCatalog = hasMissingSeries
+          ? await loadFullSeries(true)
+          : seriesCatalog;
+
+        const movieMap = new Map();
+        const seriesMap = new Map();
+        (movieCatalog || []).forEach(item => {
+          const id = item.stream_id || item.primaryItem?.stream_id;
+          if (id != null) movieMap.set(String(id), item);
+          (item.versions || []).forEach(version => {
+            if (version?.streamId != null && !movieMap.has(String(version.streamId))) {
+              movieMap.set(String(version.streamId), item);
+            }
+          });
+        });
+        (resolvedSeriesCatalog || []).forEach(item => {
+          const id = item.series_id ?? item.primaryItem?.series_id;
+          if (id != null) seriesMap.set(String(id), item);
+          (item.versions || []).forEach(version => {
+            const seriesId = version?.seriesId ?? version?.item?.series_id;
+            if (seriesId != null && !seriesMap.has(String(seriesId))) {
+              seriesMap.set(String(seriesId), item);
+            }
+          });
+        });
+
+        const ordered = [];
+        history.forEach(entry => {
+          const key = String(entry.id || '');
+          if (!key) return;
+          const match = entry.type === 'series'
+            ? (seriesMap.get(key) || buildHistoryFallbackGroup('series', key))
+            : (movieMap.get(key) || buildHistoryFallbackGroup('movie', key));
+          if (!match) return;
+          if (!match._searchType) match._searchType = entry.type;
+          if (!ordered.some(item => item === match || (item._searchType === entry.type && String(
+            entry.type === 'series'
+              ? (item.series_id ?? item.primaryItem?.series_id ?? item.id)
+              : (item.stream_id ?? item.primaryItem?.stream_id ?? item.id)
+          ) === key))) {
+            ordered.push(match);
+          }
         });
 
         currentMediaList = ordered;
-        elements.categoryLabel.textContent = type === 'movies'
-          ? '👁 Assistidos • Filmes'
-          : '👁 Assistidos • Séries';
-        elements.searchInput.placeholder = type === 'movies'
-          ? 'Pesquisar nos filmes assistidos...'
-          : 'Pesquisar nas séries assistidas...';
+        elements.categoryLabel.textContent = '👁 Assistidos';
+        elements.searchInput.placeholder = 'Pesquisar nos filmes e séries assistidos...';
         applyFilterAndRender('');
         if (ordered.length === 0) {
           elements.mediaGrid.innerHTML =
             '<div style="grid-column:1/-1;text-align:center;color:#888;padding:55px 20px;">' +
             '<div style="font-size:42px;margin-bottom:12px;">👁</div>' +
-            '<div style="font-size:17px;color:#fff;font-weight:700;">' +
-            (type === 'movies' ? 'Nenhum filme assistido recentemente.' : 'Nenhuma série assistida recentemente.') +
-            '</div>' +
+            '<div style="font-size:17px;color:#fff;font-weight:700;">Nenhum conteúdo assistido recentemente.</div>' +
             '<div style="font-size:12px;margin-top:8px;">Os títulos que você iniciar aparecerão aqui automaticamente.</div>' +
             '</div>';
-          elements.mediaCount.textContent = type === 'movies' ? '0 filmes assistidos' : '0 séries assistidas';
+          elements.mediaCount.textContent = '0 assistidos';
         }
       } catch (err) {
         currentMediaList = [];
-        elements.categoryLabel.textContent = type === 'movies'
-          ? '👁 Assistidos • Filmes'
-          : '👁 Assistidos • Séries';
+        elements.categoryLabel.textContent = '👁 Assistidos';
         elements.mediaGrid.innerHTML =
           '<div style="grid-column:1/-1;text-align:center;color:#888;padding:50px 20px;">' +
           '<div style="font-size:42px;margin-bottom:12px;">👁</div>' +
@@ -2830,6 +2875,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function restoreCatalogView() {
       if (!isWatchedView) return;
+      const returnMode = watchedReturnMode;
       isWatchedView = false;
       elements.tabWatchedBtn?.classList.remove('active');
       elements.searchInput.value = '';
@@ -2837,13 +2883,23 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.categorySelect.value = 'ALL';
       elements.categorySelect.disabled = false;
 
+      if (returnMode === 'home') {
+        showHome();
+        return;
+      }
+      if (returnMode === 'live') {
+        switchMode('live', true);
+        return;
+      }
+
+      currentMode = returnMode === 'series' ? 'series' : 'movies';
       if (currentMode === 'movies') {
         elements.tabMoviesBtn.classList.add('active');
         elements.tabSeriesBtn.classList.remove('active');
         elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
         elements.searchInput.placeholder = 'Pesquisar filme (ex: Harry Potter, Carros)...';
         currentMediaList = fullMoviesCache || [];
-      } else if (currentMode === 'series') {
+      } else {
         elements.tabMoviesBtn.classList.remove('active');
         elements.tabSeriesBtn.classList.add('active');
         elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
@@ -4664,6 +4720,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function onSearch(term) {
       const q = normalizeSearch(term);
+      if (isWatchedView) {
+        applyFilterAndRender(term);
+        return;
+      }
       if (currentMode === 'home' || currentMode === 'search') {
         if (!q) {
           if (currentMode === 'search') showHome();
@@ -4727,8 +4787,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         card.setAttribute('role', 'button');
 
         const itemSearchType = item._searchType || item.type || '';
-        const isLive = (currentMode === 'live' || itemSearchType === 'live');
-        const isMovie = (currentMode === 'movies' || itemSearchType === 'movie');
+        const isLive = itemSearchType ? itemSearchType === 'live' : currentMode === 'live';
+        const isMovie = itemSearchType ? itemSearchType === 'movie' : currentMode === 'movies';
         const title = item.name || item.title || '';
         card.title = title;
 
@@ -4904,7 +4964,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function updateCountDisplay() {
       const total = currentFilteredList.length;
-      const typeLabel = currentMode === 'search' ? 'resultado(s)' : ((currentMode === 'movies') ? 'filme(s)' : 'série(s)');
+      const typeLabel = isWatchedView
+        ? 'assistido(s)'
+        : (currentMode === 'search' ? 'resultado(s)' : ((currentMode === 'movies') ? 'filme(s)' : 'série(s)'));
       if (total === 0) {
         elements.mediaCount.textContent = `0 ${typeLabel}`;
       } else {
