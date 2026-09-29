@@ -2702,23 +2702,39 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         activity = Array.isArray(parsed) ? parsed : [];
       } catch (e) {}
 
-      if (!activity.length) {
-        const movies = getWatchedIds('movies').map((id, index) => ({
-          type: 'movie', id, updatedAt: 0, fallbackOrder: index * 2
-        }));
-        const series = getWatchedIds('series').map((id, index) => ({
-          type: 'series', id, updatedAt: 0, fallbackOrder: index * 2 + 1
-        }));
-        activity = [...movies, ...series];
-      }
+      const fallbackEntries = [
+        ...getWatchedIds('movies').map((id, index) => ({
+          type: 'movie', id, fallbackOrder: index * 2
+        })),
+        ...getWatchedIds('series').map((id, index) => ({
+          type: 'series', id, fallbackOrder: index * 2 + 1
+        }))
+      ];
 
-      return activity.slice(0, HOME_WATCHED_LIMIT * 2)
+      const merged = new Map();
+      [...activity, ...fallbackEntries].forEach(entry => {
+        if (!entry || entry.id === null || entry.id === undefined) return;
+        const type = entry.type === 'movies' || entry.type === 'movie' ? 'movie' : 'series';
+        const id = String(entry.id);
+        const key = type + ':' + id;
+        const existing = merged.get(key);
+        const candidate = {
+          type,
+          id,
+          updatedAt: Number(entry.updatedAt || 0),
+          fallbackOrder: Number(entry.fallbackOrder || 0)
+        };
+        if (!existing ||
+            candidate.updatedAt > existing.updatedAt ||
+            (candidate.updatedAt === existing.updatedAt && candidate.fallbackOrder < existing.fallbackOrder)) {
+          merged.set(key, candidate);
+        }
+      });
+
+      return [...merged.values()]
         .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0) ||
           Number(a.fallbackOrder || 0) - Number(b.fallbackOrder || 0))
-        .map(entry => resolveHomeWatchedItem(
-          entry.type === 'movies' || entry.type === 'movie' ? 'movie' : 'series',
-          entry.id
-        ))
+        .map(entry => resolveHomeWatchedItem(entry.type, entry.id))
         .filter(Boolean)
         .slice(0, HOME_WATCHED_LIMIT);
     }
