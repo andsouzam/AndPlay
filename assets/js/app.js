@@ -10,9 +10,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     // Estado da aplicação
     let currentMode = 'home'; // 'home', 'movies', 'series' ou 'live'
     let isWatchedView = false;
-    const WATCHED_MOVIES_STORAGE_KEY = 'andplay_web_recent_movies';
-    const WATCHED_SERIES_STORAGE_KEY = 'andplay_web_recent_series';
-    const WATCHED_ACTIVITY_KEY = 'andplay_web_recent_activity_v1';
     const WATCHED_LIMIT = 500;
 
     let fullMoviesCache = null;
@@ -1019,8 +1016,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         return;
       }
 
-      // A Home é a primeira tela. O catálogo só é carregado quando solicitado,
-      // evitando chamadas pesadas e deixando a inicialização praticamente instantânea.
+      // A Home é a primeira tela. Aguarda a conta terminar a carga do histórico remoto
+      // para que "Últimos assistidos" não seja renderizado antes do Supabase.
+      await window.AndPlayAccount?.ready?.();
       showHome();
     }
 
@@ -2573,6 +2571,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.categorySelect.disabled = true;
 
       try {
+        await window.AndPlayAccount?.ready?.();
+        if (!window.AndPlayAccount?.isSignedIn?.()) {
+          throw new Error('Entre na sua conta para consultar seu histórico de assistidos.');
+        }
+        await window.AndPlayAccount.refreshWatchHistory?.();
         const catalog = type === 'movies' ? await loadFullMovies() : await loadFullSeries();
         const ids = getWatchedIds(type);
         const ordered = [];
@@ -2728,48 +2731,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function getHomeWatchedItems() {
-      let activity = [];
-      try {
-        const raw = localStorage.getItem(WATCHED_ACTIVITY_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        activity = Array.isArray(parsed) ? parsed : [];
-      } catch (e) {}
-
-      const fallbackEntries = [
-        ...getWatchedIds('movies').map((id, index) => ({
-          type: 'movie', id, fallbackOrder: index * 2
-        })),
-        ...getWatchedIds('series').map((id, index) => ({
-          type: 'series', id, fallbackOrder: index * 2 + 1
-        }))
-      ];
-
-      const merged = new Map();
-      [...activity, ...fallbackEntries].forEach(entry => {
-        if (!entry || entry.id === null || entry.id === undefined) return;
-        const type = entry.type === 'movies' || entry.type === 'movie' ? 'movie' : 'series';
-        const id = String(entry.id);
-        const key = type + ':' + id;
-        const existing = merged.get(key);
-        const candidate = {
-          type,
-          id,
-          updatedAt: Number(entry.updatedAt || 0),
-          fallbackOrder: Number(entry.fallbackOrder || 0)
-        };
-        if (!existing ||
-            candidate.updatedAt > existing.updatedAt ||
-            (candidate.updatedAt === existing.updatedAt && candidate.fallbackOrder < existing.fallbackOrder)) {
-          merged.set(key, candidate);
-        }
-      });
-
-      return [...merged.values()]
-        .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0) ||
-          Number(a.fallbackOrder || 0) - Number(b.fallbackOrder || 0))
+      const history = window.AndPlayAccount?.getRemoteWatchHistory?.() || [];
+      return history
+        .slice(0, HOME_WATCHED_LIMIT)
         .map(entry => resolveHomeWatchedItem(entry.type, entry.id))
-        .filter(Boolean)
-        .slice(0, HOME_WATCHED_LIMIT);
+        .filter(Boolean);
     }
 
     const HOME_RAIL_ITEM_LIMIT = 12;

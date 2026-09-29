@@ -2,10 +2,7 @@
   'use strict';
 
   const SUPABASE_CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-  const WATCHED_KEYS = {
-    movies: 'andplay_web_recent_movies',
-    series: 'andplay_web_recent_series'
-  };
+  const REMOTE_WATCH_HISTORY_LIMIT = 500;
   const PROGRESS_PREFIX = 'andplay_web_vod_progress_';
   const PREFERENCES_KEY = 'andplay_web_preferences_v1';
   const WATCH_STATS_KEY = 'andplay_web_watch_stats_v1';
@@ -13,6 +10,8 @@
 
   let supabaseClientPromise = null;
   let currentSession = null;
+  let remoteWatchHistory = { movies: [], series: [] };
+  let remoteWatchHistoryLoaded = false;
   let syncing = false;
   let syncQueued = false;
   let syncTimer = null;
@@ -140,19 +139,94 @@
     );
   }
 
-  function readWatched(type) {
-    const raw = readJson(WATCHED_KEYS[type], []);
-    return Array.isArray(raw) ? raw.map(String) : [];
+  function normalizeWatchType(type) {
+    return type === 'series' || type === 'serieses' ? 'series' : 'movies';
   }
 
-  function mergeWatched(type, remoteIds) {
-    const local = readWatched(type);
-    const merged = [];
-    [...local, ...(Array.isArray(remoteIds) ? remoteIds : [])].forEach(id => {
-      const value = String(id);
-      if (value && !merged.includes(value)) merged.push(value);
+  function setRemoteWatchHistory(rows) {
+    const next = { movies: [], series: [] };
+    (Array.isArray(rows) ? rows : []).forEach(row => {
+      const type = row?.content_type === 'series' ? 'series' : 'movies';
+      const id = String(row?.content_id ?? '').trim();
+      if (!id) return;
+      const entry = {
+        id,
+        updatedAt: Date.parse(row?.updated_at || '') || 0,
+        sortOrder: Number(row?.sort_order || 0)
+      };
+      if (!next[type].some(item => item.id === id)) next[type].push(entry);
     });
-    writeJson(WATCHED_KEYS[type], merged.slice(0, 500));
+
+    next.movies.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0) || a.sortOrder - b.sortOrder);
+    next.series.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0) || a.sortOrder - b.sortOrder);
+    next.movies = next.movies.slice(0, REMOTE_WATCH_HISTORY_LIMIT);
+    next.series = next.series.slice(0, REMOTE_WATCH_HISTORY_LIMIT);
+    remoteWatchHistory = next;
+    remoteWatchHistoryLoaded = true;
+  }
+
+  function getRemoteWatchedIds(type) {
+    const key = normalizeWatchType(type);
+    return (remoteWatchHistory[key] || []).map(item => String(item.id));
+  }
+
+  function getRemoteWatchHistory(type) {
+    if (type === 'movies' || type === 'movie') {
+      return remoteWatchHistory.movies.map(item => ({ ...item, type: 'movie' }));
+    }
+    if (type === 'series') {
+      return remoteWatchHistory.series.map(item => ({ ...item, type: 'series' }));
+    }
+    return [
+      ...remoteWatchHistory.movies.map(item => ({ ...item, type: 'movie' })),
+      ...remoteWatchHistory.series.map(item => ({ ...item, type: 'series' }))
+    ].sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+  }
+
+  async function refreshWatchHistory(client = null) {
+    if (!currentSession) {
+      remoteWatchHistory = { movies: [], series: [] };
+      remoteWatchHistoryLoaded = true;
+      return [];
+    }
+
+    const supabase = client || await getClient();
+    const history = await supabase.from('watch_history')
+      .select('content_type,content_id,sort_order,updated_at')
+      .order('updated_at', { ascending: false });
+    if (history.error) throw history.error;
+    setRemoteWatchHistory(history.data || []);
+    return getRemoteWatchHistory();
+  }
+
+  async function recordWatched(type, id) {
+    if (!currentSession || id === null || id === undefined || String(id).trim() === '') return false;
+    const normalizedType = normalizeWatchType(type) === 'series' ? 'series' : 'movie';
+    const normalizedId = String(id).trim();
+    const now = new Date().toISOString();
+
+    const currentKey = normalizedType === 'series' ? 'series' : 'movies';
+    const current = remoteWatchHistory[currentKey] || [];
+    remoteWatchHistory[currentKey] = [
+      { id: normalizedId, updatedAt: Date.parse(now), sortOrder: 0 },
+      ...current.filter(item => item.id !== normalizedId)
+    ].slice(0, REMOTE_WATCH_HISTORY_LIMIT);
+    remoteWatchHistoryLoaded = true;
+
+    try {
+      const client = await getClient();
+      const { error } = await client.from('watch_history').upsert({
+        content_type: normalizedType,
+        content_id: normalizedId,
+        sort_order: 0,
+        updated_at: now
+      }, { onConflict: 'user_id,content_type,content_id' });
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.warn('[EPlay Account] Watch history sync:', error);
+      return false;
+    }
   }
 
   function readLocalProgress() {
@@ -234,33 +308,6 @@
 
   async function pushAllLocal(client) {
     const now = new Date().toISOString();
-    const watchRows = [];
-    const activity = readJson('andplay_web_recent_activity_v1', []);
-    const activityMap = new Map(
-      (Array.isArray(activity) ? activity : [])
-        .filter(item => item?.id)
-        .map(item => [String(item.type) + ':' + String(item.id), item])
-    );
-    ['movies', 'series'].forEach(type => {
-      readWatched(type).forEach((id, index) => {
-        const activityItem = activityMap.get(type + ':' + String(id));
-        const activityAt = Number(activityItem?.updatedAt || 0);
-        watchRows.push({
-          content_type: type === 'movies' ? 'movie' : 'series',
-          content_id: String(id),
-          sort_order: index,
-          updated_at: new Date(activityAt || Date.now()).toISOString()
-        });
-      });
-    });
-
-    if (watchRows.length) {
-      const { error } = await client.from('watch_history').upsert(watchRows, {
-        onConflict: 'user_id,content_type,content_id'
-      });
-      if (error) throw error;
-    }
-
     const progressRows = readLocalProgress();
     if (progressRows.length) {
       const { error } = await client.from('watch_progress').upsert(progressRows, {
@@ -282,44 +329,7 @@
   }
 
   async function pullRemote(client) {
-    const history = await client.from('watch_history')
-      .select('content_type,content_id,sort_order,updated_at')
-      .order('sort_order', { ascending: true });
-    if (history.error) throw history.error;
-
-    const movieIds = (history.data || [])
-      .filter(r => r.content_type === 'movie')
-      .map(r => r.content_id);
-    const seriesIds = (history.data || [])
-      .filter(r => r.content_type === 'series')
-      .map(r => r.content_id);
-    mergeWatched('movies', movieIds);
-    mergeWatched('series', seriesIds);
-
-    const localActivity = readJson('andplay_web_recent_activity_v1', []);
-    const activityMap = new Map(
-      (Array.isArray(localActivity) ? localActivity : [])
-        .filter(item => item?.id)
-        .map(item => [String(item.type) + ':' + String(item.id), item])
-    );
-    (history.data || []).forEach(row => {
-      const key = (row.content_type === 'movie' ? 'movies' : 'series') + ':' + String(row.content_id);
-      const existing = activityMap.get(key);
-      const remoteAt = Date.parse(row.updated_at || '') || 0;
-      if (!existing || remoteAt > Number(existing.updatedAt || 0)) {
-        activityMap.set(key, {
-          type: row.content_type === 'movie' ? 'movies' : 'series',
-          id: String(row.content_id),
-          updatedAt: remoteAt
-        });
-      }
-    });
-    writeJson(
-      'andplay_web_recent_activity_v1',
-      [...activityMap.values()]
-        .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0))
-        .slice(0, 500)
-    );
+    await refreshWatchHistory(client);
 
     const progress = await client.from('watch_progress')
       .select('content_type,content_id,position,duration,title,poster,series_id,season_num,episode_num,updated_at')
@@ -1059,6 +1069,7 @@
       currentSession = sessionResult.data?.session || null;
       renderUser();
       updateAccountUi();
+      if (currentSession) await syncNow();
 
       client.auth.onAuthStateChange((event, session) => {
         currentSession = session || null;
@@ -1084,6 +1095,11 @@
     }
   }
 
+  let accountReadyResolve;
+  const accountReadyPromise = new Promise(resolve => {
+    accountReadyResolve = resolve;
+  });
+
   window.AndPlayAccount = {
     isConfigured,
     isSignedIn: () => Boolean(currentSession),
@@ -1092,12 +1108,25 @@
     queueSync,
     queueSyncWatched: queueSync,
     queueSyncProgress: queueSync,
-    queueSyncPreference: queueSync
+    queueSyncPreference: queueSync,
+    getRemoteWatchedIds,
+    getRemoteWatchHistory,
+    refreshWatchHistory,
+    recordWatched,
+    ready: () => accountReadyPromise
+  };
+
+  const startAccount = async () => {
+    try {
+      await init();
+    } finally {
+      accountReadyResolve();
+    }
   };
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
+    document.addEventListener('DOMContentLoaded', startAccount, { once: true });
   } else {
-    init();
+    startAccount();
   }
 })();
