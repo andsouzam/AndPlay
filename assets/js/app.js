@@ -98,6 +98,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     // Home: novidades e histórico mistos.
     let homeCatalogPromise = null;
     let homeCatalogRenderTimer = null;
+    let viewTransitionTimer = null;
     let homeFeaturedItems = [];
     let homeFeaturedIndex = 0;
     let homeFeaturedTimer = null;
@@ -1859,6 +1860,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     const SKIP_INTRO_CACHE_MAX_ENTRIES = 200;
     const SKIP_INTRO_AUTO_STORAGE_KEY = 'andplay_web_skip_intro_auto';
     const SKIPDB_SEGMENTS_URL = 'https://api.skipdb.tv/api/segments';
+    const SKIPDB_TITLE_SEARCH_URL = 'https://api.skipdb.tv/api/titles/search';
     const ANISKIP_TIMES_URL = 'https://api.aniskip.com/v2/skip-times';
     let skipIntroLookupTimer = null;
     let skipIntroLookupKey = '';
@@ -1929,6 +1931,49 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const malId = malCandidates.map(normalizePositiveId).find(Boolean) || '';
 
       return { imdbId, malId };
+    }
+
+    function normalizeSkipSearchTitle(value) {
+      return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+    }
+
+    async function resolveSkipExternalIds(mediaMeta) {
+      const direct = getExactSeriesExternalIds(mediaMeta);
+      if (direct.imdbId || direct.malId) return direct;
+
+      const rawTitle = mediaMeta?.seriesName || mediaMeta?.title || '';
+      const query = String(rawTitle || '').trim();
+      if (!query) return direct;
+
+      try {
+        const params = new URLSearchParams({ q: query });
+        const data = await fetchJsonWithTimeout(SKIPDB_TITLE_SEARCH_URL + '?' + params.toString(), 6000);
+        const candidates = [
+          ...(Array.isArray(data?.results) ? data.results : []),
+          ...(Array.isArray(data?.local) ? data.local : [])
+        ]
+          .map(item => ({
+            ...item,
+            imdbId: normalizeImdbId(item?.imdb_id || item?.imdbId || item?.id),
+            title: item?.name || item?.title || '',
+            mediaType: String(item?.media_type || item?.mediaType || '').toLowerCase()
+          }))
+          .filter(item => item.imdbId && (!item.mediaType || item.mediaType === 'series'));
+
+        if (!candidates.length) return direct;
+
+        const expected = normalizeSkipSearchTitle(query);
+        const exact = candidates.find(item => normalizeSkipSearchTitle(item.title) === expected);
+        const chosen = exact || (candidates.length === 1 ? candidates[0] : null);
+        return chosen ? { ...direct, imdbId: chosen.imdbId } : direct;
+      } catch (e) {
+        return direct;
+      }
     }
 
     function getSkipIntroCache() {
@@ -2206,7 +2251,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const rawDuration = Number(elements.videoPlayer.duration);
       const duration = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 0;
 
-      const ids = getExactSeriesExternalIds(playback.mediaMeta);
+      const ids = await resolveSkipExternalIds(playback.mediaMeta);
       const seasonNum = normalizePositiveId(playback.seasonNum);
       const episodeNum = normalizePositiveId(playback.episodeNum);
       if (!seasonNum || !episodeNum || (!ids.imdbId && !ids.malId)) {
@@ -2272,7 +2317,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         skipIntroLookupTimer = null;
       }
 
-      skipIntroLookupTimer = setTimeout(() => {
+      skipIntroLookupTimer = setTimeout(async () => {
         skipIntroLookupTimer = null;
 
         const playback = currentPlaybackMeta;
@@ -2282,7 +2327,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const rawDuration = Number(player.duration);
         const duration = Number.isFinite(rawDuration) && rawDuration > 0 ? rawDuration : 0;
 
-        const ids = getExactSeriesExternalIds(playback.mediaMeta);
+        const ids = await resolveSkipExternalIds(playback.mediaMeta);
         const seasonNum = normalizePositiveId(playback.seasonNum);
         const episodeNum = normalizePositiveId(playback.episodeNum);
         if (!seasonNum || !episodeNum || (!ids.imdbId && !ids.malId)) return;
@@ -3221,6 +3266,19 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }, 0);
     }
 
+    function startViewTransition() {
+      document.body.classList.add('eplay-view-changing');
+      if (viewTransitionTimer !== null) window.clearTimeout(viewTransitionTimer);
+      viewTransitionTimer = window.setTimeout(() => {
+        viewTransitionTimer = null;
+        document.body.classList.remove('eplay-view-changing');
+      }, 180);
+    }
+
+    function yieldToBrowser() {
+      return new Promise(resolve => window.setTimeout(resolve, 0));
+    }
+
     async function resumeHomeProgress(item) {
       if (!item) return;
       try {
@@ -3283,9 +3341,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       document.querySelector('.status-bar')?.style.setProperty('display', 'none');
       document.querySelector('main')?.style.setProperty('display', 'none');
       if (elements.categorySelect) elements.categorySelect.disabled = true;
-      renderHomeFeatured();
-      renderHomeWatched();
-      scheduleHomeCatalogRender();
+      startViewTransition();
+      window.setTimeout(() => {
+        if (currentMode !== 'home') return;
+        renderHomeFeatured();
+        renderHomeWatched();
+        scheduleHomeCatalogRender();
+      }, 0);
       startHomeFeaturedTimer();
       loadHomeDashboardData().catch(error => console.warn('[EPlay Home] Catálogo:', error));
     }
@@ -3334,6 +3396,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
         elements.searchInput.value = '';
       }
+
+      startViewTransition();
+      await yieldToBrowser();
 
       if (mode === 'movies') {
         elements.searchInput.placeholder = 'Pesquisar filme (ex: Harry Potter, Carros)...';

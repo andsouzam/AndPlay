@@ -5353,6 +5353,9 @@ body.tv-mode {
   background:rgba(255,255,255,.09); border-color:rgba(255,193,7,.45); outline:none;
 }
 .eplay-page-kicker { color:var(--andplay-accent); font-size:10px; font-weight:900; letter-spacing:.13em; text-transform:uppercase; }
+#contentPageKicker,#contentPageType{display:none!important}
+body:not(.tv-mode) #homeDashboard,body:not(.tv-mode) main,body:not(.tv-mode) #contentPage{transition:opacity .18s ease,transform .18s ease}
+body:not(.tv-mode).eplay-view-changing #homeDashboard,body:not(.tv-mode).eplay-view-changing main,body:not(.tv-mode).eplay-view-changing #contentPage{opacity:.88;transform:translateY(4px)}
 .eplay-content-hero {
   position:relative; min-height:390px; overflow:hidden; display:flex; align-items:flex-end;
   gap:28px; padding:34px clamp(24px,5vw,68px); border:1px solid var(--andplay-border);
