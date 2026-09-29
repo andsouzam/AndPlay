@@ -19,6 +19,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let fullMoviesCache = null;
     let fullSeriesCache = null;
     let fullLiveCache = null;
+    let fullMoviesCacheSavedAt = 0;
+    let fullSeriesCacheSavedAt = 0;
     let liveCategories = [];
     let moviePosterMap = new Map(); // Mapa inteligente para recuperar imagens 4K
     let movieCategories = [];
@@ -66,7 +68,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           request.onsuccess = () => {
             const value = request.result;
             const ttl = type === 'live' ? LIVE_CATALOG_TTL_MS : CATALOG_TTL_MS;
-            if (!value || !Array.isArray(value.data) || Date.now() - Number(value.savedAt || 0) > ttl) {
+            const savedAt = Number(value?.savedAt || 0);
+            if (type === 'movies') fullMoviesCacheSavedAt = savedAt;
+            if (type === 'series') fullSeriesCacheSavedAt = savedAt;
+            if (!value || !Array.isArray(value.data) || Date.now() - savedAt > ttl) {
               resolve(null);
               return;
             }
@@ -88,6 +93,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           const request = tx.objectStore(CATALOG_STORE).get(type);
           request.onsuccess = () => {
             const value = request.result;
+            const savedAt = Number(value?.savedAt || 0);
+            if (type === 'movies') fullMoviesCacheSavedAt = savedAt;
+            if (type === 'series') fullSeriesCacheSavedAt = savedAt;
             resolve(value && Array.isArray(value.data) ? value.data : null);
           };
           request.onerror = () => resolve(null);
@@ -97,17 +105,20 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       });
     }
 
-    async function writeCatalogCache(type, data) {
+    async function writeCatalogCache(type, data, meta = {}) {
       if (!Array.isArray(data) || data.length === 0) return;
       const db = await openCatalogDb();
       if (!db) return;
+      const savedAt = Date.now();
+      if (type === 'movies') fullMoviesCacheSavedAt = savedAt;
+      if (type === 'series') fullSeriesCacheSavedAt = savedAt;
       await new Promise(resolve => {
         try {
           const tx = db.transaction(CATALOG_STORE, 'readwrite');
           tx.oncomplete = () => resolve();
           tx.onerror = () => resolve();
           tx.onabort = () => resolve();
-          tx.objectStore(CATALOG_STORE).put({ savedAt: Date.now(), data }, type);
+          tx.objectStore(CATALOG_STORE).put({ savedAt, data, ...meta }, type);
         } catch (e) {
           resolve();
         }
@@ -4516,15 +4527,24 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     // CARREGAMENTO DE DADOS (FILMES / SÉRIES)
     // ==========================================
     async function loadFullMovies(forceRefresh = false) {
-      if (!forceRefresh && fullMoviesCache && fullMoviesCache.length > 0) {
+      const hasMemoryCache = Array.isArray(fullMoviesCache) && fullMoviesCache.length > 0;
+      const memoryFresh = hasMemoryCache && Date.now() - Number(fullMoviesCacheSavedAt || 0) <= CATALOG_TTL_MS;
+      if (!forceRefresh && memoryFresh) {
         currentMediaList = fullMoviesCache;
         if (currentMode === 'movies' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
+        return fullMoviesCache;
+      }
+      if (!forceRefresh && hasMemoryCache) {
+        currentMediaList = fullMoviesCache;
+        if (currentMode === 'movies' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
+        void loadFullMovies(true);
         return fullMoviesCache;
       }
       if (_loadingMoviesPromise) return _loadingMoviesPromise;
 
       _loadingMoviesPromise = (async () => {
         let hasPersistentCache = false;
+        let hasStaleCache = false;
         try {
           const cached = await readCatalogCache('movies');
           if (Array.isArray(cached) && cached.length > 0) {
@@ -4534,10 +4554,20 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             if (currentMode === 'movies' && !document.body.classList.contains('tv-mode')) {
               applyFilterAndRender('');
             }
+          } else {
+            const stale = await readCatalogCacheStale('movies');
+            if (Array.isArray(stale) && stale.length > 0) {
+              fullMoviesCache = stale;
+              currentMediaList = fullMoviesCache;
+              hasStaleCache = true;
+              if (currentMode === 'movies' && !document.body.classList.contains('tv-mode')) {
+                applyFilterAndRender('');
+              }
+            }
           }
         } catch (e) {}
 
-        if (!hasPersistentCache && currentMode === 'movies' && !document.body.classList.contains('tv-mode')) {
+        if (!hasPersistentCache && !hasStaleCache && currentMode === 'movies' && !document.body.classList.contains('tv-mode')) {
           showLoading('Carregando catálogo de filmes e recuperando capas 4K...');
         }
         try {
@@ -4617,7 +4647,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
           // Unificar versões duplicadas (Dublado, Legendado e 4K) em cards únicos inteligentes
           fullMoviesCache = groupMoviesByTitle(validMovies);
-          await writeCatalogCache('movies', fullMoviesCache);
+          await writeCatalogCache('movies', fullMoviesCache, {
+            sourceCount: rawList.length,
+            filteredCount: validMovies.length,
+            finalCount: fullMoviesCache.length
+          });
 
           currentMediaList = fullMoviesCache;
           if (elements.categorySelect) elements.categorySelect.value = 'ALL';
@@ -4626,7 +4660,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           if (currentMode === 'movies' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
           return fullMoviesCache;
         } catch (err) {
-          if (hasPersistentCache && fullMoviesCache?.length) {
+          if ((hasPersistentCache || hasStaleCache) && fullMoviesCache?.length) {
             return fullMoviesCache;
           }
           if (elements.loading) elements.loading.innerHTML = `<p style="color:#e50914;">Erro ao carregar filmes: ${err.message}</p>`;
@@ -4641,15 +4675,24 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     async function loadFullSeries(forceRefresh = false) {
-      if (!forceRefresh && fullSeriesCache && fullSeriesCache.length > 0) {
+      const hasMemoryCache = Array.isArray(fullSeriesCache) && fullSeriesCache.length > 0;
+      const memoryFresh = hasMemoryCache && Date.now() - Number(fullSeriesCacheSavedAt || 0) <= CATALOG_TTL_MS;
+      if (!forceRefresh && memoryFresh) {
         currentMediaList = fullSeriesCache;
         if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
+        return fullSeriesCache;
+      }
+      if (!forceRefresh && hasMemoryCache) {
+        currentMediaList = fullSeriesCache;
+        if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
+        void loadFullSeries(true);
         return fullSeriesCache;
       }
       if (_loadingSeriesPromise) return _loadingSeriesPromise;
 
       _loadingSeriesPromise = (async () => {
         let hasPersistentCache = false;
+        let hasStaleCache = false;
         try {
           const cached = await readCatalogCache('series');
           if (Array.isArray(cached) && cached.length > 0) {
@@ -4659,10 +4702,20 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) {
               applyFilterAndRender('');
             }
+          } else {
+            const stale = await readCatalogCacheStale('series');
+            if (Array.isArray(stale) && stale.length > 0) {
+              fullSeriesCache = stale;
+              currentMediaList = fullSeriesCache;
+              hasStaleCache = true;
+              if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) {
+                applyFilterAndRender('');
+              }
+            }
           }
         } catch (e) {}
 
-        if (!hasPersistentCache && currentMode === 'series' && !document.body.classList.contains('tv-mode')) {
+        if (!hasPersistentCache && !hasStaleCache && currentMode === 'series' && !document.body.classList.contains('tv-mode')) {
           showLoading('Carregando catálogo de séries completas...');
         }
         try {
@@ -4687,7 +4740,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
           // Unificar versões duplicadas (Dublado, Legendado e Lançamento) em cards únicos
           fullSeriesCache = groupSeriesByTitle(validSeries);
-          await writeCatalogCache('series', fullSeriesCache);
+          await writeCatalogCache('series', fullSeriesCache, {
+            sourceCount: rawList.length,
+            filteredCount: validSeries.length,
+            finalCount: fullSeriesCache.length
+          });
 
           currentMediaList = fullSeriesCache;
           if (elements.categorySelect) elements.categorySelect.value = 'ALL';
@@ -4696,7 +4753,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
           return fullSeriesCache;
         } catch (err) {
-          if (hasPersistentCache && fullSeriesCache?.length) {
+          if ((hasPersistentCache || hasStaleCache) && fullSeriesCache?.length) {
             return fullSeriesCache;
           }
           if (elements.loading) elements.loading.innerHTML = `<p style="color:#e50914;">Erro ao carregar séries: ${err.message}</p>`;
