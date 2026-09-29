@@ -1661,6 +1661,38 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return type === 'series' ? WATCHED_SERIES_STORAGE_KEY : WATCHED_MOVIES_STORAGE_KEY;
     }
 
+    function getNormalizedRemoteHistory(type = null) {
+      const remoteType = type === 'series' ? 'series' : (type === 'movies' ? 'movies' : undefined);
+      const remote = window.AndPlayAccount?.getRemoteWatchHistory?.(remoteType) || [];
+      const output = [];
+      const seenSeries = new Set();
+
+      remote.forEach(entry => {
+        const entryType = entry?.type === 'series' ? 'series' : 'movie';
+        let id = String(entry?.id || '').trim();
+        if (!id) return;
+
+        // O histórico correto de séries usa series_id. Apenas dados legados podem
+        // conter o ID do episódio; nesse caso o watch_progress já sincronizado informa
+        // qual série aquele episódio pertence.
+        if (entryType === 'series' && !findHistoryCatalogItem('series', id)) {
+          const progress = getVodProgress('series', id);
+          const seriesId = String(progress?.seriesId || '').trim();
+          if (seriesId) id = seriesId;
+        }
+
+        if (entryType === 'series') {
+          if (seenSeries.has(id)) return;
+          seenSeries.add(id);
+        }
+        output.push({ ...entry, type: entryType, id });
+      });
+
+      return output.sort((a, b) =>
+        Number(b.updatedAt || 0) - Number(a.updatedAt || 0)
+      );
+    }
+
     function getWatchedIds(type) {
       const normalizedType = type === 'series' ? 'series' : 'movies';
       const ids = [];
@@ -1678,7 +1710,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         window.AndPlayAccount?.isRemoteWatchHistoryLoaded?.();
 
       if (useRemoteHistory) {
-        (window.AndPlayAccount.getRemoteWatchedIds(normalizedType) || []).forEach(addId);
+        getNormalizedRemoteHistory(normalizedType === 'series' ? 'series' : 'movies')
+          .forEach(entry => addId(entry.id));
         return ids.slice(0, WATCHED_LIMIT);
       }
 
@@ -1930,7 +1963,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     async function hydrateRemoteHistoryMetadata(limit = 12) {
-      const history = window.AndPlayAccount?.getRemoteWatchHistory?.() || [];
+      const history = getNormalizedRemoteHistory();
 
       // O cache de séries pode ter sido criado antes de itens históricos entrarem
       // ou depois de uma atualização do catálogo. Revalida o catálogo completo uma
@@ -1950,6 +1983,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const targets = history.filter(entry => {
         const type = entry.type === 'series' ? 'series' : 'movie';
         const id = String(entry.id || '');
+        if (type === 'series') return false;
         if (!id || findHistoryCatalogItem(type, id)) return false;
         if (remoteHistoryMetadata[type === 'series' ? 'series' : 'movies'].has(id)) return false;
         const progress = getHistoryProgressFallback(type, id);
@@ -2757,6 +2791,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         && group.versions.some(v => v?.streamId != null && String(v.streamId) === wanted);
     }
 
+    function getSeriesWatchedId(group) {
+      return String(group?.series_id || group?.primaryItem?.series_id || '').trim();
+    }
+
     function seriesGroupMatchesWatchedId(group, id) {
       const wanted = String(id);
       if (!group) return false;
@@ -2790,11 +2828,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
         await window.AndPlayAccount.refreshWatchHistory?.();
 
+        const history = getNormalizedRemoteHistory();
+        const hasMovies = history.some(entry => entry.type === 'movie');
+        const hasSeries = history.some(entry => entry.type === 'series');
         const [movieCatalog, seriesCatalog] = await Promise.all([
-          loadFullMovies(),
-          loadFullSeries()
+          hasMovies ? loadFullMovies() : Promise.resolve(fullMoviesCache || []),
+          hasSeries ? loadFullSeries() : Promise.resolve(fullSeriesCache || [])
         ]);
-        const history = window.AndPlayAccount.getRemoteWatchHistory?.() || [];
         const seriesHistory = history.filter(entry => entry.type === 'series');
 
         // O histórico guarda o series_id. Caso o cache local esteja desatualizado,
@@ -2970,7 +3010,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function getHomeWatchedItems() {
-      const history = window.AndPlayAccount?.getRemoteWatchHistory?.() || [];
+      const history = getNormalizedRemoteHistory();
       return history
         .slice(0, HOME_WATCHED_LIMIT)
         .map(entry => resolveHomeWatchedItem(entry.type, entry.id))
@@ -7690,8 +7730,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function playSeriesEpisode(ep, seasonNum) {
       const openedFromContentPage = contentPageOpen && currentContentPageType === 'series';
-      const watchedId = currentSeriesGroup?.series_id || currentSeriesGroup?.primaryItem?.series_id;
-      if (watchedId != null) saveWatchedId('series', watchedId);
+      const watchedId = getSeriesWatchedId(currentSeriesGroup);
+      if (watchedId) saveWatchedId('series', watchedId);
 
       const ext = ep.container_extension || 'mp4';
       const epUrl = `${CONFIG.server}/series/${CONFIG.user}/${CONFIG.pass}/${ep.id}.${ext}`;
@@ -8509,7 +8549,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       // Reproduzir Episódio de Série VOD no Player de TV
       function tvPlaySeriesEpisode(seriesItem, ep, seasonNum) {
         if (!seriesItem || !ep) return;
-        const watchedId = seriesItem.series_id || seriesItem.primaryItem?.series_id || seriesItem.id;
+        const watchedId = seriesItem.series_id || seriesItem.primaryItem?.series_id;
         const ext = ep.container_extension || 'mp4';
         const videoUrl = `${CONFIG.server}/series/${CONFIG.user}/${CONFIG.pass}/${ep.id}.${ext}`;
         const sName = seriesItem.name || seriesItem.title || 'Série';
@@ -11021,10 +11061,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       window.AndPlayApp = {
         refreshAfterAccountSync() {
-          if (currentMode === 'home') {
+          if (isWatchedView) {
+            showWatchedContent();
+          } else if (currentMode === 'home') {
             renderHomeDashboard();
-          } else if (isWatchedView && (currentMode === 'movies' || currentMode === 'series')) {
-            showWatchedContent(currentMode);
           }
         },
         getAccountUsageSnapshot,
