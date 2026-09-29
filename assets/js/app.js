@@ -122,6 +122,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     // Home: novidades e histórico mistos.
     let homeCatalogPromise = null;
+    let homeCatalogReady = false;
     let homeCatalogRenderTimer = null;
     let viewTransitionTimer = null;
     let homeFeaturedItems = [];
@@ -2692,10 +2693,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function resolveHomeWatchedItem(type, id) {
       if (type === 'movie') {
-        const movieCatalog = [
-          ...(Array.isArray(fullMoviesCache) ? fullMoviesCache : []),
-          ...(Array.isArray(homeWatchedCatalogFallback.movies) ? homeWatchedCatalogFallback.movies : [])
-        ];
+        const movieCatalog = Array.isArray(fullMoviesCache) ? fullMoviesCache : [];
         const group = movieCatalog.find(x => movieGroupMatchesWatchedId(x, id));
         if (!group) return null;
         return {
@@ -2710,10 +2708,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         };
       }
 
-      const seriesCatalog = [
-        ...(Array.isArray(fullSeriesCache) ? fullSeriesCache : []),
-        ...(Array.isArray(homeWatchedCatalogFallback.series) ? homeWatchedCatalogFallback.series : [])
-      ];
+      const seriesCatalog = Array.isArray(fullSeriesCache) ? fullSeriesCache : [];
       const group = seriesCatalog.find(x => String(x.series_id) === String(id)) ||
         seriesCatalog.find(x => (x.versions || []).some(v => String(v.streamId) === String(id)));
       if (!group) return null;
@@ -3325,59 +3320,77 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       setupSingleHomeRailArrow(elements.homeWatchedRail, elements.homeWatchedNext);
     }
 
+    function homeHistoryNeedsCatalogRefresh(type) {
+      const history = window.AndPlayAccount?.getRemoteWatchHistory?.(type) || [];
+      if (!history.length) return false;
+
+      const catalog = type === 'movies' ? fullMoviesCache : fullSeriesCache;
+      if (!Array.isArray(catalog) || !catalog.length) return true;
+
+      return history.some(entry => {
+        if (type === 'movies') {
+          return !catalog.some(item => movieGroupMatchesWatchedId(item, entry.id));
+        }
+        return !catalog.some(item =>
+          String(item.series_id) === String(entry.id) ||
+          (item.versions || []).some(version => String(version.seriesId) === String(entry.id))
+        );
+      });
+    }
+
     async function loadHomeDashboardData() {
       if (homeCatalogPromise) return homeCatalogPromise;
+      homeCatalogReady = false;
+
       homeCatalogPromise = (async () => {
         try {
-          const [staleMovies, staleSeries] = await Promise.all([
-            readCatalogCacheStale('movies'),
-            readCatalogCacheStale('series')
-          ]);
-          let hasStaleCatalog = false;
-          if (Array.isArray(staleMovies) && staleMovies.length) {
-            fullMoviesCache = staleMovies;
-            homeWatchedCatalogFallback.movies = staleMovies;
-            hasStaleCatalog = true;
-          }
-          if (Array.isArray(staleSeries) && staleSeries.length) {
-            fullSeriesCache = staleSeries;
-            homeWatchedCatalogFallback.series = staleSeries;
-            hasStaleCatalog = true;
-          }
-          if (!homeWatchedCatalogFallback.movies.length && Array.isArray(fullMoviesCache)) homeWatchedCatalogFallback.movies = fullMoviesCache.slice();
-          if (!homeWatchedCatalogFallback.series.length && Array.isArray(fullSeriesCache)) homeWatchedCatalogFallback.series = fullSeriesCache.slice();
-          if (hasStaleCatalog) scheduleHomeCatalogRender();
-
-          const shouldRevalidate =
-            !homeLastRevalidationAt ||
-            Date.now() - homeLastRevalidationAt >= HOME_REVALIDATE_COOLDOWN_MS ||
-            !fullMoviesCache?.length ||
-            !fullSeriesCache?.length;
-
+          // Primeiro resolve o catálogo. O histórico só será montado depois que
+          // os catálogos necessários estiverem disponíveis e cobrirem seus IDs.
           await Promise.all([
             loadMovieCategories().catch(() => []),
             loadSeriesCategories().catch(() => [])
           ]);
 
-          if (shouldRevalidate) {
+          await Promise.all([
+            loadFullMovies(false).catch(() => []),
+            loadFullSeries(false).catch(() => [])
+          ]);
+
+          const shouldRevalidate = homeLastRevalidationAt > 0 &&
+            Date.now() - homeLastRevalidationAt >= HOME_REVALIDATE_COOLDOWN_MS;
+
+          const refreshMovies = shouldRevalidate || homeHistoryNeedsCatalogRefresh('movies');
+          const refreshSeries = shouldRevalidate || homeHistoryNeedsCatalogRefresh('series');
+
+          if (refreshMovies || refreshSeries) {
             await Promise.all([
-              loadFullMovies(true).catch(() => []),
-              loadFullSeries(true).catch(() => [])
+              refreshMovies ? loadFullMovies(true).catch(() => []) : Promise.resolve(fullMoviesCache),
+              refreshSeries ? loadFullSeries(true).catch(() => []) : Promise.resolve(fullSeriesCache)
             ]);
-            homeLastRevalidationAt = Date.now();
           }
 
-          enrichHomeRatings()
-            .then(() => scheduleHomeCatalogRender())
-            .catch(() => {});
+          homeLastRevalidationAt = Date.now();
+          homeCatalogReady = Boolean(
+            Array.isArray(fullMoviesCache) && fullMoviesCache.length &&
+            Array.isArray(fullSeriesCache) && fullSeriesCache.length
+          );
+
+          // Só depois do catálogo estar resolvido é que a Home pode montar
+          // Últimos assistidos e os demais blocos que dependem do catálogo.
+          if (homeCatalogReady) {
+            enrichHomeRatings().catch(() => {});
+          }
         } finally {
-          scheduleHomeCatalogRender();
+          if (!homeCatalogReady) {
+            homeCatalogReady = false;
+          }
         }
       })().finally(() => { homeCatalogPromise = null; });
       return homeCatalogPromise;
     }
 
     function renderHomeDashboard() {
+      if (currentMode === 'home' && !homeCatalogReady) return;
       homeDisplayUsage = new Map();
       renderHomeFeatured();
       registerHomeDisplayItems(homeFeaturedItems);
@@ -3389,7 +3402,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (homeCatalogRenderTimer !== null) return;
       homeCatalogRenderTimer = window.setTimeout(() => {
         homeCatalogRenderTimer = null;
-        if (currentMode === 'home') renderHomeDashboard();
+        if (currentMode === 'home' && homeCatalogReady) renderHomeDashboard();
       }, 0);
     }
 
@@ -3478,14 +3491,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         elements.categorySelect.style.display = 'none';
       }
       startViewTransition();
-      window.setTimeout(() => {
-        if (currentMode !== 'home') return;
-        renderHomeFeatured();
-        renderHomeWatched();
-        scheduleHomeCatalogRender();
-      }, 0);
       startHomeFeaturedTimer();
-      loadHomeDashboardData().catch(error => console.warn('[EPlay Home] Catálogo:', error));
+      loadHomeDashboardData()
+        .then(() => {
+          if (currentMode === 'home' && homeCatalogReady) renderHomeDashboard();
+        })
+        .catch(error => console.warn('[EPlay Home] Catálogo:', error));
     }
 
     // ==========================================
@@ -10774,9 +10785,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       };
 
       window.AndPlayApp = {
-        refreshAfterAccountSync() {
+        async refreshAfterAccountSync() {
           if (currentMode === 'home') {
-            renderHomeDashboard();
+            await loadHomeDashboardData().catch(() => {});
+            if (currentMode === 'home' && homeCatalogReady) renderHomeDashboard();
           } else if (isWatchedView && (currentMode === 'movies' || currentMode === 'series')) {
             showWatchedContent(currentMode);
           }
