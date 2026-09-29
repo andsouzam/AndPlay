@@ -338,6 +338,57 @@
     </section>
   </section>
 
+  <section id="contentPage" class="eplay-content-page" aria-label="Detalhes do conteúdo" hidden>
+    <div class="eplay-content-page-topbar">
+      <button id="contentPageBackBtn" class="eplay-page-back" type="button" aria-label="Voltar">
+        ← Voltar
+      </button>
+      <span id="contentPageKicker" class="eplay-page-kicker">EPLAY</span>
+    </div>
+
+    <div class="eplay-content-hero">
+      <div class="eplay-content-backdrop" id="contentPageBackdrop"></div>
+      <div class="eplay-content-shade"></div>
+      <div class="eplay-content-poster-wrap">
+        <img id="contentPagePoster" class="eplay-content-poster" src="" alt="Capa">
+      </div>
+      <div class="eplay-content-copy">
+        <div id="contentPageType" class="eplay-content-type">FILME</div>
+        <h1 id="contentPageTitle">Título</h1>
+        <div id="contentPageMeta" class="eplay-content-meta"></div>
+        <div id="contentPageGenres" class="eplay-content-genres"></div>
+        <p id="contentPagePlot" class="eplay-content-plot">Sinopse não disponível.</p>
+      </div>
+    </div>
+
+    <section id="contentMoviePanel" class="eplay-content-panel" hidden>
+      <div class="eplay-content-panel-head">
+        <div>
+          <span class="eplay-page-kicker">FILME</span>
+          <h2>Escolha como assistir</h2>
+        </div>
+      </div>
+      <div id="contentMovieVersions" class="eplay-version-grid"></div>
+    </section>
+
+    <section id="contentSeriesPanel" class="eplay-content-panel" hidden>
+      <div class="eplay-content-panel-head eplay-series-panel-head">
+        <div>
+          <span class="eplay-page-kicker">EPISÓDIOS</span>
+          <h2 id="contentSeriesHeading">Série</h2>
+        </div>
+        <div class="eplay-series-toolbar">
+          <label for="contentSeasonSelect">Temporada</label>
+          <select id="contentSeasonSelect"></select>
+          <div id="contentSeriesVersionSwitcher" class="eplay-series-versions"></div>
+        </div>
+      </div>
+      <div id="contentEpisodesList" class="eplay-content-episodes">
+        <div class="eplay-page-loading">Carregando episódios...</div>
+      </div>
+    </section>
+  </section>
+
   <div class="status-bar">
     <div class="status-left">
       <span id="categoryLabel">Catálogo Geral</span>

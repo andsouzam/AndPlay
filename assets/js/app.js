@@ -139,6 +139,23 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       homeSeriesRails: document.getElementById('homeSeriesRails'),
       homeMoviesSection: document.getElementById('homeMoviesSection'),
       homeMoviesRails: document.getElementById('homeMoviesRails'),
+      contentPage: document.getElementById('contentPage'),
+      contentPageBackBtn: document.getElementById('contentPageBackBtn'),
+      contentPageKicker: document.getElementById('contentPageKicker'),
+      contentPageBackdrop: document.getElementById('contentPageBackdrop'),
+      contentPagePoster: document.getElementById('contentPagePoster'),
+      contentPageType: document.getElementById('contentPageType'),
+      contentPageTitle: document.getElementById('contentPageTitle'),
+      contentPageMeta: document.getElementById('contentPageMeta'),
+      contentPageGenres: document.getElementById('contentPageGenres'),
+      contentPagePlot: document.getElementById('contentPagePlot'),
+      contentMoviePanel: document.getElementById('contentMoviePanel'),
+      contentMovieVersions: document.getElementById('contentMovieVersions'),
+      contentSeriesPanel: document.getElementById('contentSeriesPanel'),
+      contentSeriesHeading: document.getElementById('contentSeriesHeading'),
+      contentSeasonSelect: document.getElementById('contentSeasonSelect'),
+      contentSeriesVersionSwitcher: document.getElementById('contentSeriesVersionSwitcher'),
+      contentEpisodesList: document.getElementById('contentEpisodesList'),
       tabSeriesBtn: document.getElementById('tabSeriesBtn'),
       tabLiveBtn: document.getElementById('tabLiveBtn'),
       tabWatchedBtn: document.getElementById('tabWatchedBtn'),
@@ -823,6 +840,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.homeWatchedAllBtn?.addEventListener('click', () => {
         switchMode('movies', true).then(() => showWatchedContent('movies')).catch(() => {});
       });
+      elements.contentPageBackBtn?.addEventListener('click', () => restoreFromContentPage());
+      elements.contentSeasonSelect?.addEventListener('change', (e) => renderSeasonEpisodes(e.target.value));
 
       // Video Modal
       elements.closeVideoModal.addEventListener('click', closePlayer);
@@ -3029,7 +3048,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
         slide.querySelector('.home-featured-watch')?.addEventListener('click', () => {
           if (item.type === 'movie') onMovieCardClick(item.item);
-          else openSeriesModal(item.item);
+          else openSeriesPage(item.item);
         });
         elements.homeFeaturedTrack.appendChild(slide);
 
@@ -3138,7 +3157,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             const version = (item.item.versions || []).find(v => String(v.streamId) === String(item.id)) || item.item.versions?.[0];
             if (version) playMovieVersion(item.item, version, item.item.versions || [version]);
           } else {
-            openSeriesModal(item.item);
+            openSeriesPage(item.item);
           }
         });
         elements.homeWatchedRail.appendChild(card);
@@ -3218,7 +3237,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           return;
         }
 
-        await openSeriesModal(group);
+        await openSeriesPage(group);
         const seasonKey = String(item.seasonNum || '');
         const eps = currentSeriesData?.episodes?.[seasonKey] || [];
         const ep = eps.find(e => String(e.id) === String(item.id)) ||
@@ -3233,6 +3252,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function showHome() {
       isWatchedView = false;
+      contentPageOpen = false;
+      currentContentPageType = '';
+      currentContentPageItem = null;
+      contentPageReturnState = null;
+      elements.contentPage?.classList.remove('is-active');
+      if (elements.contentPage) elements.contentPage.hidden = true;
       currentMode = 'home';
       elements.tabHomeBtn?.classList.add('active');
       elements.tabMoviesBtn?.classList.remove('active');
@@ -3269,6 +3294,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.tabHomeBtn?.classList.remove('active');
       elements.categorySelect.disabled = false;
       elements.homeDashboard?.classList.remove('is-active');
+      elements.contentPage?.classList.remove('is-active');
+      if (elements.contentPage) elements.contentPage.hidden = true;
+      contentPageOpen = false;
+      currentContentPageType = '';
+      currentContentPageItem = null;
+      contentPageReturnState = null;
       document.querySelector('.status-bar')?.style.removeProperty('display');
       document.querySelector('main')?.style.removeProperty('display');
       currentMode = mode;
@@ -4666,7 +4697,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (isMovie) {
           card.addEventListener('click', () => onMovieCardClick(item));
         } else {
-          card.addEventListener('click', () => openSeriesModal(item));
+          card.addEventListener('click', () => openSeriesPage(item));
         }
 
         fragment.appendChild(card);
@@ -5053,18 +5084,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     // ==========================================
     function onMovieCardClick(groupOrMovie) {
-      const versions = groupOrMovie.versions || [{
-        item: groupOrMovie,
-        versionInfo: detectMovieVersion(groupOrMovie),
-        streamId: groupOrMovie.stream_id,
-        ext: groupOrMovie.container_extension || 'mp4'
-      }];
-
-      if (versions.length > 1) {
-        openMovieVersionModal(groupOrMovie, versions);
-      } else {
-        playMovieVersion(groupOrMovie, versions[0], versions);
-      }
+      openMoviePage(groupOrMovie).catch(error => {
+        console.warn('[EPlay] Não foi possível abrir a página do filme:', error);
+      });
     }
 
     function openMovieVersionModal(groupOrMovie, versions) {
@@ -5111,6 +5133,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function playMovieVersion(groupOrMovie, selectedVersion, allVersions) {
+      const openedFromContentPage = contentPageOpen && currentContentPageType === 'movie';
       const watchedId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || selectedVersion?.streamId;
       if (watchedId != null) saveWatchedId('movies', watchedId);
 
@@ -5142,6 +5165,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           groupOrMovie,
           selectedVersion,
           allVersions,
+          fromContentPage: openedFromContentPage,
           poster,
           year,
           plot,
@@ -5549,6 +5573,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.modalTitle.textContent = title;
       elements.videoPlayer.src = url;
       elements.downloadBtn.href = url;
+      elements.videoModal.classList.add('eplay-player-page');
       elements.videoModal.style.display = 'flex';
       elements.modalFormat.textContent = 'Carregando vídeo...';
 
@@ -5665,6 +5690,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       currentPlaybackMeta = null;
 
       elements.videoModal.style.display = 'none';
+      elements.videoModal.classList.remove('eplay-player-page');
       elements.videoPlayer.pause();
       elements.videoPlayer.src = '';
       activeVideoUrl = '';
@@ -5682,9 +5708,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (elements.sidebarDirector) elements.sidebarDirector.textContent = '-';
       if (elements.sidebarCast) elements.sidebarCast.textContent = '-';
 
-      // Se estávamos assistindo uma série, atualiza a lista de episódios para refletir os status de indisponibilidade
+      // Se estávamos assistindo uma série, atualiza a lista de episódios e retorna à página dedicada.
       if (lastMeta?.mediaType === 'series' && lastMeta.seasonNum && currentSeriesData) {
         renderSeasonEpisodes(lastMeta.seasonNum);
+      }
+
+      if (lastMeta?.mediaMeta?.fromContentPage && contentPageReturnState === null) {
+        contentPageOpen = true;
+        currentContentPageType = lastMeta.mediaType;
       }
 
       // Limpar legendas anteriores e fechar painel
@@ -7008,6 +7039,201 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     // ==========================================
     let currentSeriesGroup = null;
     let currentActiveSeriesVersion = null;
+    let currentContentPageType = '';
+    let currentContentPageItem = null;
+    let contentPageReturnState = null;
+    let contentPageOpen = false;
+
+    const SERIES_EPISODE_HISTORY_KEY = 'andplay_web_series_episode_history_v1';
+
+    function readSeriesEpisodeHistory() {
+      try {
+        const raw = localStorage.getItem(SERIES_EPISODE_HISTORY_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function writeSeriesEpisodeHistory(history, sync = true) {
+      try {
+        localStorage.setItem(SERIES_EPISODE_HISTORY_KEY, JSON.stringify(history || {}));
+        if (sync) saveLocalPreference('series_episode_history', history || {});
+      } catch (e) {}
+    }
+
+    function getSeriesEpisodeState(ep) {
+      const id = String(ep?.id || '');
+      if (!id) return null;
+      return readSeriesEpisodeHistory()[id] || null;
+    }
+
+    function markSeriesEpisodeWatched(ep, seasonNum) {
+      const id = String(ep?.id || '');
+      if (!id) return;
+      const history = readSeriesEpisodeHistory();
+      history[id] = {
+        status: 'watched',
+        position: Number(ep.info?.duration_secs || ep.info?.duration_seconds || 0) || 0,
+        duration: Number(ep.info?.duration_secs || ep.info?.duration_seconds || 0) || 0,
+        title: String(ep.title || 'Episódio ' + (ep.episode_num || '')),
+        seasonNum: Number(seasonNum) || 0,
+        episodeNum: Number(ep.episode_num) || 0,
+        updatedAt: Date.now()
+      };
+      writeSeriesEpisodeHistory(history);
+      if (contentPageOpen && currentContentPageType === 'series') {
+        requestAnimationFrame(() => renderSeasonEpisodes(String(seasonNum)));
+      }
+    }
+
+    function getEpisodePlaybackState(ep) {
+      const id = String(ep?.id || '');
+      if (!id) return { status: 'new', position: 0, duration: 0, remaining: 0 };
+
+      const historyState = getSeriesEpisodeState(ep);
+      const progress = getVodProgress('series', id);
+      const position = Number(progress?.position || historyState?.position || 0);
+      const duration = Number(progress?.duration || historyState?.duration || 0);
+      const hasProgress = position > VOD_PROGRESS_MIN_SECONDS && duration > 0;
+      const watched = historyState?.status === 'watched';
+
+      if (watched) {
+        return {
+          status: 'watched',
+          position: duration || position,
+          duration,
+          remaining: 0
+        };
+      }
+
+      return {
+        status: hasProgress ? 'resume' : 'new',
+        position,
+        duration,
+        remaining: duration > 0 ? Math.max(0, duration - position) : 0
+      };
+    }
+
+    function showContentPageShell(type, item) {
+      if (!elements.contentPage) return;
+      currentContentPageType = type;
+      currentContentPageItem = item;
+      contentPageOpen = true;
+
+      elements.homeDashboard?.classList.remove('is-active');
+      document.querySelector('.status-bar')?.style.setProperty('display', 'none');
+      document.querySelector('main')?.style.setProperty('display', 'none');
+      if (elements.categorySelect) elements.categorySelect.disabled = true;
+      elements.contentPage.hidden = false;
+      elements.contentPage.classList.add('is-active');
+
+      const title = item?.name || item?.title || (type === 'series' ? 'Série' : 'Filme');
+      const poster = type === 'series'
+        ? (item?.cover || item?.stream_icon || '')
+        : (item?.poster || getBestPosterUrl(item?.primaryItem || item) || item?.stream_icon || '');
+
+      elements.contentPageKicker.textContent = type === 'series' ? 'SÉRIE' : 'FILME';
+      elements.contentPageType.textContent = type === 'series' ? 'SÉRIE' : 'FILME';
+      elements.contentPageTitle.textContent = title;
+      elements.contentPagePoster.src = poster;
+      elements.contentPageBackdrop.style.backgroundImage = poster ? 'url("' + String(poster).replace(/"/g, '%22') + '")' : 'none';
+
+      const ratingInfo = getHomeRatingInfo(item);
+      const year = item?.year || item?.releaseDate?.substring?.(0, 4) || '';
+      elements.contentPageMeta.textContent = [
+        year,
+        ratingInfo.value > 0 ? '★ ' + ratingInfo.value.toFixed(1) + ' ' + ratingInfo.source : ''
+      ].filter(Boolean).join(' • ');
+
+      const genres = getHomeThemesForItem(item);
+      elements.contentPageGenres.innerHTML = genres.map(genre =>
+        '<span class="eplay-content-genre">' + escapeHtml(genre) + '</span>'
+      ).join('');
+      elements.contentPagePlot.textContent = item?.plot || item?.description || 'Sinopse não disponível.';
+    }
+
+    function restoreFromContentPage() {
+      const state = contentPageReturnState || { mode: 'home', watched: false };
+      contentPageOpen = false;
+      currentContentPageType = '';
+      currentContentPageItem = null;
+      contentPageReturnState = null;
+
+      if (elements.contentPage) {
+        elements.contentPage.hidden = true;
+        elements.contentPage.classList.remove('is-active');
+      }
+
+      if (state.mode === 'home') {
+        showHome();
+        return;
+      }
+
+      switchMode(state.mode, false).then(() => {
+        if (state.watched && (state.mode === 'movies' || state.mode === 'series')) {
+          showWatchedContent(state.mode);
+        }
+      }).catch(() => {});
+    }
+
+    async function openMoviePage(groupOrMovie) {
+      contentPageReturnState = { mode: currentMode, watched: isWatchedView };
+      showContentPageShell('movie', groupOrMovie);
+
+      elements.contentSeriesPanel.hidden = true;
+      elements.contentMoviePanel.hidden = false;
+      elements.contentMovieVersions.innerHTML = '';
+
+      const versions = groupOrMovie?.versions || [{
+        item: groupOrMovie,
+        versionInfo: detectMovieVersion(groupOrMovie),
+        streamId: groupOrMovie?.stream_id,
+        ext: groupOrMovie?.container_extension || 'mp4'
+      }];
+
+      const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4 };
+      const sortedVersions = [...versions].sort((a, b) =>
+        (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99)
+      );
+
+      sortedVersions.forEach(v => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'eplay-version-card';
+        btn.innerHTML =
+          '<span class="eplay-version-icon">' + escapeHtml(v.versionInfo.icon || '▶') + '</span>' +
+          '<span class="eplay-version-copy">' +
+            '<strong>' + escapeHtml(v.versionInfo.label || 'Versão') + '</strong>' +
+            '<small>' + escapeHtml(v.versionInfo.desc || 'Assistir nesta versão') + '</small>' +
+          '</span>' +
+          '<span class="eplay-version-action">▶ Assistir</span>';
+        btn.addEventListener('click', () => playMovieVersion(groupOrMovie, v, versions));
+        elements.contentMovieVersions.appendChild(btn);
+      });
+    }
+
+    async function openSeriesPage(seriesGroupOrItem) {
+      contentPageReturnState = { mode: currentMode, watched: isWatchedView };
+      currentContentPageType = 'series';
+      currentSeriesGroup = seriesGroupOrItem;
+      showContentPageShell('series', seriesGroupOrItem);
+
+      elements.contentMoviePanel.hidden = true;
+      elements.contentSeriesPanel.hidden = false;
+      elements.contentSeriesHeading.textContent = seriesGroupOrItem?.name || seriesGroupOrItem?.title || 'Série';
+      elements.contentEpisodesList.innerHTML = '<div class="eplay-page-loading"><div class="spinner"></div>Carregando episódios...</div>';
+
+      const versions = seriesGroupOrItem?.versions || [{
+        item: seriesGroupOrItem,
+        versionInfo: detectSeriesVersion(seriesGroupOrItem),
+        seriesId: seriesGroupOrItem?.series_id
+      }];
+      setupSeriesVersionSwitcher(versions);
+      const defaultVer = versions.find(v => v.versionInfo.type === 'dublado') || versions[0];
+      await loadSeriesVersion(defaultVer);
+    }
 
     async function openSeriesModal(seriesGroupOrItem) {
       currentSeriesGroup = seriesGroupOrItem;
@@ -7034,22 +7260,36 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       await loadSeriesVersion(defaultVer);
     }
 
+    function getSeriesVersionSwitcherElement() {
+      return elements.contentSeriesVersionSwitcher || elements.seriesVersionSwitcher;
+    }
+
+    function getSeriesSeasonSelectElement() {
+      return elements.contentSeasonSelect || elements.seasonSelect;
+    }
+
+    function getSeriesEpisodesElement() {
+      return elements.contentEpisodesList || elements.episodesList;
+    }
+
     function setupSeriesVersionSwitcher(versions) {
-      if (!elements.seriesVersionSwitcher) return;
+      const switcher = getSeriesVersionSwitcherElement();
+      if (!switcher) return;
 
       if (!versions || versions.length <= 1) {
-        elements.seriesVersionSwitcher.style.display = 'none';
-        elements.seriesVersionSwitcher.innerHTML = '';
+        switcher.style.display = 'none';
+        switcher.innerHTML = '';
         return;
       }
 
-      elements.seriesVersionSwitcher.style.display = 'inline-flex';
+      switcher.style.display = 'inline-flex';
       renderSeriesVersionButtons(versions, currentActiveSeriesVersion);
     }
 
     function renderSeriesVersionButtons(versions, activeVersion) {
-      if (!elements.seriesVersionSwitcher) return;
-      elements.seriesVersionSwitcher.innerHTML = '';
+      const switcher = getSeriesVersionSwitcherElement();
+      if (!switcher) return;
+      switcher.innerHTML = '';
       const orderMap = { 'dublado': 1, 'legendado': 2 };
       const sorted = [...versions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
 
@@ -7067,11 +7307,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
         btn.addEventListener('click', () => {
           if (isCurrent) return;
-          const selectedSeason = elements.seasonSelect ? elements.seasonSelect.value : null;
+          const selectedSeason = getSeriesSeasonSelectElement()?.value || null;
           loadSeriesVersion(v, selectedSeason);
         });
 
-        elements.seriesVersionSwitcher.appendChild(btn);
+        switcher.appendChild(btn);
       });
     }
 
@@ -7084,8 +7324,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const versions = currentSeriesGroup?.versions || [versionObj];
       renderSeriesVersionButtons(versions, currentActiveSeriesVersion);
 
-      elements.episodesList.innerHTML = `<div style="text-align:center; color:#aaa; padding:40px;"><div class="spinner" style="margin: 0 auto 15px;"></div>Carregando episódios (${escapeHtml(versionObj.versionInfo.label)})...</div>`;
-      elements.seasonSelect.innerHTML = '<option>Carregando...</option>';
+      const seriesEpisodesList = getSeriesEpisodesElement();
+      const seriesSeasonSelect = getSeriesSeasonSelectElement();
+      seriesEpisodesList.innerHTML = `<div class="eplay-page-loading"><div class="spinner"></div>Carregando episódios (${escapeHtml(versionObj.versionInfo.label)})...</div>`;
+      seriesSeasonSelect.innerHTML = '<option>Carregando...</option>';
 
       try {
         const data = await xtreamApi('get_series_info', `&series_id=${versionObj.seriesId}`);
@@ -7095,10 +7337,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const episodesBySeason = currentSeriesData.episodes || {};
         const seasons = Object.keys(episodesBySeason).sort((a, b) => Number(a) - Number(b));
 
-        elements.seasonSelect.innerHTML = '';
+        seriesSeasonSelect.innerHTML = '';
         if (seasons.length === 0) {
           if (myVersionToken !== _seriesVersionLoadToken) return;
-          elements.episodesList.innerHTML = '<div style="text-align:center; color:#888; padding:30px;">Nenhum episódio cadastrado nesta versão.</div>';
+          seriesEpisodesList.innerHTML = '<div class="eplay-page-empty">Nenhum episódio cadastrado nesta versão.</div>';
           return;
         }
 
@@ -7106,26 +7348,27 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           const opt = document.createElement('option');
           opt.value = seasonNum;
           opt.textContent = `Temporada ${seasonNum} (${episodesBySeason[seasonNum].length} ep)`;
-          elements.seasonSelect.appendChild(opt);
+          seriesSeasonSelect.appendChild(opt);
         });
 
         // Mantém a temporada que o usuário já estava assistindo ou a primeira
         const targetSeason = (preferredSeason && seasons.includes(String(preferredSeason))) ? String(preferredSeason) : seasons[0];
-        elements.seasonSelect.value = targetSeason;
+        seriesSeasonSelect.value = targetSeason;
         renderSeasonEpisodes(targetSeason);
       } catch (err) {
         if (myVersionToken !== _seriesVersionLoadToken) return;
-        elements.episodesList.innerHTML = `<div style="color:#e50914; padding:20px; text-align:center;">Erro ao carregar episódios: ${escapeHtml(err.message)}</div>`;
+        seriesEpisodesList.innerHTML = `<div class="eplay-page-error">Erro ao carregar episódios: ${escapeHtml(err.message)}</div>`;
       }
     }
 
     function renderSeasonEpisodes(seasonNum) {
       if (!currentSeriesData || !currentSeriesData.episodes) return;
       const episodes = currentSeriesData.episodes[seasonNum] || [];
+      const seriesEpisodesList = elements.contentEpisodesList || elements.episodesList;
 
-      elements.episodesList.innerHTML = '';
+      seriesEpisodesList.innerHTML = '';
       if (episodes.length === 0) {
-        elements.episodesList.innerHTML = '<div style="text-align:center; color:#888; padding:30px;">Nenhum episódio encontrado nesta temporada.</div>';
+        seriesEpisodesList.innerHTML = '<div class="eplay-page-empty">Nenhum episódio encontrado nesta temporada.</div>';
         return;
       }
 
@@ -7141,11 +7384,32 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const plot = (ep.info && ep.info.plot) ? ep.info.plot : 'Sem sinopse.';
 
         const isBroken = isStreamMarkedBroken(ep.id);
+        const playbackState = getEpisodePlaybackState(ep);
+        const statusBadge = playbackState.status === 'watched'
+          ? '<span class="episode-watch-state is-watched">✓ ASSISTIDO</span>'
+          : playbackState.status === 'resume'
+            ? '<span class="episode-watch-state is-resume">↻ RETOMAR</span>'
+            : '';
         const brokenBadge = isBroken
           ? `<span style="background: rgba(229, 9, 20, 0.2); color: #ff6b6b; border: 1px solid rgba(229, 9, 20, 0.4); padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-left: 8px;">⚠️ Indisponível no Servidor</span>`
           : '';
-        const watchBtnText = isBroken ? '⚠️ Tentar Assistir' : '▶ Assistir';
-        const watchBtnClass = isBroken ? 'btn btn-secondary' : 'btn btn-primary';
+        const watchBtnText = isBroken
+          ? '⚠️ Tentar Assistir'
+          : playbackState.status === 'watched'
+            ? '✓ ASSISTIDO'
+            : playbackState.status === 'resume'
+              ? '↻ RETOMAR'
+              : '▶ Assistir';
+        const watchBtnClass = playbackState.status === 'watched' && !isBroken
+          ? 'btn btn-secondary episode-watched-btn'
+          : playbackState.status === 'resume' && !isBroken
+            ? 'btn btn-primary episode-resume-btn'
+            : isBroken ? 'btn btn-secondary' : 'btn btn-primary';
+        const remainingText = playbackState.status === 'watched'
+          ? '✓ Episódio concluído'
+          : playbackState.remaining > 0
+            ? '⏳ Restam ' + formatResumeTime(playbackState.remaining)
+            : (duration ? '⏱ Duração: ' + duration : '');
 
         epCard.innerHTML = `
           <div class="episode-card-main">
@@ -7153,9 +7417,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             <div class="episode-info">
               <div class="episode-title">
                 <span>Episódio ${ep.episode_num}: ${escapeHtml(epTitle)}</span>
+                ${statusBadge}
                 ${brokenBadge}
               </div>
-              <div style="font-size: 11px; color: #888;">${duration ? '⏱ Duração: ' + duration : ''}</div>
+              <div class="episode-duration-line">${escapeHtml(remainingText)}</div>
               <div class="episode-plot">${escapeHtml(plot)}</div>
             </div>
           </div>
@@ -7170,11 +7435,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           playSeriesEpisode(ep, seasonNum);
         });
 
-        elements.episodesList.appendChild(epCard);
+        seriesEpisodesList.appendChild(epCard);
       });
     }
 
     function playSeriesEpisode(ep, seasonNum) {
+      const openedFromContentPage = contentPageOpen && currentContentPageType === 'series';
       const watchedId = currentSeriesGroup?.series_id || currentSeriesGroup?.primaryItem?.series_id;
       if (watchedId != null) saveWatchedId('series', watchedId);
 
@@ -7239,6 +7505,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           mal_id: sInfo.mal_id || sInfo.malId || currentSeriesGroup?.mal_id || currentSeriesGroup?.malId || '',
           selectedVersion: currentActiveSeriesVersion,
           versionInfo: currentActiveSeriesVersion ? currentActiveSeriesVersion.versionInfo : null,
+          fromContentPage: openedFromContentPage,
           streamId: ep.id,
           stream_id: ep.id,
           ep
