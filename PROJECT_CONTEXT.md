@@ -106,6 +106,8 @@ A Home reaproveita esse cache e enriquece apenas uma quantidade limitada de tít
 - `a6c8eb7` — Séries/Filmes e temas na Home.
 - `b347a8c` — personalização por gosto e carrosséis sem scrollbar.
 - `39dfe33` — correção do peek dos carrosséis.
+- `cf2abb1` — páginas dedicadas para filmes e séries.
+- `54d5d19` — player em modo página e status `ASSISTIDO/RETOMAR` nos episódios.
 
 ## Validação recomendada
 Depois de alterações Web:
@@ -180,6 +182,32 @@ A aba de autenticação (Entrar/Criar conta) fica oculta enquanto a sessão aute
 As subabas do painel aparecem somente no estado autenticado.
 O botão da conta no cabeçalho passa a exibir o nome de exibição quando disponível.
 O botão de sincronização atualiza os dados e não apresenta sucesso falso quando a chamada falha.
+
+## Páginas dedicadas de conteúdo
+Filmes e séries agora abrem uma página própria dentro da interface Web, em vez de depender do popup antigo de detalhes.
+- `openMoviePage()` mostra a ficha do filme e as versões disponíveis para reprodução.
+- `openSeriesPage()` mostra ficha, temporadas, versões e episódios.
+- O botão Voltar preserva o contexto de onde o conteúdo foi aberto (Home, catálogo ou assistidos).
+- Os modais antigos de série/versão continuam no código como legado de compatibilidade, mas não são acionados pelos cards normais.
+- O player VOD recebe a classe `eplay-player-page` e ocupa a tela como uma página dedicada; ao fechar, o usuário permanece na página do conteúdo.
+
+## Estado dos episódios de séries
+A chave local `andplay_web_series_episode_history_v1` guarda o estado por episódio.
+- `new`: episódio ainda não iniciado.
+- `resume`: existe progresso utilizável; a interface mostra `RETOMAR` e o tempo restante.
+- `watched`: o episódio alcançou o critério de conclusão (fim, até 30 segundos restantes ou 95%). A interface mostra `ASSISTIDO`.
+O progresso VOD existente continua sendo a fonte da posição de retomada; o histórico adicional permite distinguir conclusão de retomada.
+A lista de episódios é re-renderizada após mudanças de estado.
+O histórico de episódios também é colocado em `user_preferences` para sincronização da conta.
+
+## Validação recente das páginas de conteúdo
+Testes reais no navegador confirmaram:
+- Home com 91 cards de séries e 95 cards de filmes no catálogo em teste.
+- Clique em série abre página dedicada com 12 episódios e temporada selecionada.
+- Clique em filme abre página dedicada com as versões disponíveis.
+- Episódio com posição 620/1300 aparece como `RETOMAR` e `Restam 11:20`.
+- Episódio concluído aparece como `ASSISTIDO` e `Episódio concluído`.
+- Abrir episódio deixa `videoModal` em modo página (`eplay-player-page`) e mantém a página de conteúdo por trás; o modal antigo de série permanece fechado.
 
 ## Última manutenção
 As mudanças do painel de usuário devem ser validadas com:
