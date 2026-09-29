@@ -3575,9 +3575,9 @@ header {
 
 .home-dashboard {
   display: none;
-  width: min(1440px, calc(100% - 32px));
+  width: min(1480px, calc(100% - 40px));
   margin: 0 auto;
-  padding: 28px 0 80px;
+  padding: 18px 0 90px;
 }
 
 .home-hero {

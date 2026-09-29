@@ -1,8 +1,5 @@
 /* EPlay Player 2.0 — camada visual independente do motor de reprodução */
 #videoModal .modal-content{max-width:1480px;width:98vw;background:#090909;border-color:#242424}
-#videoModal .modal-header{position:absolute;top:0;left:0;right:0;z-index:80;border:0;padding:18px 22px;background:linear-gradient(180deg,rgba(0,0,0,.9),transparent);pointer-events:none}
-#videoModal .modal-header h3{font-size:15px;text-shadow:0 2px 10px #000;pointer-events:auto}
-#videoModal .modal-header .close-btn{pointer-events:auto;background:rgba(20,20,20,.65);backdrop-filter:blur(8px)}
 #videoModal .player-body-wrapper{height:min(78vh,820px);min-height:420px;max-height:none;background:#000}
 #videoModal .player-info-sidebar{position:absolute;right:0;top:0;height:100%;width:min(320px,28vw);min-width:280px;max-width:320px;transform:translateX(0);z-index:70;background:rgba(15,15,15,.97);border-left:1px solid #303030;border-right:0;box-shadow:-20px 0 50px rgba(0,0,0,.45);transition:transform .25s ease,opacity .2s ease}
 #videoModal .player-info-sidebar.collapsed{width:360px!important;min-width:360px!important;max-width:min(360px,92vw)!important;padding:18px 20px!important;transform:translateX(105%);opacity:0}
@@ -64,12 +61,6 @@
 #videoModal.eplay-fullscreen .modal-header{display:none}
 #videoModal.eplay-fullscreen .modal-footer,#videoModal.eplay-fullscreen #subOptionsPanel{display:none}
 #videoModal.eplay-fullscreen .eplay-player-top{padding-top:24px}
-#videoModal .modal-footer{background:#0c0c0c;border-top:1px solid #222;padding:8px 14px}
-#videoModal .modal-footer>div:first-child{font-size:10px!important;color:#777!important}
-#videoModal .modal-footer .btn{font-size:11px!important;padding:6px 10px!important}
-#videoModal .modal-footer #toggleMovieInfoBtn{display:none!important}
-#videoModal .modal-footer #toggleSubPanelBtn{display:none!important}
-#videoModal .modal-footer #downloadBtn{display:none!important}
 #videoModal .eplay-player-top{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 22px 55px;background:linear-gradient(180deg,rgba(0,0,0,.82),rgba(0,0,0,0))}
 .eplay-player-heading{min-width:0;max-width:none;flex:1;padding-right:12px}
 .eplay-player-top-actions{display:flex;align-items:flex-start;gap:10px}

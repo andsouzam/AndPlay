@@ -810,7 +810,7 @@
           const channelDate = entry.updatedAt ? formatDate(entry.updatedAt) : '';
           return '<button type="button" class="account-history-row" data-history-index="' + index + '">' +
             '<div class="account-history-thumb">' +
-              (logo ? '<img src="' + escapeHtml(logo) + '" alt="" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">' : '<span>' + (type === 'channels' ? '📡' : '🎬') + '</span>') +
+              (logo ? '<img src="' + escapeHtml(logo) + '" alt="" loading="lazy" decoding="async" data-hide-on-error>' : '<span>' + (type === 'channels' ? '📡' : '🎬') + '</span>') +
             '</div>' +
             '<div class="account-history-copy"><strong>' + escapeHtml(entry.title || entry.name || 'Conteúdo') + '</strong><small>' +
               escapeHtml(label + (date || channelDate ? ' • ' + (date || channelDate) : '')) +
