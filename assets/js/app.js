@@ -1673,14 +1673,47 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function getWatchedIds(type) {
+      const normalizedType = type === 'series' ? 'series' : 'movies';
+      const ids = [];
+      const seen = new Set();
+
+      const addId = value => {
+        const id = String(value ?? '').trim();
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        ids.push(id);
+      };
+
       try {
-        const raw = localStorage.getItem(getWatchedStorageKey(type));
+        const raw = localStorage.getItem(getWatchedStorageKey(normalizedType));
         const parsed = raw ? JSON.parse(raw) : [];
-        if (!Array.isArray(parsed)) return [];
-        return parsed.map(v => String(v)).filter(Boolean).slice(0, WATCHED_LIMIT);
-      } catch (e) {
-        return [];
-      }
+        if (Array.isArray(parsed)) parsed.forEach(addId);
+      } catch (e) {}
+
+      try {
+        const rawActivity = localStorage.getItem(WATCHED_ACTIVITY_KEY);
+        const activity = rawActivity ? JSON.parse(rawActivity) : [];
+        if (Array.isArray(activity)) {
+          activity
+            .filter(item => {
+              const itemType = item?.type === 'movies' || item?.type === 'movie' ? 'movies' : 'series';
+              return itemType === normalizedType;
+            })
+            .forEach(item => addId(item?.id));
+        }
+      } catch (e) {}
+
+      try {
+        const progressPrefix = VOD_PROGRESS_PREFIX + (normalizedType === 'series' ? 'series_' : 'movie_');
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!key || !key.startsWith(progressPrefix)) continue;
+          addId(key.slice(progressPrefix.length));
+          if (ids.length >= WATCHED_LIMIT) break;
+        }
+      } catch (e) {}
+
+      return ids.slice(0, WATCHED_LIMIT);
     }
 
     function saveWatchedId(type, id) {
