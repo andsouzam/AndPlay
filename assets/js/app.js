@@ -2285,6 +2285,34 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const query = String(rawTitle || '').trim();
       if (!query) return direct;
 
+      // O Xtream frequentemente não entrega IMDb/MAL em get_series_info.
+      // Nesse caso, resolve o título pelo Cinemeta, que já é usado na ficha
+      // técnica do próprio player e consegue encontrar títulos traduzidos.
+      try {
+        const searchStr = parseTitleInfo(query) || cleanTitleKey(query);
+        if (searchStr) {
+          const searchUrl = `https://v3-cinemeta.strem.io/catalog/series/top/search=${encodeURIComponent(searchStr)}.json`;
+          const data = await fetchJsonWithTimeout(searchUrl, 6000);
+          const metas = Array.isArray(data?.metas) ? data.metas : [];
+
+          if (metas.length) {
+            const expected = normalizeSkipSearchTitle(searchStr);
+            const exact = metas.find(item => normalizeSkipSearchTitle(item?.name || '') === expected);
+            const year = String(mediaMeta?.year || '').trim();
+            const withYear = year
+              ? metas.find(item =>
+                  String(item?.releaseInfo || '').includes(year) ||
+                  String(item?.year || '').includes(year)
+                )
+              : null;
+            const chosen = exact || withYear || metas[0];
+            const imdbId = normalizeImdbId(chosen?.id);
+            if (imdbId) return { ...direct, imdbId };
+          }
+        }
+      } catch (e) {}
+
+      // Último fallback: pesquisa direta no SkipDB.
       try {
         const params = new URLSearchParams({ q: query });
         const data = await fetchJsonWithTimeout(SKIPDB_TITLE_SEARCH_URL + '?' + params.toString(), 6000);
