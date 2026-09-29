@@ -1407,14 +1407,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         type: 'movie',
         order: index,
         updatedAt: activityTime('movie', id),
-        item: (fullMoviesCache || []).find(x => movieGroupMatchesWatchedId(x, id)) || null
+        item: findHistoryCatalogItem('movie', id) || buildHistoryFallbackGroup('movie', id)
       }));
       const series = getWatchedIds('series').map((id, index) => ({
         id,
         type: 'series',
         order: index,
         updatedAt: activityTime('series', id),
-        item: (fullSeriesCache || []).find(x => String(x.series_id) === String(id)) || null
+        item: findHistoryCatalogItem('series', id) || buildHistoryFallbackGroup('series', id)
       }));
 
       const allWatched = [...movies, ...series].map(entry => ({
@@ -1787,6 +1787,180 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       } catch (e) {
         return null;
       }
+    }
+
+    const remoteHistoryMetadata = {
+      movies: new Map(),
+      series: new Map()
+    };
+
+    function getLatestSeriesProgress(seriesId) {
+      let latest = null;
+      const target = String(seriesId || '');
+      if (!target) return null;
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!key || !key.startsWith(VOD_PROGRESS_PREFIX + 'series_')) continue;
+          const entry = readJson(key, null);
+          if (!entry || String(entry.seriesId || '') !== target) continue;
+          if (!latest || Number(entry.updatedAt || 0) > Number(latest.updatedAt || 0)) {
+            latest = {
+              position: Math.max(0, Number(entry.position) || 0),
+              duration: Number(entry.duration) > 0 ? Number(entry.duration) : 0,
+              updatedAt: Number(entry.updatedAt) || 0,
+              title: String(entry.title || ''),
+              poster: String(entry.poster || ''),
+              seriesId: target,
+              seasonNum: Number(entry.seasonNum) || 0,
+              episodeNum: Number(entry.episodeNum) || 0
+            };
+          }
+        }
+      } catch (e) {}
+      return latest;
+    }
+
+    function getHistoryProgressFallback(type, id) {
+      return type === 'series'
+        ? getLatestSeriesProgress(id)
+        : getVodProgress('movie', id);
+    }
+
+    function buildHistoryFallbackGroup(type, id) {
+      const key = String(id || '');
+      if (!key) return null;
+      const metadata = remoteHistoryMetadata[type === 'series' ? 'series' : 'movies'].get(key) || {};
+      const progress = getHistoryProgressFallback(type, key);
+      const title = String(metadata.title || progress?.title || '').trim();
+      const poster = String(metadata.poster || progress?.poster || '').trim();
+
+      if (type === 'series') {
+        const seriesId = String(metadata.series_id || metadata.seriesId || key);
+        const item = {
+          isGroup: true,
+          series_id: seriesId,
+          name: title || 'Série ' + key,
+          title: title || 'Série ' + key,
+          cover: poster,
+          stream_icon: poster,
+          plot: metadata.plot || '',
+          genre: metadata.genre || '',
+          year: metadata.year || '',
+          rating: metadata.rating || '',
+          primaryItem: {
+            series_id: seriesId,
+            name: title || 'Série ' + key,
+            cover: poster,
+            stream_icon: poster
+          },
+          versions: [{
+            item: {
+              series_id: seriesId,
+              name: title || 'Série ' + key,
+              cover: poster,
+              stream_icon: poster
+            },
+            versionInfo: detectSeriesVersion({ name: title || '', category_id: metadata.category_id || '' }),
+            seriesId
+          }]
+        };
+        return item;
+      }
+
+      const item = {
+        isGroup: true,
+        stream_id: key,
+        name: title || 'Filme ' + key,
+        title: title || 'Filme ' + key,
+        poster,
+        stream_icon: poster,
+        plot: metadata.plot || '',
+        genre: metadata.genre || '',
+        year: metadata.year || '',
+        rating: metadata.rating || '',
+        primaryItem: {
+          stream_id: key,
+          name: title || 'Filme ' + key,
+          stream_icon: poster,
+          poster
+        },
+        versions: [{
+          item: {
+            stream_id: key,
+            name: title || 'Filme ' + key,
+            stream_icon: poster,
+            poster
+          },
+          versionInfo: detectMovieVersion({ name: title || '' }),
+          streamId: key,
+          ext: metadata.ext || 'mp4'
+        }]
+      };
+      return item;
+    }
+
+    function findHistoryCatalogItem(type, id) {
+      const key = String(id || '');
+      if (!key) return null;
+      if (type === 'movie') {
+        const catalogs = [
+          ...(Array.isArray(fullMoviesCache) ? fullMoviesCache : []),
+          ...(Array.isArray(homeWatchedCatalogFallback.movies) ? homeWatchedCatalogFallback.movies : [])
+        ];
+        return catalogs.find(item => movieGroupMatchesWatchedId(item, key)) || null;
+      }
+
+      const catalogs = [
+        ...(Array.isArray(fullSeriesCache) ? fullSeriesCache : []),
+        ...(Array.isArray(homeWatchedCatalogFallback.series) ? homeWatchedCatalogFallback.series : [])
+      ];
+      return catalogs.find(item =>
+        String(item.series_id) === key ||
+        (item.versions || []).some(version => String(version.seriesId) === key)
+      ) || null;
+    }
+
+    async function hydrateRemoteHistoryMetadata(limit = 12) {
+      const history = window.AndPlayAccount?.getRemoteWatchHistory?.() || [];
+      const targets = history.filter(entry => {
+        const type = entry.type === 'series' ? 'series' : 'movie';
+        const id = String(entry.id || '');
+        if (!id || findHistoryCatalogItem(type, id)) return false;
+        if (remoteHistoryMetadata[type === 'series' ? 'series' : 'movies'].has(id)) return false;
+        const progress = getHistoryProgressFallback(type, id);
+        return !progress?.title;
+      }).slice(0, Math.max(0, Number(limit) || 0));
+
+      let cursor = 0;
+      const workers = Array.from({ length: Math.min(4, targets.length) }, async () => {
+        while (cursor < targets.length) {
+          const entry = targets[cursor++];
+          const type = entry.type === 'series' ? 'series' : 'movie';
+          const id = String(entry.id || '');
+          try {
+            const data = type === 'movie'
+              ? await xtreamApi('get_vod_info', '&vod_id=' + encodeURIComponent(id))
+              : await xtreamApi('get_series_info', '&series_id=' + encodeURIComponent(id));
+            const info = data?.info || data || {};
+            const bucket = remoteHistoryMetadata[type === 'series' ? 'series' : 'movies'];
+            bucket.set(id, {
+              title: String(info.name || info.title || '').trim(),
+              poster: String(
+                info.movie_image || info.cover_big || info.cover || info.stream_icon || info.poster || ''
+              ).trim(),
+              plot: String(info.plot || '').trim(),
+              genre: String(info.genre || '').trim(),
+              year: String(info.year || info.releaseDate || '').slice(0, 4),
+              rating: String(info.rating || info.rating_5based || '').trim(),
+              series_id: type === 'series' ? String(info.series_id || id) : '',
+              ext: String(info.container_extension || 'mp4')
+            });
+          } catch (e) {}
+        }
+      });
+
+      await Promise.all(workers);
     }
 
     function clearVodProgress(type, id) {
@@ -2703,42 +2877,21 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function resolveHomeWatchedItem(type, id) {
-      if (type === 'movie') {
-        const movieCatalog = [
-          ...(Array.isArray(fullMoviesCache) ? fullMoviesCache : []),
-          ...(Array.isArray(homeWatchedCatalogFallback.movies) ? homeWatchedCatalogFallback.movies : [])
-        ];
-        const group = movieCatalog.find(x => movieGroupMatchesWatchedId(x, id));
-        if (!group) return null;
-        return {
-          type: 'movie',
-          id: String(id),
-          item: group,
-          title: group.name || 'Filme',
-          year: group.year || '',
-          rating: group.rating || '',
-          poster: getBestPosterUrl(group.primaryItem || group),
-          progress: getVodProgress('movie', id)
-        };
-      }
-
-      const seriesCatalog = [
-        ...(Array.isArray(fullSeriesCache) ? fullSeriesCache : []),
-        ...(Array.isArray(homeWatchedCatalogFallback.series) ? homeWatchedCatalogFallback.series : [])
-      ];
-      const group = seriesCatalog.find(x => String(x.series_id) === String(id)) ||
-        seriesCatalog.find(x => (x.versions || []).some(v => String(v.streamId) === String(id)));
+      const group = findHistoryCatalogItem(type, id) || buildHistoryFallbackGroup(type, id);
       if (!group) return null;
 
+      const progress = getHistoryProgressFallback(type, id);
       return {
-        type: 'series',
+        type,
         id: String(id),
         item: group,
-        title: group.name || 'Série',
+        title: group.name || group.title || (type === 'series' ? 'Série ' + id : 'Filme ' + id),
         year: group.year || '',
         rating: group.rating || '',
-        poster: group.cover || group.stream_icon || '',
-        progress: getVodProgress('series', id)
+        poster: type === 'series'
+          ? (group.cover || group.stream_icon || '')
+          : getBestPosterUrl(group.primaryItem || group),
+        progress
       };
     }
 
@@ -3379,6 +3532,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             homeLastRevalidationAt = Date.now();
           }
 
+          await hydrateRemoteHistoryMetadata(HOME_WATCHED_LIMIT);
           enrichHomeRatings()
             .then(() => scheduleHomeCatalogRender())
             .catch(() => {});
@@ -10803,6 +10957,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             tasks.push(loadFullSeries().catch(() => []));
           }
           if (tasks.length) await Promise.all(tasks);
+          await hydrateRemoteHistoryMetadata(50);
           return getAccountUsageSnapshot();
         },
         mergeWatchStats,
