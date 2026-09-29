@@ -1111,6 +1111,7 @@
     queueSyncPreference: queueSync,
     getRemoteWatchedIds,
     getRemoteWatchHistory,
+    isRemoteWatchHistoryLoaded: () => remoteWatchHistoryLoaded,
     refreshWatchHistory,
     recordWatched,
     ready: () => accountReadyPromise

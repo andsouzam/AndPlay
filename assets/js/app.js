@@ -1682,6 +1682,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         ids.push(id);
       };
 
+      const useRemoteHistory =
+        window.AndPlayAccount?.isSignedIn?.() &&
+        window.AndPlayAccount?.isRemoteWatchHistoryLoaded?.();
+
+      if (useRemoteHistory) {
+        (window.AndPlayAccount.getRemoteWatchedIds(normalizedType) || []).forEach(addId);
+        return ids.slice(0, WATCHED_LIMIT);
+      }
+
       try {
         const raw = localStorage.getItem(getWatchedStorageKey(normalizedType));
         const parsed = raw ? JSON.parse(raw) : [];
@@ -1732,6 +1741,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
         recordTasteFromPlayback(type, normalizedId);
 
+        window.AndPlayAccount?.recordWatched?.(type, normalizedId).then(success => {
+          if (success && currentMode === 'home') renderHomeDashboard();
+        }).catch(() => {});
         window.dispatchEvent(new CustomEvent('andplay:local-change', {
           detail: { kind: 'watched', mediaType: type, id: normalizedId }
         }));
