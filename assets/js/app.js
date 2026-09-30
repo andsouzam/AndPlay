@@ -3442,7 +3442,38 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function getHomeItemTime(item) {
-      return Number(item?.added || item?.last_modified || item?.primaryItem?.added || item?.primaryItem?.last_modified || 0);
+      const target = item?.primaryItem || item?.item || item;
+      const raw = target?.added || target?.last_modified || target?.created_at || item?.added || item?.last_modified || 0;
+      if (!raw) return 0;
+      const num = Number(raw);
+      if (!isNaN(num) && num > 0) {
+        return num < 1e11 ? num * 1000 : num;
+      }
+      const parsed = Date.parse(raw);
+      return isNaN(parsed) ? 0 : parsed;
+    }
+
+    function pickRandomSample(arr, count) {
+      if (!Array.isArray(arr) || !arr.length || count <= 0) return [];
+      if (arr.length <= count) return arr.slice();
+      const copy = arr.slice();
+      const selected = [];
+      for (let i = 0; i < count; i++) {
+        const idx = Math.floor(Math.random() * copy.length);
+        selected.push(copy[idx]);
+        copy.splice(idx, 1);
+      }
+      return selected;
+    }
+
+    function shuffleArray(arr) {
+      if (!Array.isArray(arr) || arr.length <= 1) return arr ? arr.slice() : [];
+      const copy = arr.slice();
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
     }
 
     function getHomeFeaturedItems() {
@@ -3470,22 +3501,36 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         added: getHomeItemTime(item)
       })).filter(item => item.id && item.poster);
 
-      const sortedAll = [...movies, ...series].sort((a, b) => compareByReleaseYear(a, b));
-      if (sortedAll.length <= HOME_FEATURED_LIMIT) return sortedAll;
+      const allCatalog = [...movies, ...series];
+      if (allCatalog.length <= HOME_FEATURED_LIMIT) return allCatalog;
 
-      // Amostragem dinâmica entre os top 30 lançamentos com poster e sinopse
-      const candidates = sortedAll.slice(0, Math.min(30, sortedAll.length));
-      const lead = candidates[0]; // Manter o #1 como âncora principal
-      const rest = candidates.slice(1);
-      const copy = rest.slice();
-      const restSample = [];
-      const needed = HOME_FEATURED_LIMIT - 1;
-      for (let i = 0; i < needed && copy.length > 0; i++) {
-        const idx = Math.floor(Math.random() * copy.length);
-        restSample.push(copy[idx]);
-        copy.splice(idx, 1);
+      // 1. Reservar exatamente 5 vagas no banner para os últimos 5 itens adicionados ao catálogo
+      const sortedByAdded = allCatalog.slice().sort((a, b) => (b.added || 0) - (a.added || 0));
+      const latestAdded5 = sortedByAdded.slice(0, 5);
+      const addedKeys = new Set(latestAdded5.map(x => x.type + ':' + x.id));
+
+      // 2. Selecionar 5 outros destaques (alta nota, aclamados ou populares) entre o restante
+      const remainingPool = allCatalog
+        .filter(x => !addedKeys.has(x.type + ':' + x.id))
+        .sort((a, b) => {
+          const rA = Number(a.rating || a.item?.rating || 0);
+          const rB = Number(b.rating || b.item?.rating || 0);
+          if (rB !== rA) return rB - rA;
+          return compareByReleaseYear(a, b);
+        });
+
+      // Amostragem dinâmica entre os top 40 destaques para rotatividade a cada recarregamento
+      const highlightCandidates = remainingPool.slice(0, Math.min(40, remainingPool.length));
+      const highlights5 = pickRandomSample(highlightCandidates, 5);
+
+      // 3. Intercalar no banner: Novidade do Catálogo ⇄ Destaque Aclamado
+      const featured = [];
+      for (let i = 0; i < 5; i++) {
+        if (latestAdded5[i]) featured.push(latestAdded5[i]);
+        if (highlights5[i]) featured.push(highlights5[i]);
       }
-      return [lead, ...restSample];
+
+      return featured.slice(0, HOME_FEATURED_LIMIT);
     }
 
     function resolveHomeWatchedItem(type, id) {
@@ -3646,75 +3691,62 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }, 0);
     }
 
-    // Amostrador caótico estratificado: extrai uma amostra viva e variada do catálogo de 30 mil títulos
+    // Amostrador caótico estratificado: extrai uma amostra viva, orgânica e variada do catálogo de 30 mil títulos,
+    // sem monopolizar o trilho apenas com anos recentes (2026/2025) e valorizando novidades do acervo e clássicos.
     function sampleChaoticRailItems(candidates, limit = HOME_RAIL_ITEM_LIMIT, options = {}) {
       if (!Array.isArray(candidates) || !candidates.length) return [];
       if (candidates.length <= limit) {
-        return [...candidates].sort((a, b) => {
-          const yA = getItemYear(a);
-          const yB = getItemYear(b);
-          return (yB - yA) + (Math.random() * 4 - 2);
-        });
+        return shuffleArray(candidates);
       }
 
-      const anchorCount = Math.min(options.anchorCount ?? 2, candidates.length);
-      const anchors = candidates.slice(0, anchorCount);
-      const pool = candidates.slice(anchorCount);
-      const needed = limit - anchorCount;
-      if (needed <= 0) return anchors;
+      // 1. Identificar novidades adicionadas recentemente ao catálogo (pela data de adição, independente do ano de produção)
+      const sortedByTime = candidates.slice().sort((a, b) => (b.added || 0) - (a.added || 0));
+      const topAddedCount = Math.max(2, Math.floor(candidates.length * 0.20));
+      const addedKeys = new Set(sortedByTime.slice(0, topAddedCount).map(x => (x.type || '') + ':' + (x.id || '')));
 
-      // Estratificação em 3 faixas do catálogo:
-      // Faixa 1 (Recentes): primeiros 30% do pool
-      // Faixa 2 (Consolidados / Meio): 30% a 70% do pool
-      // Faixa 3 (Baú / Clássicos / Obras Cult): 30% finais do pool
-      const cut1 = Math.max(1, Math.floor(pool.length * 0.30));
-      const cut2 = Math.max(cut1 + 1, Math.floor(pool.length * 0.70));
+      // 2. Classificar candidatos em 4 faixas equilibradas:
+      const poolAdded = [];
+      const poolRecent = [];
+      const poolModern = [];
+      const poolClassic = [];
 
-      const tier1 = pool.slice(0, cut1);
-      const tier2 = pool.slice(cut1, cut2);
-      const tier3 = pool.slice(cut2);
-
-      const count1 = Math.min(tier1.length, Math.round(needed * 0.50));
-      const count2 = Math.min(tier2.length, Math.round(needed * 0.30));
-      const count3 = Math.min(tier3.length, needed - count1 - count2);
-
-      const pickRandomSample = (arr, count) => {
-        if (!arr.length || count <= 0) return [];
-        if (arr.length <= count) return [...arr];
-        const copy = arr.slice();
-        const selected = [];
-        for (let i = 0; i < count; i++) {
-          const idx = Math.floor(Math.random() * copy.length);
-          selected.push(copy[idx]);
-          copy.splice(idx, 1);
+      candidates.forEach(item => {
+        const key = (item.type || '') + ':' + (item.id || '');
+        const y = getItemYear(item);
+        if (addedKeys.has(key)) {
+          poolAdded.push(item);
+        } else if (y >= 2023) {
+          poolRecent.push(item);
+        } else if (y >= 2010) {
+          poolModern.push(item);
+        } else {
+          poolClassic.push(item);
         }
-        return selected;
-      };
+      });
 
-      const picked1 = pickRandomSample(tier1, count1);
-      const picked2 = pickRandomSample(tier2, count2);
-      const picked3 = pickRandomSample(tier3, count3);
+      // Cotas equilibradas para compor um trilho rico em diversidade de épocas
+      const quotaAdded = Math.max(1, Math.round(limit * 0.25));
+      const quotaRecent = Math.max(1, Math.round(limit * 0.30));
+      const quotaModern = Math.max(1, Math.round(limit * 0.25));
+      const quotaClassic = Math.max(1, limit - quotaAdded - quotaRecent - quotaModern);
 
-      let combined = [...picked1, ...picked2, ...picked3];
-      if (combined.length < needed) {
-        const usedKeys = new Set(combined.map(x => (x.type || '') + ':' + (x.id || '')));
-        const leftover = pool.filter(x => !usedKeys.has((x.type || '') + ':' + (x.id || '')));
-        const extra = pickRandomSample(leftover, needed - combined.length);
+      const pickedAdded = pickRandomSample(poolAdded, quotaAdded);
+      const pickedRecent = pickRandomSample(poolRecent, quotaRecent);
+      const pickedModern = pickRandomSample(poolModern, quotaModern);
+      const pickedClassic = pickRandomSample(poolClassic, quotaClassic);
+
+      let combined = [...pickedAdded, ...pickedRecent, ...pickedModern, ...pickedClassic];
+      const usedKeys = new Set(combined.map(x => (x.type || '') + ':' + (x.id || '')));
+
+      if (combined.length < limit) {
+        const leftover = candidates.filter(x => !usedKeys.has((x.type || '') + ':' + (x.id || '')));
+        const extra = pickRandomSample(leftover, limit - combined.length);
         combined.push(...extra);
       }
 
-      // Ordenação caótica: equilíbrio orgânico entre relevância/ano e imprevisibilidade/descoberta
-      combined.sort((a, b) => {
-        const yA = getItemYear(a);
-        const yB = getItemYear(b);
-        const rA = Number(a.rating || a.item?.rating || 0);
-        const rB = Number(b.rating || b.item?.rating || 0);
-        const scoreA = (yA * 2.5) + (rA * 6) + (Math.random() * 35);
-        const scoreB = (yB * 2.5) + (rB * 6) + (Math.random() * 35);
-        return scoreB - scoreA;
-      });
-
-      return [...anchors, ...combined].slice(0, limit);
+      // Ordenação orgânica e viva: embaralha para quebrar a ordem cronológica rígida
+      // e apresentar uma mistura rica e surpreendente de épocas ao usuário ao longo do trilho
+      return shuffleArray(combined).slice(0, limit);
     }
 
     function getHomeRecommendationMix(items) {
@@ -3745,55 +3777,63 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         .filter(entry => entry.taste > 0 && !watchedKeys.has(entry.item.type + ':' + entry.item.id))
         .sort((a, b) => b.taste - a.taste || compareByReleaseYear(b.item, a.item));
 
-      const personalized = [];
-      const used = new Set();
-
-      // Aloca ~75% do trilho para títulos que combinam com os top gêneros do usuário com rotação caótica
-      const tasteQuota = Math.round(HOME_RAIL_ITEM_LIMIT * 0.75);
-      const matchingEntries = ranked.filter(entry => entry.matchesTop);
-      const matchingPool = matchingEntries.slice(0, Math.min(80, matchingEntries.length)).map(e => e.item);
-      const sampledTasteItems = sampleChaoticRailItems(matchingPool, tasteQuota, { anchorCount: 3 });
-
-      sampledTasteItems.forEach(item => {
-        personalized.push(item);
-        used.add(item.type + ':' + item.id);
-      });
-
-      // Mantém descoberta (15% a 25% do trilho): títulos aclamados fora da zona de conforto com rotação caótica
-      const discoveryQuota = Math.max(3, Math.min(6, HOME_RAIL_ITEM_LIMIT - personalized.length));
-      const discoveryCandidates = items
-        .filter(item =>
-          !used.has(item.type + ':' + item.id) &&
-          !watchedKeys.has(item.type + ':' + item.id)
-        )
-        .sort((a, b) => {
-          const rA = getHomeRatingInfo(a).value;
-          const rB = getHomeRatingInfo(b).value;
-          if (rB !== rA) return rB - rA;
-          return compareByReleaseYear(a, b);
-        })
-        .filter(item => !getHomeThemesForItem(item).some(theme => topThemes.includes(theme)));
-
-      const discoveryPool = discoveryCandidates.slice(0, Math.min(60, discoveryCandidates.length));
-      const sampledDiscoveryItems = sampleChaoticRailItems(discoveryPool, discoveryQuota, { anchorCount: 1 });
-
-      sampledDiscoveryItems.forEach(item => {
-        personalized.push(item);
-        used.add(item.type + ':' + item.id);
-      });
-
-      return personalized.slice(0, HOME_RAIL_ITEM_LIMIT);
+      // Intercalar suavemente as descobertas ao longo do trilho para criar uma experiência equilibrada e orgânica
+      const combinedMix = [];
+      const discoveryIndices = [3, 7, 11, 15, 19, 23];
+      let ti = 0;
+      let di = 0;
+      for (let i = 0; i < HOME_RAIL_ITEM_LIMIT; i++) {
+        if (discoveryIndices.includes(i) && di < sampledDiscoveryItems.length) {
+          combinedMix.push(sampledDiscoveryItems[di++]);
+        } else if (ti < sampledTasteItems.length) {
+          combinedMix.push(sampledTasteItems[ti++]);
+        } else if (di < sampledDiscoveryItems.length) {
+          combinedMix.push(sampledDiscoveryItems[di++]);
+        }
+      }
+      return combinedMix.slice(0, HOME_RAIL_ITEM_LIMIT);
     }
 
     function buildHomeCatalogRails(type) {
-      const items = getHomeCatalogItems(type).sort((a, b) => compareByReleaseYear(a, b));
+      const items = getHomeCatalogItems(type);
       if (!items.length) return [];
 
       const typeLabel = type === 'series' ? 'Séries' : 'Filmes';
 
-      // 1. Novidades: 4 âncoras mais recentes + rotação caótica dos últimos 120 lançamentos
-      const latestPool = items.slice(0, Math.min(120, items.length));
-      const latestItems = sampleChaoticRailItems(latestPool, HOME_RAIL_ITEM_LIMIT, { anchorCount: 4 });
+      // 1. Trilho de Novidades: separe sempre 35% do conteúdo voltado para novidades do catálogo,
+      //    eles não precisam ser o primeiro a aparecer, devem estar distribuídos ao longo do trilho.
+      const railLimit = HOME_RAIL_ITEM_LIMIT; // 24
+      const catalogNewsQuota = Math.round(railLimit * 0.35); // 8 itens (35%)
+      const generalQuota = railLimit - catalogNewsQuota; // 16 itens (65%)
+
+      // A. Novidades do catálogo: ordenadas por data de adição/modificação no catálogo
+      const sortedByAdded = items.slice().sort((a, b) => (b.added || 0) - (a.added || 0));
+      // Amostragem entre os top 45 itens mais recentemente adicionados para rotação constante
+      const topAddedPool = sortedByAdded.slice(0, Math.min(45, sortedByAdded.length));
+      const catalogNewsItems = pickRandomSample(topAddedPool, catalogNewsQuota);
+      const usedInNews = new Set(catalogNewsItems.map(x => (x.type || '') + ':' + (x.id || '')));
+
+      // B. Itens gerais (65%): lançamentos recentes e destaques de diversas épocas
+      const remainingPool = items.filter(x => !usedInNews.has((x.type || '') + ':' + (x.id || '')));
+      const generalItems = sampleChaoticRailItems(remainingPool, generalQuota);
+
+      // C. Distribuir os 35% de novidades do catálogo ao longo do trilho de 24 itens
+      // (espaçados homogeneamente a cada 3 cards: índices 1, 4, 7, 10, 13, 16, 19, 22)
+      const distributedLatest = new Array(railLimit);
+      const newsIndices = [1, 4, 7, 10, 13, 16, 19, 22];
+
+      let ni = 0;
+      let gi = 0;
+      for (let i = 0; i < railLimit; i++) {
+        if (newsIndices.includes(i) && ni < catalogNewsItems.length) {
+          distributedLatest[i] = catalogNewsItems[ni++];
+        } else if (gi < generalItems.length) {
+          distributedLatest[i] = generalItems[gi++];
+        } else if (ni < catalogNewsItems.length) {
+          distributedLatest[i] = catalogNewsItems[ni++];
+        }
+      }
+      const latestItems = distributedLatest.filter(Boolean);
 
       const rails = [{
         key: 'latest',
@@ -3801,16 +3841,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         items: latestItems
       }];
 
-      // 2. Mais bem avaliados: amostragem caótica entre os melhores avaliados do catálogo
+      // 2. Mais bem avaliados: amostragem caótica entre os melhores avaliados do catálogo (todas as épocas)
       const ratedCandidates = items
-        .map(item => ({ item, rating: getHomeRatingInfo(item).value }))
-        .filter(entry => entry.rating >= 6.0)
-        .sort((a, b) => b.rating - a.rating || compareByReleaseYear(b.item, a.item))
-        .map(entry => entry.item);
+        .filter(item => getHomeRatingInfo(item).value >= 6.0)
+        .sort((a, b) => getHomeRatingInfo(b).value - getHomeRatingInfo(a).value);
 
       if (ratedCandidates.length >= HOME_THEME_MIN_ITEMS) {
         const topRatedPool = ratedCandidates.slice(0, Math.min(150, ratedCandidates.length));
-        const ratedItems = sampleChaoticRailItems(topRatedPool, HOME_RAIL_ITEM_LIMIT, { anchorCount: 2 });
+        const ratedItems = sampleChaoticRailItems(topRatedPool, HOME_RAIL_ITEM_LIMIT);
         rails.push({
           key: 'top-rated',
           title: '⭐ Mais bem avaliados • ' + typeLabel,
@@ -4341,7 +4379,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const allItems = [
         ...getHomeCatalogItems('series'),
         ...getHomeCatalogItems('movie')
-      ].sort(compareByReleaseYear);
+      ];
 
       const recommendations = getHomeRecommendationMix(allItems);
       const visibleRecommendations = getHomeItemsWithinDisplayLimit(recommendations);
