@@ -470,6 +470,55 @@
       <div id="moviesCuratedRails" class="movies-curated-rails"></div>
     </section>
 
+    <!-- Series Hub: Central de Séries Completa (Hero, Pílulas, Curadoria, Ordenação, IMDb Match) -->
+    <section id="seriesHub" class="series-hub" style="display: none;" aria-label="Central de Séries">
+      <!-- 1. Hero Spotlight de Séries (Mesma identidade visual fluida e elegante da Home e Filmes) -->
+      <section id="seriesHero" class="series-hero" aria-label="Destaques de Séries">
+        <div id="seriesHeroTrack" class="series-hero-track" aria-live="polite"></div>
+        <button class="series-hero-arrow series-hero-prev" id="seriesHeroPrev" type="button" aria-label="Série anterior">‹</button>
+        <button class="series-hero-arrow series-hero-next" id="seriesHeroNext" type="button" aria-label="Próxima série">›</button>
+        <div id="seriesHeroDots" class="series-hero-dots" aria-label="Selecionar série em destaque"></div>
+        <div id="seriesHeroLoading" class="series-hero-loading">Carregando novidades e temporadas...</div>
+      </section>
+
+      <!-- 2. Barra de Pílulas de Gêneros e Plataformas Deslizantes -->
+      <div class="series-pills-bar-wrap">
+        <div id="seriesGenrePills" class="series-genre-pills" role="tablist" aria-label="Filtro por gênero e categoria de séries"></div>
+      </div>
+
+      <!-- 3. Barra de Controles: Alternador Curadoria/Grade + Surpreenda-me + Ordenação + Filtros Rápidos -->
+      <div class="series-toolbar">
+        <div class="series-view-group">
+          <div class="series-view-toggle" role="group" aria-label="Modo de visualização">
+            <button id="seriesViewCuratedBtn" class="series-toggle-btn active" type="button">🎬 Destaques & Trilhos</button>
+            <button id="seriesViewGridBtn" class="series-toggle-btn" type="button">▦ Catálogo Completo</button>
+          </div>
+          <button id="seriesSurpriseBtn" class="series-surprise-btn" type="button" title="Sorteia uma série recomendada para maratonar">🎲 Surpreenda-me</button>
+        </div>
+
+        <div class="series-sort-wrap" id="seriesSortWrap">
+          <div class="series-sort-box">
+            <label for="seriesSortSelect" class="series-sort-label">Ordenar:</label>
+            <select id="seriesSortSelect" class="series-sort-select">
+              <option value="featured">🌟 Relevância & Destaque</option>
+              <option value="added">🕒 Recém Adicionadas</option>
+              <option value="year">📅 Lançamento Recente</option>
+              <option value="rating">★ Melhores Notas (IMDb)</option>
+              <option value="alpha">🔤 Ordem Alfabética (A-Z)</option>
+            </select>
+          </div>
+
+          <div class="series-quick-filters">
+            <button id="seriesFilterDubBtn" class="series-filter-chip" type="button" data-filter="dub">DUB</button>
+            <button id="seriesFilterLegBtn" class="series-filter-chip" type="button" data-filter="leg">LEG</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Visão de Trilhos Curados de Séries -->
+      <div id="seriesCuratedRails" class="series-curated-rails"></div>
+    </section>
+
     <div id="mediaGrid" class="media-grid"></div>
     <div id="loadMoreContainer" class="load-more-container" style="display: none;">
       <button id="loadMoreBtn" class="load-more-btn">Carregar mais títulos...</button>

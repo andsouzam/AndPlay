@@ -242,6 +242,24 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       moviesFilterLegBtn: document.getElementById('moviesFilterLegBtn'),
       moviesCuratedRails: document.getElementById('moviesCuratedRails'),
 
+      // Series Hub
+      seriesHub: document.getElementById('seriesHub'),
+      seriesHero: document.getElementById('seriesHero'),
+      seriesHeroTrack: document.getElementById('seriesHeroTrack'),
+      seriesHeroPrev: document.getElementById('seriesHeroPrev'),
+      seriesHeroNext: document.getElementById('seriesHeroNext'),
+      seriesHeroDots: document.getElementById('seriesHeroDots'),
+      seriesHeroLoading: document.getElementById('seriesHeroLoading'),
+      seriesGenrePills: document.getElementById('seriesGenrePills'),
+      seriesViewCuratedBtn: document.getElementById('seriesViewCuratedBtn'),
+      seriesViewGridBtn: document.getElementById('seriesViewGridBtn'),
+      seriesSurpriseBtn: document.getElementById('seriesSurpriseBtn'),
+      seriesSortWrap: document.getElementById('seriesSortWrap'),
+      seriesSortSelect: document.getElementById('seriesSortSelect'),
+      seriesFilterDubBtn: document.getElementById('seriesFilterDubBtn'),
+      seriesFilterLegBtn: document.getElementById('seriesFilterLegBtn'),
+      seriesCuratedRails: document.getElementById('seriesCuratedRails'),
+
       // Video Modal
       videoModal: document.getElementById('videoModal'),
       modalTitle: document.getElementById('modalTitle'),
@@ -830,8 +848,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             added: item.added,
             last_modified: item.last_modified,
             series_id: item.series_id,
-            imdbId: isValidImdbId(item.imdb_id || item.imdbId) ? (item.imdb_id || item.imdbId) : '',
-            imdb_id: isValidImdbId(item.imdb_id || item.imdbId) ? (item.imdb_id || item.imdbId) : '',
+            imdbId: isValidImdbId(item.imdb_id || item.imdbId) ? (item.imdb_id || item.imdbId) : (readSeriesImdbCache()[clean] || ''),
+            imdb_id: isValidImdbId(item.imdb_id || item.imdbId) ? (item.imdb_id || item.imdbId) : (readSeriesImdbCache()[clean] || ''),
             malId: normalizePositiveId(item.mal_id || item.malId),
             mal_id: normalizePositiveId(item.mal_id || item.malId),
             plot: item.plot,
@@ -2516,6 +2534,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const direct = getExactSeriesExternalIds(mediaMeta);
       if (direct.imdbId || direct.malId) return direct;
 
+      const fastCleanKey = cleanTitleKey(mediaMeta?.seriesName || mediaMeta?.title || '');
+      if (fastCleanKey) {
+        const cachedFastId = readSeriesImdbCache()[fastCleanKey];
+        if (cachedFastId) return { ...direct, imdbId: cachedFastId };
+      }
+
       const rawTitle = mediaMeta?.seriesName || mediaMeta?.title || '';
       const query = String(rawTitle || '').trim();
       if (!query) return direct;
@@ -3192,10 +3216,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       favoriteReturnMode = ['home', 'movies', 'series', 'live'].includes(currentMode) ? currentMode : 'home';
       isFavoritesView = true;
       isWatchedView = false;
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
+      }
+      if (seriesHeroTimer) {
+        clearInterval(seriesHeroTimer);
+        seriesHeroTimer = null;
       }
       if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
       if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
@@ -3259,10 +3287,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!isFavoritesView) return;
       const returnMode = favoriteReturnMode;
       isFavoritesView = false;
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
+      }
+      if (seriesHeroTimer) {
+        clearInterval(seriesHeroTimer);
+        seriesHeroTimer = null;
       }
       if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
       if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
@@ -3304,10 +3336,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     async function showWatchedContent() {
       isWatchedView = true;
       isFavoritesView = false;
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
+      }
+      if (seriesHeroTimer) {
+        clearInterval(seriesHeroTimer);
+        seriesHeroTimer = null;
       }
       if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
       if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
@@ -5675,7 +5711,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function renderMoviesHub() {
       if (currentMode !== 'movies' || isWatchedView || isFavoritesView) {
-        if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+        if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
         return;
       }
 
@@ -5705,15 +5741,752 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
     }
 
-    function showHome(targetScroll = 0) {
+
+    // ==========================================
+    // SERIES HUB & IMDB MATCHING (SOB DEMANDA)
+    // ==========================================
+    const SERIES_IMDB_CACHE_KEY = 'andplay_series_imdb_match_v1';
+    let seriesImdbMemoryCache = null;
+
+    function readSeriesImdbCache() {
+      if (seriesImdbMemoryCache) return seriesImdbMemoryCache;
+      try {
+        const raw = localStorage.getItem(SERIES_IMDB_CACHE_KEY);
+        seriesImdbMemoryCache = raw ? JSON.parse(raw) : {};
+      } catch (_) {
+        seriesImdbMemoryCache = {};
+      }
+      return seriesImdbMemoryCache;
+    }
+
+    let _seriesImdbSaveTimer = null;
+    function writeSeriesImdbCache(key, imdbId) {
+      if (!key || !imdbId) return;
+      const cache = readSeriesImdbCache();
+      cache[key] = imdbId;
+      if (_seriesImdbSaveTimer) return;
+      _seriesImdbSaveTimer = setTimeout(() => {
+        _seriesImdbSaveTimer = null;
+        try {
+          localStorage.setItem(SERIES_IMDB_CACHE_KEY, JSON.stringify(cache));
+        } catch (_) {}
+      }, 500);
+    }
+
+    // Match sob demanda: apenas quando o usuário abre ou assiste a série
+    async function resolveSeriesImdbId(seriesItemOrGroup) {
+      if (!seriesItemOrGroup) return '';
+      const existing = normalizeImdbId(seriesItemOrGroup.imdbId || seriesItemOrGroup.imdb_id);
+      if (existing) return existing;
+
+      const rawTitle = seriesItemOrGroup.name || seriesItemOrGroup.title || seriesItemOrGroup.originalName || '';
+      if (!rawTitle) return '';
+
+      const cleanKey = cleanTitleKey(rawTitle);
+      if (!cleanKey) return '';
+
+      const cache = readSeriesImdbCache();
+      if (cache[cleanKey]) {
+        const cachedId = cache[cleanKey];
+        seriesItemOrGroup.imdbId = cachedId;
+        seriesItemOrGroup.imdb_id = cachedId;
+        return cachedId;
+      }
+
+      // Consulta individual e pontual no Cinemeta (~150ms)
+      try {
+        const query = parseTitleInfo(rawTitle) || cleanKey;
+        if (!query) return '';
+        const searchUrl = 'https://v3-cinemeta.strem.io/catalog/series/top/search=' + encodeURIComponent(query) + '.json';
+        const data = await fetchJsonWithTimeout(searchUrl, 4000);
+        const metas = Array.isArray(data?.metas) ? data.metas : [];
+        if (metas.length > 0) {
+          const expectedYear = String(seriesItemOrGroup.year || '').trim();
+          let best = metas[0];
+          if (expectedYear) {
+            const withYear = metas.find(m => (m.releaseInfo && String(m.releaseInfo).includes(expectedYear)) || (m.year && String(m.year).includes(expectedYear)));
+            if (withYear) best = withYear;
+          }
+          const foundId = normalizeImdbId(best?.id);
+          if (foundId) {
+            seriesItemOrGroup.imdbId = foundId;
+            seriesItemOrGroup.imdb_id = foundId;
+            writeSeriesImdbCache(cleanKey, foundId);
+            if ((!seriesItemOrGroup.rating || Number(seriesItemOrGroup.rating) <= 0) && best.imdbRating) {
+              seriesItemOrGroup.rating = best.imdbRating;
+            }
+            return foundId;
+          }
+        }
+      } catch (_) {}
+      return '';
+    }
+
+    let seriesHubInitialized = false;
+    let isSeriesCuratedMode = true;
+    let currentSeriesGenreFilter = 'ALL';
+    let seriesSortBy = 'featured';
+    let seriesFilterDub = false;
+    let seriesFilterLeg = false;
+    let seriesHeroItems = [];
+    let seriesHeroIndex = 0;
+    let seriesHeroTimer = null;
+
+    function initSeriesHub() {
+      if (seriesHubInitialized || !elements.seriesHub) return;
+      seriesHubInitialized = true;
+
+      elements.seriesViewCuratedBtn?.addEventListener('click', () => {
+        isSeriesCuratedMode = true;
+        currentSeriesGenreFilter = 'ALL';
+        elements.seriesViewCuratedBtn.classList.add('active');
+        elements.seriesViewGridBtn.classList.remove('active');
+        renderSeriesGenrePills();
+        renderSeriesHub();
+      });
+
+      elements.seriesViewGridBtn?.addEventListener('click', () => {
+        isSeriesCuratedMode = false;
+        elements.seriesViewCuratedBtn.classList.remove('active');
+        elements.seriesViewGridBtn.classList.add('active');
+        renderSeriesHub();
+      });
+
+      elements.seriesSurpriseBtn?.addEventListener('click', () => {
+        pickSurpriseSeries();
+      });
+
+      elements.seriesSortSelect?.addEventListener('change', (e) => {
+        seriesSortBy = e.target.value;
+        if (isSeriesCuratedMode && currentSeriesGenreFilter === 'ALL') {
+          isSeriesCuratedMode = false;
+          elements.seriesViewCuratedBtn?.classList.remove('active');
+          elements.seriesViewGridBtn?.classList.add('active');
+        }
+        applySeriesFiltersAndSort();
+      });
+
+      elements.seriesFilterDubBtn?.addEventListener('click', () => {
+        seriesFilterDub = !seriesFilterDub;
+        elements.seriesFilterDubBtn.classList.toggle('active', seriesFilterDub);
+        if (isSeriesCuratedMode) {
+          isSeriesCuratedMode = false;
+          elements.seriesViewCuratedBtn?.classList.remove('active');
+          elements.seriesViewGridBtn?.classList.add('active');
+        }
+        applySeriesFiltersAndSort();
+      });
+
+      elements.seriesFilterLegBtn?.addEventListener('click', () => {
+        seriesFilterLeg = !seriesFilterLeg;
+        elements.seriesFilterLegBtn.classList.toggle('active', seriesFilterLeg);
+        if (isSeriesCuratedMode) {
+          isSeriesCuratedMode = false;
+          elements.seriesViewCuratedBtn?.classList.remove('active');
+          elements.seriesViewGridBtn?.classList.add('active');
+        }
+        applySeriesFiltersAndSort();
+      });
+
+      elements.seriesHeroPrev?.addEventListener('click', () => moveSeriesHero(-1));
+      elements.seriesHeroNext?.addEventListener('click', () => moveSeriesHero(1));
+      elements.seriesHeroDots?.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-series-slide]');
+        if (button) showSeriesHero(Number(button.dataset.seriesSlide));
+      });
+
+      setupPillsDragScroll(elements.seriesGenrePills);
+    }
+
+    function getSeriesHeroItems() {
+      const series = (Array.isArray(fullSeriesCache) ? fullSeriesCache : []).map(item => ({
+        type: 'series',
+        id: String(item.series_id || item.primaryItem?.series_id || ''),
+        item,
+        title: cleanDisplayTitle(item.name || item.title || 'Série'),
+        year: item.year || '',
+        rating: item.rating || '',
+        poster: item.cover || item.poster || item.stream_icon || getHomeItemPoster({ type: 'series', primaryItem: item }),
+        plot: item.plot || item.description || '',
+        added: getHomeItemTime(item),
+        genre: item.genre || 'Série'
+      })).filter(item => item.id && item.poster);
+
+      if (!series.length) return [];
+
+      const sortedByAdded = series.slice().sort((a, b) => b.added - a.added);
+      const topAdded = sortedByAdded.slice(0, 20);
+
+      const topRated = series
+        .filter(s => Number(s.rating) >= 7.5 && s.plot && s.plot.length > 20)
+        .sort((a, b) => Number(b.rating) - Number(a.rating))
+        .slice(0, 30);
+
+      const pool = topRated.length >= 6 ? topRated : series.slice(0, 30);
+      const candidates = [...topAdded.slice(0, 8), ...pool.slice(0, 16)];
+      const seen = new Set();
+      const unique = [];
+      for (const item of candidates) {
+        if (!seen.has(item.id)) {
+          seen.add(item.id);
+          unique.push(item);
+        }
+      }
+      return pickRandomSample(unique, Math.min(8, unique.length));
+    }
+
+    function renderSeriesHero() {
+      if (!elements.seriesHeroTrack) return;
+      seriesHeroItems = getSeriesHeroItems();
+      seriesHeroIndex = Math.min(seriesHeroIndex, Math.max(0, seriesHeroItems.length - 1));
+      elements.seriesHeroTrack.innerHTML = '';
+      if (elements.seriesHeroDots) elements.seriesHeroDots.innerHTML = '';
+
+      if (!seriesHeroItems.length) {
+        if (elements.seriesHeroLoading) {
+          elements.seriesHeroLoading.style.display = 'flex';
+          elements.seriesHeroLoading.textContent = 'Carregando novidades de séries...';
+        }
+        return;
+      }
+
+      if (elements.seriesHeroLoading) elements.seriesHeroLoading.style.display = 'none';
+
+      seriesHeroItems.forEach((item, index) => {
+        const slide = document.createElement('article');
+        slide.className = 'series-hero-slide';
+        slide.dataset.seriesIndex = String(index);
+
+        const ratingVal = Number(item.rating || 0);
+        const ratingStr = ratingVal > 0 ? '★ ' + ratingVal.toFixed(1) + ' IMDb' : '';
+        const metaParts = [ratingStr, item.year, item.genre].filter(Boolean);
+        const meta = metaParts.join(' • ');
+
+        slide.innerHTML =
+          '<img class="series-hero-backdrop" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async" draggable="false">' +
+          '<div class="series-hero-shade"></div>' +
+          '<div class="series-hero-content">' +
+            '<span class="series-hero-kicker">SÉRIES EM DESTAQUE • TEMPORADAS COMPLETAS</span>' +
+            '<h1>' + escapeHtml(item.title) + '</h1>' +
+            '<div class="series-hero-meta">' + escapeHtml(meta) + '</div>' +
+            '<p>' + escapeHtml(item.plot || 'Disponível no catálogo de séries do EPlay.') + '</p>' +
+            '<div class="series-hero-actions">' +
+              '<button class="series-hero-watch" type="button">▶ Assistir Temporadas</button>' +
+              '<button class="series-hero-details" type="button">ℹ Ficha Técnica</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="series-hero-poster-wrap"><img class="series-hero-poster" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async" draggable="false"></div>';
+
+        const openItem = () => {
+          if (item.item) openSeriesPage(item.item);
+        };
+
+        slide.addEventListener('click', (event) => {
+          if (event.target.closest('.series-hero-actions')) return;
+          openItem();
+        });
+
+        slide.querySelector('.series-hero-watch')?.addEventListener('click', (event) => {
+          event.stopPropagation();
+          openItem();
+        });
+
+        slide.querySelector('.series-hero-details')?.addEventListener('click', (event) => {
+          event.stopPropagation();
+          openItem();
+        });
+
+        elements.seriesHeroTrack.appendChild(slide);
+
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.dataset.seriesSlide = String(index);
+        dot.className = 'series-hero-dot';
+        dot.setAttribute('aria-label', 'Ir para destaque ' + (index + 1) + ': ' + item.title);
+        elements.seriesHeroDots?.appendChild(dot);
+      });
+
+      updateSeriesHeroPosition();
+      setupSeriesHeroSwipe();
+      startSeriesHeroTimer();
+    }
+
+    function setupSeriesHeroSwipe() {
+      const track = elements.seriesHeroTrack;
+      if (!track || track._hasSwipe) return;
+      track._hasSwipe = true;
+
+      let isDown = false;
+      let startX = 0;
+      let startY = 0;
+      let currentX = 0;
+      let isDragging = false;
+      let activePointerId = null;
+
+      const onPointerDown = (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (e.target.closest('.series-hero-actions, .series-hero-arrow, .series-hero-dots')) return;
+
+        if (seriesHeroTimer) clearInterval(seriesHeroTimer);
+        seriesHeroTimer = null;
+
+        isDown = true;
+        isDragging = false;
+        activePointerId = e.pointerId;
+        startX = e.clientX;
+        startY = e.clientY;
+        currentX = e.clientX;
+
+        track.classList.add('is-swiping');
+        try { track.setPointerCapture(e.pointerId); } catch (_) {}
+      };
+
+      const onPointerMove = (e) => {
+        if (!isDown || e.pointerId !== activePointerId) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        if (!isDragging && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+          isDragging = true;
+        }
+
+        if (isDragging) {
+          e.preventDefault();
+          currentX = e.clientX;
+          const trackWidth = track.clientWidth || 1;
+          const offsetPercent = (dx / trackWidth) * 100;
+          const basePercent = -seriesHeroIndex * 100;
+          let targetPercent = basePercent + offsetPercent;
+
+          if (seriesHeroIndex === 0 && offsetPercent > 0) {
+            targetPercent = basePercent + offsetPercent * 0.35;
+          } else if (seriesHeroIndex === seriesHeroItems.length - 1 && offsetPercent < 0) {
+            targetPercent = basePercent + offsetPercent * 0.35;
+          }
+
+          track.style.transform = 'translate3d(' + targetPercent + '%, 0, 0)';
+        }
+      };
+
+      const onPointerEnd = (e) => {
+        if (!isDown || (activePointerId !== null && e.pointerId !== activePointerId)) return;
+        isDown = false;
+        const pid = activePointerId;
+        activePointerId = null;
+        if (pid !== null) {
+          try { track.releasePointerCapture(pid); } catch (_) {}
+        }
+
+        track.classList.remove('is-swiping');
+
+        if (isDragging) {
+          isDragging = false;
+          const dx = currentX - startX;
+          const threshold = Math.max(48, (track.clientWidth || 300) * 0.14);
+
+          if (dx < -threshold && seriesHeroIndex < seriesHeroItems.length - 1) {
+            moveSeriesHero(1);
+          } else if (dx > threshold && seriesHeroIndex > 0) {
+            moveSeriesHero(-1);
+          } else {
+            updateSeriesHeroPosition();
+          }
+
+          const suppressClick = (clickEv) => {
+            clickEv.preventDefault();
+            clickEv.stopPropagation();
+          };
+          window.addEventListener('click', suppressClick, { capture: true, once: true });
+          setTimeout(() => window.removeEventListener('click', suppressClick, { capture: true }), 100);
+        } else {
+          updateSeriesHeroPosition();
+        }
+
+        startSeriesHeroTimer();
+      };
+
+      track.addEventListener('pointerdown', onPointerDown);
+      track.addEventListener('pointermove', onPointerMove);
+      track.addEventListener('pointerup', onPointerEnd);
+      track.addEventListener('pointercancel', onPointerEnd);
+
+      track.addEventListener('mouseenter', () => {
+        if (seriesHeroTimer) clearInterval(seriesHeroTimer);
+        seriesHeroTimer = null;
+      });
+      track.addEventListener('mouseleave', () => {
+        if (!isDown) startSeriesHeroTimer();
+      });
+    }
+
+    function updateSeriesHeroPosition() {
+      if (!elements.seriesHeroTrack) return;
+      elements.seriesHeroTrack.style.transform = 'translate3d(-' + (seriesHeroIndex * 100) + '%, 0, 0)';
+      elements.seriesHeroDots?.querySelectorAll('.series-hero-dot').forEach((dot, idx) => {
+        dot.classList.toggle('active', idx === seriesHeroIndex);
+      });
+    }
+
+    function showSeriesHero(index) {
+      if (!seriesHeroItems.length) return;
+      seriesHeroIndex = (index + seriesHeroItems.length) % seriesHeroItems.length;
+      updateSeriesHeroPosition();
+    }
+
+    function moveSeriesHero(delta) {
+      showSeriesHero(seriesHeroIndex + delta);
+    }
+
+    function startSeriesHeroTimer() {
+      if (seriesHeroTimer) clearInterval(seriesHeroTimer);
+      seriesHeroTimer = null;
+      if (seriesHeroItems.length < 2) return;
+      seriesHeroTimer = setInterval(() => {
+        if (currentMode === 'series' && elements.seriesHub && elements.seriesHub.style.display !== 'none' && !document.hidden) {
+          moveSeriesHero(1);
+        }
+      }, 7000);
+    }
+
+    const SERIES_HUB_PILLS = [
+      { id: 'ALL', label: 'Todas as Séries', icon: '🌐' },
+      { id: 'TOP_RATED', label: 'Aclamadas (IMDb 8.0+)', icon: '⭐' },
+      { id: 'RECENT_ADDED', label: 'Recém Chegadas', icon: '🕒' },
+      { id: 'NEW_RELEASES', label: 'Novas Temporadas (2024–2026)', icon: '🆕' },
+      { id: 'STREAMING_HBO', label: 'HBO & Max Originals', icon: '🟣' },
+      { id: 'STREAMING_NETFLIX', label: 'Netflix & Prime', icon: '🔴' },
+      { id: 'CRIME_SUSPENSE', label: 'Crime, Mistério & Suspense', icon: '🕵️' },
+      { id: 'SCIFI_FANTASY', label: 'Sci-Fi & Fantasia Épica', icon: '🚀' },
+      { id: 'COMEDY', label: 'Comédias & Sitcoms', icon: '😂' },
+      { id: 'MINISERIES', label: 'Minisséries & Grandes Histórias', icon: '👑' },
+      { id: 'ANIMATION', label: 'Animações & Animes', icon: '⚡' }
+    ];
+
+    function renderSeriesGenrePills() {
+      if (!elements.seriesGenrePills) return;
+      elements.seriesGenrePills.innerHTML = '';
+
+      SERIES_HUB_PILLS.forEach(pill => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'series-pill ' + (currentSeriesGenreFilter === pill.id ? 'active' : '');
+        btn.dataset.pillId = pill.id;
+        btn.innerHTML = pill.icon + ' <span>' + escapeHtml(pill.label) + '</span>';
+
+        btn.addEventListener('click', () => {
+          currentSeriesGenreFilter = pill.id;
+          document.querySelectorAll('.series-pill').forEach(p => p.classList.remove('active'));
+          btn.classList.add('active');
+
+          if (pill.id === 'ALL') {
+            isSeriesCuratedMode = true;
+            elements.seriesViewCuratedBtn?.classList.add('active');
+            elements.seriesViewGridBtn?.classList.remove('active');
+          } else {
+            isSeriesCuratedMode = false;
+            elements.seriesViewCuratedBtn?.classList.remove('active');
+            elements.seriesViewGridBtn?.classList.add('active');
+          }
+          renderSeriesHub();
+          btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+        });
+
+        elements.seriesGenrePills.appendChild(btn);
+      });
+    }
+
+    function buildSeriesHubCuratedRails() {
+      const allSeries = getHomeCatalogItems('series');
+      if (!allSeries.length) return [];
+
+      const rails = [];
+      const railLimit = HOME_RAIL_ITEM_LIMIT; // 24
+
+      // 1. Séries do Momento & Mais Maratonadas
+      const topMarathon = allSeries.filter(s => {
+        const rating = getHomeRatingInfo(s).value;
+        const y = Number(s.year || 0);
+        return rating >= 7.6 || y >= 2024;
+      });
+      rails.push({
+        key: 'top-marathon',
+        title: '🔥 Séries do Momento & Mais Maratonadas',
+        items: sampleChaoticRailItems(topMarathon.length >= 10 ? topMarathon : allSeries, railLimit)
+      });
+
+      // 2. Recém Chegadas ao Catálogo (35% novidades distribuídas)
+      const sortedByAdded = allSeries.slice().sort((a, b) => (b.added || 0) - (a.added || 0));
+      const catalogNewsQuota = Math.round(railLimit * 0.35);
+      const topAddedPool = sortedByAdded.slice(0, Math.min(45, sortedByAdded.length));
+      const newsItems = pickRandomSample(topAddedPool, catalogNewsQuota);
+      const usedInNews = new Set(newsItems.map(x => (x.type || '') + ':' + (x.id || '')));
+      const remainingPool = allSeries.filter(x => !usedInNews.has((x.type || '') + ':' + (x.id || '')));
+      const generalItems = sampleChaoticRailItems(remainingPool, railLimit - catalogNewsQuota);
+
+      const distributedLatest = new Array(railLimit);
+      const newsIndices = [1, 4, 7, 10, 13, 16, 19, 22];
+      let ni = 0, gi = 0;
+      for (let i = 0; i < railLimit; i++) {
+        if (newsIndices.includes(i) && ni < newsItems.length) {
+          distributedLatest[i] = newsItems[ni++];
+        } else if (gi < generalItems.length) {
+          distributedLatest[i] = generalItems[gi++];
+        } else if (ni < newsItems.length) {
+          distributedLatest[i] = newsItems[ni++];
+        }
+      }
+      rails.push({
+        key: 'latest-series',
+        title: '🆕 Recém Adicionadas ao Catálogo',
+        items: distributedLatest.filter(Boolean)
+      });
+
+      // 3. Obras-Primas da TV (IMDb 8.0+)
+      const masterpieceItems = allSeries.filter(s => getHomeRatingInfo(s).value >= 8.0);
+      if (masterpieceItems.length >= HOME_THEME_MIN_ITEMS) {
+        rails.push({
+          key: 'masterpieces',
+          title: '⭐ Obras-Primas da TV (IMDb 8.0+)',
+          items: sampleChaoticRailItems(masterpieceItems, railLimit)
+        });
+      }
+
+      // 4. Novas Temporadas & Lançamentos (2024–2026)
+      const currentYear = new Date().getFullYear();
+      const newSeasons = allSeries.filter(s => {
+        const y = Number(s.year || 0);
+        return y >= currentYear - 2;
+      });
+      if (newSeasons.length >= HOME_THEME_MIN_ITEMS) {
+        rails.push({
+          key: 'new-seasons',
+          title: '🍿 Novas Temporadas & Lançamentos (' + (currentYear - 2) + '–' + currentYear + ')',
+          items: sampleChaoticRailItems(newSeasons, railLimit)
+        });
+      }
+
+      // 5. Mistério, Crime & Investigação
+      const crimeKeywords = ['crime', 'suspense', 'investiga', 'detective', 'policia', 'fbi', 'misterio', 'assassin', 'true crime'];
+      const crimeItems = allSeries.filter(s => {
+        const themes = getHomeThemesForItem(s);
+        if (themes.includes('Suspense e Terror')) return true;
+        const g = normalizeSearch(s.item?.genre || s.genre || '');
+        const t = normalizeSearch(s.title || '');
+        return crimeKeywords.some(kw => g.includes(kw) || t.includes(kw));
+      });
+      if (crimeItems.length >= HOME_THEME_MIN_ITEMS) {
+        rails.push({
+          key: 'crime-suspense',
+          title: '🕵️ Mistério, Crime & Investigação',
+          items: sampleChaoticRailItems(crimeItems, railLimit)
+        });
+      }
+
+      // 6. Sci-Fi, Distopia & Fantasia Épica
+      const scifiItems = allSeries.filter(s => {
+        const themes = getHomeThemesForItem(s);
+        if (themes.includes('Ficção Científica') || themes.includes('Fantasia')) return true;
+        const g = normalizeSearch(s.item?.genre || s.genre || '');
+        return g.includes('ficcao') || g.includes('sci-fi') || g.includes('fantasia');
+      });
+      if (scifiItems.length >= HOME_THEME_MIN_ITEMS) {
+        rails.push({
+          key: 'scifi-fantasy',
+          title: '🚀 Sci-Fi, Distopia & Fantasia Épica',
+          items: sampleChaoticRailItems(scifiItems, railLimit)
+        });
+      }
+
+      // 7. Sitcoms & Comédias para Relaxar
+      const comedyItems = allSeries.filter(s => {
+        const themes = getHomeThemesForItem(s);
+        if (themes.includes('Comédia')) return true;
+        const g = normalizeSearch(s.item?.genre || s.genre || '');
+        return g.includes('comedia') || g.includes('sitcom');
+      });
+      if (comedyItems.length >= HOME_THEME_MIN_ITEMS) {
+        rails.push({
+          key: 'comedy-sitcoms',
+          title: '😂 Sitcoms & Comédias para Relaxar',
+          items: sampleChaoticRailItems(comedyItems, railLimit)
+        });
+      }
+
+      // 8. Minisséries & Grandes Produções Dramáticas
+      const miniseriesItems = allSeries.filter(s => {
+        const g = normalizeSearch(s.item?.genre || s.genre || '');
+        const t = normalizeSearch(s.title || '');
+        return g.includes('minisserie') || t.includes('minisserie') || t.includes('limited series') || getHomeThemesForItem(s).includes('Drama e Romance');
+      });
+      if (miniseriesItems.length >= HOME_THEME_MIN_ITEMS) {
+        rails.push({
+          key: 'miniseries-drama',
+          title: '👑 Minisséries & Grandes Histórias',
+          items: sampleChaoticRailItems(miniseriesItems, railLimit)
+        });
+      }
+
+      return rails;
+    }
+
+    function renderSeriesCuratedRails() {
+      if (!elements.seriesCuratedRails) return;
+      elements.seriesCuratedRails.innerHTML = '';
+      const rails = buildSeriesHubCuratedRails();
+      rails.forEach(rail => {
+        const block = renderHomeRailBlock(rail, 'series', new Map());
+        if (block) {
+          elements.seriesCuratedRails.appendChild(block);
+        }
+      });
+    }
+
+    function pickSurpriseSeries() {
+      const candidates = (fullSeriesCache || []).filter(item => {
+        const rating = Number(item.rating || 0);
+        return rating >= 7.8 || (item.year && Number(item.year) >= 2024);
+      });
+      const pool = candidates.length > 0 ? candidates : (fullSeriesCache || []);
+      if (!pool.length) return;
+      const chosen = pool[Math.floor(Math.random() * pool.length)];
+      openSeriesPage(chosen);
+    }
+
+    function applySeriesFiltersAndSort() {
+      let list = (fullSeriesCache || []).slice();
+
+      if (currentSeriesGenreFilter !== 'ALL') {
+        if (currentSeriesGenreFilter === 'TOP_RATED') {
+          list = list.filter(s => Number(s.rating || 0) >= 8.0);
+        } else if (currentSeriesGenreFilter === 'RECENT_ADDED') {
+          list = list.sort((a, b) => getHomeItemTime(b) - getHomeItemTime(a));
+        } else if (currentSeriesGenreFilter === 'NEW_RELEASES') {
+          const currentYear = new Date().getFullYear();
+          list = list.filter(s => Number(s.year || 0) >= currentYear - 2);
+        } else if (currentSeriesGenreFilter === 'STREAMING_HBO') {
+          const hboKeywords = ['hbo', 'max', 'game of thrones', 'house of the dragon', 'the last of us', 'succession', 'white lotus', 'euphoria', 'true detective', 'chernobyl', 'sopranos', 'the wire'];
+          list = list.filter(s => {
+            const t = normalizeSearch(s.name || s.title || '');
+            const g = normalizeSearch(s.genre || '');
+            return hboKeywords.some(k => t.includes(k) || g.includes(k));
+          });
+        } else if (currentSeriesGenreFilter === 'STREAMING_NETFLIX') {
+          const netflixKeywords = ['stranger things', 'bridgerton', 'wandinha', 'wednesday', 'the crown', 'black mirror', 'dark', 'ozark', 'narcos', 'squid game', 'round 6', 'the boys', 'fallout', 'reacher'];
+          list = list.filter(s => {
+            const t = normalizeSearch(s.name || s.title || '');
+            const g = normalizeSearch(s.genre || '');
+            return netflixKeywords.some(k => t.includes(k) || g.includes(k));
+          });
+        } else if (currentSeriesGenreFilter === 'CRIME_SUSPENSE') {
+          list = list.filter(s => {
+            const g = normalizeSearch(s.genre || '');
+            return g.includes('crime') || g.includes('suspense') || g.includes('policial') || g.includes('misterio');
+          });
+        } else if (currentSeriesGenreFilter === 'SCIFI_FANTASY') {
+          list = list.filter(s => {
+            const g = normalizeSearch(s.genre || '');
+            return g.includes('ficcao') || g.includes('sci-fi') || g.includes('fantasia');
+          });
+        } else if (currentSeriesGenreFilter === 'COMEDY') {
+          list = list.filter(s => {
+            const g = normalizeSearch(s.genre || '');
+            return g.includes('comedia') || g.includes('sitcom');
+          });
+        } else if (currentSeriesGenreFilter === 'MINISERIES') {
+          list = list.filter(s => {
+            const g = normalizeSearch(s.genre || '');
+            const t = normalizeSearch(s.name || s.title || '');
+            return g.includes('minisserie') || t.includes('minisserie') || g.includes('drama');
+          });
+        } else if (currentSeriesGenreFilter === 'ANIMATION') {
+          list = list.filter(s => {
+            const g = normalizeSearch(s.genre || '');
+            return g.includes('animacao') || g.includes('anime');
+          });
+        }
+      }
+
+      if (seriesFilterDub) {
+        list = list.filter(s => s.versions ? s.versions.some(v => v.versionInfo.type === 'dublado') : true);
+      }
+      if (seriesFilterLeg) {
+        list = list.filter(s => s.versions ? s.versions.some(v => v.versionInfo.type === 'legendado') : /\[\s*L\s*\]/i.test(s.name || s.title || ''));
+      }
+
+      if (seriesSortBy === 'added') {
+        list.sort((a, b) => getHomeItemTime(b) - getHomeItemTime(a));
+      } else if (seriesSortBy === 'year') {
+        list.sort((a, b) => Number(b.year || 0) - Number(a.year || 0));
+      } else if (seriesSortBy === 'rating') {
+        list.sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
+      } else if (seriesSortBy === 'alpha') {
+        list.sort((a, b) => (a.name || a.title || '').localeCompare(b.name || b.title || ''));
+      }
+
+      currentFilteredList = list;
+      elements.mediaGrid.innerHTML = '';
+      renderedCount = 0;
+      updateCountDisplay();
+
+      if (currentFilteredList.length === 0) {
+        elements.mediaGrid.innerHTML =
+          '<div style="grid-column: 1 / -1; text-align: center; color: #888; padding: 40px 20px;">' +
+            '<p style="font-size: 16px; margin-bottom: 8px;">Nenhuma série encontrada com os filtros selecionados.</p>' +
+            '<p style="font-size: 13px; color: #555;">Tente desmarcar filtros ou escolher outro gênero.</p>' +
+          '</div>';
+        elements.loadMoreContainer.style.display = 'none';
+        return;
+      }
+
+      renderNextBatch();
+    }
+
+    function renderSeriesHub() {
+      if (currentMode !== 'series' || isWatchedView || isFavoritesView) {
+        if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+        return;
+      }
+
+      initSeriesHub();
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (elements.seriesHub) elements.seriesHub.style.display = 'block';
+
+      renderSeriesHero();
+      renderSeriesGenrePills();
+
+      const inCurated = isSeriesCuratedMode && currentSeriesGenreFilter === 'ALL' && !elements.searchInput.value && !seriesFilterDub && !seriesFilterLeg && seriesSortBy === 'featured';
+
+      if (inCurated) {
+        elements.seriesCuratedRails.style.display = 'flex';
+        elements.mediaGrid.style.display = 'none';
+        elements.loadMoreContainer.style.display = 'none';
+        document.querySelector('.status-bar')?.style.setProperty('display', 'none');
+        elements.seriesViewCuratedBtn?.classList.add('active');
+        elements.seriesViewGridBtn?.classList.remove('active');
+        renderSeriesCuratedRails();
+      } else {
+        elements.seriesCuratedRails.style.display = 'none';
+        elements.mediaGrid.style.removeProperty('display');
+        document.querySelector('.status-bar')?.style.removeProperty('display');
+        elements.seriesViewCuratedBtn?.classList.remove('active');
+        elements.seriesViewGridBtn?.classList.add('active');
+        applySeriesFiltersAndSort();
+      }
+    }
+
+function showHome(targetScroll = 0) {
       if (currentMode === 'live') {
         liveLoadGeneration++;
         window.EPlayTvEpg?.deactivate();
       }
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
+      }
+      if (seriesHeroTimer) {
+        clearInterval(seriesHeroTimer);
+        seriesHeroTimer = null;
       }
       if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
       if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
@@ -5769,7 +6542,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         window.EPlayTvEpg?.activate();
       }
       if (mode !== 'movies') {
-        if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+        if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
         if (moviesHeroTimer) {
           clearInterval(moviesHeroTimer);
           moviesHeroTimer = null;
@@ -5796,9 +6569,16 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       contentPageReturnState = null;
       document.querySelector('.status-bar')?.style.removeProperty('display');
       document.querySelector('main')?.style.removeProperty('display');
-      if (mode !== 'movies') {
+      if (mode !== 'movies' && mode !== 'series') {
         if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
         if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
+      }
+      if (mode !== 'series') {
+        if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+        if (seriesHeroTimer) {
+          clearInterval(seriesHeroTimer);
+          seriesHeroTimer = null;
+        }
       }
       currentMode = mode;
 
@@ -5859,7 +6639,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           elements.categorySelect.value = 'ALL';
           elements.resetCategoryBtn.style.display = 'none';
           elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
-          applyFilterAndRender('');
+          renderSeriesHub();
         } else {
           await loadFullSeries();
           if (currentMode !== mode || isWatchedView || isFavoritesView) return;
@@ -5868,7 +6648,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             elements.categorySelect.value = 'ALL';
             elements.resetCategoryBtn.style.display = 'none';
             elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
-            applyFilterAndRender('');
+            renderSeriesHub();
           }
         }
       } else if (mode === 'live') {
@@ -6781,10 +7561,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       currentMode = 'search';
       isWatchedView = false;
       isFavoritesView = false;
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
+      }
+      if (seriesHeroTimer) {
+        clearInterval(seriesHeroTimer);
+        seriesHeroTimer = null;
       }
       elements.homeDashboard?.classList.remove('is-active');
       elements.contentPage?.classList.remove('is-active');
@@ -9480,10 +10264,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       currentContentPageType = type;
       currentContentPageItem = item;
       contentPageOpen = true;
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
+      }
+      if (seriesHeroTimer) {
+        clearInterval(seriesHeroTimer);
+        seriesHeroTimer = null;
       }
       elements.homeDashboard?.classList.remove('is-active');
       document.querySelector('.status-bar')?.style.setProperty('display', 'none');
@@ -9660,6 +10448,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     async function openSeriesPage(seriesGroupOrItem) {
+      void resolveSeriesImdbId(seriesGroupOrItem);
       contentPageReturnState = {
         mode: currentMode,
         watched: isWatchedView,
@@ -9951,8 +10740,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           rating: sInfo.rating || sInfo.rating_5based || '',
           duration: epDuration,
           seriesId: currentActiveSeriesVersion?.seriesId || currentSeriesGroup?.series_id || sInfo.series_id || '',
-          imdbId: sInfo.imdb_id || sInfo.imdbId || currentSeriesGroup?.imdbId || currentSeriesGroup?.imdb_id || '',
-          imdb_id: sInfo.imdb_id || sInfo.imdbId || currentSeriesGroup?.imdb_id || currentSeriesGroup?.imdbId || '',
+          imdbId: sInfo.imdb_id || sInfo.imdbId || currentSeriesGroup?.imdbId || currentSeriesGroup?.imdb_id || readSeriesImdbCache()[cleanTitleKey(sName)] || '',
+          imdb_id: sInfo.imdb_id || sInfo.imdbId || currentSeriesGroup?.imdb_id || currentSeriesGroup?.imdbId || readSeriesImdbCache()[cleanTitleKey(sName)] || '',
           malId: sInfo.mal_id || sInfo.malId || currentSeriesGroup?.malId || currentSeriesGroup?.mal_id || '',
           mal_id: sInfo.mal_id || sInfo.malId || currentSeriesGroup?.mal_id || currentSeriesGroup?.malId || '',
           selectedVersion: currentActiveSeriesVersion,
