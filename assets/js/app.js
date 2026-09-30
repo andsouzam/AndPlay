@@ -264,6 +264,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       videoModal: document.getElementById('videoModal'),
       modalTitle: document.getElementById('modalTitle'),
       videoPlayer: document.getElementById('videoPlayer'),
+      subtitleOverlay: document.getElementById('eplaySubtitleOverlay'),
       embedPlayer: document.getElementById('embedPlayer'),
       closeVideoModal: document.getElementById('closeVideoModal'),
       downloadBtn: document.getElementById('downloadBtn'),
@@ -2696,7 +2697,19 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
 
       const data = await fetchJsonWithTimeout(SKIPDB_SEGMENTS_URL + '?' + params.toString());
-      const intro = data?.segments?.intro;
+      let intro = data?.segments?.intro;
+      if (!intro && duration > 0) {
+        const agnosticParams = new URLSearchParams({
+          imdb_id: imdbId,
+          season: String(Number(seasonNum)),
+          episode: String(Number(episodeNum)),
+          type: 'intro',
+          adjust: 'conservative'
+        });
+        const agnosticData = await fetchJsonWithTimeout(SKIPDB_SEGMENTS_URL + '?' + agnosticParams.toString());
+        intro = agnosticData?.segments?.intro;
+      }
+
       if (!intro) {
         if (duration > 0) {
           const zeroCached = getCachedSkipIntro(['skipdb', imdbId, seasonNum, episodeNum, 0].join(':'));
@@ -2712,10 +2725,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         return null;
       }
 
-      // Quando a duração já existe, preferimos correspondências exact/shifted.
-      // "agnostic" é usado apenas como fallback enquanto a duração ainda não foi conhecida.
       const matchType = String(intro.match || '');
-      if (!['exact', 'shifted', 'agnostic'].includes(matchType)) return null;
+      if (!['exact', 'shifted', 'agnostic', 'out-of-range'].includes(matchType)) return null;
       const confidence = Number(intro.confidence);
 
       const valid = validateSkipSegment(Number(intro.start_ms) / 1000, Number(intro.end_ms) / 1000, duration);
@@ -2880,11 +2891,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         return;
       }
 
-      if (currentTime < segment.start) {
+      if (currentTime < segment.start || (segment.start <= 5 && currentTime < 5)) {
         skipIntroState.used = false;
       }
 
-      const insideSegment = currentTime >= segment.start && currentTime < segment.end;
+      // Se a abertura começa nos primeiros 5 segundos do episódio (ex: segundo 0 ou 1),
+      // o botão já deve estar disponível desde o início da reprodução até o fim da abertura!
+      const startThreshold = segment.start <= 5 ? 0 : segment.start;
+      const insideSegment = currentTime >= startThreshold && currentTime < segment.end;
       const shouldShow = insideSegment && !skipIntroState.used;
       const wasVisible = btn.dataset.eplayVisible === '1';
       btn.style.display = shouldShow ? 'inline-flex' : 'none';
@@ -2919,7 +2933,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
 
       const requestSeq = ++skipIntroRequestSeq;
-      skipIntroState = { segment: null, source: '', used: false };
+      const existingSegment = skipIntroState.segment;
       updateSkipIntroAutoUi('series');
 
       let segment = null;
@@ -2936,15 +2950,17 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       if (requestSeq !== skipIntroRequestSeq || currentPlaybackMeta !== playback) return;
 
-      if (segment) {
+      const chosenSegment = segment || existingSegment;
+
+      if (chosenSegment) {
         skipIntroState = {
-          segment,
-          source: segment.source,
-          used: false
+          segment: chosenSegment,
+          source: chosenSegment.source,
+          used: (existingSegment && existingSegment.start === chosenSegment.start && existingSegment.end === chosenSegment.end) ? skipIntroState.used : false
         };
         if (elements.skipIntroSource) {
           elements.skipIntroSource.style.display = 'inline';
-          elements.skipIntroSource.textContent = segment.source === 'SkipDB'
+          elements.skipIntroSource.textContent = chosenSegment.source === 'SkipDB'
             ? 'Dados comunitários via SkipDB • ODbL 1.0'
             : 'Dados comunitários via AniSkip';
           elements.skipIntroSource.title = 'Timestamp fornecido por uma base comunitária de skip times.';
@@ -3012,7 +3028,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!segment || !isAutoSkipIntroEnabled() || skipIntroState.used || !player || player.paused || currentPlaybackMeta?.mediaType !== 'series') return;
 
       const currentTime = Number(player.currentTime);
-      if (!Number.isFinite(currentTime) || currentTime < segment.start || currentTime >= segment.end) return;
+      const startThreshold = segment.start <= 5 ? 0 : segment.start;
+      if (!Number.isFinite(currentTime) || currentTime < startThreshold || currentTime >= segment.end) return;
 
       const target = Math.min(segment.end, Number(player.duration) || segment.end);
       if (!Number.isFinite(target) || target <= currentTime) return;
@@ -8464,6 +8481,9 @@ function showHome(targetScroll = 0) {
     let currentRawSubtitleText = '';
     let currentSubtitleLabel = '';
     let currentSubtitleOffset = 0.0;
+    let currentParsedCues = [];
+    let currentSubtitleActive = false;
+    let lastActiveCueHtml = null;
     let currentSubContext = {
       rawTitle: '',
       mediaType: 'movie',
@@ -8474,10 +8494,147 @@ function showHome(targetScroll = 0) {
       candidates: []
     };
 
+    function parseSubtitleTimestamp(timeStr) {
+      if (!timeStr) return null;
+      const clean = timeStr.trim().replace(',', '.');
+      const parts = clean.split(':');
+      if (parts.length === 3) {
+        const h = parseFloat(parts[0]) || 0;
+        const m = parseFloat(parts[1]) || 0;
+        const s = parseFloat(parts[2]) || 0;
+        return h * 3600 + m * 60 + s;
+      } else if (parts.length === 2) {
+        const m = parseFloat(parts[0]) || 0;
+        const s = parseFloat(parts[1]) || 0;
+        return m * 60 + s;
+      } else if (parts.length === 1) {
+        const s = parseFloat(parts[0]);
+        return Number.isFinite(s) ? s : null;
+      }
+      return null;
+    }
+
+    function parseSubtitleTextToCues(rawText, offsetSeconds = 0) {
+      if (!rawText || typeof rawText !== 'string') return [];
+      const normalized = rawText
+        .replace(/^\uFEFF/, '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n');
+
+      const cues = [];
+      const blocks = normalized.trim().split(/\n\s*\n+/);
+
+      for (let b = 0; b < blocks.length; b++) {
+        const block = blocks[b].trim();
+        if (!block || block.startsWith('NOTE') || block === 'WEBVTT' || block.startsWith('WEBVTT\n')) {
+          continue;
+        }
+        const lines = block.split('\n');
+        let timeIndex = -1;
+        for (let l = 0; l < lines.length; l++) {
+          if (lines[l].includes('-->')) {
+            timeIndex = l;
+            break;
+          }
+        }
+        if (timeIndex === -1) continue;
+
+        const parts = lines[timeIndex].split('-->');
+        if (parts.length !== 2) continue;
+
+        const startMatch = parts[0].trim().match(/(?:\d{1,2}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?/);
+        const endMatch = parts[1].trim().match(/(?:\d{1,2}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?/);
+        if (!startMatch || !endMatch) continue;
+
+        const parsedStart = parseSubtitleTimestamp(startMatch[0]);
+        const parsedEnd = parseSubtitleTimestamp(endMatch[0]);
+        if (parsedStart === null || parsedEnd === null) continue;
+
+        let start = parsedStart + offsetSeconds;
+        let end = parsedEnd + offsetSeconds;
+        if (end <= start) continue;
+        if (start < 0) start = 0;
+
+        const textLines = lines.slice(timeIndex + 1);
+        const rawCueText = textLines.join('\n').trim();
+        if (!rawCueText) continue;
+
+        cues.push({
+          start,
+          end,
+          text: rawCueText
+        });
+      }
+
+      cues.sort((a, b) => a.start - b.start);
+      return cues;
+    }
+
+    function formatCueText(txt) {
+      if (!txt) return '';
+      const div = document.createElement('div');
+      div.textContent = txt;
+      let safe = div.innerHTML;
+      return safe.replace(/&lt;(\/?)i&gt;/gi, '<$1i>')
+                 .replace(/&lt;(\/?)b&gt;/gi, '<$1b>')
+                 .replace(/&lt;(\/?)u&gt;/gi, '<$1u>');
+    }
+
+    function updateSubtitleOverlay() {
+      const overlay = elements.subtitleOverlay || document.getElementById('eplaySubtitleOverlay');
+      if (!overlay) return;
+
+      if (!currentSubtitleActive || !currentParsedCues.length || !elements.videoPlayer) {
+        if (overlay.style.display !== 'none') {
+          overlay.style.display = 'none';
+          overlay.innerHTML = '';
+          lastActiveCueHtml = null;
+        }
+        return;
+      }
+
+      const curTime = elements.videoPlayer.currentTime;
+      const activeCues = [];
+      for (let i = 0; i < currentParsedCues.length; i++) {
+        const cue = currentParsedCues[i];
+        if (curTime >= cue.start && curTime <= cue.end) {
+          activeCues.push(cue);
+        } else if (cue.start > curTime) {
+          break;
+        }
+      }
+
+      if (activeCues.length === 0) {
+        if (overlay.style.display !== 'none') {
+          overlay.style.display = 'none';
+          overlay.innerHTML = '';
+          lastActiveCueHtml = null;
+        }
+        return;
+      }
+
+      const html = activeCues
+        .map(c => `<div class="eplay-subtitle-cue">${formatCueText(c.text)}</div>`)
+        .join('');
+
+      if (html !== lastActiveCueHtml) {
+        overlay.innerHTML = html;
+        lastActiveCueHtml = html;
+      }
+      if (overlay.style.display !== 'block') {
+        overlay.style.display = 'block';
+      }
+    }
+
     function disableActiveSubtitle(reasonMessage = '') {
       currentRawSubtitleText = '';
       currentSubtitleLabel = '';
       currentSubtitleOffset = 0.0;
+      currentParsedCues = [];
+      currentSubtitleActive = false;
+      lastActiveCueHtml = null;
+      updateSubtitleOverlay();
+
       if (elements.subOffsetDisplay) elements.subOffsetDisplay.textContent = '0.0s';
       if (elements.subSyncControls) elements.subSyncControls.style.display = 'none';
       if (elements.subSelect) {
@@ -8761,6 +8918,10 @@ function showHome(targetScroll = 0) {
       currentRawSubtitleText = '';
       currentSubtitleLabel = '';
       currentSubtitleOffset = 0.0;
+      currentParsedCues = [];
+      currentSubtitleActive = false;
+      lastActiveCueHtml = null;
+      updateSubtitleOverlay();
       elements.subOffsetDisplay.textContent = '0.0s';
       elements.subSyncControls.style.display = 'none';
       closeSubOptionsPanel();
@@ -8904,6 +9065,13 @@ function showHome(targetScroll = 0) {
 
       // Limpar legendas anteriores e fechar painel
       closeSubOptionsPanel();
+      currentRawSubtitleText = '';
+      currentSubtitleLabel = '';
+      currentSubtitleOffset = 0.0;
+      currentParsedCues = [];
+      currentSubtitleActive = false;
+      lastActiveCueHtml = null;
+      updateSubtitleOverlay();
       const oldTracks = elements.videoPlayer.querySelectorAll('track');
       oldTracks.forEach(t => {
         if (t.src && t.src.startsWith('blob:')) {
@@ -8973,14 +9141,19 @@ function showHome(targetScroll = 0) {
     elements.videoPlayer.addEventListener('timeupdate', () => {
       maybeAutoSkipIntro();
       updateSkipIntroButton();
+      updateSubtitleOverlay();
     });
-    elements.videoPlayer.addEventListener('seeking', updateSkipIntroButton);
+    elements.videoPlayer.addEventListener('seeking', () => {
+      updateSkipIntroButton();
+      updateSubtitleOverlay();
+    });
     elements.videoPlayer.addEventListener('seeked', () => {
       if (skipIntroState.segment && elements.videoPlayer.currentTime < skipIntroState.segment.start) {
         skipIntroState.used = false;
       }
       maybeAutoSkipIntro();
       updateSkipIntroButton();
+      updateSubtitleOverlay();
     });
 
     elements.videoPlayer.addEventListener('ended', () => {
@@ -9821,6 +9994,10 @@ function showHome(targetScroll = 0) {
         : '<option value="none" selected>Desativada</option>';
 
       if (filtered.length === 0) {
+        currentParsedCues = [];
+        currentSubtitleActive = false;
+        lastActiveCueHtml = null;
+        updateSubtitleOverlay();
         if (!isLeg) elements.modalFormat.textContent = 'Sem legendas em Português para este filtro';
         return;
       }
@@ -9844,6 +10021,10 @@ function showHome(targetScroll = 0) {
         // Por padrão ou se for versão legendada: legendas desativadas
         elements.subSelect.value = 'none';
         elements.subSyncControls.style.display = 'none';
+        currentParsedCues = [];
+        currentSubtitleActive = false;
+        lastActiveCueHtml = null;
+        updateSubtitleOverlay();
         if (isLeg) {
           const oldTracks = elements.videoPlayer.querySelectorAll('track');
           oldTracks.forEach(t => t.remove());
@@ -10181,10 +10362,10 @@ function showHome(targetScroll = 0) {
 
     function applySubtitleText(text, label = 'Português') {
       const cleanText = (text || '').replace(/^\uFEFF/, '');
-      let vttContent = cleanText;
-      if (!cleanText.startsWith('WEBVTT') || currentSubtitleOffset !== 0) {
-        vttContent = srtToVtt(cleanText, currentSubtitleOffset);
-      }
+      currentParsedCues = parseSubtitleTextToCues(cleanText, currentSubtitleOffset);
+      currentSubtitleActive = currentParsedCues.length > 0;
+      lastActiveCueHtml = null;
+      updateSubtitleOverlay();
 
       // Limpar faixas anteriores e revogar Blob URLs para evitar memory leak
       const oldTracks = elements.videoPlayer.querySelectorAll('track');
@@ -10195,33 +10376,25 @@ function showHome(targetScroll = 0) {
         t.remove();
       });
 
-      const blob = new Blob([vttContent], { type: 'text/vtt' });
-      const trackUrl = URL.createObjectURL(blob);
-
-      const track = document.createElement('track');
-      track.kind = 'subtitles';
-      track.label = label;
-      track.srclang = 'pt';
-      track.src = trackUrl;
-      track.default = true;
-
-      elements.videoPlayer.appendChild(track);
-      track.addEventListener('load', () => {
-        try {
-          if (track.track) track.track.mode = 'showing';
-        } catch (_) {}
-      });
-      setTimeout(() => {
-        if (track.track) {
-          track.track.mode = 'showing';
-        } else if (elements.videoPlayer.textTracks) {
-          for (let i = 0; i < elements.videoPlayer.textTracks.length; i++) {
-            try {
-              elements.videoPlayer.textTracks[i].mode = 'showing';
-            } catch (_) {}
-          }
+      try {
+        let vttContent = cleanText;
+        if (!cleanText.startsWith('WEBVTT') || currentSubtitleOffset !== 0) {
+          vttContent = srtToVtt(cleanText, currentSubtitleOffset);
         }
-      }, 80);
+        const blob = new Blob([vttContent], { type: 'text/vtt' });
+        const trackUrl = URL.createObjectURL(blob);
+        const track = document.createElement('track');
+        track.kind = 'subtitles';
+        track.label = label;
+        track.srclang = 'pt';
+        track.src = trackUrl;
+        elements.videoPlayer.appendChild(track);
+        track.addEventListener('load', () => {
+          try {
+            if (track.track) track.track.mode = 'hidden';
+          } catch (_) {}
+        });
+      } catch (_) {}
 
       const offsetText = currentSubtitleOffset !== 0 ? ` (sync: ${currentSubtitleOffset > 0 ? '+' : ''}${currentSubtitleOffset}s)` : '';
       elements.modalFormat.textContent = `💬 ${label} ativa${offsetText}`;

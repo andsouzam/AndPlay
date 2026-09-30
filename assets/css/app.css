@@ -572,7 +572,7 @@
     }
 
     #imdbSearchModal {
-      z-index: 3500;
+      z-index: 6000 !important;
     }
 
     .version-btn {

@@ -49,8 +49,17 @@
   }
   function reveal() {
     if (!ui) return;
-    ui.classList.remove('idle'); clearTimeout(hideTimer);
-    if (!video.paused) hideTimer = setTimeout(() => { if (!menu.classList.contains('open')) ui.classList.add('idle'); }, 3200);
+    ui.classList.remove('idle');
+    const subOverlay = $('eplaySubtitleOverlay');
+    if (subOverlay) subOverlay.classList.remove('ui-idle');
+    clearTimeout(hideTimer);
+    if (!video.paused) hideTimer = setTimeout(() => {
+      if (!menu.classList.contains('open')) {
+        ui.classList.add('idle');
+        const so = $('eplaySubtitleOverlay');
+        if (so) so.classList.add('ui-idle');
+      }
+    }, 3200);
   }
   function toggleMenu() {
     const open = menu.classList.toggle('open');
@@ -164,7 +173,7 @@
   $on('eplayPlay','click',playPause); $on('eplayCenterPlay','click',playPause);
   $on('eplayBack10','click',()=>seekBy(-10)); $on('eplayForward10','click',()=>seekBy(10));
   $on('eplayPrevEpisode','click',()=>{ closeMenu(); window.EPlaySeriesNavigation?.previous?.(); }); $on('eplayNextEpisode','click',()=>{ closeMenu(); window.EPlaySeriesNavigation?.next?.(); });
-  function syncSkipTools(){const n=window.EPlaySeriesNavigation;const source=$('skipIntroBtn');const available=!!(n && source && source.style.display!=='none');const autoRow=$('eplayAutoSkipRow'),autoToggle=$('eplayAutoSkipToggle');if(autoRow)autoRow.style.display=n?'flex':'none';if(autoToggle)autoToggle.checked=$('skipIntroAutoToggle')?.checked || localStorage.getItem('andplay_web_skip_intro_auto')==='1';const now=$('eplaySkipIntroNow');if(now)now.style.display=available?'block':'none';const overlay=$('eplaySkipIntroOverlay');if(overlay){overlay.style.display=available?'inline-flex':'none';overlay.disabled=!available;}const liveSync=$('eplayLiveSyncMenu'),lat=$('eplayLatencyMenu');if(liveSync)liveSync.style.display=$('syncLiveBtn')?.style.display!=='none'?'block':'none';if(lat)lat.style.display=$('toggleLatencyModeBtn')?.style.display!=='none'?'block':'none';}
+  function syncSkipTools(event){const n=window.EPlaySeriesNavigation;const source=$('skipIntroBtn');const visibleFromEvt=event?.detail&&typeof event.detail.visible==='boolean'?event.detail.visible:null;const available=!!(n && (visibleFromEvt!==null?visibleFromEvt:(source && (source.dataset.eplayVisible==='1'||source.style.display!=='none'))));const autoRow=$('eplayAutoSkipRow'),autoToggle=$('eplayAutoSkipToggle');if(autoRow)autoRow.style.display=n?'flex':'none';if(autoToggle)autoToggle.checked=$('skipIntroAutoToggle')?.checked || localStorage.getItem('andplay_web_skip_intro_auto')==='1';const now=$('eplaySkipIntroNow');if(now)now.style.display=available?'block':'none';const overlay=$('eplaySkipIntroOverlay');if(overlay){overlay.style.display=available?'inline-flex':'none';overlay.disabled=!available;}const liveSync=$('eplayLiveSyncMenu'),lat=$('eplayLatencyMenu');if(liveSync)liveSync.style.display=$('syncLiveBtn')?.style.display!=='none'?'block':'none';if(lat)lat.style.display=$('toggleLatencyModeBtn')?.style.display!=='none'?'block':'none';}
   function syncSeriesNav(){const n=window.EPlaySeriesNavigation;const p=$('eplayPrevEpisode'),x=$('eplayNextEpisode');if(!n){if(p)p.style.display='none';if(x)x.style.display='none';}else{const hasPrev=n.hasPrevious !== undefined ? !!n.hasPrevious : Number(n.episodeNum||0)>1;const hasNext=n.hasNext !== undefined ? !!n.hasNext : true;if(p)p.style.display=hasPrev?'inline-flex':'none';if(x)x.style.display=hasNext?'inline-flex':'none';}syncSkipTools();}
   window.addEventListener('eplay:skip-auto-changed',syncSkipTools);
   window.addEventListener('eplay:skip-state',syncSkipTools);
@@ -172,7 +181,7 @@
   $on('eplayVolumeBtn','click',toggleMute); $on('eplayVolume','input',e=>setVolume(Number(e.target.value)/100));
   $on('eplaySubtitle','click',openSubtitles); $on('eplayInfo','click',openInfo); $on('eplayPip','click',pip);
   $on('eplaySettings','click',toggleMenu); $on('eplayDownloadMenu','click',downloadVideo); $on('eplayInfoMenu','click',openInfo); $on('eplaySubMenu','click',openSubtitles); $on('eplayPipMenu','click',pip); $on('eplayFsMenu','click',fullscreen); $on('eplayFullscreen','click',fullscreen);
-  const skipIntroNow=()=>{const b=$('skipIntroBtn');if(b&&b.style.display!=='none')b.click();else showToast('Nenhum marcador de abertura disponível agora');};
+  const skipIntroNow=()=>{const b=$('skipIntroBtn');if(b&&(b.dataset.eplayVisible==='1'||b.style.display!=='none'))b.click();else showToast('Nenhum marcador de abertura disponível agora');};
   $on('eplaySkipIntroNow','click',skipIntroNow); $on('eplaySkipIntroOverlay','click',skipIntroNow);
   $on('eplayAutoSkipToggle','change',e=>{const b=$('skipIntroAutoToggle');if(b){b.checked=!!e.target.checked;b.dispatchEvent(new Event('change',{bubbles:true}));}syncSkipTools();});
   $on('eplayLiveSyncMenu','click',()=>{$('syncLiveBtn')?.click();closeMenu();});

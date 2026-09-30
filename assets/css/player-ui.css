@@ -109,3 +109,11 @@
 #videoModal #subOptionsPanel{bottom:0;max-height:55vh;padding:12px!important}
 }
 #videoModal video::cue{background-color:rgba(0,0,0,.85);color:#fff;font-family:'Segoe UI',-apple-system,Roboto,sans-serif;font-size:clamp(14px,2.2vw,26px);font-weight:600;text-shadow:0 2px 4px rgba(0,0,0,.95),0 0 2px #000;line-height:1.35;white-space:pre-line}
+.eplay-subtitle-overlay{position:absolute;left:4%;right:4%;bottom:84px;z-index:35;pointer-events:none;text-align:center;display:none;transition:bottom .2s ease}
+#videoModal .eplay-player-ui.idle~.eplay-subtitle-overlay,.eplay-subtitle-overlay.ui-idle{bottom:38px}
+.eplay-subtitle-cue{display:inline-block;background-color:rgba(0,0,0,.84);color:#fff;font-family:'Segoe UI',-apple-system,Roboto,sans-serif;font-size:clamp(15px,2.4vw,28px);font-weight:600;line-height:1.35;padding:5px 14px;border-radius:6px;text-shadow:0 2px 4px rgba(0,0,0,.95),0 0 2px #000;max-width:92%;white-space:pre-line;word-wrap:break-word}
+@media(max-width:920px){
+.eplay-subtitle-overlay{bottom:76px}
+#videoModal .eplay-player-ui.idle~.eplay-subtitle-overlay,.eplay-subtitle-overlay.ui-idle{bottom:26px}
+.eplay-subtitle-cue{font-size:clamp(14px,3.8vw,20px);padding:4px 10px}
+}
