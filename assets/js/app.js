@@ -869,6 +869,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (elements.tabLiveBtn) {
         elements.tabLiveBtn.addEventListener('click', () => switchMode('live', true));
       }
+      elements.contentFavoriteBtn?.addEventListener('click', () => toggleCurrentFavorite());
 
       // Eventos
       elements.categorySelect.addEventListener('change', (e) => onCategoryChange(e.target.value));
