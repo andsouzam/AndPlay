@@ -4017,6 +4017,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (item.year) parts.push(String(item.year));
 
       // 11. Esportes e Canais Ao Vivo
+      if (item.channelNumber) {
+        parts.push(String(item.channelNumber));
+        parts.push(`ch${item.channelNumber}`);
+        parts.push(`ch ${item.channelNumber}`);
+      }
+      if (item.channelNumberFormatted) {
+        parts.push(item.channelNumberFormatted);
+        parts.push(item.channelNumberFormatted.replace(' ', ''));
+      }
       if (item.league) parts.push(item.league);
       if (item.homeTeam) parts.push(item.homeTeam);
       if (item.awayTeam) parts.push(item.awayTeam);
@@ -4025,6 +4034,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (item.tournament) parts.push(item.tournament);
       if (item.matchTime) parts.push(item.matchTime);
       if (item.nowTitle) parts.push(item.nowTitle);
+      if (item.subCategory) parts.push(item.subCategory);
+      if (item.rawCategory) parts.push(item.rawCategory);
       if (Array.isArray(item.nextProgrammes)) {
         item.nextProgrammes.forEach(p => {
           if (p?.t) parts.push(p.t);
@@ -7126,17 +7137,135 @@ function showHome(targetScroll = 0) {
 
 
     function getCategoryInfo(rawCat) {
-      if (!rawCat) return { key: 'variety', label: 'Variedades' };
+      if (!rawCat) return { key: 'variety', label: 'Variedades', subCategory: 'Variedades' };
       const c = rawCat.toLowerCase();
-      if (c.includes('esporte')) return { key: 'sports', label: 'Esportes' };
-      if (c.includes('aberto') || c.includes('aberta')) return { key: 'open_tv', label: 'TV Aberta' };
-      if (c.includes('filme') || c.includes('série') || c.includes('series')) return { key: 'movies', label: 'Filmes & Séries' };
-      if (c.includes('notícia') || c.includes('noticia')) return { key: 'news', label: 'Notícias' };
-      if (c.includes('infantil') || c.includes('desenho')) return { key: 'kids', label: 'Infantil & Desenhos' };
-      if (c.includes('reality')) return { key: 'reality', label: 'Realitys' };
-      if (c.includes('24 hora') || c.includes('24h')) return { key: 'channels_24h', label: 'Clássicos 24H' };
-      if (c.includes('adulto')) return { key: 'adult', label: 'Adulto (+18)' };
-      return { key: 'variety', label: 'Variedades' };
+      if (c.includes('aberto') || c.includes('aberta')) return { key: 'open_tv', label: 'Abertos', subCategory: 'Canais Abertos' };
+      if (c.includes('esporte')) return { key: 'sports', label: 'Esportes', subCategory: 'Esportes' };
+      if (c.includes('infantil') || c.includes('desenho')) return { key: 'kids', label: 'Infantil', subCategory: rawCat };
+      if (c.includes('24 hora') || c.includes('24h')) return { key: 'channels_24h', label: '24 Horas', subCategory: '24 Horas' };
+      if (c.includes('adulto')) return { key: 'other', label: 'Outros', subCategory: 'Adulto' };
+      return { key: 'variety', label: 'Variedades', subCategory: rawCat };
+    }
+
+    // Algoritmo de ranking e agrupamento unificado com o APK Android
+    function getChannelGroupRank(ch) {
+      if (!ch) return 6;
+      const k = (ch.categoryKey || ch.key || '').toLowerCase();
+      const c = (ch.categoryLabel || ch.cat || ch.rawCategory || '').toLowerCase();
+
+      // 1. Abertos
+      if (k === 'open_tv' || c.includes('aberto')) return 1;
+
+      // 2. Esportes
+      if (k === 'sports' || c.includes('esporte')) return 2;
+
+      // 3. Variedades (unificado com Filmes / Séries / Realitys / Notícias / Doc / Miami)
+      if (k === 'variety' || k === 'reality' || k === 'movies' || k === 'news'
+          || c.includes('variedade') || c.includes('not') || c.includes('doc')
+          || c.includes('rie') || c.includes('serie')
+          || c.includes('reality') || c.includes('filme')
+          || c.includes('geral') || c.includes('ing') || c.includes('miami')) {
+        return 3;
+      }
+
+      // 4. Infantil
+      if (k === 'kids' || c.includes('infantil') || c.includes('desenho')) return 4;
+
+      // 5. 24hrs
+      if (k === 'channels_24h' || c.includes('24')) return 5;
+
+      // 6. Outros
+      return 6;
+    }
+
+    function extractTrailingNumber(s) {
+      if (!s) return -1;
+      const matches = s.match(/\d+/g);
+      if (!matches) return -1;
+      return parseInt(matches[matches.length - 1], 10);
+    }
+
+    function getChannelSubRank(ch, groupRank) {
+      if (!ch) return 0;
+      const id = (ch.channelSlug || ch.id || '').toLowerCase().replace(/^canal\//, '').replace(/\.html$/, '');
+      const name = (ch.name || '').toLowerCase();
+
+      if (groupRank === 1) {
+        // 1. Globo SP como primeiro canal absoluto (Canal 001)
+        if (id === 'globosp' || name.startsWith('globo sp')) return 1;
+        // 2. Demais canais GLOBO e derivados (ex.: TV Bahia, TV Asa Branca, TV Anhanguera, etc.)
+        if (id.startsWith('globo') || name.includes('globo')
+            || ['globoal', 'globoba', 'globoam', 'globodf', 'globogo', 'globomg', 'globoms', 'globors'].includes(id)
+            || name.includes('asa branca') || name.includes('bahia')
+            || name.includes('anhanguera') || name.includes('morena')
+            || name.includes('rbs') || name.includes('amazônica') || name.includes('brasília')) {
+          return 10;
+        }
+        // 3. Band SP
+        if (id === 'bandsp' || name.startsWith('band sp') || id === 'band') return 20;
+        // 4. Record SP
+        if (id === 'recordsp' || name.startsWith('record sp') || id === 'record') return 30;
+        // 5. SBT
+        if (id === 'sbt' || name === 'sbt') return 40;
+        // 6. Demais canais abertos
+        return 50;
+      }
+
+      if (groupRank === 2) {
+        // 1. ESPN
+        if (id.startsWith('espn') || name.startsWith('espn')) {
+          if (id === 'espn' || name === 'espn') return 101;
+          const num = extractTrailingNumber(name || id);
+          return (num > 0) ? (100 + num) : 199;
+        }
+        // 2. SporTV
+        if (id.startsWith('sportv') || name.startsWith('sportv')) {
+          if (id === 'sportv' || name === 'sportv') return 201;
+          const num = extractTrailingNumber(name || id);
+          return (num > 0) ? (200 + num) : 299;
+        }
+        // 3. Premiere
+        if (id.startsWith('premiere') || name.startsWith('premiere')) {
+          if (name.includes('clubes') || id === 'premiere') return 301;
+          const num = extractTrailingNumber(name || id);
+          return (num > 0) ? (300 + num) : 399;
+        }
+        return 400;
+      }
+
+      if (groupRank === 3) {
+        // A Fazenda vai para o final do grupo Variedades
+        if (id.startsWith('afazenda') || name.startsWith('a fazenda')) {
+          if (id === 'afazenda' || name === 'a fazenda') return 1001;
+          const num = extractTrailingNumber(name || id);
+          return (num > 0) ? (1000 + num) : 1099;
+        }
+        return 0;
+      }
+
+      return 0;
+    }
+
+    function sortChannelsByGroup(list) {
+      if (!Array.isArray(list) || list.length === 0) return;
+      list.sort((c1, c2) => {
+        const r1 = getChannelGroupRank(c1);
+        const r2 = getChannelGroupRank(c2);
+        if (r1 !== r2) return r1 - r2;
+
+        const sub1 = getChannelSubRank(c1, r1);
+        const sub2 = getChannelSubRank(c2, r2);
+        if (sub1 !== sub2) return sub1 - sub2;
+
+        const n1 = c1.name || '';
+        const n2 = c2.name || '';
+        return n1.localeCompare(n2, 'pt-BR');
+      });
+      list.forEach((ch, idx) => {
+        ch.channelNumber = idx + 1;
+        ch.channelNumberFormatted = `CH ${String(idx + 1).padStart(3, '0')}`;
+        ch.groupRank = getChannelGroupRank(ch);
+      });
     }
 
     // EPG real agora pertence ao módulo TV e só é ativado quando a área de TV é acessada.
@@ -7157,7 +7286,11 @@ function showHome(targetScroll = 0) {
         fallbacks.unshift(KNOWN_NATIVE_STREAMS[raw.id]);
       }
 
-      const liveEpg = getChannelLiveSchedule(raw);
+      const liveEpg = (typeof getChannelLiveSchedule === 'function')
+        ? getChannelLiveSchedule(raw)
+        : (typeof window !== 'undefined' && typeof window.getChannelLiveSchedule === 'function'
+            ? window.getChannelLiveSchedule(raw)
+            : null);
       const nowTitle = (liveEpg && liveEpg.nowTitle) ? liveEpg.nowTitle : (raw.now || 'Programação Ao Vivo');
       const nowProgress = liveEpg ? liveEpg.progress : (Number(raw.prog) || 0);
       const synopsis = liveEpg ? liveEpg.synopsis : '';
@@ -7169,6 +7302,8 @@ function showHome(targetScroll = 0) {
         name: raw.name,
         categoryKey: catInfo.key,
         categoryLabel: catInfo.label,
+        subCategory: catInfo.subCategory,
+        rawCategory: raw.cat,
         logo: raw.logo,
         badge: catInfo.key === 'channels_24h' ? '24 HORAS' : 'AO VIVO',
         embedUrl: fallbacks[0].url,
@@ -7197,6 +7332,7 @@ function showHome(targetScroll = 0) {
         })
         .then(rawChannels => {
           LIVE_CHANNELS = rawChannels.map(buildChannelItem);
+          sortChannelsByGroup(LIVE_CHANNELS);
           return LIVE_CHANNELS;
         })
         .catch(err => {
@@ -7212,17 +7348,14 @@ function showHome(targetScroll = 0) {
       elements.categorySelect.innerHTML = '';
 
       const liveCategories = [
-        { id: 'ALL', name: '📺 Todos os Canais e Jogos Ao Vivo' },
+        { id: 'ALL', name: '📺 Todos os Canais e Jogos (328)' },
         { id: 'JOGOS', name: '⚽ Jogos de Hoje & Transmissões' },
-        { id: 'sports', name: '🏆 Canais de Esportes (114)' },
-        { id: 'open_tv', name: '📡 TV Aberta Nacional & Regional (45)' },
-        { id: 'movies', name: '🎬 Filmes & Séries 24H (37)' },
-        { id: 'kids', name: '🧸 Infantil & Desenhos (18)' },
-        { id: 'news', name: '📰 Notícias 24H (10)' },
-        { id: 'channels_24h', name: '⭐ Clássicos 24 Horas (10)' },
-        { id: 'reality', name: '🤠 Reality Shows (9)' },
-        { id: 'variety', name: '🎭 Variedades & Documentários (74)' },
-        { id: 'adult', name: '🔞 Adulto +18 (11)' }
+        { id: 'open_tv', name: '📡 Abertos (45)' },
+        { id: 'sports', name: '🏆 Esportes (114)' },
+        { id: 'variety', name: '🎭 Variedades (130)' },
+        { id: 'kids', name: '🧸 Infantil (18)' },
+        { id: 'channels_24h', name: '⭐ 24 Horas (10)' },
+        { id: 'other', name: '🔞 Outros & Adulto (11)' }
       ];
 
       liveCategories.forEach(cat => {
@@ -7242,17 +7375,14 @@ function showHome(targetScroll = 0) {
     let currentLiveQuickFilter = 'all'; // 'all' | 'now' | 'matches' | 'channels'
 
     const LIVE_PILL_CATEGORIES = [
-      { id: 'ALL', label: 'Todos', icon: '📺' },
+      { id: 'ALL', label: 'Todos (328)', icon: '📺' },
       { id: 'JOGOS', label: 'Jogos Hoje', icon: '⚽' },
-      { id: 'sports', label: 'Esportes', icon: '🏆' },
-      { id: 'open_tv', label: 'TV Aberta', icon: '📡' },
-      { id: 'movies', label: 'Filmes & Séries', icon: '🎬' },
-      { id: 'kids', label: 'Infantil', icon: '🧸' },
-      { id: 'news', label: 'Notícias', icon: '📰' },
-      { id: 'channels_24h', label: '24 Horas', icon: '⭐' },
-      { id: 'reality', label: 'Reality Shows', icon: '🤠' },
-      { id: 'variety', label: 'Variedades & Doc', icon: '🎭' },
-      { id: 'adult', label: 'Adulto +18', icon: '🔞' }
+      { id: 'open_tv', label: 'Abertos (45)', icon: '📡' },
+      { id: 'sports', label: 'Esportes (114)', icon: '🏆' },
+      { id: 'variety', label: 'Variedades (130)', icon: '🎭' },
+      { id: 'kids', label: 'Infantil (18)', icon: '🧸' },
+      { id: 'channels_24h', label: '24 Horas (10)', icon: '⭐' },
+      { id: 'other', label: 'Outros (11)', icon: '🔞' }
     ];
 
     function initLiveHub() {
@@ -7383,10 +7513,22 @@ function showHome(targetScroll = 0) {
       const searchTerm = elements.searchInput ? elements.searchInput.value.trim() : '';
       const q = normalizeSearch(searchTerm);
 
-      // 1. Filtro por categoria
+      // 1. Filtro por categoria com alinhamento aos grupos do APK
       let list = source;
       if (currentLiveCategoryFilter === 'JOGOS') {
         list = list.filter(item => item.isLiveMatch);
+      } else if (currentLiveCategoryFilter === 'open_tv') {
+        list = list.filter(item => getChannelGroupRank(item) === 1);
+      } else if (currentLiveCategoryFilter === 'sports') {
+        list = list.filter(item => getChannelGroupRank(item) === 2 || item.isLiveMatch);
+      } else if (currentLiveCategoryFilter === 'variety') {
+        list = list.filter(item => getChannelGroupRank(item) === 3);
+      } else if (currentLiveCategoryFilter === 'kids') {
+        list = list.filter(item => getChannelGroupRank(item) === 4);
+      } else if (currentLiveCategoryFilter === 'channels_24h') {
+        list = list.filter(item => getChannelGroupRank(item) === 5);
+      } else if (currentLiveCategoryFilter === 'other' || currentLiveCategoryFilter === 'adult') {
+        list = list.filter(item => getChannelGroupRank(item) === 6);
       } else if (currentLiveCategoryFilter !== 'ALL') {
         list = list.filter(item => item.categoryKey === currentLiveCategoryFilter || String(item.category_id) === String(currentLiveCategoryFilter));
       }
@@ -7405,16 +7547,27 @@ function showHome(targetScroll = 0) {
         list = list.filter(item => matchesSearchQuery(item, q));
       }
 
-      // 4. Ordenação inteligente
+      // 4. Ordenação inteligente mantendo o padrão numérico do APK
       list.sort((a, b) => {
-        const aScore = a.isLiveNow ? 4 : (a.nowTitle && a.nowTitle !== 'Programação Indisponível' && a.nowTitle !== 'Carregando guia...' ? 3 : (a.isLiveMatch ? 2 : 1));
-        const bScore = b.isLiveNow ? 4 : (b.nowTitle && b.nowTitle !== 'Programação Indisponível' && b.nowTitle !== 'Carregando guia...' ? 3 : (b.isLiveMatch ? 2 : 1));
-        return bScore - aScore;
+        // Se ambos forem partidas: ao vivo primeiro
+        if (a.isLiveMatch && b.isLiveMatch) {
+          return (b.isLiveNow ? 1 : 0) - (a.isLiveNow ? 1 : 0);
+        }
+        // Se ambos forem canais: ordenação pelos números correspondentes do APK
+        if (a.channelNumber && b.channelNumber) {
+          return a.channelNumber - b.channelNumber;
+        }
+        // Se partida ao vivo vs canal
+        if (a.isLiveMatch && a.isLiveNow) return -1;
+        if (b.isLiveMatch && b.isLiveNow) return 1;
+        if (a.channelNumber) return -1;
+        if (b.channelNumber) return 1;
+        return 0;
       });
 
       // 5. Atualizar trilho de destaque (Live Spotlight)
       if (elements.liveSpotlightSection && elements.liveSpotlightTrack) {
-        if (!q && (currentLiveCategoryFilter === 'ALL' || currentLiveCategoryFilter === 'JOGOS' || currentLiveQuickFilter === 'matches')) {
+        if (!q && (currentLiveCategoryFilter === 'ALL' || currentLiveCategoryFilter === 'JOGOS' || currentLiveCategoryFilter === 'sports' || currentLiveQuickFilter === 'matches')) {
           renderLiveSpotlightRail();
         } else {
           elements.liveSpotlightSection.style.display = 'none';
@@ -8381,26 +8534,44 @@ function showHome(targetScroll = 0) {
               </div>
             `;
           } else {
-            // Filtra logos de domínios bloqueados pelo ISP (reidosembeds.online sem DNS)
+            // Canal ao vivo: card moderno com logo/capa em destaque, legenda sobreposta fosca e progresso EPG
+            card.className = 'media-card channel-media-card';
             const rawLogo = item.logo || item.stream_icon || '';
             const logoUrl = getTvLogoUrl(rawLogo);
+            const numLabel = item.channelNumberFormatted || (item.channelNumber ? `CH ${String(item.channelNumber).padStart(3, '0')}` : '');
+            const groupText = item.subCategory || item.categoryLabel || item.rawCategory || 'TV';
+
+            const liveSchedule = (typeof getChannelLiveSchedule === 'function')
+              ? getChannelLiveSchedule(item)
+              : (typeof window !== 'undefined' && typeof window.EPlayTvEpg?.getSchedule === 'function'
+                  ? window.EPlayTvEpg.getSchedule(item)
+                  : null);
+            const nowTitle = (liveSchedule && liveSchedule.nowTitle)
+              ? liveSchedule.nowTitle
+              : (item.nowTitle && item.nowTitle !== 'Carregando guia...' ? item.nowTitle : 'Programação Ao Vivo');
+            const progress = Math.max(0, Math.min(100, liveSchedule ? (Number(liveSchedule.progress) || 0) : (Number(item.nowProgress) || 0)));
+
             card.innerHTML = `
-              <div class="poster-wrap" style="background: radial-gradient(circle, #252525 0%, #121212 100%); display: flex; align-items: center; justify-content: center; padding: 18px;">
-                ${logoUrl ? `<img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(title)}" style="max-width: 85%; max-height: 85px; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.8));" data-hide-show-fallback-on-error loading="lazy">` : ''}
+              <div class="channel-poster-wrap">
+                ${numLabel ? `<div class="badge-channel-num">${escapeHtml(numLabel)}</div>` : ''}
+                <div class="badge-channel">${escapeHtml(item.badge || 'AO VIVO')}</div>
+                ${logoUrl ? `<img class="channel-main-logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(title)}" data-hide-show-fallback-on-error loading="lazy">` : ''}
                 <div class="poster-fallback" style="${logoUrl ? 'display:none;' : 'display:flex;'}">📺<br>${escapeHtml(title)}</div>
-                <div class="badge-channel">${item.badge || 'AO VIVO'}</div>
+                <div class="channel-overlay-bar">
+                  <span class="channel-overlay-name" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+                  <span class="channel-overlay-tag">${escapeHtml(groupText)}</span>
+                </div>
               </div>
-              <div class="card-info">
-                <div class="card-title">${escapeHtml(title)}</div>
-                ${item.nowTitle ? `
-                  <div style="font-size: 11px; color: #ff5252; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px; display: flex; align-items: center; gap: 4px;">
-                    <span style="display: inline-block; width: 6px; height: 6px; background: #ff5252; border-radius: 50%; flex-shrink: 0;"></span>
-                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(item.nowTitle)}</span>
-                  </div>
-                  ${item.nowProgress > 0 ? `<div style="width: 100%; height: 2px; background: rgba(255,255,255,0.15); border-radius: 1px; overflow: hidden; margin-top: 3px;"><div style="width: ${Math.min(100, item.nowProgress)}%; height: 100%; background: #ff5252;"></div></div>` : ''}
-                ` : ''}
-                <div class="card-meta" style="margin-top: 4px;">
-                  <span>${escapeHtml(item.categoryLabel || 'TV Ao Vivo')}</span>
+              <div class="channel-event-bar">
+                <div class="channel-event-row">
+                  <span class="channel-event-indicator"></span>
+                  <span class="channel-event-title" title="${escapeHtml(nowTitle)}">${escapeHtml(nowTitle)}</span>
+                </div>
+                <div class="channel-progress-track">
+                  <div class="channel-progress-fill" style="width: ${progress}%;"></div>
+                </div>
+                <div class="channel-meta-bottom">
+                  <span>${escapeHtml(item.categoryLabel || groupText)}</span>
                   <span>${item.fallbacks ? item.fallbacks.length + ' opções' : 'HD'}</span>
                 </div>
               </div>
