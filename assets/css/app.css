@@ -4396,7 +4396,7 @@ header {
 
 .home-rail-more {
   position: absolute;
-  top: 50%;
+  top: calc(50% - 16px);
   right: 7px;
   z-index: 4;
   width: 38px;
@@ -4411,7 +4411,6 @@ header {
   cursor: pointer;
   box-shadow: 0 10px 28px rgba(0,0,0,.36), -24px 0 44px rgba(5,7,11,.28);
   backdrop-filter: blur(12px);
-  transform: translateY(-16px);
   transition: opacity .18s ease, border-color .18s ease, background .18s ease;
 }
 
@@ -4419,7 +4418,6 @@ header {
 .home-rail-more:focus-visible {
   border-color: rgba(255,193,7,.6);
   background: rgba(8,10,16,.92);
-  transform: translateY(-16px);
   outline: none;
 }
 
@@ -4726,14 +4724,13 @@ header {
 
 .home-rail-nav {
   position: absolute;
-  top: 50%;
+  top: calc(50% - 10px);
   left: 7px;
   right: 7px;
   z-index: 4;
   display: flex;
   justify-content: space-between;
   gap: 6px;
-  transform: translateY(-10px);
   pointer-events: none;
 }
 
@@ -4758,7 +4755,6 @@ header {
 .home-rail-arrow:focus-visible {
   border-color: rgba(255,193,7,.6);
   background: rgba(8,10,16,.92);
-  transform: none;
   outline: none;
 }
 
@@ -4780,12 +4776,11 @@ header {
   position: absolute;
   left: 7px;
   right: 7px;
-  top: 50%;
+  top: calc(50% - 10px);
   z-index: 4;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  transform: translateY(-10px);
   pointer-events: none;
 }
 

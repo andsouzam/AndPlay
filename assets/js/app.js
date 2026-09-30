@@ -3336,8 +3336,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function updateHomeRailControls(scroller, prevBtn, nextBtn) {
       if (!scroller || !prevBtn || !nextBtn) return;
-      const canScrollLeft = scroller.scrollLeft > 4;
-      const canScrollRight = scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 4;
+      const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      const scrollLeft = Math.max(0, Math.min(scroller.scrollLeft, maxScrollLeft));
+      const canScrollLeft = maxScrollLeft > 0 && scrollLeft > 1;
+      const canScrollRight = maxScrollLeft > 0 && scrollLeft < maxScrollLeft - 1;
       prevBtn.disabled = !canScrollLeft;
       nextBtn.disabled = !canScrollRight;
       prevBtn.classList.toggle('is-hidden', !canScrollLeft);
@@ -3348,8 +3350,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const nav = document.createElement('div');
       nav.className = 'home-rail-nav';
       nav.innerHTML =
-        '<button type="button" class="home-rail-arrow home-rail-prev" aria-label="Itens anteriores">‹</button>' +
-        '<button type="button" class="home-rail-arrow home-rail-next" aria-label="Mais conteúdo">›</button>';
+        '<button type="button" class="home-rail-arrow home-rail-prev is-hidden" aria-label="Itens anteriores">‹</button>' +
+        '<button type="button" class="home-rail-arrow home-rail-next is-hidden" aria-label="Mais conteúdo">›</button>';
 
       const prevBtn = nav.querySelector('.home-rail-prev');
       const nextBtn = nav.querySelector('.home-rail-next');
@@ -3363,6 +3365,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       });
       scroller.addEventListener('scroll', () => updateHomeRailControls(scroller, prevBtn, nextBtn), { passive: true });
 
+      updateHomeRailControls(scroller, prevBtn, nextBtn);
       requestAnimationFrame(() => updateHomeRailControls(scroller, prevBtn, nextBtn));
       return nav;
     }
@@ -3423,8 +3426,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
 
       const update = () => {
-        const canScrollLeft = scroller.scrollLeft > 4;
-        const canScrollRight = scroller.scrollLeft + scroller.clientWidth < scroller.scrollWidth - 4;
+        const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+        const scrollLeft = Math.max(0, Math.min(scroller.scrollLeft, maxScrollLeft));
+        const canScrollLeft = maxScrollLeft > 0 && scrollLeft > 1;
+        const canScrollRight = maxScrollLeft > 0 && scrollLeft < maxScrollLeft - 1;
 
         nextBtn.disabled = !canScrollRight;
         nextBtn.classList.toggle('is-hidden', !canScrollRight);
@@ -3627,6 +3632,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!elements.homeWatchedRail) return;
       const items = getHomeWatchedItems();
       elements.homeWatchedRail.innerHTML = '';
+      elements.homeWatchedRail.scrollLeft = 0;
+      elements.homeWatchedPrev?.classList.add('is-hidden');
+      elements.homeWatchedPrev && (elements.homeWatchedPrev.disabled = true);
+      elements.homeWatchedNext?.classList.add('is-hidden');
+      elements.homeWatchedNext && (elements.homeWatchedNext.disabled = true);
       elements.homeWatchedSection?.style.setProperty('display', items.length ? '' : 'none');
 
       if (!items.length) {
