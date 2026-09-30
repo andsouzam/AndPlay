@@ -59,16 +59,20 @@
             android:paddingTop="6dp"
             android:paddingBottom="6dp" />
 
-        <!-- Dica de tecla -->
+        <!-- Botão Voltar Touch & D-pad -->
         <TextView
+            android:id="@+id/btnHubBack"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="36dp"
+            android:layout_margin="8dp"
+            android:background="@drawable/pill_focus_bg"
+            android:clickable="true"
+            android:focusable="true"
             android:gravity="center"
-            android:paddingTop="8dp"
-            android:paddingBottom="10dp"
-            android:text="VOLTAR: Fechar"
-            android:textColor="#40FFFFFF"
-            android:textSize="9sp" />
+            android:text="◀ VOLTAR"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
     </LinearLayout>
 
     <!-- ── DIVIDER VERTICAL ───────────────────────────────────────────── -->
@@ -106,6 +110,23 @@
                 android:textStyle="bold"
                 android:singleLine="true"
                 android:ellipsize="end" />
+
+            <!-- Botão Voltar Touch no cabeçalho -->
+            <TextView
+                android:id="@+id/btnHubHeaderBack"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/pill_focus_bg"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="◀ VOLTAR"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
 
             <!-- Dica de navegação -->
             <TextView

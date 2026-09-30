@@ -92,6 +92,12 @@ public class UserActivity extends Activity {
     }
 
     private void setupListeners() {
+        View btnUserBack = findViewById(R.id.btnUserBack);
+        if (btnUserBack != null) {
+            btnUserBack.setOnClickListener(v -> finish());
+            setupFocusAnimation(btnUserBack);
+        }
+
         // Clicar no cabeçalho ou cards de modo abre o modal com corte diagonal
         if (cardModeSelection != null) {
             cardModeSelection.setOnClickListener(v -> openModeSelectionModal());

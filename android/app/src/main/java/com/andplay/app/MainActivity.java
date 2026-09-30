@@ -223,9 +223,23 @@ public class MainActivity extends Activity {
     private TextView osdChNum, osdChName, osdClock, osdNowTitle, osdRemaining, osdSynopsis, osdNextProgram, osdSportsHint;
     private ProgressBar osdProgressBar;
 
+    // Player Top Overlay & Touch Controls
+    private LinearLayout playerTopOverlay;
+    private TextView btnPlayerBack;
+    private TextView playerTitleText;
+    private LinearLayout playerCenterControls;
+    private TextView btnPlayerRewind;
+    private TextView btnPlayerPlayPause;
+    private TextView btnPlayerForward;
+    private TextView btnPlayerNextEp;
+
+    // Channel Rail Drawer Button
+    private TextView btnOpenChannelDrawer;
+
     // Lateral EPG Drawer
     private LinearLayout epgDrawer;
     private TextView drawerHeaderTitle;
+    private TextView btnDrawerClose;
     private RecyclerView drawerCatsRecycler;
     private RecyclerView drawerChannelsRecycler;
 
@@ -267,6 +281,7 @@ public class MainActivity extends Activity {
 
     // Full EPG Guide Views
     private LinearLayout fullGuideLayout;
+    private TextView btnGuideBack;
     private TextView guideClock;
     private TextView guideHeroChannelBadge, guideHeroStatusBadge, guideHeroTime, guideHeroRemaining;
     private TextView guideHeroTitle, guideHeroSynopsis;
@@ -466,6 +481,12 @@ public class MainActivity extends Activity {
         favoritesLayout = findViewById(R.id.favoritesLayout);
         favoritesRail = findViewById(R.id.favoritesRail);
         channelsLayout = findViewById(R.id.channelsLayout);
+        btnOpenChannelDrawer = findViewById(R.id.btnOpenChannelDrawer);
+        if (btnOpenChannelDrawer != null) {
+            btnOpenChannelDrawer.setOnClickListener(v -> openDrawer());
+            btnOpenChannelDrawer.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
+        }
         sportsLayout = findViewById(R.id.sportsLayout);
 
         channelsRail = findViewById(R.id.channelsRail);
@@ -494,9 +515,76 @@ public class MainActivity extends Activity {
 
         // Fullscreen
         fullscreenLayout = findViewById(R.id.fullscreenLayout);
+        if (fullscreenLayout != null) {
+            fullscreenLayout.setOnClickListener(v -> toggleOsdFromTouch());
+        }
         topChannelBadge = findViewById(R.id.topChannelBadge);
         topChNum = findViewById(R.id.topChNum);
         topChName = findViewById(R.id.topChName);
+
+        playerTopOverlay = findViewById(R.id.playerTopOverlay);
+        playerTitleText = findViewById(R.id.playerTitleText);
+        btnPlayerBack = findViewById(R.id.btnPlayerBack);
+        if (btnPlayerBack != null) {
+            btnPlayerBack.setOnClickListener(v -> exitFullscreenPlayer());
+            btnPlayerBack.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
+        }
+
+        playerCenterControls = findViewById(R.id.playerCenterControls);
+        btnPlayerRewind = findViewById(R.id.btnPlayerRewind);
+        if (btnPlayerRewind != null) {
+            btnPlayerRewind.setOnClickListener(v -> {
+                if (isPlayingVod && exoPlayer != null) {
+                    long target = Math.max(0, exoPlayer.getCurrentPosition() - 15000);
+                    exoPlayer.seekTo(target);
+                    updateVodProgress();
+                    showOsdBanner(5000);
+                }
+            });
+            btnPlayerRewind.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.12f : 1.0f).scaleY(hasFocus ? 1.12f : 1.0f).setDuration(100).start());
+        }
+
+        btnPlayerPlayPause = findViewById(R.id.btnPlayerPlayPause);
+        if (btnPlayerPlayPause != null) {
+            btnPlayerPlayPause.setOnClickListener(v -> {
+                if (exoPlayer != null) {
+                    if (exoPlayer.isPlaying()) {
+                        exoPlayer.pause();
+                        btnPlayerPlayPause.setText("▶");
+                    } else {
+                        exoPlayer.play();
+                        btnPlayerPlayPause.setText("⏸");
+                    }
+                    showOsdBanner(5000);
+                }
+            });
+            btnPlayerPlayPause.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.12f : 1.0f).scaleY(hasFocus ? 1.12f : 1.0f).setDuration(100).start());
+        }
+
+        btnPlayerForward = findViewById(R.id.btnPlayerForward);
+        if (btnPlayerForward != null) {
+            btnPlayerForward.setOnClickListener(v -> {
+                if (isPlayingVod && exoPlayer != null) {
+                    long dur = exoPlayer.getDuration();
+                    long target = dur > 0 ? Math.min(dur, exoPlayer.getCurrentPosition() + 15000) : exoPlayer.getCurrentPosition() + 15000;
+                    exoPlayer.seekTo(target);
+                    updateVodProgress();
+                    showOsdBanner(5000);
+                }
+            });
+            btnPlayerForward.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.12f : 1.0f).scaleY(hasFocus ? 1.12f : 1.0f).setDuration(100).start());
+        }
+
+        btnPlayerNextEp = findViewById(R.id.btnPlayerNextEp);
+        if (btnPlayerNextEp != null) {
+            btnPlayerNextEp.setOnClickListener(v -> playNextSeriesEpisode());
+            btnPlayerNextEp.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
+        }
 
         osdBanner = findViewById(R.id.osdBanner);
         osdChNum = findViewById(R.id.osdChNum);
@@ -508,11 +596,44 @@ public class MainActivity extends Activity {
         osdNextProgram = findViewById(R.id.osdNextProgram);
         osdSportsHint  = findViewById(R.id.osdSportsHint);
         osdProgressBar = findViewById(R.id.osdProgressBar);
+        if (osdProgressBar != null) {
+            osdProgressBar.setOnTouchListener((v, event) -> {
+                if (isPlayingVod && exoPlayer != null) {
+                    long dur = exoPlayer.getDuration();
+                    if (dur > 0) {
+                        float x = event.getX();
+                        float width = v.getWidth();
+                        if (width > 0) {
+                            float progress = Math.max(0f, Math.min(1f, x / width));
+                            long targetPos = (long) (progress * dur);
+                            if (event.getAction() == MotionEvent.ACTION_DOWN || event.getAction() == MotionEvent.ACTION_MOVE || event.getAction() == MotionEvent.ACTION_UP) {
+                                if (event.getAction() == MotionEvent.ACTION_UP) {
+                                    exoPlayer.seekTo(targetPos);
+                                }
+                                osdProgressBar.setProgress((int) (progress * 100));
+                                if (osdRemaining != null) {
+                                    osdRemaining.setText(formatDuration(targetPos) + " / " + formatDuration(dur));
+                                }
+                                showOsdBanner(5000);
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            });
+        }
 
         // EPG Drawer
         epgDrawer = findViewById(R.id.epgDrawer);
         drawerHeaderTitle = findViewById(R.id.drawerHeaderTitle);
         btnDrawerOptions = findViewById(R.id.btnDrawerOptions);
+        btnDrawerClose = findViewById(R.id.btnDrawerClose);
+        if (btnDrawerClose != null) {
+            btnDrawerClose.setOnClickListener(v -> closeDrawer());
+            btnDrawerClose.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
+        }
         drawerCatsRecycler = findViewById(R.id.drawerCatsRecycler);
         drawerChannelsRecycler = findViewById(R.id.drawerChannelsRecycler);
         drawerCatsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
@@ -606,6 +727,12 @@ public class MainActivity extends Activity {
 
         // Full EPG Guide
         fullGuideLayout = findViewById(R.id.fullGuideLayout);
+        btnGuideBack = findViewById(R.id.btnGuideBack);
+        if (btnGuideBack != null) {
+            btnGuideBack.setOnClickListener(v -> closeFullGuide());
+            btnGuideBack.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
+        }
         guideClock = findViewById(R.id.guideClock);
         guideHeroChannelBadge = findViewById(R.id.guideHeroChannelBadge);
         guideHeroStatusBadge = findViewById(R.id.guideHeroStatusBadge);
@@ -1877,6 +2004,23 @@ public class MainActivity extends Activity {
         unifiedPlayerBox = (FrameLayout) LayoutInflater.from(this).inflate(R.layout.player_box, null);
         unifiedExoPlayerView = unifiedPlayerBox.findViewById(R.id.unifiedExoPlayerView);
         unifiedEmbedWebView = unifiedPlayerBox.findViewById(R.id.unifiedEmbedWebView);
+
+        unifiedPlayerBox.setOnClickListener(v -> {
+            if (currentMode == ScreenMode.FULLSCREEN) {
+                toggleOsdFromTouch();
+            } else if (currentMode == ScreenMode.CENTRAL) {
+                setScreenMode(ScreenMode.FULLSCREEN);
+            }
+        });
+        if (unifiedExoPlayerView != null) {
+            unifiedExoPlayerView.setOnClickListener(v -> {
+                if (currentMode == ScreenMode.FULLSCREEN) {
+                    toggleOsdFromTouch();
+                } else if (currentMode == ScreenMode.CENTRAL) {
+                    setScreenMode(ScreenMode.FULLSCREEN);
+                }
+            });
+        }
 
         // Configuração de alto desempenho do ExoPlayer com OkHttp e DNS inteligente
         sharedOkHttpClient = new OkHttpClient.Builder()
@@ -5568,6 +5712,10 @@ public class MainActivity extends Activity {
     public void showOsdBannerLoading() {
         if (isMosaicActive) return;
         osdHandler.removeCallbacks(osdHideRunnable);
+        if (playerTopOverlay != null) {
+            playerTopOverlay.setVisibility(View.VISIBLE);
+            updatePlayerTitle();
+        }
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
         scheduleOsdHide(getOsdTimeoutMs());
@@ -5580,6 +5728,23 @@ public class MainActivity extends Activity {
             hideSportsOverlay();
         }
         osdHandler.removeCallbacks(osdHideRunnable);
+        if (playerTopOverlay != null) {
+            playerTopOverlay.setVisibility(View.VISIBLE);
+            updatePlayerTitle();
+        }
+        if (playerCenterControls != null) {
+            if (isPlayingVod) {
+                playerCenterControls.setVisibility(View.VISIBLE);
+                if (btnPlayerPlayPause != null) {
+                    btnPlayerPlayPause.setText(exoPlayer != null && exoPlayer.isPlaying() ? "⏸" : "▶");
+                }
+                if (btnPlayerNextEp != null) {
+                    btnPlayerNextEp.setVisibility(hasNextSeriesEpisode() ? View.VISIBLE : View.GONE);
+                }
+            } else {
+                playerCenterControls.setVisibility(View.GONE);
+            }
+        }
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
 
@@ -5597,8 +5762,98 @@ public class MainActivity extends Activity {
 
     public void hideOsdBanner() {
         osdHandler.removeCallbacks(osdHideRunnable);
+        if (playerTopOverlay != null) playerTopOverlay.setVisibility(View.GONE);
+        if (playerCenterControls != null) playerCenterControls.setVisibility(View.GONE);
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.GONE);
         if (osdBanner != null) osdBanner.setVisibility(View.GONE);
+    }
+
+    private void updatePlayerTitle() {
+        if (playerTitleText == null) return;
+        if (isPlayingVod) {
+            if (activeVodSeries != null && activeVodEpisode != null) {
+                String epTitle = (activeVodEpisode.title != null && !activeVodEpisode.title.isEmpty()) ? " - " + activeVodEpisode.title : "";
+                playerTitleText.setText(activeVodSeries.title + " • T" + activeVodSeasonNum + ":E" + activeVodEpisode.episode_num + epTitle);
+            } else if (activeVodMovie != null) {
+                playerTitleText.setText(activeVodMovie.title != null ? activeVodMovie.title : "");
+            } else {
+                playerTitleText.setText("");
+            }
+        } else if (isPlayingSportsEvent && activeSportsEvent != null) {
+            playerTitleText.setText(activeSportsEvent.homeName + " x " + activeSportsEvent.awayName);
+        } else if (currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
+            Channel ch = allChannels.get(currentChannelIdx);
+            playerTitleText.setText(ch != null ? ch.name : "");
+        } else {
+            playerTitleText.setText("");
+        }
+    }
+
+    private void toggleOsdFromTouch() {
+        if (currentMode != ScreenMode.FULLSCREEN) return;
+        if (osdBanner != null && osdBanner.getVisibility() == View.VISIBLE) {
+            hideOsdBanner();
+        } else {
+            showOsdBanner(5000);
+        }
+    }
+
+    public void exitFullscreenPlayer() {
+        if (pendingZapChannelIdx >= 0) {
+            cancelPendingZap();
+        }
+        hideOsdBanner();
+        if (isPlayingVod) {
+            stopVodProgressTicker();
+            destroyCurrentStream();
+            isPlayingVod = false;
+            ScreenMode target = (previousMode == ScreenMode.SERIES_DETAIL ? ScreenMode.SERIES_DETAIL : ScreenMode.VOD);
+            activeVodMovie = null;
+            activeVodEpisode = null;
+            setScreenMode(target);
+            return;
+        }
+        if (isPlayingSportsEvent) {
+            zapHandler.removeCallbacks(zapConfirmRunnable);
+            isPlayingSportsEvent = false;
+            activeSportsEvent = null;
+        }
+        setScreenMode(ScreenMode.CENTRAL);
+    }
+
+    private boolean hasNextSeriesEpisode() {
+        if (activeVodSeries == null || activeVodEpisode == null || currentSeriesEpisodesMap == null) return false;
+        List<Episode> currentSeasonEps = currentSeriesEpisodesMap.get(activeVodSeasonNum);
+        if (currentSeasonEps != null) {
+            int currentEpIdx = -1;
+            for (int i = 0; i < currentSeasonEps.size(); i++) {
+                Episode ep = currentSeasonEps.get(i);
+                if (ep.id != null && ep.id.equals(activeVodEpisode.id)) {
+                    currentEpIdx = i;
+                    break;
+                }
+            }
+            if (currentEpIdx < 0) {
+                for (int i = 0; i < currentSeasonEps.size(); i++) {
+                    Episode ep = currentSeasonEps.get(i);
+                    if (ep.episode_num == activeVodEpisode.episode_num) {
+                        currentEpIdx = i;
+                        break;
+                    }
+                }
+            }
+            if (currentEpIdx >= 0 && currentEpIdx + 1 < currentSeasonEps.size()) {
+                return true;
+            }
+        }
+        List<String> seasonKeys = new ArrayList<>(currentSeriesEpisodesMap.keySet());
+        int currentSeasonIdx = seasonKeys.indexOf(activeVodSeasonNum);
+        if (currentSeasonIdx >= 0 && currentSeasonIdx + 1 < seasonKeys.size()) {
+            String nextSeasonNum = seasonKeys.get(currentSeasonIdx + 1);
+            List<Episode> nextSeasonEps = currentSeriesEpisodesMap.get(nextSeasonNum);
+            return nextSeasonEps != null && !nextSeasonEps.isEmpty();
+        }
+        return false;
     }
 
     public void openDrawer() {
@@ -5666,6 +5921,7 @@ public class MainActivity extends Activity {
     public void setScreenMode(ScreenMode mode) {
         if (currentMode == ScreenMode.FULLSCREEN && mode != ScreenMode.FULLSCREEN) {
             hideSportsOverlay(); // Fecha overlay de tabela ao sair da tela cheia
+            hideOsdBanner();
             if (isPlayingVod) {
                 stopVodProgressTicker();
                 destroyCurrentStream();

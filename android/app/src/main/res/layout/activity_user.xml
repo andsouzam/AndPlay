@@ -39,17 +39,19 @@
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/userBackHint"
+                android:id="@+id/btnUserBack"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="#22FFFFFF"
-                android:paddingStart="8dp"
-                android:paddingTop="3dp"
-                android:paddingEnd="8dp"
-                android:paddingBottom="3dp"
-                android:text="VOLTAR: Fechar"
-                android:textColor="#80FFFFFF"
-                android:textSize="11sp" />
+                android:layout_height="32dp"
+                android:background="@drawable/pill_focus_bg"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="◀ VOLTAR"
+                android:textColor="#FFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
         <androidx.core.widget.NestedScrollView
