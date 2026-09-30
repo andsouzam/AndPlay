@@ -4002,6 +4002,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         history.push({ x: e.clientX, time: performance.now() });
 
         if (window.getSelection) window.getSelection().removeAllRanges();
+        if (document.activeElement && typeof document.activeElement.blur === 'function') {
+          document.activeElement.blur();
+        }
       });
 
       scroller.addEventListener('pointermove', e => {
@@ -4016,6 +4019,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             try { scroller.setPointerCapture(e.pointerId); } catch (_) {}
             scroller.classList.add('is-dragging');
             if (window.getSelection) window.getSelection().removeAllRanges();
+            if (document.activeElement && typeof document.activeElement.blur === 'function') {
+              document.activeElement.blur();
+            }
           } else if (Math.abs(dy) > 10) {
             isDown = false;
             return;
@@ -4049,6 +4055,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (isDragging) {
           isDragging = false;
           scroller.classList.remove('is-dragging');
+          if (document.activeElement && typeof document.activeElement.blur === 'function') {
+            document.activeElement.blur();
+          }
 
           const suppressClick = clickEv => {
             clickEv.preventDefault();
