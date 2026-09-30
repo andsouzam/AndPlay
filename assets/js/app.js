@@ -3972,74 +3972,132 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       let isDown = false;
       let startX = 0;
+      let startY = 0;
       let scrollStart = 0;
       let isDragging = false;
-      let velocity = 0;
-      let lastX = 0;
-      let lastTime = 0;
+      let activePointerId = null;
       let momentumRaf = null;
+      const history = [];
 
-      scroller.addEventListener('mousedown', e => {
-        if (e.button !== 0) return;
+      const stopMomentum = () => {
+        if (momentumRaf !== null) {
+          cancelAnimationFrame(momentumRaf);
+          momentumRaf = null;
+        }
+      };
+
+      scroller.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
         if (e.target.closest('button.home-watched-menu, .home-watched-menu-panel, .home-rail-arrow, .home-rail-more')) return;
-        if (window.getSelection) window.getSelection().removeAllRanges();
+
+        stopMomentum();
         isDown = true;
         isDragging = false;
-        startX = e.pageX;
+        activePointerId = e.pointerId;
+        startX = e.clientX;
+        startY = e.clientY;
         scrollStart = scroller.scrollLeft;
-        lastX = e.pageX;
-        lastTime = Date.now();
-        velocity = 0;
-        cancelAnimationFrame(momentumRaf);
+
+        history.length = 0;
+        history.push({ x: e.clientX, time: performance.now() });
+
+        if (window.getSelection) window.getSelection().removeAllRanges();
       });
 
-      window.addEventListener('mousemove', e => {
-        if (!isDown) return;
-        const dx = e.pageX - startX;
-        if (!isDragging && Math.abs(dx) > 5) {
-          isDragging = true;
-          scroller.classList.add('is-dragging');
-          if (window.getSelection) window.getSelection().removeAllRanges();
+      scroller.addEventListener('pointermove', e => {
+        if (!isDown || e.pointerId !== activePointerId) return;
+
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        if (!isDragging) {
+          if (Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) {
+            isDragging = true;
+            try { scroller.setPointerCapture(e.pointerId); } catch (_) {}
+            scroller.classList.add('is-dragging');
+            if (window.getSelection) window.getSelection().removeAllRanges();
+          } else if (Math.abs(dy) > 10) {
+            isDown = false;
+            return;
+          }
         }
+
         if (isDragging) {
+          if (e.cancelable) e.preventDefault();
           if (window.getSelection) window.getSelection().removeAllRanges();
-          const now = Date.now();
-          const dt = Math.max(1, now - lastTime);
-          velocity = (e.pageX - lastX) / dt;
-          lastX = e.pageX;
-          lastTime = now;
+
+          const now = performance.now();
+          history.push({ x: e.clientX, time: now });
+          while (history.length > 5 && now - history[0].time > 100) {
+            history.shift();
+          }
+
           scroller.scrollLeft = scrollStart - dx;
         }
       });
 
-      const onDragEnd = () => {
-        if (!isDown) return;
+      const onPointerEnd = e => {
+        if (!isDown || (activePointerId !== null && e.pointerId !== activePointerId)) return;
         isDown = false;
-        scroller.classList.remove('is-dragging');
+        const pid = activePointerId;
+        activePointerId = null;
+
+        if (pid !== null) {
+          try { scroller.releasePointerCapture(pid); } catch (_) {}
+        }
 
         if (isDragging) {
           isDragging = false;
+          scroller.classList.remove('is-dragging');
+
           const suppressClick = clickEv => {
             clickEv.preventDefault();
             clickEv.stopPropagation();
           };
           window.addEventListener('click', suppressClick, { capture: true, once: true });
-          setTimeout(() => window.removeEventListener('click', suppressClick, { capture: true }), 80);
+          setTimeout(() => window.removeEventListener('click', suppressClick, { capture: true }), 100);
 
-          if (Math.abs(velocity) > 0.22) {
-            let v = velocity * 15;
+          const now = performance.now();
+          const recent = history.filter(p => now - p.time <= 90);
+          let velocity = 0;
+          if (recent.length >= 2) {
+            const first = recent[0];
+            const last = recent[recent.length - 1];
+            const dt = last.time - first.time;
+            if (dt > 12) {
+              velocity = (last.x - first.x) / dt;
+            }
+          }
+
+          if (Math.abs(velocity) > 0.16) {
+            let v = velocity * 16;
+            v = Math.max(-50, Math.min(50, v));
+            const friction = 0.958;
+            const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+
             const applyMomentum = () => {
-              if (Math.abs(v) < 0.5) return;
+              if (Math.abs(v) < 0.25) {
+                stopMomentum();
+                return;
+              }
               scroller.scrollLeft -= v;
-              v *= 0.92;
+              v *= friction;
+
+              if (scroller.scrollLeft <= 0 || scroller.scrollLeft >= maxScroll) {
+                stopMomentum();
+                return;
+              }
               momentumRaf = requestAnimationFrame(applyMomentum);
             };
             momentumRaf = requestAnimationFrame(applyMomentum);
           }
+        } else {
+          scroller.classList.remove('is-dragging');
         }
       };
 
-      window.addEventListener('mouseup', onDragEnd);
+      scroller.addEventListener('pointerup', onPointerEnd);
+      scroller.addEventListener('pointercancel', onPointerEnd);
     }
 
     function updateHomeRailControls(scroller, prevBtn, nextBtn) {
