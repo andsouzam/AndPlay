@@ -855,6 +855,10 @@
   }
 
   function openModal() {
+    if (typeof window.showUserPage === 'function') {
+      window.showUserPage();
+      return;
+    }
     const modal = document.getElementById('andplayAccountModal');
     if (!modal) return;
     modal.style.display = 'flex';
@@ -1527,7 +1531,49 @@
     refreshWatchHistory,
     recordWatched,
     removeWatched,
-    ready: () => accountReadyPromise
+    ready: () => accountReadyPromise,
+    getSession: () => currentSession,
+    getCurrentUser,
+    getDisplayName,
+    getAvatarUrl,
+    signInDirect: async (email, password) => {
+      const client = await getClient();
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      currentSession = data.session;
+      updateAccountUi();
+      await syncNow();
+      await refreshAccountUsage().catch(() => {});
+      return data;
+    },
+    signUpDirect: async (email, password) => {
+      const client = await getClient();
+      const { data, error } = await client.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: window.location.origin + window.location.pathname }
+      });
+      if (error) throw error;
+      currentSession = data.session;
+      updateAccountUi();
+      if (currentSession) {
+        await syncNow();
+        await refreshAccountUsage().catch(() => {});
+      }
+      return data;
+    },
+    signOutDirect: async () => {
+      await signOut();
+      updateAccountUi();
+    },
+    requestPasswordResetDirect: async (email) => {
+      const client = await getClient();
+      const { error } = await client.auth.resetPasswordForEmail(email, {
+        redirectTo: getAuthRedirectUrl()
+      });
+      if (error) throw error;
+      return true;
+    }
   };
 
   const startAccount = async () => {

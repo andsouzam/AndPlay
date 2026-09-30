@@ -273,6 +273,86 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       liveSpotlightSection: document.getElementById('liveSpotlightSection'),
       liveSpotlightTrack: document.getElementById('liveSpotlightTrack'),
 
+      // Favorites & Watched Hubs
+      favoritesHub: document.getElementById('favoritesHub'),
+      favTotalBadge: document.getElementById('favTotalBadge'),
+      favCountAll: document.getElementById('favCountAll'),
+      favCountMovies: document.getElementById('favCountMovies'),
+      favCountSeries: document.getElementById('favCountSeries'),
+      favClearBtn: document.getElementById('favClearBtn'),
+      favPillAll: document.getElementById('favPillAll'),
+      favPillMovies: document.getElementById('favPillMovies'),
+      favPillSeries: document.getElementById('favPillSeries'),
+
+      watchedHub: document.getElementById('watchedHub'),
+      watchedTotalBadge: document.getElementById('watchedTotalBadge'),
+      watchedSyncNotice: document.getElementById('watchedSyncNotice'),
+      watchedSyncNoticeBtn: document.getElementById('watchedSyncNoticeBtn'),
+      watchedCountAll: document.getElementById('watchedCountAll'),
+      watchedCountResume: document.getElementById('watchedCountResume'),
+      watchedCountDone: document.getElementById('watchedCountDone'),
+      watchedCountMovies: document.getElementById('watchedCountMovies'),
+      watchedCountSeries: document.getElementById('watchedCountSeries'),
+      watchedClearBtn: document.getElementById('watchedClearBtn'),
+      watchedPillAll: document.getElementById('watchedPillAll'),
+      watchedPillResume: document.getElementById('watchedPillResume'),
+      watchedPillDone: document.getElementById('watchedPillDone'),
+      watchedPillMovies: document.getElementById('watchedPillMovies'),
+      watchedPillSeries: document.getElementById('watchedPillSeries'),
+
+      // User Dashboard & Navigation
+      tabUserBtn: document.getElementById('tabUserBtn'),
+      accountBtn: document.getElementById('accountBtn'),
+      userDashboard: document.getElementById('userDashboard'),
+      userAvatarDisplay: document.getElementById('userAvatarDisplay'),
+      userAvatarEditBtn: document.getElementById('userAvatarEditBtn'),
+      userAvatarPicker: document.getElementById('userAvatarPicker'),
+      userProfileName: document.getElementById('userProfileName'),
+      userProfileBadge: document.getElementById('userProfileBadge'),
+      userProfileEmail: document.getElementById('userProfileEmail'),
+      userHeroSyncBtn: document.getElementById('userHeroSyncBtn'),
+      userHeroAuthBtn: document.getElementById('userHeroAuthBtn'),
+      statWatchTime: document.getElementById('statWatchTime'),
+      statMoviesCount: document.getElementById('statMoviesCount'),
+      statSeriesCount: document.getElementById('statSeriesCount'),
+      statFavCount: document.getElementById('statFavCount'),
+      statLiveCount: document.getElementById('statLiveCount'),
+      userTabBtnAccount: document.getElementById('userTabBtnAccount'),
+      userTabBtnPreferences: document.getElementById('userTabBtnPreferences'),
+      userTabBtnShortcuts: document.getElementById('userTabBtnShortcuts'),
+      userTabBtnStorage: document.getElementById('userTabBtnStorage'),
+      userPanelAccount: document.getElementById('userPanelAccount'),
+      userPanelPreferences: document.getElementById('userPanelPreferences'),
+      userPanelShortcuts: document.getElementById('userPanelShortcuts'),
+      userPanelStorage: document.getElementById('userPanelStorage'),
+      userAccountConnectedBlock: document.getElementById('userAccountConnectedBlock'),
+      userConnectedEmail: document.getElementById('userConnectedEmail'),
+      userConnectedId: document.getElementById('userConnectedId'),
+      userConnectedSyncStatus: document.getElementById('userConnectedSyncStatus'),
+      userChangePassBtn: document.getElementById('userChangePassBtn'),
+      userLogoutBtn: document.getElementById('userLogoutBtn'),
+      userAccountAuthBlock: document.getElementById('userAccountAuthBlock'),
+      userAuthTabLogin: document.getElementById('userAuthTabLogin'),
+      userAuthTabRegister: document.getElementById('userAuthTabRegister'),
+      userAuthTabRecovery: document.getElementById('userAuthTabRecovery'),
+      userAuthEmailInput: document.getElementById('userAuthEmailInput'),
+      userAuthPassGroup: document.getElementById('userAuthPassGroup'),
+      userAuthPassInput: document.getElementById('userAuthPassInput'),
+      userAuthStatusMsg: document.getElementById('userAuthStatusMsg'),
+      userAuthSubmitBtn: document.getElementById('userAuthSubmitBtn'),
+      userPrefSkipIntro: document.getElementById('userPrefSkipIntro'),
+      userPrefAutoNext: document.getElementById('userPrefAutoNext'),
+      userPrefTvMode: document.getElementById('userPrefTvMode'),
+      userPrefQualitySelect: document.getElementById('userPrefQualitySelect'),
+      userPrefAudioSelect: document.getElementById('userPrefAudioSelect'),
+      userShortcutWatchedCard: document.getElementById('userShortcutWatchedCard'),
+      userShortcutFavCard: document.getElementById('userShortcutFavCard'),
+      userShortcutLiveCard: document.getElementById('userShortcutLiveCard'),
+      userStorageUsage: document.getElementById('userStorageUsage'),
+      userClearCacheBtn: document.getElementById('userClearCacheBtn'),
+      userExportFavsBtn: document.getElementById('userExportFavsBtn'),
+      userResetAllDataBtn: document.getElementById('userResetAllDataBtn'),
+
       // Video Modal
       videoModal: document.getElementById('videoModal'),
       modalTitle: document.getElementById('modalTitle'),
@@ -947,6 +1027,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (elements.tabLiveBtn) {
         elements.tabLiveBtn.addEventListener('click', () => switchMode('live', true));
       }
+      elements.tabUserBtn?.addEventListener('click', () => showUserPage());
+      elements.accountBtn?.addEventListener('click', () => showUserPage());
       elements.contentFavoriteBtn?.addEventListener('click', () => toggleCurrentFavorite());
 
       // Eventos
@@ -987,7 +1069,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (isFavoritesView) restoreFavoritesView();
         else showFavoritesContent();
       });
-      elements.mobileAccountBtn?.addEventListener('click', () => window.AndPlayAccount?.open());
+      elements.mobileAccountBtn?.addEventListener('click', () => showUserPage());
       elements.homeFeaturedPrev?.addEventListener('click', () => moveHomeFeatured(-1));
       elements.homeFeaturedNext?.addEventListener('click', () => moveHomeFeatured(1));
       elements.homeFeaturedDots?.addEventListener('click', (event) => {
@@ -1287,7 +1369,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
           } else if (active === elements.tabFavoritesBtn) {
             if (key === 'ArrowLeft') { e.preventDefault(); elements.tabWatchedBtn?.focus(); return; }
+            if (key === 'ArrowRight' && elements.tabUserBtn) { e.preventDefault(); elements.tabUserBtn.focus(); return; }
             if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
+          } else if (active === elements.tabUserBtn) {
+            if (key === 'ArrowLeft') { e.preventDefault(); elements.tabFavoritesBtn?.focus(); return; }
+            if (key === 'ArrowRight' && elements.accountBtn) { e.preventDefault(); elements.accountBtn.focus(); return; }
+            if (key === 'ArrowDown') { e.preventDefault(); elements.userHeroSyncBtn?.focus(); return; }
           } else if (active === elements.categorySelect) {
             if (key === 'ArrowUp') {
               e.preventDefault();
@@ -3306,19 +3393,88 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       };
     }
 
+    // ==========================================
+    // FAVORITOS HUB & CONTROLES
+    // ==========================================
+    let currentFavFilter = 'all'; // 'all' | 'movies' | 'series'
+    let fullFavoritesList = [];
+
+    function updateFavoritesCounters() {
+      const favs = readFavorites();
+      const movieCount = favs.filter(f => f.type === 'movie').length;
+      const seriesCount = favs.filter(f => f.type === 'series').length;
+      if (elements.favCountAll) elements.favCountAll.textContent = favs.length;
+      if (elements.favCountMovies) elements.favCountMovies.textContent = movieCount;
+      if (elements.favCountSeries) elements.favCountSeries.textContent = seriesCount;
+      if (elements.favTotalBadge) elements.favTotalBadge.textContent = `${favs.length} ${favs.length === 1 ? 'item' : 'itens'}`;
+      if (elements.statFavCount) elements.statFavCount.textContent = favs.length;
+    }
+
+    function applyFavFilter(filter) {
+      currentFavFilter = filter;
+      document.querySelectorAll('.fav-filter-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.favFilter === filter);
+      });
+      if (filter === 'movies') {
+        currentMediaList = fullFavoritesList.filter(item => item._searchType === 'movie');
+      } else if (filter === 'series') {
+        currentMediaList = fullFavoritesList.filter(item => item._searchType === 'series');
+      } else {
+        currentMediaList = fullFavoritesList;
+      }
+      applyFilterAndRender(elements.searchInput?.value || '');
+    }
+
+    async function clearAllFavorites() {
+      if (!confirm('Deseja realmente remover todos os títulos da sua lista de favoritos?')) return;
+      writeFavorites([]);
+      fullFavoritesList = [];
+      currentMediaList = [];
+      updateFavoritesCounters();
+      applyFilterAndRender('');
+      if (window.AndPlayAccount?.refreshFavorites) {
+        window.AndPlayAccount.refreshFavorites().catch(() => {});
+      }
+    }
+
+    function removeSingleFavoriteItem(type, id) {
+      const normalizedType = type === 'series' ? 'series' : 'movie';
+      const normalizedId = String(id || '').trim();
+      if (!normalizedId) return;
+
+      const current = readFavorites();
+      const next = current.filter(entry => !(entry.type === normalizedType && String(entry.id) === normalizedId));
+      writeFavorites(next);
+      window.AndPlayAccount?.setFavorite?.(normalizedType, normalizedId, false)?.catch?.(() => {});
+    }
+
+    let favoritesHubInitialized = false;
+    function initFavoritesHub() {
+      if (favoritesHubInitialized) return;
+      favoritesHubInitialized = true;
+
+      elements.favPillAll?.addEventListener('click', () => applyFavFilter('all'));
+      elements.favPillMovies?.addEventListener('click', () => applyFavFilter('movies'));
+      elements.favPillSeries?.addEventListener('click', () => applyFavFilter('series'));
+      elements.favClearBtn?.addEventListener('click', clearAllFavorites);
+    }
+
     async function showFavoritesContent() {
       favoriteReturnMode = ['home', 'movies', 'series', 'live'].includes(currentMode) ? currentMode : 'home';
       isFavoritesView = true;
       isWatchedView = false;
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none'; if (elements.liveHub) elements.liveHub.style.display = 'none';
-      if (moviesHeroTimer) {
-        clearInterval(moviesHeroTimer);
-        moviesHeroTimer = null;
-      }
-      if (seriesHeroTimer) {
-        clearInterval(seriesHeroTimer);
-        seriesHeroTimer = null;
-      }
+      currentMode = 'favorites';
+
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+      if (elements.liveHub) elements.liveHub.style.display = 'none';
+      if (elements.watchedHub) elements.watchedHub.style.display = 'none';
+      if (elements.userDashboard) elements.userDashboard.style.display = 'none';
+
+      if (moviesHeroTimer) { clearInterval(moviesHeroTimer); moviesHeroTimer = null; }
+      if (seriesHeroTimer) { clearInterval(seriesHeroTimer); seriesHeroTimer = null; }
+      window.EPlayTvEpg?.deactivate();
+
       if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
       if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
       elements.homeDashboard?.classList.remove('is-active');
@@ -3326,10 +3482,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (elements.contentPage) elements.contentPage.hidden = true;
       document.querySelector('.status-bar')?.style.removeProperty('display');
       document.querySelector('main')?.style.removeProperty('display');
-      document.querySelectorAll('.nav-tabs .nav-tab').forEach(button => button.classList.remove('active'));
+
+      document.querySelectorAll('.nav-tabs .nav-tab').forEach(b => b.classList.remove('active'));
       elements.tabFavoritesBtn?.classList.add('active');
-      document.querySelectorAll('.mobile-bottom-nav button').forEach(button => button.classList.remove('active'));
+      elements.tabUserBtn?.classList.remove('active');
+      elements.accountBtn?.classList.remove('active');
+      document.querySelectorAll('.mobile-bottom-nav button').forEach(b => b.classList.remove('active'));
       elements.mobileFavoritesBtn?.classList.add('active');
+
       startViewTransition();
       window.scrollTo({ top: 0, behavior: 'instant' });
 
@@ -3342,7 +3502,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.categorySelect.disabled = true;
       elements.categorySelect.style.display = 'none';
 
+      initFavoritesHub();
+      if (elements.favoritesHub) elements.favoritesHub.style.display = 'block';
+
       const favorites = readFavorites().sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+      updateFavoritesCounters();
+
       const hasMovies = favorites.some(entry => entry.type === 'movie');
       const hasSeries = favorites.some(entry => entry.type === 'series');
 
@@ -3362,6 +3527,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         return resolved;
       });
 
+      fullFavoritesList = ordered;
+      currentFavFilter = 'all';
+      document.querySelectorAll('.fav-filter-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.favFilter === 'all');
+      });
+
       currentMediaList = ordered;
       elements.categoryLabel.textContent = '★ Favoritos';
       applyFilterAndRender('');
@@ -3370,8 +3541,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         elements.mediaGrid.innerHTML =
           '<div class="eplay-favorites-empty">' +
             '<div class="eplay-favorites-empty-icon">☆</div>' +
-            '<div>Nenhum filme ou série foi adicionado aos favoritos.</div>' +
-            '<small>Abra um título e toque em “Adicionar aos favoritos”.</small>' +
+            '<div style="font-size: 16px; font-weight: 700; color: #fff; margin-top: 6px;">Sua lista de favoritos está vazia.</div>' +
+            '<small style="margin-top: 4px;">Abra qualquer filme ou série e clique em “Adicionar aos favoritos” para salvar aqui.</small>' +
           '</div>';
         elements.mediaCount.textContent = '0 favoritos';
         elements.loadMoreContainer.style.display = 'none';
@@ -3382,15 +3553,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!isFavoritesView) return;
       const returnMode = favoriteReturnMode;
       isFavoritesView = false;
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none'; if (elements.liveHub) elements.liveHub.style.display = 'none';
-      if (moviesHeroTimer) {
-        clearInterval(moviesHeroTimer);
-        moviesHeroTimer = null;
-      }
-      if (seriesHeroTimer) {
-        clearInterval(seriesHeroTimer);
-        seriesHeroTimer = null;
-      }
+      if (elements.favoritesHub) elements.favoritesHub.style.display = 'none';
+      if (moviesHeroTimer) { clearInterval(moviesHeroTimer); moviesHeroTimer = null; }
+      if (seriesHeroTimer) { clearInterval(seriesHeroTimer); seriesHeroTimer = null; }
       if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
       if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
       elements.tabFavoritesBtn?.classList.remove('active');
@@ -3398,14 +3563,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.searchInput.value = '';
       elements.categorySelect.disabled = false;
 
-      if (returnMode === 'home') {
-        showHome();
-        return;
-      }
-      if (returnMode === 'live') {
-        switchMode('live', true);
-        return;
-      }
+      if (returnMode === 'home') { showHome(); return; }
+      if (returnMode === 'live') { switchMode('live', true); return; }
       currentMode = returnMode === 'series' ? 'series' : 'movies';
       elements.tabHomeBtn?.classList.remove('active');
       elements.tabMoviesBtn.classList.toggle('active', currentMode === 'movies');
@@ -3428,18 +3587,243 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       applyFilterAndRender('');
     }
 
+    // ==========================================
+    // ASSISTIDOS HUB & CONTROLES
+    // ==========================================
+    let currentWatchedFilter = 'all'; // 'all' | 'resume' | 'done' | 'movies' | 'series'
+    let fullWatchedList = [];
+
+    function getItemProgressPct(item) {
+      if (!item) return 0;
+      const isMovie = item._searchType === 'movie';
+      const id = isMovie
+        ? (item.stream_id ?? item.primaryItem?.stream_id ?? item.id)
+        : (item.series_id ?? item.primaryItem?.series_id ?? item.id);
+      const prog = getVodProgress(isMovie ? 'movie' : 'series', id);
+      if (!prog || !prog.duration || prog.duration <= 0) return 0;
+      return Math.max(0, Math.min(100, Math.round((prog.position / prog.duration) * 100)));
+    }
+
+    function updateWatchedCounters() {
+      const all = fullWatchedList;
+      const resumeCount = all.filter(item => {
+        const p = getItemProgressPct(item);
+        return p > 0 && p < 95;
+      }).length;
+      const doneCount = all.filter(item => {
+        const p = getItemProgressPct(item);
+        return p >= 95;
+      }).length;
+      const movieCount = all.filter(item => item._searchType === 'movie').length;
+      const seriesCount = all.filter(item => item._searchType === 'series').length;
+
+      if (elements.watchedCountAll) elements.watchedCountAll.textContent = all.length;
+      if (elements.watchedCountResume) elements.watchedCountResume.textContent = resumeCount;
+      if (elements.watchedCountDone) elements.watchedCountDone.textContent = doneCount;
+      if (elements.watchedCountMovies) elements.watchedCountMovies.textContent = movieCount;
+      if (elements.watchedCountSeries) elements.watchedCountSeries.textContent = seriesCount;
+      if (elements.watchedTotalBadge) elements.watchedTotalBadge.textContent = `${all.length} ${all.length === 1 ? 'item' : 'itens'}`;
+      if (elements.statMoviesCount) elements.statMoviesCount.textContent = movieCount;
+      if (elements.statSeriesCount) elements.statSeriesCount.textContent = seriesCount;
+    }
+
+    function applyWatchedFilter(filter) {
+      currentWatchedFilter = filter;
+      document.querySelectorAll('.watched-filter-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.watchedFilter === filter);
+      });
+      if (filter === 'resume') {
+        currentMediaList = fullWatchedList.filter(item => {
+          const p = getItemProgressPct(item);
+          return p > 0 && p < 95;
+        });
+      } else if (filter === 'done') {
+        currentMediaList = fullWatchedList.filter(item => {
+          const p = getItemProgressPct(item);
+          return p >= 95;
+        });
+      } else if (filter === 'movies') {
+        currentMediaList = fullWatchedList.filter(item => item._searchType === 'movie');
+      } else if (filter === 'series') {
+        currentMediaList = fullWatchedList.filter(item => item._searchType === 'series');
+      } else {
+        currentMediaList = fullWatchedList;
+      }
+      applyFilterAndRender(elements.searchInput?.value || '');
+    }
+
+    async function clearAllWatchedHistory() {
+      if (!confirm('Deseja realmente limpar todo o histórico de filmes e séries assistidos?')) return;
+      try {
+        const toRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(VOD_PROGRESS_PREFIX)) toRemove.push(k);
+        }
+        toRemove.forEach(k => localStorage.removeItem(k));
+        localStorage.removeItem('andplay_web_watch_history_pending_v1');
+        localStorage.removeItem('andplay_watched_movies_v1');
+        localStorage.removeItem('andplay_watched_series_v1');
+      } catch (e) {}
+
+      fullWatchedList = [];
+      currentMediaList = [];
+      updateWatchedCounters();
+      applyFilterAndRender('');
+    }
+
+    function removeSingleWatchedItem(type, id) {
+      const normalizedType = type === 'series' ? 'series' : 'movie';
+      const normalizedId = String(id || '').trim();
+      if (!normalizedId) return;
+
+      try {
+        const vodKey = getVodProgressKey(normalizedType, normalizedId);
+        if (vodKey) localStorage.removeItem(vodKey);
+
+        if (normalizedType === 'series') {
+          const toRemove = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.includes(`series_${normalizedId}`)) toRemove.push(k);
+          }
+          toRemove.forEach(k => localStorage.removeItem(k));
+        }
+
+        const rawPending = localStorage.getItem('andplay_web_watch_history_pending_v1');
+        if (rawPending) {
+          const parsed = JSON.parse(rawPending);
+          if (Array.isArray(parsed)) {
+            const nextPending = parsed.filter(item => !(item.type === normalizedType && String(item.id) === normalizedId));
+            localStorage.setItem('andplay_web_watch_history_pending_v1', JSON.stringify(nextPending));
+          }
+        }
+
+        const legacyKey = normalizedType === 'series' ? 'andplay_watched_series_v1' : 'andplay_watched_movies_v1';
+        const rawLegacy = localStorage.getItem(legacyKey);
+        if (rawLegacy) {
+          const parsed = JSON.parse(rawLegacy);
+          if (Array.isArray(parsed)) {
+            const nextLegacy = parsed.filter(item => String(item.id || item) !== normalizedId);
+            localStorage.setItem(legacyKey, JSON.stringify(nextLegacy));
+          }
+        }
+      } catch (e) {
+        console.warn('[EPlay] Erro ao remover assistido local:', e);
+      }
+
+      window.AndPlayAccount?.removeWatched?.(normalizedType, normalizedId)?.catch?.(() => {});
+    }
+
+    let watchedHubInitialized = false;
+    function initWatchedHub() {
+      if (watchedHubInitialized) return;
+      watchedHubInitialized = true;
+
+      elements.watchedPillAll?.addEventListener('click', () => applyWatchedFilter('all'));
+      elements.watchedPillResume?.addEventListener('click', () => applyWatchedFilter('resume'));
+      elements.watchedPillDone?.addEventListener('click', () => applyWatchedFilter('done'));
+      elements.watchedPillMovies?.addEventListener('click', () => applyWatchedFilter('movies'));
+      elements.watchedPillSeries?.addEventListener('click', () => applyWatchedFilter('series'));
+      elements.watchedClearBtn?.addEventListener('click', clearAllWatchedHistory);
+      elements.watchedSyncNoticeBtn?.addEventListener('click', () => showUserPage());
+    }
+
+    function getAllWatchHistoryEntries() {
+      const map = new Map();
+
+      // 1. Remote watch history se disponível via AndPlayAccount
+      const remote = getNormalizedRemoteHistory();
+      remote.forEach(entry => {
+        const id = String(entry.id || '').trim();
+        if (!id) return;
+        const type = entry.type === 'series' ? 'series' : 'movie';
+        map.set(`${type}:${id}`, { ...entry, type, id });
+      });
+
+      // 2. Histórico pendente em localStorage
+      try {
+        const rawPending = localStorage.getItem('andplay_web_watch_history_pending_v1');
+        if (rawPending) {
+          const parsed = JSON.parse(rawPending);
+          if (Array.isArray(parsed)) {
+            parsed.forEach(item => {
+              const id = String(item?.id || '').trim();
+              if (!id) return;
+              const type = item.type === 'series' ? 'series' : 'movie';
+              const key = `${type}:${id}`;
+              if (!map.has(key)) {
+                map.set(key, { type, id, updatedAt: Number(item.updatedAt) || Date.now() });
+              }
+            });
+          }
+        }
+      } catch (e) {}
+
+      // 3. Progresso individual salvo em andplay_web_vod_progress_*
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k || !k.startsWith(VOD_PROGRESS_PREFIX)) continue;
+          const sub = k.slice(VOD_PROGRESS_PREFIX.length);
+          const isSeries = sub.startsWith('series_');
+          const type = isSeries ? 'series' : 'movie';
+          let id = sub.replace(/^(series_|movie_)/, '');
+          if (!id) continue;
+          const progress = getVodProgress(type, id);
+          if (isSeries && progress?.seriesId) {
+            id = progress.seriesId;
+          }
+          const key = `${type}:${id}`;
+          const currentEntry = map.get(key);
+          const itemTime = Number(progress?.updatedAt) || Date.now();
+          if (!currentEntry) {
+            map.set(key, { type, id, updatedAt: itemTime });
+          } else if (itemTime > (Number(currentEntry.updatedAt) || 0)) {
+            currentEntry.updatedAt = itemTime;
+          }
+        }
+      } catch (e) {}
+
+      // 4. Histórico local legado
+      ['movie', 'series'].forEach(t => {
+        try {
+          const raw = localStorage.getItem(getWatchedStorageKey(t === 'series' ? 'series' : 'movies'));
+          if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              list.forEach(rawId => {
+                const id = String(rawId || '').trim();
+                if (!id) return;
+                const key = `${t}:${id}`;
+                if (!map.has(key)) {
+                  map.set(key, { type: t, id, updatedAt: 0 });
+                }
+              });
+            }
+          }
+        } catch (e) {}
+      });
+
+      return Array.from(map.values()).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+    }
+
     async function showWatchedContent() {
+      watchedReturnMode = ['home', 'movies', 'series', 'live'].includes(currentMode) ? currentMode : 'home';
       isWatchedView = true;
       isFavoritesView = false;
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none'; if (elements.liveHub) elements.liveHub.style.display = 'none';
-      if (moviesHeroTimer) {
-        clearInterval(moviesHeroTimer);
-        moviesHeroTimer = null;
-      }
-      if (seriesHeroTimer) {
-        clearInterval(seriesHeroTimer);
-        seriesHeroTimer = null;
-      }
+      currentMode = 'watched';
+
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+      if (elements.liveHub) elements.liveHub.style.display = 'none';
+      if (elements.favoritesHub) elements.favoritesHub.style.display = 'none';
+      if (elements.userDashboard) elements.userDashboard.style.display = 'none';
+
+      if (moviesHeroTimer) { clearInterval(moviesHeroTimer); moviesHeroTimer = null; }
+      if (seriesHeroTimer) { clearInterval(seriesHeroTimer); seriesHeroTimer = null; }
+      window.EPlayTvEpg?.deactivate();
+
       if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
       if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
       elements.homeDashboard?.classList.remove('is-active');
@@ -3447,17 +3831,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (elements.contentPage) elements.contentPage.hidden = true;
       document.querySelector('.status-bar')?.style.removeProperty('display');
       document.querySelector('main')?.style.removeProperty('display');
-      elements.tabHomeBtn?.classList.remove('active');
-      document.querySelectorAll('.mobile-bottom-nav button').forEach(button => button.classList.remove('active'));
-      elements.mobileWatchedBtn?.classList.add('active');
-      if (elements.categorySelect) {
-        elements.categorySelect.style.display = 'none';
-      }
+
+      document.querySelectorAll('.nav-tabs .nav-tab').forEach(b => b.classList.remove('active'));
       elements.tabWatchedBtn?.classList.add('active');
-      elements.tabFavoritesBtn?.classList.remove('active');
-      elements.tabMoviesBtn.classList.remove('active');
-      elements.tabSeriesBtn.classList.remove('active');
-      elements.tabLiveBtn?.classList.remove('active');
+      elements.tabUserBtn?.classList.remove('active');
+      elements.accountBtn?.classList.remove('active');
+      document.querySelectorAll('.mobile-bottom-nav button').forEach(b => b.classList.remove('active'));
+      elements.mobileWatchedBtn?.classList.add('active');
+
       startViewTransition();
       window.scrollTo({ top: 0, behavior: 'instant' });
 
@@ -3465,107 +3846,95 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.resetCategoryBtn.style.display = 'none';
       elements.categorySelect.value = 'ALL';
       elements.categorySelect.disabled = true;
+      elements.categorySelect.style.display = 'none';
       elements.categoryLabel.textContent = '👁 Assistidos';
       elements.searchInput.placeholder = 'Pesquisar nos filmes e séries assistidos...';
-      elements.mediaGrid.innerHTML =
-        '<div style="grid-column:1/-1;text-align:center;color:#888;padding:55px 20px;">' +
-        '<div class="spinner" style="margin:0 auto 14px;"></div>' +
-        '<div style="font-size:15px;color:#fff;font-weight:700;">Carregando seus assistidos...</div>' +
-        '</div>';
-      elements.mediaCount.textContent = 'Carregando assistidos...';
-      elements.loadMoreContainer.style.display = 'none';
 
-      try {
-        await window.AndPlayAccount?.ready?.();
-        if (!window.AndPlayAccount?.isSignedIn?.()) {
-          throw new Error('Entre na sua conta para consultar seu histórico de assistidos.');
+      initWatchedHub();
+      if (elements.watchedHub) elements.watchedHub.style.display = 'block';
+
+      const isAccountSignedIn = Boolean(window.AndPlayAccount?.isSignedIn?.());
+      if (elements.watchedSyncNotice) {
+        elements.watchedSyncNotice.style.display = isAccountSignedIn ? 'none' : 'flex';
+      }
+
+      if (isAccountSignedIn) {
+        try {
+          await window.AndPlayAccount.refreshWatchHistory?.();
+        } catch (e) {
+          console.warn('[EPlay Watched] Sync history warning:', e);
         }
-        await window.AndPlayAccount.refreshWatchHistory?.();
-        if (!isWatchedView) return;
+      }
 
-        const history = getNormalizedRemoteHistory();
-        const hasMovies = history.some(entry => entry.type === 'movie');
-        const hasSeries = history.some(entry => entry.type === 'series');
-        const [movieCatalog, seriesCatalog] = await Promise.all([
-          hasMovies ? loadFullMovies() : Promise.resolve(fullMoviesCache || []),
-          hasSeries ? loadFullSeries() : Promise.resolve(fullSeriesCache || [])
-        ]);
-        if (!isWatchedView) return;
-        const seriesHistory = history.filter(entry => entry.type === 'series');
+      const history = getAllWatchHistoryEntries();
+      const hasMovies = history.some(entry => entry.type === 'movie');
+      const hasSeries = history.some(entry => entry.type === 'series');
 
-        // O histórico guarda o series_id. Caso o cache local esteja desatualizado,
-        // atualiza o catálogo de séries uma única vez antes de concluir que o ID não existe.
-        const hasMissingSeries = seriesHistory.some(entry =>
-          !(seriesCatalog || []).some(item => seriesGroupMatchesWatchedId(item, entry.id))
-        );
-        const resolvedSeriesCatalog = hasMissingSeries
-          ? await loadFullSeries(true)
-          : seriesCatalog;
-        if (!isWatchedView) return;
+      const [movieCatalog, seriesCatalog] = await Promise.all([
+        hasMovies ? loadFullMovies() : Promise.resolve(fullMoviesCache || []),
+        hasSeries ? loadFullSeries() : Promise.resolve(fullSeriesCache || [])
+      ]);
 
-        const movieMap = new Map();
-        const seriesMap = new Map();
-        (movieCatalog || []).forEach(item => {
-          const id = item.stream_id || item.primaryItem?.stream_id;
-          if (id != null) movieMap.set(String(id), item);
-          (item.versions || []).forEach(version => {
-            if (version?.streamId != null && !movieMap.has(String(version.streamId))) {
-              movieMap.set(String(version.streamId), item);
-            }
-          });
-        });
-        (resolvedSeriesCatalog || []).forEach(item => {
-          const id = item.series_id ?? item.primaryItem?.series_id;
-          if (id != null) seriesMap.set(String(id), item);
-          (item.versions || []).forEach(version => {
-            const seriesId = version?.seriesId ?? version?.item?.series_id;
-            if (seriesId != null && !seriesMap.has(String(seriesId))) {
-              seriesMap.set(String(seriesId), item);
-            }
-          });
-        });
+      if (!isWatchedView) return;
 
-        const ordered = [];
-        history.forEach(entry => {
-          const key = String(entry.id || '');
-          if (!key) return;
-          const match = entry.type === 'series'
-            ? (seriesMap.get(key) || buildHistoryFallbackGroup('series', key))
-            : (movieMap.get(key) || buildHistoryFallbackGroup('movie', key));
-          if (!match) return;
-          if (!match._searchType) match._searchType = entry.type;
-          if (!ordered.some(item => item === match || (item._searchType === entry.type && String(
-            entry.type === 'series'
-              ? (item.series_id ?? item.primaryItem?.series_id ?? item.id)
-              : (item.stream_id ?? item.primaryItem?.stream_id ?? item.id)
-          ) === key))) {
-            ordered.push(match);
+      const movieMap = new Map();
+      const seriesMap = new Map();
+      (movieCatalog || []).forEach(item => {
+        const id = item.stream_id || item.primaryItem?.stream_id;
+        if (id != null) movieMap.set(String(id), item);
+        (item.versions || []).forEach(version => {
+          if (version?.streamId != null && !movieMap.has(String(version.streamId))) {
+            movieMap.set(String(version.streamId), item);
           }
         });
+      });
+      (seriesCatalog || []).forEach(item => {
+        const id = item.series_id ?? item.primaryItem?.series_id;
+        if (id != null) seriesMap.set(String(id), item);
+        (item.versions || []).forEach(version => {
+          const seriesId = version?.seriesId ?? version?.item?.series_id;
+          if (seriesId != null && !seriesMap.has(String(seriesId))) {
+            seriesMap.set(String(seriesId), item);
+          }
+        });
+      });
 
-        currentMediaList = ordered;
-        elements.categoryLabel.textContent = '👁 Assistidos';
-        elements.searchInput.placeholder = 'Pesquisar nos filmes e séries assistidos...';
-        applyFilterAndRender('');
-        if (ordered.length === 0) {
-          elements.mediaGrid.innerHTML =
-            '<div style="grid-column:1/-1;text-align:center;color:#888;padding:55px 20px;">' +
+      const ordered = [];
+      history.forEach(entry => {
+        const key = String(entry.id || '');
+        if (!key) return;
+        const match = entry.type === 'series'
+          ? (seriesMap.get(key) || buildHistoryFallbackGroup('series', key))
+          : (movieMap.get(key) || buildHistoryFallbackGroup('movie', key));
+        if (!match) return;
+        if (!match._searchType) match._searchType = entry.type;
+        if (!ordered.some(item => item === match || (item._searchType === entry.type && String(
+          entry.type === 'series'
+            ? (item.series_id ?? item.primaryItem?.series_id ?? item.id)
+            : (item.stream_id ?? item.primaryItem?.stream_id ?? item.id)
+        ) === key))) {
+          ordered.push(match);
+        }
+      });
+
+      fullWatchedList = ordered;
+      currentWatchedFilter = 'all';
+      document.querySelectorAll('.watched-filter-pill').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.watchedFilter === 'all');
+      });
+
+      updateWatchedCounters();
+      currentMediaList = ordered;
+      applyFilterAndRender('');
+
+      if (ordered.length === 0) {
+        elements.mediaGrid.innerHTML =
+          '<div style="grid-column:1/-1;text-align:center;color:#888;padding:55px 20px;">' +
             '<div style="font-size:42px;margin-bottom:12px;">👁</div>' +
             '<div style="font-size:17px;color:#fff;font-weight:700;">Nenhum conteúdo assistido recentemente.</div>' +
-            '<div style="font-size:12px;margin-top:8px;">Os títulos que você iniciar aparecerão aqui automaticamente.</div>' +
-            '</div>';
-          elements.mediaCount.textContent = '0 assistidos';
-        }
-      } catch (err) {
-        currentMediaList = [];
-        elements.categoryLabel.textContent = '👁 Assistidos';
-        elements.mediaGrid.innerHTML =
-          '<div style="grid-column:1/-1;text-align:center;color:#888;padding:50px 20px;">' +
-          '<div style="font-size:42px;margin-bottom:12px;">👁</div>' +
-          '<div style="font-size:16px;color:#fff;font-weight:700;">Não foi possível carregar os assistidos.</div>' +
-          '<div style="font-size:12px;margin-top:8px;">' + escapeHtml(err.message) + '</div>' +
+            '<div style="font-size:12px;margin-top:8px;">Os títulos que você iniciar aparecerão aqui automaticamente com barra de progresso.</div>' +
           '</div>';
-        elements.mediaCount.textContent = 'Histórico indisponível';
+        elements.mediaCount.textContent = '0 assistidos';
         elements.loadMoreContainer.style.display = 'none';
       }
     }
@@ -3574,20 +3943,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!isWatchedView) return;
       const returnMode = watchedReturnMode;
       isWatchedView = false;
+      if (elements.watchedHub) elements.watchedHub.style.display = 'none';
       elements.tabWatchedBtn?.classList.remove('active');
       elements.searchInput.value = '';
       elements.resetCategoryBtn.style.display = 'none';
       elements.categorySelect.value = 'ALL';
       elements.categorySelect.disabled = false;
 
-      if (returnMode === 'home') {
-        showHome();
-        return;
-      }
-      if (returnMode === 'live') {
-        switchMode('live', true);
-        return;
-      }
+      if (returnMode === 'home') { showHome(); return; }
+      if (returnMode === 'live') { switchMode('live', true); return; }
 
       currentMode = returnMode === 'series' ? 'series' : 'movies';
       if (currentMode === 'movies') {
@@ -3603,8 +3967,358 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         elements.searchInput.placeholder = 'Pesquisar séries por título, gênero ou elenco...';
         currentMediaList = fullSeriesCache || [];
       }
+      elements.categorySelect.style.removeProperty('display');
       applyFilterAndRender('');
     }
+
+    // ==========================================
+    // TELA DO USUÁRIO INDEPENDENTE (USER DASHBOARD)
+    // ==========================================
+    let userReturnMode = 'home';
+    let userDashboardInitialized = false;
+
+    function renderUserPage() {
+      if (!elements.userDashboard) return;
+
+      // 1. Avatar
+      const savedAvatar = localStorage.getItem('andplay_user_avatar') || '👤';
+      if (elements.userAvatarDisplay) elements.userAvatarDisplay.textContent = savedAvatar;
+
+      // 2. Status do Usuário
+      const isSignedIn = Boolean(window.AndPlayAccount?.isSignedIn?.());
+      const currentUser = window.AndPlayAccount?.getCurrentUser?.() || null;
+      if (isSignedIn && currentUser) {
+        const name = window.AndPlayAccount?.getDisplayName?.(currentUser) || currentUser.email?.split('@')[0] || 'Usuário EPlay';
+        if (elements.userProfileName) elements.userProfileName.textContent = name;
+        if (elements.userProfileEmail) elements.userProfileEmail.textContent = currentUser.email || 'Conta sincronizada';
+        if (elements.userProfileBadge) {
+          elements.userProfileBadge.className = 'user-status-badge badge-connected';
+          elements.userProfileBadge.textContent = '● Nuvem Conectada';
+        }
+        if (elements.userConnectedEmail) elements.userConnectedEmail.textContent = currentUser.email || '-';
+        if (elements.userConnectedId) elements.userConnectedId.textContent = currentUser.id ? currentUser.id.slice(0, 20) + '...' : '-';
+        if (elements.userConnectedSyncStatus) elements.userConnectedSyncStatus.textContent = 'Sincronizado';
+        if (elements.userAccountConnectedBlock) elements.userAccountConnectedBlock.style.display = 'block';
+        if (elements.userAccountAuthBlock) elements.userAccountAuthBlock.style.display = 'none';
+        if (elements.userHeroAuthBtn) elements.userHeroAuthBtn.textContent = 'Minha Conta';
+      } else {
+        if (elements.userProfileName) elements.userProfileName.textContent = 'Usuário EPlay';
+        if (elements.userProfileEmail) elements.userProfileEmail.textContent = 'Perfil local neste aparelho (sem sincronização)';
+        if (elements.userProfileBadge) {
+          elements.userProfileBadge.className = 'user-status-badge badge-guest';
+          elements.userProfileBadge.textContent = '○ Modo Local';
+        }
+        if (elements.userAccountConnectedBlock) elements.userAccountConnectedBlock.style.display = 'none';
+        if (elements.userAccountAuthBlock) elements.userAccountAuthBlock.style.display = 'block';
+        if (elements.userHeroAuthBtn) elements.userHeroAuthBtn.textContent = 'Conectar Conta';
+      }
+
+      // 3. Estatísticas em Tempo Real
+      let totalSeconds = 0;
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(VOD_PROGRESS_PREFIX)) {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (parsed && Number(parsed.position) > 0) {
+                totalSeconds += Number(parsed.position);
+              }
+            }
+          }
+        }
+        const stats = JSON.parse(localStorage.getItem('andplay_web_watch_stats_v1') || '{}');
+        if (stats && stats.devices) {
+          Object.values(stats.devices).forEach(d => {
+            if (d && d.movieSeconds) totalSeconds += Number(d.movieSeconds);
+            if (d && d.seriesSeconds) totalSeconds += Number(d.seriesSeconds);
+          });
+        }
+      } catch (e) {}
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      if (elements.statWatchTime) {
+        elements.statWatchTime.textContent = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+      }
+
+      const historyEntries = getAllWatchHistoryEntries();
+      const movieCount = historyEntries.filter(e => e.type === 'movie').length;
+      const seriesCount = historyEntries.filter(e => e.type === 'series').length;
+      if (elements.statMoviesCount) elements.statMoviesCount.textContent = movieCount;
+      if (elements.statSeriesCount) elements.statSeriesCount.textContent = seriesCount;
+
+      const favs = readFavorites();
+      if (elements.statFavCount) elements.statFavCount.textContent = favs.length;
+
+      try {
+        const liveHist = JSON.parse(localStorage.getItem('andplay_web_live_history_v1') || '[]');
+        if (elements.statLiveCount) elements.statLiveCount.textContent = Array.isArray(liveHist) ? liveHist.length : 0;
+      } catch (e) {
+        if (elements.statLiveCount) elements.statLiveCount.textContent = 0;
+      }
+
+      // 4. Preferências
+      if (elements.userPrefSkipIntro) {
+        elements.userPrefSkipIntro.checked = localStorage.getItem('andplay_web_skip_intro_auto') === '1';
+      }
+      if (elements.userPrefAutoNext) {
+        elements.userPrefAutoNext.checked = localStorage.getItem('andplay_web_auto_next') !== '0';
+      }
+      if (elements.userPrefTvMode) {
+        elements.userPrefTvMode.checked = document.body.classList.contains('tv-mode');
+      }
+      if (elements.userPrefQualitySelect) {
+        elements.userPrefQualitySelect.value = localStorage.getItem('andplay_preferred_quality') || 'auto';
+      }
+      if (elements.userPrefAudioSelect) {
+        elements.userPrefAudioSelect.value = localStorage.getItem('andplay_preferred_audio') || 'dub';
+      }
+
+      // 5. Uso do Armazenamento
+      try {
+        let totalBytes = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          totalBytes += (k.length + (localStorage.getItem(k)?.length || 0)) * 2;
+        }
+        if (elements.userStorageUsage) {
+          elements.userStorageUsage.textContent = totalBytes > 1048576
+            ? `${(totalBytes / (1024 * 1024)).toFixed(2)} MB`
+            : `${(totalBytes / 1024).toFixed(1)} KB`;
+        }
+      } catch (e) {}
+    }
+
+    function initUserDashboard() {
+      if (userDashboardInitialized) return;
+      userDashboardInitialized = true;
+
+      // 1. Avatar Picker
+      elements.userAvatarEditBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!elements.userAvatarPicker) return;
+        const isHidden = elements.userAvatarPicker.style.display === 'none';
+        elements.userAvatarPicker.style.display = isHidden ? 'flex' : 'none';
+      });
+
+      document.addEventListener('click', (e) => {
+        if (elements.userAvatarPicker && !e.target.closest('#userAvatarPicker') && !e.target.closest('#userAvatarEditBtn')) {
+          elements.userAvatarPicker.style.display = 'none';
+        }
+      });
+
+      elements.userAvatarPicker?.querySelectorAll('.user-avatar-opt').forEach(opt => {
+        opt.addEventListener('click', () => {
+          const av = opt.dataset.avatar || '👤';
+          localStorage.setItem('andplay_user_avatar', av);
+          if (elements.userAvatarDisplay) elements.userAvatarDisplay.textContent = av;
+          elements.userAvatarPicker.style.display = 'none';
+        });
+      });
+
+      // 2. Abas do Usuário
+      document.querySelectorAll('.user-nav-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+          const panelName = pill.dataset.userPanel;
+          document.querySelectorAll('.user-nav-pill').forEach(p => p.classList.toggle('active', p === pill));
+          document.querySelectorAll('.user-tab-panel').forEach(panel => {
+            const isMatch = panel.id === `userPanel${panelName.charAt(0).toUpperCase() + panelName.slice(1)}`;
+            panel.style.display = isMatch ? 'block' : 'none';
+            panel.classList.toggle('active', isMatch);
+          });
+        });
+      });
+
+      // 3. Abas de Autenticação
+      let currentAuthTab = 'login';
+      document.querySelectorAll('.user-auth-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          currentAuthTab = tab.dataset.authTab;
+          document.querySelectorAll('.user-auth-tab').forEach(t => t.classList.toggle('active', t === tab));
+          if (elements.userAuthPassGroup) {
+            elements.userAuthPassGroup.style.display = currentAuthTab === 'recovery' ? 'none' : 'flex';
+          }
+          if (elements.userAuthSubmitBtn) {
+            if (currentAuthTab === 'login') elements.userAuthSubmitBtn.textContent = 'Entrar na Conta';
+            else if (currentAuthTab === 'register') elements.userAuthSubmitBtn.textContent = 'Criar Conta Gratuita';
+            else elements.userAuthSubmitBtn.textContent = 'Enviar Link de Recuperação';
+          }
+          if (elements.userAuthStatusMsg) elements.userAuthStatusMsg.textContent = '';
+        });
+      });
+
+      // 4. Submissão de Autenticação
+      elements.userAuthSubmitBtn?.addEventListener('click', async () => {
+        const email = elements.userAuthEmailInput?.value?.trim() || '';
+        const password = elements.userAuthPassInput?.value || '';
+        const statusEl = elements.userAuthStatusMsg;
+        if (!email) {
+          if (statusEl) { statusEl.className = 'user-auth-status error'; statusEl.textContent = 'Informe seu e-mail.'; }
+          return;
+        }
+        if (currentAuthTab !== 'recovery' && (!password || password.length < 6)) {
+          if (statusEl) { statusEl.className = 'user-auth-status error'; statusEl.textContent = 'A senha deve ter no mínimo 6 caracteres.'; }
+          return;
+        }
+
+        try {
+          if (statusEl) { statusEl.className = 'user-auth-status'; statusEl.textContent = 'Conectando...'; }
+          if (currentAuthTab === 'login') {
+            await window.AndPlayAccount?.signInDirect?.(email, password);
+            if (statusEl) { statusEl.className = 'user-auth-status success'; statusEl.textContent = 'Conta conectada com sucesso!'; }
+          } else if (currentAuthTab === 'register') {
+            await window.AndPlayAccount?.signUpDirect?.(email, password);
+            if (statusEl) { statusEl.className = 'user-auth-status success'; statusEl.textContent = 'Conta criada com sucesso!'; }
+          } else {
+            await window.AndPlayAccount?.requestPasswordResetDirect?.(email);
+            if (statusEl) { statusEl.className = 'user-auth-status success'; statusEl.textContent = 'Instruções enviadas para seu e-mail.'; }
+          }
+          renderUserPage();
+        } catch (err) {
+          if (statusEl) { statusEl.className = 'user-auth-status error'; statusEl.textContent = err.message || 'Falha na autenticação.'; }
+        }
+      });
+
+      // 5. Botões de Hero & Sessão
+      elements.userHeroSyncBtn?.addEventListener('click', async () => {
+        const btn = elements.userHeroSyncBtn;
+        const originalText = btn.textContent;
+        btn.textContent = '⏳ Sincronizando...';
+        btn.disabled = true;
+        try {
+          await window.AndPlayAccount?.syncNow?.();
+          btn.textContent = '✓ Sincronizado!';
+        } catch (e) {
+          btn.textContent = '✓ Salvo localmente';
+        }
+        setTimeout(() => { btn.textContent = originalText; btn.disabled = false; renderUserPage(); }, 1400);
+      });
+
+      elements.userHeroAuthBtn?.addEventListener('click', () => {
+        elements.userTabBtnAccount?.click();
+        elements.userAuthEmailInput?.focus();
+      });
+
+      elements.userLogoutBtn?.addEventListener('click', async () => {
+        if (!confirm('Deseja realmente sair da sua conta? Seus dados locais permanecerão salvos.')) return;
+        await window.AndPlayAccount?.signOutDirect?.();
+        renderUserPage();
+      });
+
+      elements.userChangePassBtn?.addEventListener('click', () => {
+        const email = elements.userConnectedEmail?.textContent;
+        if (email && email !== '-') {
+          window.AndPlayAccount?.requestPasswordResetDirect?.(email)
+            .then(() => alert(`Enviamos um link de redefinição de senha para ${email}.`))
+            .catch(err => alert(err.message || 'Não foi possível solicitar redefinição.'));
+        }
+      });
+
+      // 6. Preferências
+      elements.userPrefSkipIntro?.addEventListener('change', (e) => {
+        localStorage.setItem('andplay_web_skip_intro_auto', e.target.checked ? '1' : '0');
+        window.AndPlayAccount?.queueSyncPreference?.();
+      });
+
+      elements.userPrefAutoNext?.addEventListener('change', (e) => {
+        localStorage.setItem('andplay_web_auto_next', e.target.checked ? '1' : '0');
+        window.AndPlayAccount?.queueSyncPreference?.();
+      });
+
+      elements.userPrefTvMode?.addEventListener('change', (e) => {
+        const isTv = e.target.checked;
+        document.body.classList.toggle('tv-mode', isTv);
+        localStorage.setItem('andplay_tv_mode', isTv ? '1' : '0');
+      });
+
+      elements.userPrefQualitySelect?.addEventListener('change', (e) => {
+        localStorage.setItem('andplay_preferred_quality', e.target.value);
+        window.AndPlayAccount?.queueSyncPreference?.();
+      });
+
+      elements.userPrefAudioSelect?.addEventListener('change', (e) => {
+        localStorage.setItem('andplay_preferred_audio', e.target.value);
+        window.AndPlayAccount?.queueSyncPreference?.();
+      });
+
+      // 7. Atalhos
+      elements.userShortcutWatchedCard?.addEventListener('click', () => showWatchedContent());
+      elements.userShortcutFavCard?.addEventListener('click', () => showFavoritesContent());
+      elements.userShortcutLiveCard?.addEventListener('click', () => switchMode('live', true));
+
+      // 8. Armazenamento
+      elements.userClearCacheBtn?.addEventListener('click', () => {
+        const catalogKeys = [
+          'stale_movies_catalog_v1', 'stale_series_catalog_v1',
+          'stale_movie_categories_v1', 'stale_series_categories_v1',
+          'andplay_home_recs_cache_v1', 'andplay_home_ratings_v1'
+        ];
+        catalogKeys.forEach(k => localStorage.removeItem(k));
+        fullMoviesCache = null;
+        fullSeriesCache = null;
+        alert('Cache de catálogos limpo com sucesso! Os catálogos serão recarregados da fonte na próxima consulta.');
+        renderUserPage();
+      });
+
+      elements.userExportFavsBtn?.addEventListener('click', () => {
+        const favs = readFavorites();
+        const blob = new Blob([JSON.stringify(favs, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `eplay-favoritos-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      elements.userResetAllDataBtn?.addEventListener('click', () => {
+        if (!confirm('ATENÇÃO: Isso apagará todas as preferências, histórico de assistidos e favoritos locais deste navegador.\n\nDeseja continuar?')) return;
+        localStorage.clear();
+        window.location.reload();
+      });
+    }
+
+    function showUserPage() {
+      userReturnMode = ['home', 'movies', 'series', 'live', 'favorites', 'watched'].includes(currentMode) ? currentMode : 'home';
+      currentMode = 'user';
+      isFavoritesView = false;
+      isWatchedView = false;
+
+      if (moviesHeroTimer) { clearInterval(moviesHeroTimer); moviesHeroTimer = null; }
+      if (seriesHeroTimer) { clearInterval(seriesHeroTimer); seriesHeroTimer = null; }
+      clearInterval(homeFeaturedTimer); homeFeaturedTimer = null;
+      window.EPlayTvEpg?.deactivate();
+
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+      if (elements.liveHub) elements.liveHub.style.display = 'none';
+      if (elements.favoritesHub) elements.favoritesHub.style.display = 'none';
+      if (elements.watchedHub) elements.watchedHub.style.display = 'none';
+      elements.homeDashboard?.classList.remove('is-active');
+      elements.contentPage?.classList.remove('is-active');
+      if (elements.contentPage) elements.contentPage.hidden = true;
+      if (elements.mediaGrid) elements.mediaGrid.style.display = 'none';
+      if (elements.loadMoreContainer) elements.loadMoreContainer.style.display = 'none';
+      document.querySelector('.status-bar')?.style.setProperty('display', 'none');
+      document.querySelector('main')?.style.removeProperty('display');
+      if (elements.categorySelect) elements.categorySelect.style.display = 'none';
+
+      document.querySelectorAll('.nav-tabs .nav-tab').forEach(b => b.classList.remove('active'));
+      elements.tabUserBtn?.classList.add('active');
+      elements.accountBtn?.classList.add('active');
+      document.querySelectorAll('.mobile-bottom-nav button').forEach(b => b.classList.remove('active'));
+      elements.mobileAccountBtn?.classList.add('active');
+
+      if (elements.userDashboard) elements.userDashboard.style.display = 'block';
+
+      startViewTransition();
+      window.scrollTo({ top: 0, behavior: 'instant' });
+
+      initUserDashboard();
+      renderUserPage();
+    }
+    window.showUserPage = showUserPage;
 
     // ==========================================
     // HOME / DASHBOARD
@@ -6826,8 +7540,14 @@ function showHome(targetScroll = 0) {
       document.querySelectorAll('.nav-tabs .nav-tab').forEach(button => button.classList.remove('active'));
       elements.tabHomeBtn?.classList.add('active');
       elements.tabFavoritesBtn?.classList.remove('active');
+      elements.tabUserBtn?.classList.remove('active');
+      elements.accountBtn?.classList.remove('active');
       document.querySelectorAll('.mobile-bottom-nav button').forEach(button => button.classList.remove('active'));
       elements.mobileHomeBtn?.classList.add('active');
+
+      if (elements.userDashboard) elements.userDashboard.style.display = 'none';
+      if (elements.favoritesHub) elements.favoritesHub.style.display = 'none';
+      if (elements.watchedHub) elements.watchedHub.style.display = 'none';
 
       globalSearchRequestId++;
       if (elements.searchInput) elements.searchInput.value = '';
@@ -6882,6 +7602,11 @@ function showHome(targetScroll = 0) {
       elements.tabWatchedBtn?.classList.remove('active');
       elements.tabFavoritesBtn?.classList.remove('active');
       elements.tabHomeBtn?.classList.remove('active');
+      elements.tabUserBtn?.classList.remove('active');
+      elements.accountBtn?.classList.remove('active');
+      if (elements.userDashboard) elements.userDashboard.style.display = 'none';
+      if (elements.favoritesHub) elements.favoritesHub.style.display = 'none';
+      if (elements.watchedHub) elements.watchedHub.style.display = 'none';
       elements.categorySelect.disabled = false;
       elements.categorySelect.style.removeProperty('display');
       elements.homeDashboard?.classList.remove('is-active');
@@ -8623,12 +9348,51 @@ function showHome(targetScroll = 0) {
         const rating = (item.rating && Number(item.rating) > 0) ? Number(item.rating).toFixed(1) : null;
         const year = item.year || (item.releaseDate ? item.releaseDate.substring(0, 4) : '');
 
+        let extraOverlaysHtml = '';
+        const rawItemId = isMovie
+          ? (item.stream_id ?? item.primaryItem?.stream_id ?? item.id)
+          : (item.series_id ?? item.primaryItem?.series_id ?? item.id);
+        const itemId = String(rawItemId || '');
+        const itemType = isMovie ? 'movie' : 'series';
+
+        if (isFavoritesView) {
+          extraOverlaysHtml = `
+            <div class="badge-fav-active">★ SALVO</div>
+            <button type="button" class="card-quick-action-btn" data-fav-remove="${escapeHtml(itemId)}" data-fav-type="${escapeHtml(itemType)}" title="Remover dos favoritos" aria-label="Remover dos favoritos">✕</button>
+          `;
+        } else if (isWatchedView) {
+          const progPct = getItemProgressPct(item);
+          const isDone = progPct >= 95;
+          const vodProg = getVodProgress(itemType, itemId);
+          let stateLabel = '';
+          if (isDone) {
+            stateLabel = '✓ CONCLUÍDO';
+          } else if (progPct > 0) {
+            if (itemType === 'series' && vodProg?.seasonNum && vodProg?.episodeNum) {
+              stateLabel = `T${vodProg.seasonNum}:E${vodProg.episodeNum} • ${progPct}%`;
+            } else {
+              stateLabel = `Retomar ${progPct}%`;
+            }
+          } else {
+            stateLabel = 'Assistido';
+          }
+
+          extraOverlaysHtml = `
+            ${stateLabel ? `<div class="badge-watched-state ${isDone ? 'done' : ''}">${escapeHtml(stateLabel)}</div>` : ''}
+            <div class="card-watched-progress-track">
+              <div class="card-watched-progress-fill" style="width: ${progPct}%;"></div>
+            </div>
+            <button type="button" class="card-quick-action-btn" data-watched-remove="${escapeHtml(itemId)}" data-watched-type="${escapeHtml(itemType)}" title="Remover do histórico" aria-label="Remover do histórico">✕</button>
+          `;
+        }
+
         card.innerHTML = `
           <div class="poster-wrap">
             ${poster ? `<img src="${escapeHtml(poster)}" alt="${escapeHtml(title)}" loading="lazy" decoding="async" data-poster-error="${escapeHtml(title)}" draggable="false">` : ''}
             <div class="poster-fallback" style="${poster ? 'display:none;' : ''}">🎬<br>${escapeHtml(title)}</div>
             ${badgeHtml}
             ${rating ? `<div class="rating-badge">★ ${rating}</div>` : ''}
+            ${extraOverlaysHtml}
           </div>
           <div class="card-info">
             <div class="card-title">${escapeHtml(title)}</div>
@@ -8638,6 +9402,85 @@ function showHome(targetScroll = 0) {
             </div>
           </div>
         `;
+
+        if (isFavoritesView) {
+          const favRemoveBtn = card.querySelector('[data-fav-remove]');
+          if (favRemoveBtn) {
+            favRemoveBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              removeSingleFavoriteItem(itemType, itemId);
+              card.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+              card.style.opacity = '0';
+              card.style.transform = 'scale(0.85)';
+              setTimeout(() => {
+                card.remove();
+                fullFavoritesList = fullFavoritesList.filter(f => {
+                  const fId = String(f.stream_id ?? f.series_id ?? f.primaryItem?.stream_id ?? f.primaryItem?.series_id ?? f.id);
+                  return !(fId === itemId && (f._searchType || f.type) === itemType);
+                });
+                currentFilteredList = currentFilteredList.filter(f => {
+                  const fId = String(f.stream_id ?? f.series_id ?? f.primaryItem?.stream_id ?? f.primaryItem?.series_id ?? f.id);
+                  return !(fId === itemId && (f._searchType || f.type) === itemType);
+                });
+                currentMediaList = currentMediaList.filter(f => {
+                  const fId = String(f.stream_id ?? f.series_id ?? f.primaryItem?.stream_id ?? f.primaryItem?.series_id ?? f.id);
+                  return !(fId === itemId && (f._searchType || f.type) === itemType);
+                });
+                renderedCount = Math.max(0, renderedCount - 1);
+                updateFavoritesCounters();
+                updateCountDisplay();
+                if (currentFilteredList.length === 0) {
+                  elements.mediaGrid.innerHTML =
+                    '<div class="eplay-favorites-empty">' +
+                      '<div class="eplay-favorites-empty-icon">☆</div>' +
+                      '<div style="font-size: 16px; font-weight: 700; color: #fff; margin-top: 6px;">Sua lista de favoritos está vazia.</div>' +
+                      '<small style="margin-top: 4px;">Abra qualquer filme ou série e clique em “Adicionar aos favoritos” para salvar aqui.</small>' +
+                    '</div>';
+                  elements.loadMoreContainer.style.display = 'none';
+                }
+              }, 250);
+            });
+          }
+        }
+
+        if (isWatchedView) {
+          const watchedRemoveBtn = card.querySelector('[data-watched-remove]');
+          if (watchedRemoveBtn) {
+            watchedRemoveBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              removeSingleWatchedItem(itemType, itemId);
+              card.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+              card.style.opacity = '0';
+              card.style.transform = 'scale(0.85)';
+              setTimeout(() => {
+                card.remove();
+                fullWatchedList = fullWatchedList.filter(w => {
+                  const wId = String(w.stream_id ?? w.series_id ?? w.primaryItem?.stream_id ?? w.primaryItem?.series_id ?? w.id);
+                  return !(wId === itemId && (w._searchType || w.type) === itemType);
+                });
+                currentFilteredList = currentFilteredList.filter(w => {
+                  const wId = String(w.stream_id ?? w.series_id ?? w.primaryItem?.stream_id ?? w.primaryItem?.series_id ?? w.id);
+                  return !(wId === itemId && (w._searchType || w.type) === itemType);
+                });
+                currentMediaList = currentMediaList.filter(w => {
+                  const wId = String(w.stream_id ?? w.series_id ?? w.primaryItem?.stream_id ?? w.primaryItem?.series_id ?? w.id);
+                  return !(wId === itemId && (w._searchType || w.type) === itemType);
+                });
+                renderedCount = Math.max(0, renderedCount - 1);
+                updateWatchedCounters();
+                updateCountDisplay();
+                if (currentFilteredList.length === 0) {
+                  elements.mediaGrid.innerHTML =
+                    '<div class="eplay-favorites-empty">' +
+                      '<div class="eplay-favorites-empty-icon">👁</div>' +
+                      '<div style="font-size: 16px; font-weight: 700; color: #fff; margin-top: 6px;">Nenhum conteúdo encontrado nesta categoria.</div>' +
+                    '</div>';
+                  elements.loadMoreContainer.style.display = 'none';
+                }
+              }, 250);
+            });
+          }
+        }
 
         if (isMovie) {
           card.addEventListener('click', () => onMovieCardClick(item));

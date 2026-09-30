@@ -266,6 +266,7 @@
         <button class="nav-tab" id="tabLiveBtn">🔴 Ao Vivo</button>
         <button class="nav-tab" id="tabWatchedBtn" title="Ver histórico de filmes e séries assistidos">👁 Assistidos</button>
         <button class="nav-tab" id="tabFavoritesBtn" title="Ver seus filmes e séries favoritos">★ Favoritos</button>
+        <button class="nav-tab" id="tabUserBtn" title="Minha Conta, Estatísticas e Preferências">👤 Perfil</button>
       </nav>
     </div>
     <div class="controls">
@@ -348,6 +349,253 @@
       </div>
       <div id="homeMoviesRails" class="home-theme-rails"></div>
     </section>
+  </section>
+
+  <!-- User Dashboard: Página Independente da Tela do Usuário (Perfil, Métricas, Conta, Preferências, Armazenamento) -->
+  <section id="userDashboard" class="user-dashboard" style="display: none;" aria-label="Tela do Usuário">
+    <!-- 1. Hero do Perfil -->
+    <div class="user-profile-hero">
+      <div class="user-profile-hero-bg"></div>
+      <div class="user-profile-main">
+        <div class="user-avatar-wrap">
+          <div id="userAvatarDisplay" class="user-avatar">👤</div>
+          <button id="userAvatarEditBtn" class="user-avatar-edit-btn" type="button" title="Mudar avatar" aria-label="Mudar avatar">✏️</button>
+          <div id="userAvatarPicker" class="user-avatar-picker" style="display: none;">
+            <button class="user-avatar-opt" type="button" data-avatar="👤">👤</button>
+            <button class="user-avatar-opt" type="button" data-avatar="🍿">🍿</button>
+            <button class="user-avatar-opt" type="button" data-avatar="🎬">🎬</button>
+            <button class="user-avatar-opt" type="button" data-avatar="🚀">🚀</button>
+            <button class="user-avatar-opt" type="button" data-avatar="🦁">🦁</button>
+            <button class="user-avatar-opt" type="button" data-avatar="👑">👑</button>
+            <button class="user-avatar-opt" type="button" data-avatar="⚡">⚡</button>
+            <button class="user-avatar-opt" type="button" data-avatar="🕶️">🕶️</button>
+          </div>
+        </div>
+        <div class="user-profile-details">
+          <div class="user-profile-name-row">
+            <h1 id="userProfileName" class="user-profile-name">Usuário EPlay</h1>
+            <span id="userProfileBadge" class="user-status-badge badge-guest">Modo Local</span>
+          </div>
+          <p id="userProfileEmail" class="user-profile-email">Nenhuma conta na nuvem conectada</p>
+          <div class="user-profile-hero-actions">
+            <button id="userHeroSyncBtn" class="user-btn user-btn-accent" type="button">🔄 Sincronizar Agora</button>
+            <button id="userHeroAuthBtn" class="user-btn user-btn-secondary" type="button">Conectar Conta</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Grid de Métricas / Estatísticas de Uso -->
+    <div class="user-stats-grid">
+      <div class="user-stat-card">
+        <div class="user-stat-icon">⏱️</div>
+        <div class="user-stat-data">
+          <span id="statWatchTime" class="user-stat-value">0h 00m</span>
+          <span class="user-stat-label">Tempo Assistido</span>
+        </div>
+      </div>
+      <div class="user-stat-card">
+        <div class="user-stat-icon">🎬</div>
+        <div class="user-stat-data">
+          <span id="statMoviesCount" class="user-stat-value">0</span>
+          <span class="user-stat-label">Filmes Assistidos</span>
+        </div>
+      </div>
+      <div class="user-stat-card">
+        <div class="user-stat-icon">📺</div>
+        <div class="user-stat-data">
+          <span id="statSeriesCount" class="user-stat-value">0</span>
+          <span class="user-stat-label">Séries em Andamento</span>
+        </div>
+      </div>
+      <div class="user-stat-card">
+        <div class="user-stat-icon">★</div>
+        <div class="user-stat-data">
+          <span id="statFavCount" class="user-stat-value">0</span>
+          <span class="user-stat-label">Favoritos Salvos</span>
+        </div>
+      </div>
+      <div class="user-stat-card">
+        <div class="user-stat-icon">📡</div>
+        <div class="user-stat-data">
+          <span id="statLiveCount" class="user-stat-value">0</span>
+          <span class="user-stat-label">Canais Acessados</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Abas da Tela do Usuário -->
+    <div class="user-nav-pills" role="tablist">
+      <button id="userTabBtnAccount" class="user-nav-pill active" type="button" data-user-panel="account">👤 Minha Conta</button>
+      <button id="userTabBtnPreferences" class="user-nav-pill" type="button" data-user-panel="preferences">⚙️ Preferências</button>
+      <button id="userTabBtnShortcuts" class="user-nav-pill" type="button" data-user-panel="shortcuts">🚀 Meus Conteúdos</button>
+      <button id="userTabBtnStorage" class="user-nav-pill" type="button" data-user-panel="storage">💾 Armazenamento & Dados</button>
+    </div>
+
+    <!-- Painel 1: Minha Conta -->
+    <div id="userPanelAccount" class="user-tab-panel active">
+      <!-- Bloco se logado -->
+      <div id="userAccountConnectedBlock" class="user-panel-card" style="display: none;">
+        <h3 class="user-panel-title">Sessão Supabase Ativa</h3>
+        <div class="user-info-rows">
+          <div class="user-info-row">
+            <span class="user-info-label">E-mail:</span>
+            <span id="userConnectedEmail" class="user-info-value">-</span>
+          </div>
+          <div class="user-info-row">
+            <span class="user-info-label">ID do Usuário:</span>
+            <span id="userConnectedId" class="user-info-value user-code-font">-</span>
+          </div>
+          <div class="user-info-row">
+            <span class="user-info-label">Status da Sincronização:</span>
+            <span id="userConnectedSyncStatus" class="user-info-value">Pronto</span>
+          </div>
+        </div>
+        <div class="user-form-actions" style="margin-top: 20px;">
+          <button id="userChangePassBtn" type="button" class="user-btn user-btn-secondary">Alterar Senha</button>
+          <button id="userLogoutBtn" type="button" class="user-btn user-btn-danger">Sair da Conta</button>
+        </div>
+      </div>
+
+      <!-- Bloco se deslogado (Formulário) -->
+      <div id="userAccountAuthBlock" class="user-panel-card">
+        <div class="user-auth-tabs">
+          <button id="userAuthTabLogin" class="user-auth-tab active" type="button" data-auth-tab="login">Entrar</button>
+          <button id="userAuthTabRegister" class="user-auth-tab" type="button" data-auth-tab="register">Criar Conta</button>
+          <button id="userAuthTabRecovery" class="user-auth-tab" type="button" data-auth-tab="recovery">Recuperar</button>
+        </div>
+
+        <div class="user-auth-body">
+          <div class="user-input-group">
+            <label for="userAuthEmailInput">E-mail</label>
+            <input type="email" id="userAuthEmailInput" placeholder="seuemail@exemplo.com" autocomplete="email" />
+          </div>
+          <div id="userAuthPassGroup" class="user-input-group">
+            <label for="userAuthPassInput">Senha</label>
+            <input type="password" id="userAuthPassInput" placeholder="Sua senha secreta" autocomplete="current-password" />
+          </div>
+          <div id="userAuthStatusMsg" class="user-auth-status"></div>
+          <div class="user-form-actions">
+            <button id="userAuthSubmitBtn" type="button" class="user-btn user-btn-accent">Entrar na Conta</button>
+          </div>
+          <p class="user-auth-footnote">
+            Ao sincronizar, seus favoritos, minutagem de reprodução e histórico ficam salvos na nuvem e sincronizam entre a TV Box, PC e celular.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Painel 2: Preferências -->
+    <div id="userPanelPreferences" class="user-tab-panel" style="display: none;">
+      <div class="user-panel-card">
+        <h3 class="user-panel-title">Preferências do Player & Interface</h3>
+        <div class="user-pref-list">
+          <div class="user-pref-item">
+            <div class="user-pref-info">
+              <strong class="user-pref-title">Pular Aberturas Automaticamente</strong>
+              <span class="user-pref-sub">Salta aberturas de animes e séries reconhecidas sem precisar clicar no botão.</span>
+            </div>
+            <label class="user-switch">
+              <input type="checkbox" id="userPrefSkipIntro" />
+              <span class="user-switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="user-pref-item">
+            <div class="user-pref-info">
+              <strong class="user-pref-title">Próximo Episódio Automático</strong>
+              <span class="user-pref-sub">Inicia automaticamente o próximo episódio ao terminar o atual.</span>
+            </div>
+            <label class="user-switch">
+              <input type="checkbox" id="userPrefAutoNext" checked />
+              <span class="user-switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="user-pref-item">
+            <div class="user-pref-info">
+              <strong class="user-pref-title">Navegação Otimizada para TV (D-pad)</strong>
+              <span class="user-pref-sub">Ativa o modo TV com foco visual ampliado para controles remotos.</span>
+            </div>
+            <label class="user-switch">
+              <input type="checkbox" id="userPrefTvMode" />
+              <span class="user-switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="user-pref-item">
+            <div class="user-pref-info">
+              <strong class="user-pref-title">Qualidade Preferida do Player</strong>
+              <span class="user-pref-sub">Resolução prioritária ao abrir transmissões e filmes.</span>
+            </div>
+            <select id="userPrefQualitySelect" class="user-select">
+              <option value="auto">Automático (Mais Rápido)</option>
+              <option value="1080p">Full HD (1080p)</option>
+              <option value="720p">HD (720p)</option>
+            </select>
+          </div>
+
+          <div class="user-pref-item">
+            <div class="user-pref-info">
+              <strong class="user-pref-title">Preferência de Áudio</strong>
+              <span class="user-pref-sub">Priorizar versão dublada ou legendada ao selecionar um título.</span>
+            </div>
+            <select id="userPrefAudioSelect" class="user-select">
+              <option value="dub">Dublado (Português)</option>
+              <option value="leg">Legendado</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Painel 3: Atalhos & Conteúdos -->
+    <div id="userPanelShortcuts" class="user-tab-panel" style="display: none;">
+      <div class="user-shortcuts-grid">
+        <div id="userShortcutWatchedCard" class="user-shortcut-card" tabindex="0" role="button">
+          <div class="user-shortcut-icon">👁</div>
+          <div class="user-shortcut-title">Histórico de Assistidos</div>
+          <p class="user-shortcut-desc">Veja todos os seus títulos iniciados, minutagem de onde parou e episódios assistidos.</p>
+          <span class="user-shortcut-action">Abrir Assistidos →</span>
+        </div>
+
+        <div id="userShortcutFavCard" class="user-shortcut-card" tabindex="0" role="button">
+          <div class="user-shortcut-icon">★</div>
+          <div class="user-shortcut-title">Meus Favoritos</div>
+          <p class="user-shortcut-desc">Acesse sua lista personalizada de filmes e séries salvos.</p>
+          <span class="user-shortcut-action">Abrir Favoritos →</span>
+        </div>
+
+        <div id="userShortcutLiveCard" class="user-shortcut-card" tabindex="0" role="button">
+          <div class="user-shortcut-icon">🔴</div>
+          <div class="user-shortcut-title">Guia de TV Ao Vivo</div>
+          <p class="user-shortcut-desc">Explore os 328 canais abertos, esportes, variedades e jogos de hoje.</p>
+          <span class="user-shortcut-action">Abrir Ao Vivo →</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Painel 4: Armazenamento & Dados -->
+    <div id="userPanelStorage" class="user-tab-panel" style="display: none;">
+      <div class="user-panel-card">
+        <h3 class="user-panel-title">Gerenciamento de Dados Locais</h3>
+        <div class="user-storage-stats">
+          <div class="user-storage-row">
+            <span>Uso Estimado do LocalStorage:</span>
+            <strong id="userStorageUsage">0 KB</strong>
+          </div>
+          <div class="user-storage-row">
+            <span>Versão da Aplicação:</span>
+            <strong>EPlay Web v2.2.0 • Pro Build</strong>
+          </div>
+        </div>
+        <div class="user-form-actions" style="margin-top: 24px; gap: 12px; flex-wrap: wrap;">
+          <button id="userClearCacheBtn" type="button" class="user-btn user-btn-secondary">Limpar Cache de Catálogos</button>
+          <button id="userExportFavsBtn" type="button" class="user-btn user-btn-secondary">Exportar Favoritos (JSON)</button>
+          <button id="userResetAllDataBtn" type="button" class="user-btn user-btn-danger">Redefinir Dados Locais</button>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section id="contentPage" class="eplay-content-page" aria-label="Detalhes do conteúdo" hidden>
@@ -547,6 +795,62 @@
           </div>
         </div>
         <div id="liveSpotlightTrack" class="live-spotlight-track" aria-label="Transmissões de jogos ao vivo"></div>
+      </div>
+    </section>
+
+    <!-- Favorites Hub: Central Moderna de Favoritos (Pílulas de Filtro, Ações e Contadores) -->
+    <section id="favoritesHub" class="favorites-hub" style="display: none;" aria-label="Central de Favoritos">
+      <div class="user-subpage-header">
+        <div class="user-subpage-info">
+          <div class="user-subpage-title-row">
+            <span class="user-subpage-icon">★</span>
+            <h2 class="user-subpage-title">Meus Favoritos</h2>
+            <span id="favTotalBadge" class="user-subpage-badge">0 itens</span>
+          </div>
+          <p class="user-subpage-desc">Sua coleção pessoal de filmes e séries salvos para assistir a qualquer hora.</p>
+        </div>
+      </div>
+
+      <div class="favorites-toolbar">
+        <div class="favorites-pills" role="tablist" aria-label="Filtrar favoritos">
+          <button id="favPillAll" class="fav-filter-pill active" type="button" data-fav-filter="all">★ Todos (<span id="favCountAll">0</span>)</button>
+          <button id="favPillMovies" class="fav-filter-pill" type="button" data-fav-filter="movies">🎬 Filmes (<span id="favCountMovies">0</span>)</button>
+          <button id="favPillSeries" class="fav-filter-pill" type="button" data-fav-filter="series">📺 Séries (<span id="favCountSeries">0</span>)</button>
+        </div>
+        <div class="favorites-actions">
+          <button id="favClearBtn" class="fav-clear-btn" type="button" title="Limpar todos os favoritos">Limpar Favoritos</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Watched Hub: Central Moderna de Assistidos & Continuar Assistindo (Progresso, Filtros, Contadores) -->
+    <section id="watchedHub" class="watched-hub" style="display: none;" aria-label="Central de Assistidos">
+      <div class="user-subpage-header">
+        <div class="user-subpage-info">
+          <div class="user-subpage-title-row">
+            <span class="user-subpage-icon">👁</span>
+            <h2 class="user-subpage-title">Assistidos & Continuar</h2>
+            <span id="watchedTotalBadge" class="user-subpage-badge">0 itens</span>
+          </div>
+          <p class="user-subpage-desc">Retome de onde parou seus filmes e episódios ou consulte seu histórico de reprodução.</p>
+        </div>
+        <div id="watchedSyncNotice" class="watched-sync-notice" style="display: none;">
+          <span>💡 Sincronize seu progresso na nuvem:</span>
+          <button id="watchedSyncNoticeBtn" type="button" class="btn-sm-accent">Conectar Conta</button>
+        </div>
+      </div>
+
+      <div class="watched-toolbar">
+        <div class="watched-pills" role="tablist" aria-label="Filtrar assistidos">
+          <button id="watchedPillAll" class="watched-filter-pill active" type="button" data-watched-filter="all">👁 Todos (<span id="watchedCountAll">0</span>)</button>
+          <button id="watchedPillResume" class="watched-filter-pill" type="button" data-watched-filter="resume">▶ Continuar Assistindo (<span id="watchedCountResume">0</span>)</button>
+          <button id="watchedPillDone" class="watched-filter-pill" type="button" data-watched-filter="done">✓ Concluídos (<span id="watchedCountDone">0</span>)</button>
+          <button id="watchedPillMovies" class="watched-filter-pill" type="button" data-watched-filter="movies">🎬 Filmes (<span id="watchedCountMovies">0</span>)</button>
+          <button id="watchedPillSeries" class="watched-filter-pill" type="button" data-watched-filter="series">📺 Séries (<span id="watchedCountSeries">0</span>)</button>
+        </div>
+        <div class="watched-actions">
+          <button id="watchedClearBtn" class="watched-clear-btn" type="button" title="Limpar histórico de reprodução">Limpar Histórico</button>
+        </div>
       </div>
     </section>
 
