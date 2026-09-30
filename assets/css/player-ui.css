@@ -108,3 +108,4 @@
 @media(max-width:920px){
 #videoModal #subOptionsPanel{bottom:0;max-height:55vh;padding:12px!important}
 }
+#videoModal video::cue{background-color:rgba(0,0,0,.85);color:#fff;font-family:'Segoe UI',-apple-system,Roboto,sans-serif;font-size:clamp(14px,2.2vw,26px);font-weight:600;text-shadow:0 2px 4px rgba(0,0,0,.95),0 0 2px #000;line-height:1.35;white-space:pre-line}

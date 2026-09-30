@@ -2566,7 +2566,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
               : null;
             const chosen = exact || withYear || metas[0];
             const imdbId = normalizeImdbId(chosen?.id);
-            if (imdbId) return { ...direct, imdbId };
+            if (imdbId) {
+              if (fastCleanKey) writeSeriesImdbCache(fastCleanKey, imdbId);
+              return { ...direct, imdbId };
+            }
           }
         }
       } catch (e) {}
@@ -2592,7 +2595,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const expected = normalizeSkipSearchTitle(query);
         const exact = candidates.find(item => normalizeSkipSearchTitle(item.title) === expected);
         const chosen = exact || (candidates.length === 1 ? candidates[0] : null);
-        return chosen ? { ...direct, imdbId: chosen.imdbId } : direct;
+        if (chosen?.imdbId) {
+          if (fastCleanKey) writeSeriesImdbCache(fastCleanKey, chosen.imdbId);
+          return { ...direct, imdbId: chosen.imdbId };
+        }
+        return direct;
       } catch (e) {
         return direct;
       }
@@ -2690,7 +2697,20 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       const data = await fetchJsonWithTimeout(SKIPDB_SEGMENTS_URL + '?' + params.toString());
       const intro = data?.segments?.intro;
-      if (!intro) return null;
+      if (!intro) {
+        if (duration > 0) {
+          const zeroCached = getCachedSkipIntro(['skipdb', imdbId, seasonNum, episodeNum, 0].join(':'));
+          if (zeroCached) {
+            const revalidated = validateSkipSegment(zeroCached.start, zeroCached.end, duration);
+            if (revalidated) {
+              const resegment = { ...zeroCached, ...revalidated };
+              saveCachedSkipIntro(cacheKey, resegment);
+              return resegment;
+            }
+          }
+        }
+        return null;
+      }
 
       // Quando a duração já existe, preferimos correspondências exact/shifted.
       // "agnostic" é usado apenas como fallback enquanto a duração ainda não foi conhecida.
@@ -2737,7 +2757,20 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!data?.found || !Array.isArray(data.results)) return null;
 
       const op = data.results.find(item => item?.skipType === 'op' && item?.interval);
-      if (!op) return null;
+      if (!op) {
+        if (duration > 0) {
+          const zeroCached = getCachedSkipIntro(['aniskip', malId, episodeNum, 0].join(':'));
+          if (zeroCached) {
+            const revalidated = validateSkipSegment(zeroCached.start, zeroCached.end, duration);
+            if (revalidated) {
+              const resegment = { ...zeroCached, ...revalidated };
+              saveCachedSkipIntro(cacheKey, resegment);
+              return resegment;
+            }
+          }
+        }
+        return null;
+      }
 
       const sourceDuration = Number(op.episodeLength || 0);
       const durationDelta = sourceDuration > 0 ? Math.abs(duration - sourceDuration) : 0;
@@ -2845,6 +2878,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           window.dispatchEvent(new CustomEvent('eplay:skip-state', { detail: { visible: false } }));
         }
         return;
+      }
+
+      if (currentTime < segment.start) {
+        skipIntroState.used = false;
       }
 
       const insideSegment = currentTime >= segment.start && currentTime < segment.end;
@@ -2983,7 +3020,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       skipIntroState.used = true;
       try {
         player.currentTime = target;
+        updateSkipIntroButton();
         saveCurrentVodProgress();
+        window.EPlayPlayerUI?.showToast?.('⏭ Abertura pulada automaticamente');
       } catch (e) {}
     }
 
@@ -3000,6 +3039,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         skipIntroState.used = true;
         updateSkipIntroButton();
         saveCurrentVodProgress();
+        window.EPlayPlayerUI?.showToast?.('⏭ Abertura pulada');
       } catch (e) {}
     }
 
@@ -8442,15 +8482,21 @@ function showHome(targetScroll = 0) {
       if (elements.subSyncControls) elements.subSyncControls.style.display = 'none';
       if (elements.subSelect) {
         elements.subSelect.value = 'none';
+        const isLeg = isLegendadoMedia(currentSubContext?.mediaMeta) || isLegendadoMedia({ name: currentSubContext?.rawTitle });
         const firstOpt = elements.subSelect.options[0];
         if (firstOpt && firstOpt.value === 'none') {
-          firstOpt.textContent = 'Desativada (Legenda já no vídeo)';
+          firstOpt.textContent = isLeg ? 'Desativada (Legenda já no vídeo)' : 'Desativada';
         }
       }
 
       if (elements.videoPlayer) {
         const oldTracks = elements.videoPlayer.querySelectorAll('track');
-        oldTracks.forEach(t => t.remove());
+        oldTracks.forEach(t => {
+          if (t.src && t.src.startsWith('blob:')) {
+            try { URL.revokeObjectURL(t.src); } catch (_) {}
+          }
+          t.remove();
+        });
         if (elements.videoPlayer.textTracks) {
           for (let i = 0; i < elements.videoPlayer.textTracks.length; i++) {
             try {
@@ -8727,7 +8773,12 @@ function showHome(targetScroll = 0) {
 
       // Limpar faixas de vídeo anteriores
       const oldTracks = elements.videoPlayer.querySelectorAll('track');
-      oldTracks.forEach(t => t.remove());
+      oldTracks.forEach(t => {
+        if (t.src && t.src.startsWith('blob:')) {
+          try { URL.revokeObjectURL(t.src); } catch (_) {}
+        }
+        t.remove();
+      });
       if (elements.videoPlayer.textTracks) {
         for (let i = 0; i < elements.videoPlayer.textTracks.length; i++) {
           try {
@@ -8854,7 +8905,12 @@ function showHome(targetScroll = 0) {
       // Limpar legendas anteriores e fechar painel
       closeSubOptionsPanel();
       const oldTracks = elements.videoPlayer.querySelectorAll('track');
-      oldTracks.forEach(t => t.remove());
+      oldTracks.forEach(t => {
+        if (t.src && t.src.startsWith('blob:')) {
+          try { URL.revokeObjectURL(t.src); } catch (_) {}
+        }
+        t.remove();
+      });
       elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
       elements.subSyncControls.style.display = 'none';
       elements.subCandidateSelect.innerHTML = '<option value="">Identificando...</option>';
@@ -8919,6 +8975,13 @@ function showHome(targetScroll = 0) {
       updateSkipIntroButton();
     });
     elements.videoPlayer.addEventListener('seeking', updateSkipIntroButton);
+    elements.videoPlayer.addEventListener('seeked', () => {
+      if (skipIntroState.segment && elements.videoPlayer.currentTime < skipIntroState.segment.start) {
+        skipIntroState.used = false;
+      }
+      maybeAutoSkipIntro();
+      updateSkipIntroButton();
+    });
 
     elements.videoPlayer.addEventListener('ended', () => {
       const meta = getCurrentVodProgressMeta();
@@ -9546,6 +9609,45 @@ function showHome(targetScroll = 0) {
           tagLabel = '[Memorizado]';
         }
 
+        if (!savedMatch) {
+          if (mediaType === 'series') {
+            const cleanKey = cleanTitleKey(mediaMeta?.seriesName || rawTitle || '');
+            const seriesImdb = normalizeImdbId(
+              mediaMeta?.imdbId ||
+              mediaMeta?.imdb_id ||
+              (cleanKey ? readSeriesImdbCache()[cleanKey] : '')
+            );
+            if (seriesImdb) {
+              savedMatch = {
+                id: seriesImdb,
+                name: (mediaMeta?.seriesName || clean || rawTitle).replace(/\s*\[.*?\]/g, '').trim(),
+                year: mediaMeta?.year || '',
+                poster: mediaMeta?.poster || '',
+                catalogType: 'series'
+              };
+              tagLabel = '[IMDb]';
+            }
+          } else {
+            const movieImdb = normalizeImdbId(
+              mediaMeta?.imdbId ||
+              mediaMeta?.imdb_id ||
+              mediaMeta?.groupOrMovie?.imdbId ||
+              mediaMeta?.groupOrMovie?.imdb_id ||
+              mediaMeta?.primaryItem?.imdb_id
+            );
+            if (movieImdb) {
+              savedMatch = {
+                id: movieImdb,
+                name: (mediaMeta?.title || clean || rawTitle).replace(/\s*\[.*?\]/g, '').trim(),
+                year: mediaMeta?.year || '',
+                poster: mediaMeta?.poster || '',
+                catalogType: 'movie'
+              };
+              tagLabel = '[IMDb]';
+            }
+          }
+        }
+
         const isLeg = isLegendadoMedia(mediaMeta) || isLegendadoMedia({ name: rawTitle });
 
         if (savedMatch && savedMatch.id) {
@@ -9680,8 +9782,8 @@ function showHome(targetScroll = 0) {
       try {
         let subQueryId = imdbId;
         if (currentSubContext.mediaType === 'series' && currentSubContext.mediaMeta) {
-          const seasonNum = currentSubContext.mediaMeta.season || 1;
-          const epNum = currentSubContext.mediaMeta.episodeNum || 1;
+          const seasonNum = Number(currentSubContext.mediaMeta.seasonNum || currentSubContext.mediaMeta.season || 1);
+          const epNum = Number(currentSubContext.mediaMeta.episodeNum || currentSubContext.mediaMeta.episode_num || currentSubContext.mediaMeta.ep?.episode_num || 1);
           subQueryId = `${imdbId}:${seasonNum}:${epNum}`;
         }
 
@@ -10078,14 +10180,20 @@ function showHome(targetScroll = 0) {
     }
 
     function applySubtitleText(text, label = 'Português') {
-      let vttContent = text;
-      if (!text.startsWith('WEBVTT')) {
-        vttContent = srtToVtt(text, currentSubtitleOffset);
+      const cleanText = (text || '').replace(/^\uFEFF/, '');
+      let vttContent = cleanText;
+      if (!cleanText.startsWith('WEBVTT') || currentSubtitleOffset !== 0) {
+        vttContent = srtToVtt(cleanText, currentSubtitleOffset);
       }
 
-      // Limpar faixas anteriores
+      // Limpar faixas anteriores e revogar Blob URLs para evitar memory leak
       const oldTracks = elements.videoPlayer.querySelectorAll('track');
-      oldTracks.forEach(t => t.remove());
+      oldTracks.forEach(t => {
+        if (t.src && t.src.startsWith('blob:')) {
+          try { URL.revokeObjectURL(t.src); } catch (_) {}
+        }
+        t.remove();
+      });
 
       const blob = new Blob([vttContent], { type: 'text/vtt' });
       const trackUrl = URL.createObjectURL(blob);
@@ -10098,11 +10206,22 @@ function showHome(targetScroll = 0) {
       track.default = true;
 
       elements.videoPlayer.appendChild(track);
+      track.addEventListener('load', () => {
+        try {
+          if (track.track) track.track.mode = 'showing';
+        } catch (_) {}
+      });
       setTimeout(() => {
-        if (elements.videoPlayer.textTracks && elements.videoPlayer.textTracks[0]) {
-          elements.videoPlayer.textTracks[0].mode = 'showing';
+        if (track.track) {
+          track.track.mode = 'showing';
+        } else if (elements.videoPlayer.textTracks) {
+          for (let i = 0; i < elements.videoPlayer.textTracks.length; i++) {
+            try {
+              elements.videoPlayer.textTracks[i].mode = 'showing';
+            } catch (_) {}
+          }
         }
-      }, 100);
+      }, 80);
 
       const offsetText = currentSubtitleOffset !== 0 ? ` (sync: ${currentSubtitleOffset > 0 ? '+' : ''}${currentSubtitleOffset}s)` : '';
       elements.modalFormat.textContent = `💬 ${label} ativa${offsetText}`;
@@ -10110,21 +10229,29 @@ function showHome(targetScroll = 0) {
 
     function srtToVtt(srtText, offsetSeconds = 0) {
       let vtt = "WEBVTT\n\n";
-      const normalized = srtText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const normalized = (srtText || '').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
       const blocks = normalized.trim().split(/\n\n+/);
 
       function shiftTime(timeStr, offset) {
-        if (!offset) return timeStr.replace(',', '.');
-        const parts = timeStr.trim().split(':');
-        if (parts.length < 3) return timeStr.replace(',', '.');
-        const h = parseInt(parts[0], 10);
-        const m = parseInt(parts[1], 10);
-        const s = parseFloat(parts[2].replace(',', '.'));
+        const clean = timeStr.trim();
+        if (!offset) return clean.replace(',', '.');
+        const parts = clean.split(':');
+        if (parts.length < 2) return clean.replace(',', '.');
+        let h = 0, m = 0, s = 0;
+        if (parts.length === 2) {
+          m = parseInt(parts[0], 10) || 0;
+          s = parseFloat(parts[1].replace(',', '.')) || 0;
+        } else {
+          h = parseInt(parts[0], 10) || 0;
+          m = parseInt(parts[1], 10) || 0;
+          s = parseFloat(parts[2].replace(',', '.')) || 0;
+        }
         let total = h * 3600 + m * 60 + s + offset;
         if (total < 0) total = 0;
         const newH = Math.floor(total / 3600).toString().padStart(2, '0');
         const newM = Math.floor((total % 3600) / 60).toString().padStart(2, '0');
-        const newS = (total % 60).toFixed(3).padStart(6, '0');
+        const secVal = (total % 60).toFixed(3);
+        const newS = secVal.padStart(6, '0');
         return `${newH}:${newM}:${newS}`;
       }
 
@@ -10700,8 +10827,9 @@ function showHome(targetScroll = 0) {
       const sPoster = ep.info?.movie_image || currentSeriesGroup?.poster || sInfo.cover || '';
 
       const seasonEpisodes = currentSeriesData?.episodes?.[seasonNum] || [];
-      const hasPrevious = seasonEpisodes.some(e => Number(e.episode_num) === Number(ep.episode_num) - 1);
-      const hasNext = seasonEpisodes.some(e => Number(e.episode_num) === Number(ep.episode_num) + 1);
+      const currentEpIdx = seasonEpisodes.findIndex(e => String(e.id) === String(ep.id));
+      const hasPrevious = seasonEpisodes.some(e => Number(e.episode_num) === Number(ep.episode_num) - 1) || currentEpIdx > 0;
+      const hasNext = seasonEpisodes.some(e => Number(e.episode_num) === Number(ep.episode_num) + 1) || (currentEpIdx >= 0 && currentEpIdx < seasonEpisodes.length - 1);
 
       window.EPlaySeriesNavigation = {
         seasonNum: Number(seasonNum) || 0,
@@ -10709,14 +10837,22 @@ function showHome(targetScroll = 0) {
         hasPrevious,
         hasNext,
         next: () => {
-          const eps = currentSeriesData?.episodes?.[seasonNum] || [];
-          const nextEp = eps.find(e => Number(e.episode_num) === Number(ep.episode_num) + 1);
+          const list = currentSeriesData?.episodes?.[seasonNum] || [];
+          let nextEp = list.find(e => Number(e.episode_num) === Number(ep.episode_num) + 1);
+          if (!nextEp) {
+            const idx = list.findIndex(e => String(e.id) === String(ep.id));
+            if (idx >= 0 && idx < list.length - 1) nextEp = list[idx + 1];
+          }
           if (nextEp) playSeriesEpisode(nextEp, seasonNum);
           return !!nextEp;
         },
         previous: () => {
-          const eps = currentSeriesData?.episodes?.[seasonNum] || [];
-          const previousEp = eps.find(e => Number(e.episode_num) === Number(ep.episode_num) - 1);
+          const list = currentSeriesData?.episodes?.[seasonNum] || [];
+          let previousEp = list.find(e => Number(e.episode_num) === Number(ep.episode_num) - 1);
+          if (!previousEp) {
+            const idx = list.findIndex(e => String(e.id) === String(ep.id));
+            if (idx > 0) previousEp = list[idx - 1];
+          }
           if (previousEp) playSeriesEpisode(previousEp, seasonNum);
           return !!previousEp;
         }

@@ -59,10 +59,15 @@
     reveal();
   }
   function closeMenu() {
-    if (!menu) return;
-    menu.classList.remove('open');
+    if (menu) menu.classList.remove('open');
     const settings = $('eplaySettings');
     if (settings) settings.setAttribute('aria-expanded', 'false');
+    const subPanel = $('subOptionsPanel');
+    if (subPanel && subPanel.style.display !== 'none') {
+      const closeBtn = $('closeSubPanelBtn');
+      if (closeBtn) closeBtn.click();
+      else subPanel.style.display = 'none';
+    }
   }
   function setVolume(v) {
     state.volume = Math.max(0, Math.min(1, v)); video.volume = state.volume; video.muted = state.volume === 0;
@@ -183,7 +188,7 @@
   seek.addEventListener('input',()=>{if(Number.isFinite(video.duration))video.currentTime=Number(seek.value);setRange();reveal();});
   document.querySelectorAll('[data-speed]').forEach(b=>b.addEventListener('click',()=>applySpeed(b.dataset.speed)));
   container.addEventListener('mousemove',reveal); container.addEventListener('touchstart',reveal,{passive:true});
-  video.addEventListener('play',()=>{setPlayIcon();reveal()}); video.addEventListener('pause',()=>{setPlayIcon();reveal()});
+  video.addEventListener('play',()=>{setPlayIcon();reveal()}); video.addEventListener('pause',()=>{setPlayIcon();reveal()}); video.addEventListener('ended',()=>{setPlayIcon();reveal()});
   video.addEventListener('timeupdate',setRange); video.addEventListener('durationchange',setRange); video.addEventListener('loadedmetadata',()=>{setRange();updateTitle()});
   video.addEventListener('volumechange',updateVolume); video.addEventListener('ratechange',()=>applySpeed(video.playbackRate));
   document.addEventListener('fullscreenchange',()=>{modal.classList.toggle('eplay-fullscreen',!!document.fullscreenElement);reveal()});
@@ -191,7 +196,7 @@
     if(modal.style.display==='none')return;
     const tag=(e.target.tagName||'').toLowerCase();if(['input','select','textarea'].includes(tag))return;
     if(e.code==='Space'||e.key===' '){e.preventDefault();e.stopImmediatePropagation();playPause();return}
-    if(e.key.toLowerCase()==='k'){e.preventDefault();playPause()} else if(e.key==='ArrowLeft'){e.preventDefault();seekBy(-10)} else if(e.key==='ArrowRight'){e.preventDefault();seekBy(10)} else if(e.key==='ArrowUp'){e.preventDefault();setVolume(video.volume+.05)} else if(e.key==='ArrowDown'){e.preventDefault();setVolume(video.volume-.05)} else if(e.key.toLowerCase()==='m'){e.preventDefault();toggleMute()} else if(e.key.toLowerCase()==='f'){e.preventDefault();fullscreen()} else if(e.key.toLowerCase()==='p'){e.preventDefault();pip()} else if(e.key.toLowerCase()==='c'){e.preventDefault();openSubtitles()} else if(e.key==='Escape'){closeMenu();reveal()} else reveal();
+    if(e.key.toLowerCase()==='k'){e.preventDefault();playPause()} else if(e.key==='ArrowLeft'){e.preventDefault();seekBy(-10)} else if(e.key==='ArrowRight'){e.preventDefault();seekBy(10)} else if(e.key==='ArrowUp'){e.preventDefault();setVolume(video.volume+.05)} else if(e.key==='ArrowDown'){e.preventDefault();setVolume(video.volume-.05)} else if(e.key.toLowerCase()==='m'){e.preventDefault();toggleMute()} else if(e.key.toLowerCase()==='f'){e.preventDefault();fullscreen()} else if(e.key.toLowerCase()==='p'){e.preventDefault();pip()} else if(e.key.toLowerCase()==='c'){e.preventDefault();openSubtitles()} else if(e.key.toLowerCase()==='s'){e.preventDefault();skipIntroNow()} else if(e.key==='Escape'){closeMenu();reveal()} else reveal();
   }, true);
   let sx=0,sy=0,st=0;
   container.addEventListener('touchstart',e=>{const t=e.changedTouches[0];sx=t.clientX;sy=t.clientY;st=Date.now()},{passive:true});
