@@ -14,7 +14,7 @@
   <!-- Escudo Zero Anúncios (Ad-Shield) -->
   <script src="./assets/js/security.js"></script>
 
-  <link rel="stylesheet" href="./assets/css/app.css?v=20260929-01">
+  <link rel="stylesheet" href="./assets/css/app.css?v=20260929-02">
   <link rel="stylesheet" href="./assets/css/player-ui.css?v=20260929-01">
 </head>
 
@@ -257,6 +257,7 @@
         <button class="nav-tab" id="tabSeriesBtn">📺 Séries</button>
         <button class="nav-tab" id="tabLiveBtn">🔴 Ao Vivo</button>
         <button class="nav-tab" id="tabWatchedBtn" title="Ver histórico de filmes e séries assistidos">👁 Assistidos</button>
+        <button class="nav-tab" id="tabFavoritesBtn" title="Ver seus filmes e séries favoritos">★ Favoritos</button>
       </nav>
     </div>
     <div class="controls">
@@ -280,6 +281,7 @@
     <button id="mobileSeriesBtn" type="button">📺<span>Séries</span></button>
     <button id="mobileLiveBtn" type="button">🔴<span>Ao Vivo</span></button>
     <button id="mobileWatchedBtn" type="button">👁<span>Assistidos</span></button>
+    <button id="mobileFavoritesBtn" type="button">★<span>Favoritos</span></button>
     <button id="mobileAccountBtn" type="button">◉<span>Conta</span></button>
   </div>
 
@@ -360,6 +362,9 @@
         <div id="contentPageMeta" class="eplay-content-meta"></div>
         <div id="contentPageGenres" class="eplay-content-genres"></div>
         <p id="contentPagePlot" class="eplay-content-plot">Sinopse não disponível.</p>
+        <div class="eplay-content-actions">
+          <button id="contentFavoriteBtn" class="eplay-favorite-btn" type="button" aria-pressed="false">☆ Adicionar aos favoritos</button>
+        </div>
       </div>
     </div>
 
@@ -723,7 +728,7 @@
   <script src="./assets/js/supabase-config.js?v=20260929-01"></script>
   <script src="./assets/js/tv-epg.js?v=20260929-01"></script>
   <script src="./assets/js/account.js?v=20260929-04"></script>
-  <script src="./assets/js/app.js?v=20260929-12"></script>
+  <script src="./assets/js/app.js?v=20260929-13"></script>
   <script src="./assets/js/player-ui.js?v=20260929-01"></script>
 </body>
 

@@ -11,10 +11,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let currentMode = 'home'; // 'home', 'movies', 'series' ou 'live'
     let isWatchedView = false;
     let watchedReturnMode = 'home';
+    let isFavoritesView = false;
+    let favoriteReturnMode = 'home';
     const WATCHED_LIMIT = 500;
     const WATCHED_MOVIES_STORAGE_KEY = 'andplay_web_watched_movies_v1';
     const WATCHED_SERIES_STORAGE_KEY = 'andplay_web_watched_series_v1';
     const WATCHED_ACTIVITY_KEY = 'andplay_web_watched_activity_v1';
+    const FAVORITES_STORAGE_KEY = 'andplay_web_favorites_v1';
 
     let fullMoviesCache = null;
     let fullSeriesCache = null;
@@ -165,6 +168,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       mobileSeriesBtn: document.getElementById('mobileSeriesBtn'),
       mobileLiveBtn: document.getElementById('mobileLiveBtn'),
       mobileWatchedBtn: document.getElementById('mobileWatchedBtn'),
+      mobileFavoritesBtn: document.getElementById('mobileFavoritesBtn'),
       mobileAccountBtn: document.getElementById('mobileAccountBtn'),
       homeDashboard: document.getElementById('homeDashboard'),
       homeFeaturedTrack: document.getElementById('homeFeaturedTrack'),
@@ -205,6 +209,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       tabSeriesBtn: document.getElementById('tabSeriesBtn'),
       tabLiveBtn: document.getElementById('tabLiveBtn'),
       tabWatchedBtn: document.getElementById('tabWatchedBtn'),
+      tabFavoritesBtn: document.getElementById('tabFavoritesBtn'),
+      contentFavoriteBtn: document.getElementById('contentFavoriteBtn'),
       categorySelect: document.getElementById('categorySelect'),
       searchInput: document.getElementById('searchInput'),
       resetCategoryBtn: document.getElementById('resetCategoryBtn'),
@@ -856,6 +862,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           else showWatchedContent();
         });
       }
+      elements.tabFavoritesBtn?.addEventListener('click', () => {
+        if (isFavoritesView) restoreFavoritesView();
+        else showFavoritesContent();
+      });
       if (elements.tabLiveBtn) {
         elements.tabLiveBtn.addEventListener('click', () => switchMode('live', true));
       }
@@ -893,6 +903,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.mobileWatchedBtn?.addEventListener('click', () => {
         if (isWatchedView) restoreCatalogView();
         else showWatchedContent();
+      });
+      elements.mobileFavoritesBtn?.addEventListener('click', () => {
+        if (isFavoritesView) restoreFavoritesView();
+        else showFavoritesContent();
       });
       elements.mobileAccountBtn?.addEventListener('click', () => window.AndPlayAccount?.open());
       elements.homeFeaturedPrev?.addEventListener('click', () => moveHomeFeatured(-1));
@@ -1162,6 +1176,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             if (key === 'ArrowDown') { e.preventDefault(); elements.categorySelect.focus(); return; }
           } else if (active === elements.tabWatchedBtn) {
             if (key === 'ArrowLeft') { e.preventDefault(); elements.tabLiveBtn?.focus(); return; }
+            if (key === 'ArrowRight') { e.preventDefault(); elements.tabFavoritesBtn?.focus(); return; }
+            if (key === 'ArrowDown') { e.preventDefault(); elements.categorySelect.focus(); return; }
+          } else if (active === elements.tabFavoritesBtn) {
+            if (key === 'ArrowLeft') { e.preventDefault(); elements.tabWatchedBtn?.focus(); return; }
             if (key === 'ArrowDown') { e.preventDefault(); elements.categorySelect.focus(); return; }
           } else if (active === elements.categorySelect) {
             if (key === 'ArrowUp') {
@@ -2880,10 +2898,215 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         );
     }
 
+    function readFavorites() {
+      try {
+        const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(parsed)) return [];
+        return parsed.map(item => ({
+          type: item?.type === 'series' ? 'series' : 'movie',
+          id: String(item?.id || '').trim(),
+          title: String(item?.title || '').trim(),
+          poster: String(item?.poster || '').trim(),
+          updatedAt: Number(item?.updatedAt || 0) || 0
+        })).filter(item => item.id);
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function writeFavorites(items) {
+      try {
+        localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(
+          (Array.isArray(items) ? items : []).slice(0, 500)
+        ));
+      } catch (e) {}
+    }
+
+    function getFavoriteId(type, item) {
+      if (!item) return '';
+      if (type === 'series') {
+        return String(item.series_id || item.primaryItem?.series_id || item.versions?.[0]?.seriesId || '').trim();
+      }
+      return String(
+        item.stream_id ||
+        item.primaryItem?.stream_id ||
+        item.versions?.[0]?.streamId ||
+        ''
+      ).trim();
+    }
+
+    function isFavorite(type, item) {
+      const id = getFavoriteId(type, item);
+      if (!id) return false;
+      return readFavorites().some(entry => entry.type === type && entry.id === id);
+    }
+
+    function updateFavoriteButton(type = currentContentPageType, item = currentContentPageItem) {
+      const btn = elements.contentFavoriteBtn;
+      if (!btn) return;
+      const favorite = isFavorite(type, item);
+      btn.classList.toggle('is-favorite', favorite);
+      btn.setAttribute('aria-pressed', favorite ? 'true' : 'false');
+      btn.textContent = favorite ? '★ Remover dos favoritos' : '☆ Adicionar aos favoritos';
+      btn.title = favorite ? 'Remover este título dos favoritos' : 'Adicionar este título aos favoritos';
+    }
+
+    function toggleCurrentFavorite() {
+      const type = currentContentPageType === 'series' ? 'series' : 'movie';
+      const item = currentContentPageItem;
+      const id = getFavoriteId(type, item);
+      if (!id) return;
+
+      const current = readFavorites();
+      const index = current.findIndex(entry => entry.type === type && entry.id === id);
+      if (index >= 0) {
+        current.splice(index, 1);
+      } else {
+        const poster = type === 'series'
+          ? String(item?.cover || item?.stream_icon || '').trim()
+          : String(item?.poster || getBestPosterUrl(item?.primaryItem || item) || item?.stream_icon || '').trim();
+        current.unshift({
+          type,
+          id,
+          title: String(item?.name || item?.title || (type === 'series' ? 'Série' : 'Filme')).trim(),
+          poster,
+          updatedAt: Date.now()
+        });
+      }
+      writeFavorites(current);
+      updateFavoriteButton(type, item);
+    }
+
+    function buildFavoriteFallbackGroup(entry) {
+      const title = entry?.title || (entry?.type === 'series' ? 'Série ' + entry.id : 'Filme ' + entry.id);
+      const poster = entry?.poster || '';
+      if (entry?.type === 'series') {
+        return {
+          isGroup: true,
+          series_id: entry.id,
+          name: title,
+          title,
+          cover: poster,
+          stream_icon: poster,
+          primaryItem: { series_id: entry.id, name: title, cover: poster, stream_icon: poster },
+          versions: [{ item: { series_id: entry.id, name: title, cover: poster }, seriesId: entry.id }]
+        };
+      }
+      return {
+        isGroup: true,
+        stream_id: entry.id,
+        name: title,
+        title,
+        poster,
+        stream_icon: poster,
+        primaryItem: { stream_id: entry.id, name: title, stream_icon: poster }
+      };
+    }
+
+    async function showFavoritesContent() {
+      favoriteReturnMode = ['home', 'movies', 'series', 'live'].includes(currentMode) ? currentMode : 'home';
+      isFavoritesView = true;
+      isWatchedView = false;
+      elements.homeDashboard?.classList.remove('is-active');
+      elements.contentPage?.classList.remove('is-active');
+      if (elements.contentPage) elements.contentPage.hidden = true;
+      document.querySelector('.status-bar')?.style.removeProperty('display');
+      document.querySelector('main')?.style.removeProperty('display');
+      document.querySelectorAll('.nav-tabs .nav-tab').forEach(button => button.classList.remove('active'));
+      elements.tabFavoritesBtn?.classList.add('active');
+      document.querySelectorAll('.mobile-bottom-nav button').forEach(button => button.classList.remove('active'));
+      elements.mobileFavoritesBtn?.classList.add('active');
+
+      if (elements.searchInput) {
+        elements.searchInput.value = '';
+        elements.searchInput.placeholder = 'Pesquisar nos seus favoritos...';
+      }
+      elements.resetCategoryBtn.style.display = 'none';
+      elements.categorySelect.value = 'ALL';
+      elements.categorySelect.disabled = true;
+      elements.categorySelect.style.display = 'none';
+
+      const favorites = readFavorites().sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+      const hasMovies = favorites.some(entry => entry.type === 'movie');
+      const hasSeries = favorites.some(entry => entry.type === 'series');
+
+      const [movieCatalog, seriesCatalog] = await Promise.all([
+        hasMovies ? loadFullMovies() : Promise.resolve(fullMoviesCache || []),
+        hasSeries ? loadFullSeries() : Promise.resolve(fullSeriesCache || [])
+      ]);
+
+      if (!isFavoritesView) return;
+
+      const ordered = favorites.map(entry => {
+        const match = entry.type === 'movie'
+          ? (movieCatalog || []).find(item => movieGroupMatchesWatchedId(item, entry.id))
+          : (seriesCatalog || []).find(item => seriesGroupMatchesWatchedId(item, entry.id));
+        const resolved = match || buildFavoriteFallbackGroup(entry);
+        resolved._searchType = entry.type;
+        return resolved;
+      });
+
+      currentMediaList = ordered;
+      elements.categoryLabel.textContent = '★ Favoritos';
+      applyFilterAndRender('');
+
+      if (!ordered.length) {
+        elements.mediaGrid.innerHTML =
+          '<div class="eplay-favorites-empty">' +
+            '<div class="eplay-favorites-empty-icon">☆</div>' +
+            '<div>Nenhum filme ou série foi adicionado aos favoritos.</div>' +
+            '<small>Abra um título e toque em “Adicionar aos favoritos”.</small>' +
+          '</div>';
+        elements.mediaCount.textContent = '0 favoritos';
+        elements.loadMoreContainer.style.display = 'none';
+      }
+    }
+
+    function restoreFavoritesView() {
+      if (!isFavoritesView) return;
+      const returnMode = favoriteReturnMode;
+      isFavoritesView = false;
+      elements.tabFavoritesBtn?.classList.remove('active');
+      elements.mobileFavoritesBtn?.classList.remove('active');
+      elements.searchInput.value = '';
+      elements.categorySelect.disabled = false;
+
+      if (returnMode === 'home') {
+        showHome();
+        return;
+      }
+      if (returnMode === 'live') {
+        switchMode('live', true);
+        return;
+      }
+      currentMode = returnMode === 'series' ? 'series' : 'movies';
+      elements.tabHomeBtn?.classList.remove('active');
+      elements.tabMoviesBtn.classList.toggle('active', currentMode === 'movies');
+      elements.tabSeriesBtn.classList.toggle('active', currentMode === 'series');
+      elements.tabLiveBtn?.classList.remove('active');
+      document.querySelectorAll('.mobile-bottom-nav button').forEach(button => button.classList.remove('active'));
+      if (currentMode === 'movies') elements.mobileMoviesBtn?.classList.add('active');
+      else elements.mobileSeriesBtn?.classList.add('active');
+      if (currentMode === 'movies') {
+        elements.categorySelect.style.removeProperty('display');
+        elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
+        elements.searchInput.placeholder = 'Pesquisar filme (ex: Harry Potter, Carros)...';
+        currentMediaList = fullMoviesCache || [];
+      } else {
+        elements.categorySelect.style.removeProperty('display');
+        elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
+        elements.searchInput.placeholder = 'Pesquisar série (ex: Breaking Bad, Stranger Things)...';
+        currentMediaList = fullSeriesCache || [];
+      }
+      applyFilterAndRender('');
+    }
+
     async function showWatchedContent() {
 
       watchedReturnMode = currentMode;
       isWatchedView = true;
+      isFavoritesView = false;
       elements.homeDashboard?.classList.remove('is-active');
       elements.contentPage?.classList.remove('is-active');
       if (elements.contentPage) elements.contentPage.hidden = true;
@@ -2896,6 +3119,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         elements.categorySelect.style.removeProperty('display');
       }
       elements.tabWatchedBtn?.classList.add('active');
+      elements.tabFavoritesBtn?.classList.remove('active');
       elements.tabMoviesBtn.classList.remove('active');
       elements.tabSeriesBtn.classList.remove('active');
       elements.tabLiveBtn?.classList.remove('active');
@@ -3835,6 +4059,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         window.EPlayTvEpg?.deactivate();
       }
       isWatchedView = false;
+      isFavoritesView = false;
       contentPageOpen = false;
       currentContentPageType = '';
       currentContentPageItem = null;
@@ -3844,6 +4069,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       currentMode = 'home';
       document.querySelectorAll('.nav-tabs .nav-tab').forEach(button => button.classList.remove('active'));
       elements.tabHomeBtn?.classList.add('active');
+      elements.tabFavoritesBtn?.classList.remove('active');
       document.querySelectorAll('.mobile-bottom-nav button').forEach(button => button.classList.remove('active'));
       elements.mobileHomeBtn?.classList.add('active');
 
@@ -3884,9 +4110,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
       clearInterval(homeFeaturedTimer);
       homeFeaturedTimer = null;
-      if (currentMode === mode && !forceReload && !isWatchedView) return;
+      if (currentMode === mode && !forceReload && !isWatchedView && !isFavoritesView) return;
       isWatchedView = false;
+      isFavoritesView = false;
       elements.tabWatchedBtn?.classList.remove('active');
+      elements.tabFavoritesBtn?.classList.remove('active');
       elements.tabHomeBtn?.classList.remove('active');
       elements.categorySelect.disabled = false;
       elements.categorySelect.style.removeProperty('display');
@@ -3923,13 +4151,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       startViewTransition();
       await yieldToBrowser();
 
-      if (currentMode !== mode || isWatchedView) return;
+      if (currentMode !== mode || isWatchedView || isFavoritesView) return;
 
       if (mode === 'movies') {
         elements.searchInput.placeholder = 'Pesquisar filme (ex: Harry Potter, Carros)...';
         if (movieCategories.length === 0) {
           await loadMovieCategories();
-          if (currentMode !== mode || isWatchedView) return;
+          if (currentMode !== mode || isWatchedView || isFavoritesView) return;
         } else {
           populateCategoriesSelect(movieCategories, 'Filmes');
         }
@@ -3941,13 +4169,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           applyFilterAndRender('');
         } else {
           await loadFullMovies();
-          if (currentMode !== mode || isWatchedView) return;
+          if (currentMode !== mode || isWatchedView || isFavoritesView) return;
         }
       } else if (mode === 'series') {
         elements.searchInput.placeholder = 'Pesquisar série (ex: Breaking Bad, Stranger Things)...';
         if (seriesCategories.length === 0) {
           await loadSeriesCategories();
-          if (currentMode !== mode || isWatchedView) return;
+          if (currentMode !== mode || isWatchedView || isFavoritesView) return;
         } else {
           populateCategoriesSelect(seriesCategories, 'Séries');
         }
@@ -3959,7 +4187,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           applyFilterAndRender('');
         } else {
           await loadFullSeries();
-          if (currentMode !== mode || isWatchedView) return;
+          if (currentMode !== mode || isWatchedView || isFavoritesView) return;
         }
       } else if (mode === 'live') {
         elements.searchInput.placeholder = 'Pesquisar canal ou partida (ex: SporTV, Premiere, São Paulo, Real Madrid)...';
@@ -3973,7 +4201,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           fetchLiveChannelsFromApi().catch(() => {});
         } else {
           await loadFullLive();
-          if (currentMode !== mode || isWatchedView) return;
+          if (currentMode !== mode || isWatchedView || isFavoritesView) return;
         }
       }
     }
@@ -4806,6 +5034,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         restoreCatalogView();
         return;
       }
+      if (isFavoritesView) {
+        restoreFavoritesView();
+        return;
+      }
       elements.categorySelect.value = 'ALL';
       elements.resetCategoryBtn.style.display = 'none';
       elements.searchInput.value = '';
@@ -4869,6 +5101,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const requestId = ++globalSearchRequestId;
       currentMode = 'search';
       isWatchedView = false;
+      isFavoritesView = false;
       elements.homeDashboard?.classList.remove('is-active');
       elements.contentPage?.classList.remove('is-active');
       if (elements.contentPage) elements.contentPage.hidden = true;
@@ -4912,7 +5145,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function onSearch(term) {
       const q = normalizeSearch(term);
-      if (isWatchedView) {
+      if (isWatchedView || isFavoritesView) {
         applyFilterAndRender(term);
         return;
       }
@@ -5158,7 +5391,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const total = currentFilteredList.length;
       const typeLabel = isWatchedView
         ? 'assistido(s)'
-        : (currentMode === 'search' ? 'resultado(s)' : ((currentMode === 'movies') ? 'filme(s)' : 'série(s)'));
+        : (isFavoritesView
+          ? 'favoritos'
+          : (currentMode === 'search' ? 'resultado(s)' : ((currentMode === 'movies') ? 'filme(s)' : 'série(s)')));
       if (total === 0) {
         elements.mediaCount.textContent = `0 ${typeLabel}`;
       } else {
@@ -7584,10 +7819,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         '<span class="eplay-content-genre">' + escapeHtml(genre) + '</span>'
       ).join('');
       elements.contentPagePlot.textContent = item?.plot || item?.description || 'Sinopse não disponível.';
+      updateFavoriteButton(type, item);
     }
 
     function restoreFromContentPage() {
-      const state = contentPageReturnState || { mode: 'home', watched: false };
+      const state = contentPageReturnState || { mode: 'home', watched: false, favorites: false };
       contentPageOpen = false;
       currentContentPageType = '';
       currentContentPageItem = null;
@@ -7598,20 +7834,26 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         elements.contentPage.classList.remove('is-active');
       }
 
+      if (state.mode === 'home' && state.favorites) {
+        showFavoritesContent();
+        return;
+      }
       if (state.mode === 'home') {
         showHome();
         return;
       }
 
       switchMode(state.mode, false).then(() => {
-        if (state.watched && (state.mode === 'movies' || state.mode === 'series')) {
+        if (state.favorites) {
+          showFavoritesContent();
+        } else if (state.watched && (state.mode === 'movies' || state.mode === 'series')) {
           showWatchedContent(state.mode);
         }
       }).catch(() => {});
     }
 
     async function openMoviePage(groupOrMovie) {
-      contentPageReturnState = { mode: currentMode, watched: isWatchedView };
+      contentPageReturnState = { mode: currentMode, watched: isWatchedView, favorites: isFavoritesView };
       showContentPageShell('movie', groupOrMovie);
 
       elements.contentSeriesPanel.hidden = true;
@@ -7656,7 +7898,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     async function openSeriesPage(seriesGroupOrItem) {
-      contentPageReturnState = { mode: currentMode, watched: isWatchedView };
+      contentPageReturnState = { mode: currentMode, watched: isWatchedView, favorites: isFavoritesView };
       currentContentPageType = 'series';
       currentSeriesGroup = seriesGroupOrItem;
       showContentPageShell('series', seriesGroupOrItem);
