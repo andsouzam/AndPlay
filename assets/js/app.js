@@ -7405,12 +7405,12 @@ function showHome(targetScroll = 0) {
       const memoryFresh = hasMemoryCache && Date.now() - Number(fullSeriesCacheSavedAt || 0) <= CATALOG_TTL_MS;
       if (!forceRefresh && memoryFresh) {
         currentMediaList = fullSeriesCache;
-        if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
+        if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) renderSeriesHub();
         return fullSeriesCache;
       }
       if (!forceRefresh && hasMemoryCache) {
         currentMediaList = fullSeriesCache;
-        if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
+        if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) renderSeriesHub();
         void loadFullSeries(true);
         return fullSeriesCache;
       }
@@ -7426,7 +7426,7 @@ function showHome(targetScroll = 0) {
             currentMediaList = fullSeriesCache;
             hasPersistentCache = true;
             if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) {
-              applyFilterAndRender('');
+              renderSeriesHub();
             }
           } else {
             const stale = await readCatalogCacheStale('series');
@@ -7471,7 +7471,7 @@ function showHome(targetScroll = 0) {
           if (elements.categorySelect) elements.categorySelect.value = 'ALL';
           if (elements.resetCategoryBtn) elements.resetCategoryBtn.style.display = 'none';
           if (elements.categoryLabel) elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
-          if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) applyFilterAndRender('');
+          if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) renderSeriesHub();
           return fullSeriesCache;
         } catch (err) {
           if ((hasPersistentCache || hasStaleCache) && fullSeriesCache?.length) {
@@ -7833,7 +7833,8 @@ function showHome(targetScroll = 0) {
       renderedCount += nextBatch.length;
       updateCountDisplay();
 
-      if (renderedCount < currentFilteredList.length) {
+      const isCuratedActive = (currentMode === 'movies' && isMoviesCuratedMode) || (currentMode === 'series' && isSeriesCuratedMode);
+      if (renderedCount < currentFilteredList.length && !isCuratedActive) {
         elements.loadMoreContainer.style.display = 'flex';
         elements.loadMoreBtn.textContent = `Carregar mais (+${Math.min(BATCH_SIZE, currentFilteredList.length - renderedCount)} de ${currentFilteredList.length - renderedCount})`;
       } else {
