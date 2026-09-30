@@ -83,6 +83,7 @@ import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import android.view.MotionEvent;
+import android.view.GestureDetector;
 
 import android.graphics.Color;
 import com.andplay.app.adapter.CategoryPillAdapter;
@@ -183,6 +184,10 @@ public class MainActivity extends Activity {
     private TextView btnCinemaHeroCatalog;
     private TextView btnCinemaHeroPrev;
     private TextView btnCinemaHeroNext;
+    private FrameLayout cinemaHeroPosterCard;
+    private ImageView cinemaHeroPoster;
+    private TextView cinemaHeroQuality;
+    private LinearLayout cinemaHeroDots;
     private final List<Movie> cinemaHeroItems = new ArrayList<>();
     private int currentCinemaHeroIdx = 0;
     private final Handler cinemaHeroHandler = new Handler(Looper.getMainLooper());
@@ -227,6 +232,11 @@ public class MainActivity extends Activity {
     // VOD Views
     private LinearLayout vodLayout;
     private TextView vodHeroTitle, vodHeroRating, vodHeroYear, vodHeroGenre, vodHeroPlot;
+    private TextView btnVodBack;
+    private FrameLayout vodHeroPosterCard;
+    private ImageView vodHeroPoster;
+    private TextView btnVodHeroWatch;
+    private Movie activeVodHeroMovie;
     private TextView btnVodSearch;
     private TextView btnVodWatched;
     private TextView btnVodPlaylist;
@@ -247,6 +257,9 @@ public class MainActivity extends Activity {
     // Series Detail Views
     private LinearLayout seriesDetailLayout;
     private TextView seriesDetailTitle, seriesDetailRating, seriesDetailYear, seriesDetailGenre, seriesDetailPlot;
+    private TextView btnSeriesDetailBack;
+    private FrameLayout seriesDetailPosterCard;
+    private ImageView seriesDetailPoster;
     private RecyclerView seriesSeasonsRecycler;
     private RecyclerView seriesEpisodesRecycler;
     private List<String> currentSeriesSeasonKeys = new ArrayList<>();
@@ -474,6 +487,10 @@ public class MainActivity extends Activity {
         btnCinemaHeroCatalog = findViewById(R.id.btnCinemaHeroCatalog);
         btnCinemaHeroPrev = findViewById(R.id.btnCinemaHeroPrev);
         btnCinemaHeroNext = findViewById(R.id.btnCinemaHeroNext);
+        cinemaHeroPosterCard = findViewById(R.id.cinemaHeroPosterCard);
+        cinemaHeroPoster = findViewById(R.id.cinemaHeroPoster);
+        cinemaHeroQuality = findViewById(R.id.cinemaHeroQuality);
+        cinemaHeroDots = findViewById(R.id.cinemaHeroDots);
 
         // Fullscreen
         fullscreenLayout = findViewById(R.id.fullscreenLayout);
@@ -508,6 +525,36 @@ public class MainActivity extends Activity {
         vodHeroYear = findViewById(R.id.vodHeroYear);
         vodHeroGenre = findViewById(R.id.vodHeroGenre);
         vodHeroPlot = findViewById(R.id.vodHeroPlot);
+        btnVodBack = findViewById(R.id.btnVodBack);
+        if (btnVodBack != null) {
+            btnVodBack.setOnClickListener(v -> setScreenMode(ScreenMode.CENTRAL));
+            btnVodBack.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
+        }
+        vodHeroPosterCard = findViewById(R.id.vodHeroPosterCard);
+        vodHeroPoster = findViewById(R.id.vodHeroPoster);
+        btnVodHeroWatch = findViewById(R.id.btnVodHeroWatch);
+        if (btnVodHeroWatch != null) {
+            btnVodHeroWatch.setOnClickListener(v -> {
+                if (activeVodHeroMovie != null) {
+                    if (activeVodHeroMovie.isSeries) {
+                        if (cachedSeries != null) {
+                            for (Series s : cachedSeries) {
+                                if (s.series_id != null && s.series_id.equals(activeVodHeroMovie.stream_id)) {
+                                    openSeriesDetail(s);
+                                    return;
+                                }
+                            }
+                        }
+                        openVodExplorer("series");
+                    } else {
+                        playMovie(activeVodHeroMovie);
+                    }
+                }
+            });
+            btnVodHeroWatch.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
+        }
         vodCatsRecycler = findViewById(R.id.vodCatsRecycler);
         vodGridRecycler = findViewById(R.id.vodGridRecycler);
         btnVodSearch = findViewById(R.id.btnVodSearch);
@@ -546,6 +593,14 @@ public class MainActivity extends Activity {
         seriesDetailYear = findViewById(R.id.seriesDetailYear);
         seriesDetailGenre = findViewById(R.id.seriesDetailGenre);
         seriesDetailPlot = findViewById(R.id.seriesDetailPlot);
+        btnSeriesDetailBack = findViewById(R.id.btnSeriesDetailBack);
+        if (btnSeriesDetailBack != null) {
+            btnSeriesDetailBack.setOnClickListener(v -> setScreenMode(ScreenMode.VOD));
+            btnSeriesDetailBack.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
+        }
+        seriesDetailPosterCard = findViewById(R.id.seriesDetailPosterCard);
+        seriesDetailPoster = findViewById(R.id.seriesDetailPoster);
         seriesSeasonsRecycler = findViewById(R.id.seriesSeasonsRecycler);
         seriesEpisodesRecycler = findViewById(R.id.seriesEpisodesRecycler);
 
@@ -3913,6 +3968,9 @@ public class MainActivity extends Activity {
             cinemaHeroYear.setText(item.year != null && !item.year.isEmpty() ? item.year : "");
             cinemaHeroYear.setVisibility(item.year != null && !item.year.isEmpty() ? View.VISIBLE : View.GONE);
         }
+        if (cinemaHeroQuality != null) {
+            cinemaHeroQuality.setText("4K ULTRA HD");
+        }
         if (cinemaHeroGenre != null) {
             cinemaHeroGenre.setText(item.genre != null && !item.genre.isEmpty() ? item.genre : "Catálogo EPlay");
         }
@@ -3927,6 +3985,15 @@ public class MainActivity extends Activity {
             btnCinemaHeroFav.setTextColor(isFav ? Color.parseColor("#FFC107") : Color.WHITE);
         }
 
+        if (cinemaHeroPoster != null && item.stream_icon != null && !item.stream_icon.isEmpty()) {
+            Glide.with(this)
+                    .load(item.stream_icon)
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .centerCrop()
+                    .placeholder(R.drawable.card_focus_bg)
+                    .into(cinemaHeroPoster);
+        }
+
         if (cinemaHeroBackdrop != null && item.stream_icon != null && !item.stream_icon.isEmpty()) {
             Glide.with(this)
                     .load(item.stream_icon)
@@ -3934,9 +4001,93 @@ public class MainActivity extends Activity {
                     .centerCrop()
                     .into(cinemaHeroBackdrop);
         }
+
+        updateCinemaHeroDots(index);
+    }
+
+    private void updateCinemaHeroDots(int activeIdx) {
+        if (cinemaHeroDots == null) return;
+        cinemaHeroDots.removeAllViews();
+        int count = Math.min(cinemaHeroItems.size(), 7);
+        if (count <= 1) return;
+        int dotHeight = (int) (8 * getResources().getDisplayMetrics().density);
+        int dotActiveWidth = (int) (22 * getResources().getDisplayMetrics().density);
+        int dotInactiveWidth = (int) (8 * getResources().getDisplayMetrics().density);
+        int dotMargin = (int) (4 * getResources().getDisplayMetrics().density);
+
+        for (int i = 0; i < count; i++) {
+            View dot = new View(this);
+            boolean isActive = (i == activeIdx);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    isActive ? dotActiveWidth : dotInactiveWidth,
+                    dotHeight
+            );
+            params.setMargins(dotMargin, 0, dotMargin, 0);
+            dot.setLayoutParams(params);
+            dot.setBackgroundResource(isActive ? R.drawable.cinema_hero_dot_active : R.drawable.cinema_hero_dot_inactive);
+            final int targetIdx = i;
+            dot.setClickable(true);
+            dot.setFocusable(false);
+            dot.setOnClickListener(v -> {
+                currentCinemaHeroIdx = targetIdx;
+                displayCinemaHero(currentCinemaHeroIdx);
+            });
+            cinemaHeroDots.addView(dot);
+        }
     }
 
     private void setupCinemaHeroButtons() {
+        GestureDetector heroGestureDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
+            private static final int SWIPE_THRESHOLD = 60;
+            private static final int SWIPE_VELOCITY_THRESHOLD = 80;
+
+            @Override
+            public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
+                if (e1 == null || e2 == null) return false;
+                float diffX = e2.getX() - e1.getX();
+                float diffY = e2.getY() - e1.getY();
+                if (Math.abs(diffX) > Math.abs(diffY) &&
+                        Math.abs(diffX) > SWIPE_THRESHOLD &&
+                        Math.abs(velocityX) > SWIPE_VELOCITY_THRESHOLD) {
+                    if (diffX > 0) {
+                        // Swipe Right -> Anterior
+                        if (!cinemaHeroItems.isEmpty()) {
+                            currentCinemaHeroIdx = (currentCinemaHeroIdx - 1 + cinemaHeroItems.size()) % cinemaHeroItems.size();
+                            displayCinemaHero(currentCinemaHeroIdx);
+                        }
+                    } else {
+                        // Swipe Left -> Próximo
+                        if (!cinemaHeroItems.isEmpty()) {
+                            currentCinemaHeroIdx = (currentCinemaHeroIdx + 1) % cinemaHeroItems.size();
+                            displayCinemaHero(currentCinemaHeroIdx);
+                        }
+                    }
+                    return true;
+                }
+                return false;
+            }
+        });
+
+        if (cinemaHeroLayout != null) {
+            cinemaHeroLayout.setOnTouchListener((v, event) -> {
+                heroGestureDetector.onTouchEvent(event);
+                return false;
+            });
+        }
+
+        if (cinemaHeroPosterCard != null) {
+            cinemaHeroPosterCard.setOnClickListener(v -> playHeroItem());
+            cinemaHeroPosterCard.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    playHeroItem();
+                    return true;
+                }
+                return false;
+            });
+            cinemaHeroPosterCard.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.05f : 1.0f).scaleY(hasFocus ? 1.05f : 1.0f).setDuration(120).start());
+        }
+
         if (btnCinemaHeroPlay != null) {
             btnCinemaHeroPlay.setOnClickListener(v -> playHeroItem());
             btnCinemaHeroPlay.setOnKeyListener((v, keyCode, event) -> {
@@ -4281,7 +4432,7 @@ public class MainActivity extends Activity {
                     pseudo.isFavorite = true;
                     converted.add(pseudo);
                 }
-                vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+                vodGridRecycler.setLayoutManager(new GridLayoutManager(this, getVodGridSpanCount()));
                 vodGridRecycler.setAdapter(new MoviePosterAdapter(this, converted, true, new MoviePosterAdapter.OnMovieActionListener() {
                     @Override
                     public void onMovieClick(Movie m) {
@@ -4316,7 +4467,7 @@ public class MainActivity extends Activity {
                     Toast.makeText(this, "Nenhum filme favoritado ainda.", Toast.LENGTH_SHORT).show();
                     return;
                 }
-                vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+                vodGridRecycler.setLayoutManager(new GridLayoutManager(this, getVodGridSpanCount()));
                 vodGridRecycler.setAdapter(new MoviePosterAdapter(this, favMoviesList, true, new MoviePosterAdapter.OnMovieActionListener() {
                     @Override
                     public void onMovieClick(Movie movie) {
@@ -5696,7 +5847,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, getVodGridSpanCount()));
         vodGridRecycler.setAdapter(new MoviePosterAdapter(this, filtered, true, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
             public void onMovieClick(Movie movie) {
@@ -5755,7 +5906,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, getVodGridSpanCount()));
         vodGridRecycler.setAdapter(new MoviePosterAdapter(this, converted, true, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
             public void onMovieClick(Movie m) {
@@ -5929,7 +6080,7 @@ public class MainActivity extends Activity {
                         vodHeroTitle.setText("🔍 Séries: \"" + query + "\" (" + converted.size() + " encontradas)");
                         vodHeroPlot.setText("Resultados da pesquisa por \"" + query + "\". Selecione para assistir.");
 
-                        vodGridRecycler.setLayoutManager(new GridLayoutManager(MainActivity.this, 7));
+                        vodGridRecycler.setLayoutManager(new GridLayoutManager(MainActivity.this, getVodGridSpanCount()));
                         vodGridRecycler.setAdapter(new MoviePosterAdapter(MainActivity.this, converted, true, new MoviePosterAdapter.OnMovieActionListener() {
                             @Override
                             public void onMovieClick(Movie m) {
@@ -5978,7 +6129,7 @@ public class MainActivity extends Activity {
                         vodHeroTitle.setText("🔍 Filmes: \"" + query + "\" (" + filtered.size() + " encontrados)");
                         vodHeroPlot.setText("Resultados da pesquisa por \"" + query + "\". Selecione para assistir.");
 
-                        vodGridRecycler.setLayoutManager(new GridLayoutManager(MainActivity.this, 7));
+                        vodGridRecycler.setLayoutManager(new GridLayoutManager(MainActivity.this, getVodGridSpanCount()));
                         vodGridRecycler.setAdapter(new MoviePosterAdapter(MainActivity.this, filtered, true, new MoviePosterAdapter.OnMovieActionListener() {
                             @Override
                             public void onMovieClick(Movie movie) {
@@ -6003,13 +6154,35 @@ public class MainActivity extends Activity {
         });
     }
 
+    private int getVodGridSpanCount() {
+        int screenWidthDp = getResources().getConfiguration().screenWidthDp;
+        if (screenWidthDp <= 0) {
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            screenWidthDp = (int) (dm.widthPixels / dm.density);
+        }
+        return Math.max(3, Math.min(8, screenWidthDp / 130));
+    }
+
     private void updateVodHero(Movie m) {
         if (m == null) return;
-        vodHeroTitle.setText(m.getDisplayTitle());
-        vodHeroRating.setText(m.rating != null && !m.rating.isEmpty() ? "★ " + m.rating : "★ 7.5");
-        vodHeroYear.setText(m.year != null ? m.year : "");
-        vodHeroGenre.setText(m.genre != null ? m.genre : "");
-        vodHeroPlot.setText(m.plot != null ? m.plot : "Sinopse disponível ao reproduzir o título.");
+        activeVodHeroMovie = m;
+        if (vodHeroTitle != null) vodHeroTitle.setText(m.getDisplayTitle());
+        if (vodHeroRating != null) vodHeroRating.setText(m.rating != null && !m.rating.isEmpty() ? "★ " + m.rating : "★ 7.5");
+        if (vodHeroYear != null) vodHeroYear.setText(m.year != null ? m.year : "");
+        if (vodHeroGenre != null) vodHeroGenre.setText(m.genre != null ? m.genre : "");
+        if (vodHeroPlot != null) vodHeroPlot.setText(m.plot != null ? m.plot : "Sinopse disponível ao reproduzir o título.");
+
+        if (vodHeroPoster != null && m.stream_icon != null && !m.stream_icon.isEmpty()) {
+            Glide.with(this)
+                    .load(m.stream_icon)
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .centerCrop()
+                    .placeholder(R.drawable.card_focus_bg)
+                    .into(vodHeroPoster);
+        }
+        if (btnVodHeroWatch != null) {
+            btnVodHeroWatch.setVisibility(View.VISIBLE);
+        }
     }
 
     private void openSeriesDetail(Series series) {
@@ -6027,6 +6200,15 @@ public class MainActivity extends Activity {
         }
         if (seriesDetailPlot != null) {
             seriesDetailPlot.setText(series.plot != null ? series.plot : "Temporadas e episódios disponíveis.");
+        }
+
+        if (seriesDetailPoster != null && series.cover != null && !series.cover.isEmpty()) {
+            Glide.with(this)
+                    .load(series.cover)
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .centerCrop()
+                    .placeholder(R.drawable.card_focus_bg)
+                    .into(seriesDetailPoster);
         }
 
         showLoading("Carregando episódios...");
@@ -6232,7 +6414,7 @@ public class MainActivity extends Activity {
                     pseudo.genre = s.genre;
                     converted.add(pseudo);
                 }
-                vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+                vodGridRecycler.setLayoutManager(new GridLayoutManager(this, getVodGridSpanCount()));
                 vodGridRecycler.setAdapter(new MoviePosterAdapter(this, converted, true, new MoviePosterAdapter.OnMovieActionListener() {
                     @Override
                     public void onMovieClick(Movie m) {
@@ -6276,7 +6458,7 @@ public class MainActivity extends Activity {
                     Toast.makeText(this, "Nenhum filme encontrado no histórico.", Toast.LENGTH_SHORT).show();
                     return;
                 }
-                vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+                vodGridRecycler.setLayoutManager(new GridLayoutManager(this, getVodGridSpanCount()));
                 vodGridRecycler.setAdapter(new MoviePosterAdapter(this, watchedMovies, true, new MoviePosterAdapter.OnMovieActionListener() {
                     @Override
                     public void onMovieClick(Movie movie) {
@@ -6922,7 +7104,7 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Playlist vazia ou filmes indisponíveis.", Toast.LENGTH_SHORT).show();
             return;
         }
-        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, getVodGridSpanCount()));
         vodGridRecycler.setAdapter(new MoviePosterAdapter(this, pMovies, true, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
             public void onMovieClick(Movie movie) {
