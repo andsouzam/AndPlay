@@ -733,6 +733,44 @@
     }
   }
 
+  async function removeWatched(type, id) {
+    const normalizedType = type === 'series' ? 'series' : 'movie';
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId) return false;
+
+    const key = normalizedType === 'series' ? 'series' : 'movies';
+    remoteWatchHistory[key] = (remoteWatchHistory[key] || []).filter(item => String(item.id) !== normalizedId);
+    removePendingWatchHistory(normalizedType, normalizedId);
+
+    if (!currentSession) return true;
+
+    try {
+      const client = await getClient();
+      const { error } = await client.from('watch_history')
+        .delete()
+        .eq('content_type', normalizedType)
+        .eq('content_id', normalizedId);
+      if (error) throw error;
+
+      // O progresso não precisa permanecer quando o item é retirado do histórico:
+      // removê-lo evita que ele volte a aparecer como assistido sem histórico.
+      if (normalizedType === 'series') {
+        const { error: progressError } = await client.from('watch_progress')
+          .delete()
+          .eq('content_type', 'series')
+          .eq('series_id', normalizedId);
+        if (progressError) console.warn('[EPlay Account] Series progress delete sync:', progressError);
+      } else {
+        await deleteRemoteProgress(normalizedType, normalizedId);
+      }
+      return true;
+    } catch (error) {
+      console.warn('[EPlay Account] Watch history remove sync:', error);
+      queueSync(1500);
+      return false;
+    }
+  }
+
   async function syncNow() {
     if (syncing || !currentSession) return;
     syncing = true;
@@ -1477,6 +1515,7 @@
     isRemoteWatchHistoryLoaded: () => remoteWatchHistoryLoaded,
     refreshWatchHistory,
     recordWatched,
+    removeWatched,
     ready: () => accountReadyPromise
   };
 

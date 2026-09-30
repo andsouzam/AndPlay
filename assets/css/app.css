@@ -4514,6 +4514,69 @@ header {
   white-space: nowrap;
 }
 
+.home-watched-menu-wrap {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 8;
+}
+
+.home-watched-menu {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 50%;
+  background: rgba(10,10,10,.82);
+  color: #fff;
+  font-size: 20px;
+  line-height: 22px;
+  padding: 0 0 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+}
+
+.home-watched-menu:hover {
+  background: rgba(40,40,40,.96);
+  border-color: rgba(255,255,255,.35);
+}
+
+.home-watched-menu-panel {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  display: none;
+  min-width: 170px;
+  padding: 5px;
+  border: 1px solid #3a3a3a;
+  border-radius: 8px;
+  background: #181818;
+  box-shadow: 0 10px 24px rgba(0,0,0,.65);
+}
+
+.home-watched-card.is-menu-open .home-watched-menu-panel {
+  display: block;
+}
+
+.home-watched-remove {
+  width: 100%;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  padding: 9px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.home-watched-remove:hover {
+  background: #2a2a2a;
+}
+
 .home-watched-type {
   position: absolute;
   top: 8px;

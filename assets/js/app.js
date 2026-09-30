@@ -1781,6 +1781,61 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return ids.slice(0, WATCHED_LIMIT);
     }
 
+    function removeLocalWatched(type, id) {
+      const normalizedType = type === 'series' ? 'series' : 'movies';
+      const normalizedId = String(id ?? '').trim();
+      if (!normalizedId) return;
+
+      try {
+        const historyKey = getWatchedStorageKey(normalizedType);
+        const history = JSON.parse(localStorage.getItem(historyKey) || '[]');
+        localStorage.setItem(historyKey, JSON.stringify(
+          Array.isArray(history) ? history.filter(value => String(value) !== normalizedId) : []
+        ));
+      } catch (e) {}
+
+      try {
+        const activity = JSON.parse(localStorage.getItem(WATCHED_ACTIVITY_KEY) || '[]');
+        localStorage.setItem(WATCHED_ACTIVITY_KEY, JSON.stringify(
+          Array.isArray(activity)
+            ? activity.filter(item => !(item && item.type === normalizedType && String(item.id) === normalizedId))
+            : []
+        ));
+      } catch (e) {}
+
+      // O progresso é apagado junto para que, sem login, ele também não faça
+      // o título reaparecer no histórico automaticamente.
+      try {
+        const prefix = VOD_PROGRESS_PREFIX + (normalizedType === 'series' ? 'series_' : 'movie_');
+        localStorage.removeItem(prefix + normalizedId);
+        if (normalizedType === 'series') {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (!key || !key.startsWith(VOD_PROGRESS_PREFIX + 'series_')) continue;
+            const progress = getVodProgress('series', key.slice((VOD_PROGRESS_PREFIX + 'series_').length));
+            if (String(progress?.seriesId || '') === normalizedId) localStorage.removeItem(key);
+          }
+        }
+      } catch (e) {}
+
+      window.dispatchEvent(new CustomEvent('andplay:local-change', {
+        detail: { kind: 'watched-removed', mediaType: normalizedType, id: normalizedId }
+      }));
+    }
+
+    async function removeWatched(type, id) {
+      const normalizedType = type === 'series' ? 'series' : 'movies';
+      const normalizedId = String(id ?? '').trim();
+      if (!normalizedId) return;
+
+      removeLocalWatched(normalizedType, normalizedId);
+      if (window.AndPlayAccount?.removeWatched) {
+        await window.AndPlayAccount.removeWatched(normalizedType, normalizedId);
+      }
+      if (currentMode === 'home') renderHomeDashboard();
+      if (isWatchedView) showWatchedContent();
+    }
+
     function saveWatchedId(type, id) {
       if (id === null || id === undefined || String(id).trim() === '') return;
       const normalizedId = String(id);
@@ -3915,9 +3970,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       registerHomeDisplayItems(items);
 
       items.forEach(item => {
-        const card = document.createElement('button');
-        card.type = 'button';
+        const card = document.createElement('div');
         card.className = 'home-watched-card';
+        card.tabIndex = 0;
+        card.setAttribute('role', 'button');
         const progress = item.progress && item.progress.duration > 0
           ? Math.max(0, Math.min(100, item.progress.position / item.progress.duration * 100))
           : 0;
@@ -3932,10 +3988,41 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
               : '<span>🎬</span>') +
             (progress > 0 && progress < 95 ? '<div class="home-watched-progress"><span style="width:' + progress + '%"></span></div>' : '') +
             '<span class="home-watched-type">' + (item.type === 'movie' ? 'FILME' : 'SÉRIE') + '</span>' +
+            '<span class="home-watched-menu-wrap">' +
+              '<button type="button" class="home-watched-menu" aria-label="Opções de ' + escapeHtml(item.title) + '" title="Opções">…</button>' +
+              '<span class="home-watched-menu-panel">' +
+                '<button type="button" class="home-watched-remove">Retirar de Assistidos</button>' +
+              '</span>' +
+            '</span>' +
           '</div>' +
           '<strong>' + escapeHtml(item.title) + '</strong>' +
           '<small>' + escapeHtml(sub) + '</small>';
 
+        const menuButton = card.querySelector('.home-watched-menu');
+        const menuPanel = card.querySelector('.home-watched-menu-panel');
+        const removeButton = card.querySelector('.home-watched-remove');
+        menuButton?.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          document.querySelectorAll('.home-watched-card.is-menu-open').forEach(other => {
+            if (other !== card) other.classList.remove('is-menu-open');
+          });
+          card.classList.toggle('is-menu-open');
+        });
+        menuPanel?.addEventListener('click', event => event.stopPropagation());
+        removeButton?.addEventListener('click', async event => {
+          event.preventDefault();
+          event.stopPropagation();
+          card.classList.remove('is-menu-open');
+          await removeWatched(item.type, item.id);
+        });
+
+        card.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            card.click();
+          }
+        });
         card.addEventListener('click', () => {
           if (item.type === 'movie') {
             const version = (item.item.versions || []).find(v => String(v.streamId) === String(item.id)) || item.item.versions?.[0];
