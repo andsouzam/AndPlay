@@ -5,7 +5,11 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import com.andplay.app.account.AccountManager;
+import com.andplay.app.model.FavoriteItem;
+import com.andplay.app.model.WatchProgressItem;
 import android.graphics.Typeface;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -158,6 +162,54 @@ public class MainActivity extends Activity {
     private RecyclerView moviesRail;
     private RecyclerView seriesRail;
     private static final int REQ_SPORTS_HUB = 1001;
+    private static final int REQ_USER_ACTIVITY = 1002;
+
+    // View Mode & Header Elements
+    private LinearLayout btnHeaderSwitchView;
+    private TextView btnHeaderSwitchViewText;
+    private LinearLayout btnHeaderUser;
+    private TextView btnHeaderUserText;
+
+    // Cinema Hero Elements
+    private FrameLayout cinemaHeroLayout;
+    private ImageView cinemaHeroBackdrop;
+    private TextView cinemaHeroTypeBadge;
+    private TextView cinemaHeroRating;
+    private TextView cinemaHeroYear;
+    private TextView cinemaHeroGenre;
+    private TextView cinemaHeroTitle;
+    private TextView cinemaHeroPlot;
+    private TextView btnCinemaHeroPlay;
+    private TextView btnCinemaHeroFav;
+    private TextView btnCinemaHeroCatalog;
+    private TextView btnCinemaHeroPrev;
+    private TextView btnCinemaHeroNext;
+    private final List<Movie> cinemaHeroItems = new ArrayList<>();
+    private int currentCinemaHeroIdx = 0;
+    private final Handler cinemaHeroHandler = new Handler(Looper.getMainLooper());
+    private final Runnable cinemaHeroAutoRotateRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (AccountManager.VIEW_MODE_CINEMA.equals(AccountManager.getInstance(MainActivity.this).getViewMode())
+                    && currentMode == ScreenMode.CENTRAL
+                    && cinemaHeroLayout != null && cinemaHeroLayout.getVisibility() == View.VISIBLE
+                    && !cinemaHeroItems.isEmpty()) {
+                currentCinemaHeroIdx = (currentCinemaHeroIdx + 1) % cinemaHeroItems.size();
+                displayCinemaHero(currentCinemaHeroIdx);
+            }
+            cinemaHeroHandler.postDelayed(this, 12000);
+        }
+    };
+
+    // Mode Sections & Rails
+    private View tvTopSection;
+    private LinearLayout continueWatchingLayout;
+    private RecyclerView continueWatchingRail;
+    private LinearLayout favoritesLayout;
+    private RecyclerView favoritesRail;
+    private LinearLayout channelsLayout;
+    private LinearLayout sportsLayout;
+    private TextView btnVodFavorites;
 
     // Fullscreen Views
     private FrameLayout fullscreenLayout;
@@ -346,6 +398,18 @@ public class MainActivity extends Activity {
 
         loadInitialData();
         setupCentralButtons();
+
+        // Inicializa AccountManager e sincroniza dados em nuvem
+        AccountManager.getInstance(this).syncAll((success, favs, progs) -> {
+            mainHandler.post(() -> {
+                setupContinueWatchingRail();
+                setupFavoritesRail();
+            });
+        });
+
+        // Aplica o modo de visualização inicial salvo (TV ou Cinema)
+        String initialViewMode = AccountManager.getInstance(this).getViewMode();
+        applyViewMode(initialViewMode, false);
     }
 
     private void bindViews() {
@@ -364,6 +428,11 @@ public class MainActivity extends Activity {
         headerClock = findViewById(R.id.headerClock);
         headerDate = findViewById(R.id.headerDate);
         btnHeaderOptions = findViewById(R.id.btnHeaderOptions);
+        btnHeaderSwitchView = findViewById(R.id.btnHeaderSwitchView);
+        btnHeaderSwitchViewText = findViewById(R.id.btnHeaderSwitchViewText);
+        btnHeaderUser = findViewById(R.id.btnHeaderUser);
+        btnHeaderUserText = findViewById(R.id.btnHeaderUserText);
+
         pipContainer = findViewById(R.id.pipContainer);
         pipOverlayBar = findViewById(R.id.pipOverlayBar);
         pipChannelName = findViewById(R.id.pipChannelName);
@@ -374,10 +443,33 @@ public class MainActivity extends Activity {
         btnNavSports = findViewById(R.id.btnNavSports);
         btnNavEpg = findViewById(R.id.btnNavEpg);
 
+        tvTopSection = findViewById(R.id.tvTopSection);
+        continueWatchingLayout = findViewById(R.id.continueWatchingLayout);
+        continueWatchingRail = findViewById(R.id.continueWatchingRail);
+        favoritesLayout = findViewById(R.id.favoritesLayout);
+        favoritesRail = findViewById(R.id.favoritesRail);
+        channelsLayout = findViewById(R.id.channelsLayout);
+        sportsLayout = findViewById(R.id.sportsLayout);
+
         channelsRail = findViewById(R.id.channelsRail);
         sportsRail = findViewById(R.id.sportsRail);
         moviesRail = findViewById(R.id.moviesRail);
         seriesRail = findViewById(R.id.seriesRail);
+
+        // Cinema Hero
+        cinemaHeroLayout = findViewById(R.id.cinemaHeroLayout);
+        cinemaHeroBackdrop = findViewById(R.id.cinemaHeroBackdrop);
+        cinemaHeroTypeBadge = findViewById(R.id.cinemaHeroTypeBadge);
+        cinemaHeroRating = findViewById(R.id.cinemaHeroRating);
+        cinemaHeroYear = findViewById(R.id.cinemaHeroYear);
+        cinemaHeroGenre = findViewById(R.id.cinemaHeroGenre);
+        cinemaHeroTitle = findViewById(R.id.cinemaHeroTitle);
+        cinemaHeroPlot = findViewById(R.id.cinemaHeroPlot);
+        btnCinemaHeroPlay = findViewById(R.id.btnCinemaHeroPlay);
+        btnCinemaHeroFav = findViewById(R.id.btnCinemaHeroFav);
+        btnCinemaHeroCatalog = findViewById(R.id.btnCinemaHeroCatalog);
+        btnCinemaHeroPrev = findViewById(R.id.btnCinemaHeroPrev);
+        btnCinemaHeroNext = findViewById(R.id.btnCinemaHeroNext);
 
         // Fullscreen
         fullscreenLayout = findViewById(R.id.fullscreenLayout);
@@ -426,6 +518,13 @@ public class MainActivity extends Activity {
             btnVodWatched.setOnClickListener(v -> showVodWatchedContent());
             btnVodWatched.setOnFocusChangeListener((v, hasFocus) -> {
                 btnVodWatched.setTextColor(hasFocus ? android.graphics.Color.BLACK : android.graphics.Color.WHITE);
+            });
+        }
+        btnVodFavorites = findViewById(R.id.btnVodFavorites);
+        if (btnVodFavorites != null) {
+            btnVodFavorites.setOnClickListener(v -> showVodFavoritesContent());
+            btnVodFavorites.setOnFocusChangeListener((v, hasFocus) -> {
+                btnVodFavorites.setTextColor(hasFocus ? android.graphics.Color.BLACK : android.graphics.Color.WHITE);
             });
         }
         btnVodPlaylist = findViewById(R.id.btnVodPlaylist);
@@ -2092,15 +2191,49 @@ public class MainActivity extends Activity {
             // Se assistiu mais de 95% do vídeo ou restam menos de 30 segundos, considera concluído e limpa
             if (durationMs > 0 && (positionMs >= durationMs - 30000 || positionMs >= (long) (durationMs * 0.95))) {
                 prefs.edit().remove(key).remove(key + "_dur").remove(key + "_time").apply();
-                return;
-            }
-            // Salva apenas se assistiu pelo menos 5 segundos
-            if (positionMs > 5000) {
+            } else if (positionMs > 5000) {
+                // Salva apenas se assistiu pelo menos 5 segundos
                 prefs.edit()
                         .putLong(key, positionMs)
                         .putLong(key + "_dur", durationMs)
                         .putLong(key + "_time", System.currentTimeMillis())
                         .apply();
+            }
+
+            // Sincroniza com Supabase através do AccountManager
+            if (activeVodMovie != null) {
+                AccountManager.getInstance(this).recordVodProgress(
+                        "movie",
+                        activeVodMovie.stream_id != null ? activeVodMovie.stream_id : key,
+                        activeVodMovie.name != null ? activeVodMovie.name : activeVodMovie.title,
+                        activeVodMovie.stream_icon,
+                        positionMs,
+                        durationMs,
+                        null,
+                        0,
+                        0
+                );
+            } else if (activeVodSeries != null) {
+                String epId = activeVodEpisode != null && activeVodEpisode.id != null ? activeVodEpisode.id : key;
+                String epTitle = (activeVodSeries.name != null ? activeVodSeries.name : "")
+                        + (activeVodEpisode != null ? (" T" + activeVodSeasonNum + ":E" + activeVodEpisode.episode_num) : "");
+                int sNum = 1;
+                try {
+                    if (activeVodSeasonNum != null) {
+                        sNum = Integer.parseInt(activeVodSeasonNum.replaceAll("[^0-9]", ""));
+                    }
+                } catch (Exception ignored) {}
+                AccountManager.getInstance(this).recordVodProgress(
+                        "series",
+                        epId,
+                        epTitle,
+                        activeVodSeries.cover,
+                        positionMs,
+                        durationMs,
+                        activeVodSeries.series_id,
+                        sNum,
+                        activeVodEpisode != null ? activeVodEpisode.episode_num : 0
+                );
             }
         } catch (Exception e) {
             Log.w("EPlayVOD", "Erro ao salvar progresso VOD: " + e.getMessage());
@@ -2112,6 +2245,16 @@ public class MainActivity extends Activity {
         try {
             SharedPreferences prefs = getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE);
             return prefs.getLong(key, 0);
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private long getVodDuration(String key) {
+        if (key == null || key.isEmpty()) return 0;
+        try {
+            SharedPreferences prefs = getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE);
+            return prefs.getLong(key + "_dur", 0);
         } catch (Exception e) {
             return 0;
         }
@@ -2445,13 +2588,19 @@ public class MainActivity extends Activity {
                             initialIdx = lastIdx;
                         }
                     } catch (Exception ignored) {}
-                    tuneChannel(initialIdx, false);
+
+                    // Só inicia reprodução de TV se o modo for TV Ao Vivo
+                    if (!AccountManager.VIEW_MODE_CINEMA.equals(AccountManager.getInstance(MainActivity.this).getViewMode())) {
+                        tuneChannel(initialIdx, false);
+                    }
                 }
 
-                if (pipContainer != null) {
-                    pipContainer.setFocusable(true);
-                    pipContainer.setFocusableInTouchMode(true);
-                    pipContainer.postDelayed(() -> pipContainer.requestFocus(), 250);
+                if (!AccountManager.VIEW_MODE_CINEMA.equals(AccountManager.getInstance(MainActivity.this).getViewMode())) {
+                    if (pipContainer != null) {
+                        pipContainer.setFocusable(true);
+                        pipContainer.setFocusableInTouchMode(true);
+                        pipContainer.postDelayed(() -> pipContainer.requestFocus(), 250);
+                    }
                 }
             });
 
@@ -2459,14 +2608,24 @@ public class MainActivity extends Activity {
             try {
                 movieCategories = ApiClient.getMovieCategories();
                 cachedMovies = ApiClient.getMovies();
-                mainHandler.post(this::setupMoviesRail);
+                mainHandler.post(() -> {
+                    setupMoviesRail();
+                    setupContinueWatchingRail();
+                    setupFavoritesRail();
+                    setupCinemaHero();
+                });
             } catch (Throwable t) {
                 Log.e("EPlay", "Erro ao pré-carregar filmes", t);
             }
             try {
                 seriesCategories = ApiClient.getSeriesCategories();
                 cachedSeries = ApiClient.getSeries();
-                mainHandler.post(this::setupSeriesRail);
+                mainHandler.post(() -> {
+                    setupSeriesRail();
+                    setupContinueWatchingRail();
+                    setupFavoritesRail();
+                    setupCinemaHero();
+                });
             } catch (Throwable t) {
                 Log.e("EPlay", "Erro ao pré-carregar séries", t);
             }
@@ -2542,6 +2701,42 @@ public class MainActivity extends Activity {
                 }
             });
         }
+
+        if (btnHeaderSwitchView != null) {
+            btnHeaderSwitchView.setOnClickListener(v -> toggleViewMode());
+            btnHeaderSwitchView.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    toggleViewMode();
+                    return true;
+                }
+                return false;
+            });
+            btnHeaderSwitchView.setOnFocusChangeListener((v, hasFocus) -> {
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(120).start();
+                if (hasFocus && centralScroll != null) {
+                    centralScroll.smoothScrollTo(0, 0);
+                }
+            });
+        }
+
+        if (btnHeaderUser != null) {
+            btnHeaderUser.setOnClickListener(v -> openUserActivity());
+            btnHeaderUser.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    openUserActivity();
+                    return true;
+                }
+                return false;
+            });
+            btnHeaderUser.setOnFocusChangeListener((v, hasFocus) -> {
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(120).start();
+                if (hasFocus && centralScroll != null) {
+                    centralScroll.smoothScrollTo(0, 0);
+                }
+            });
+        }
+
+        setupCinemaHeroButtons();
 
         if (btnDrawerOptions != null) {
             btnDrawerOptions.setOnClickListener(v -> showProviderOptionsDialog());
@@ -2786,6 +2981,16 @@ public class MainActivity extends Activity {
                         return;
                     }
                 }
+            }
+        } else if (requestCode == REQ_USER_ACTIVITY) {
+            String curMode = AccountManager.getInstance(this).getViewMode();
+            applyViewMode(curMode, false);
+            setupMoviesRail();
+            setupSeriesRail();
+            setupContinueWatchingRail();
+            setupFavoritesRail();
+            if (AccountManager.VIEW_MODE_CINEMA.equals(curMode)) {
+                setupCinemaHero();
             }
         }
     }
@@ -3435,6 +3640,16 @@ public class MainActivity extends Activity {
             if (orderedMovies.size() >= 30) break;
         }
 
+        for (Movie m : orderedMovies) {
+            String key = "movie_" + m.stream_id;
+            long dur = getVodDuration(key);
+            long pos = getVodProgress(key);
+            if (dur > 0 && pos > 0) {
+                m.progressPercent = (int) Math.min(100, Math.max(0, (pos * 100) / dur));
+            }
+            m.isFavorite = AccountManager.getInstance(this).isFavorite("movie", m.stream_id);
+        }
+
         moviesRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         moviesRail.setAdapter(new MoviePosterAdapter(this, orderedMovies, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
@@ -3529,6 +3744,8 @@ public class MainActivity extends Activity {
             pseudo.plot = s.plot;
             pseudo.rating = s.rating;
             pseudo.genre = s.genre;
+            pseudo.isSeries = true;
+            pseudo.isFavorite = AccountManager.getInstance(this).isFavorite("series", s.series_id);
             converted.add(pseudo);
         }
 
@@ -3547,6 +3764,562 @@ public class MainActivity extends Activity {
             @Override
             public void onMovieFocus(Movie movie) {}
         }));
+    }
+
+    // =========================================================================
+    // INTEGRAÇÃO DE MODOS: TV AO VIVO VS MODO CINEMA & SINCRONIZAÇÃO
+    // =========================================================================
+
+    private void toggleViewMode() {
+        String cur = AccountManager.getInstance(this).getViewMode();
+        String next = AccountManager.VIEW_MODE_CINEMA.equals(cur) ? AccountManager.VIEW_MODE_TV : AccountManager.VIEW_MODE_CINEMA;
+        AccountManager.getInstance(this).setViewMode(next);
+        applyViewMode(next, true);
+    }
+
+    private void applyViewMode(String mode, boolean requestFocus) {
+        boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(mode);
+
+        if (btnHeaderSwitchViewText != null) {
+            btnHeaderSwitchViewText.setText(isCinema ? "📺 MODO TV" : "🎬 MODO CINEMA");
+        }
+
+        if (isCinema) {
+            if (tvTopSection != null) tvTopSection.setVisibility(View.GONE);
+            if (cinemaHeroLayout != null) cinemaHeroLayout.setVisibility(View.VISIBLE);
+            if (channelsLayout != null) channelsLayout.setVisibility(View.GONE);
+            if (sportsLayout != null) sportsLayout.setVisibility(View.GONE);
+
+            // Parar reprodução ao vivo para economizar banda/processamento no modo cinema
+            destroyCurrentStream();
+
+            cinemaHeroHandler.removeCallbacks(cinemaHeroAutoRotateRunnable);
+            cinemaHeroHandler.postDelayed(cinemaHeroAutoRotateRunnable, 12000);
+
+            if (requestFocus && btnCinemaHeroPlay != null) {
+                btnCinemaHeroPlay.requestFocus();
+            }
+        } else {
+            cinemaHeroHandler.removeCallbacks(cinemaHeroAutoRotateRunnable);
+            if (tvTopSection != null) tvTopSection.setVisibility(View.VISIBLE);
+            if (cinemaHeroLayout != null) cinemaHeroLayout.setVisibility(View.GONE);
+            if (channelsLayout != null) channelsLayout.setVisibility(View.VISIBLE);
+            if (sportsLayout != null) sportsLayout.setVisibility(View.VISIBLE);
+
+            if (currentMode == ScreenMode.CENTRAL) {
+                attachPlayerToHost(pipPlayerHost);
+                if ((currentActiveStreamUrl == null || currentActiveStreamUrl.isEmpty()) && !allChannels.isEmpty()) {
+                    tuneChannel(currentChannelIdx, false);
+                }
+                if (requestFocus && pipContainer != null) {
+                    pipContainer.requestFocus();
+                }
+            }
+        }
+
+        setupContinueWatchingRail();
+        setupFavoritesRail();
+    }
+
+    private void setupCinemaHero() {
+        cinemaHeroItems.clear();
+        // Top rated movies
+        if (cachedMovies != null) {
+            for (Movie m : cachedMovies) {
+                if (isDemoMovie(m)) continue;
+                try {
+                    double r = m.rating != null && !m.rating.isEmpty() ? Double.parseDouble(m.rating.replace(",", ".")) : 0;
+                    if (r >= 7.8) {
+                        cinemaHeroItems.add(m);
+                    }
+                } catch (Exception ignored) {}
+                if (cinemaHeroItems.size() >= 5) break;
+            }
+        }
+        // Top rated series
+        if (cachedSeries != null) {
+            int count = 0;
+            for (Series s : cachedSeries) {
+                try {
+                    double r = s.rating != null && !s.rating.isEmpty() ? Double.parseDouble(s.rating.replace(",", ".")) : 0;
+                    if (r >= 8.0) {
+                        Movie pseudo = new Movie();
+                        pseudo.stream_id = s.series_id;
+                        pseudo.name = s.name;
+                        pseudo.title = s.title;
+                        pseudo.stream_icon = s.cover;
+                        pseudo.plot = s.plot;
+                        pseudo.rating = s.rating;
+                        pseudo.genre = s.genre;
+                        pseudo.isSeries = true;
+                        cinemaHeroItems.add(pseudo);
+                        count++;
+                    }
+                } catch (Exception ignored) {}
+                if (count >= 5) break;
+            }
+        }
+        // Fallback se não encontrou com rating alto
+        if (cinemaHeroItems.isEmpty()) {
+            if (cachedMovies != null && !cachedMovies.isEmpty()) {
+                for (int i = 0; i < Math.min(5, cachedMovies.size()); i++) {
+                    if (!isDemoMovie(cachedMovies.get(i))) {
+                        cinemaHeroItems.add(cachedMovies.get(i));
+                    }
+                }
+            }
+        }
+
+        if (!cinemaHeroItems.isEmpty()) {
+            currentCinemaHeroIdx = 0;
+            displayCinemaHero(0);
+        }
+    }
+
+    private void displayCinemaHero(int index) {
+        if (cinemaHeroItems.isEmpty() || index < 0 || index >= cinemaHeroItems.size()) return;
+        Movie item = cinemaHeroItems.get(index);
+
+        if (cinemaHeroTitle != null) {
+            cinemaHeroTitle.setText(item.name != null && !item.name.isEmpty() ? item.name : item.title);
+        }
+        if (cinemaHeroTypeBadge != null) {
+            cinemaHeroTypeBadge.setText(item.isSeries ? "📺 SÉRIE EM DESTAQUE" : "🎬 FILME EM DESTAQUE");
+        }
+        if (cinemaHeroRating != null) {
+            String r = item.rating != null && !item.rating.isEmpty() ? item.rating : "8.5";
+            cinemaHeroRating.setText("★ " + r);
+        }
+        if (cinemaHeroYear != null) {
+            cinemaHeroYear.setText(item.year != null && !item.year.isEmpty() ? item.year : "");
+            cinemaHeroYear.setVisibility(item.year != null && !item.year.isEmpty() ? View.VISIBLE : View.GONE);
+        }
+        if (cinemaHeroGenre != null) {
+            cinemaHeroGenre.setText(item.genre != null && !item.genre.isEmpty() ? item.genre : "Catálogo EPlay");
+        }
+        if (cinemaHeroPlot != null) {
+            String p = item.plot != null && !item.plot.isEmpty() ? item.plot : "Disponível em alta definição no catálogo EPlay.";
+            cinemaHeroPlot.setText(p);
+        }
+
+        boolean isFav = AccountManager.getInstance(this).isFavorite(item.isSeries ? "series" : "movie", item.stream_id);
+        if (btnCinemaHeroFav != null) {
+            btnCinemaHeroFav.setText(isFav ? "⭐ SALVO" : "⭐ SALVAR");
+            btnCinemaHeroFav.setTextColor(isFav ? Color.parseColor("#FFC107") : Color.WHITE);
+        }
+
+        if (cinemaHeroBackdrop != null && item.stream_icon != null && !item.stream_icon.isEmpty()) {
+            Glide.with(this)
+                    .load(item.stream_icon)
+                    .diskCacheStrategy(DiskCacheStrategy.ALL)
+                    .centerCrop()
+                    .into(cinemaHeroBackdrop);
+        }
+    }
+
+    private void setupCinemaHeroButtons() {
+        if (btnCinemaHeroPlay != null) {
+            btnCinemaHeroPlay.setOnClickListener(v -> playHeroItem());
+            btnCinemaHeroPlay.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    playHeroItem();
+                    return true;
+                }
+                return false;
+            });
+            btnCinemaHeroPlay.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(120).start());
+        }
+
+        if (btnCinemaHeroFav != null) {
+            btnCinemaHeroFav.setOnClickListener(v -> toggleHeroItemFav());
+            btnCinemaHeroFav.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    toggleHeroItemFav();
+                    return true;
+                }
+                return false;
+            });
+            btnCinemaHeroFav.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(120).start());
+        }
+
+        if (btnCinemaHeroCatalog != null) {
+            btnCinemaHeroCatalog.setOnClickListener(v -> {
+                if (!cinemaHeroItems.isEmpty()) {
+                    Movie item = cinemaHeroItems.get(currentCinemaHeroIdx);
+                    openVodExplorer(item.isSeries ? "series" : "movies");
+                } else {
+                    openVodExplorer("movies");
+                }
+            });
+            btnCinemaHeroCatalog.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    if (!cinemaHeroItems.isEmpty()) {
+                        Movie item = cinemaHeroItems.get(currentCinemaHeroIdx);
+                        openVodExplorer(item.isSeries ? "series" : "movies");
+                    } else {
+                        openVodExplorer("movies");
+                    }
+                    return true;
+                }
+                return false;
+            });
+            btnCinemaHeroCatalog.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(120).start());
+        }
+
+        if (btnCinemaHeroPrev != null) {
+            btnCinemaHeroPrev.setOnClickListener(v -> {
+                if (!cinemaHeroItems.isEmpty()) {
+                    currentCinemaHeroIdx = (currentCinemaHeroIdx - 1 + cinemaHeroItems.size()) % cinemaHeroItems.size();
+                    displayCinemaHero(currentCinemaHeroIdx);
+                }
+            });
+            btnCinemaHeroPrev.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    if (!cinemaHeroItems.isEmpty()) {
+                        currentCinemaHeroIdx = (currentCinemaHeroIdx - 1 + cinemaHeroItems.size()) % cinemaHeroItems.size();
+                        displayCinemaHero(currentCinemaHeroIdx);
+                    }
+                    return true;
+                }
+                return false;
+            });
+            btnCinemaHeroPrev.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.15f : 1.0f).scaleY(hasFocus ? 1.15f : 1.0f).setDuration(120).start());
+        }
+
+        if (btnCinemaHeroNext != null) {
+            btnCinemaHeroNext.setOnClickListener(v -> {
+                if (!cinemaHeroItems.isEmpty()) {
+                    currentCinemaHeroIdx = (currentCinemaHeroIdx + 1) % cinemaHeroItems.size();
+                    displayCinemaHero(currentCinemaHeroIdx);
+                }
+            });
+            btnCinemaHeroNext.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    if (!cinemaHeroItems.isEmpty()) {
+                        currentCinemaHeroIdx = (currentCinemaHeroIdx + 1) % cinemaHeroItems.size();
+                        displayCinemaHero(currentCinemaHeroIdx);
+                    }
+                    return true;
+                }
+                return false;
+            });
+            btnCinemaHeroNext.setOnFocusChangeListener((v, hasFocus) ->
+                v.animate().scaleX(hasFocus ? 1.15f : 1.0f).scaleY(hasFocus ? 1.15f : 1.0f).setDuration(120).start());
+        }
+    }
+
+    private void playHeroItem() {
+        if (cinemaHeroItems.isEmpty() || currentCinemaHeroIdx >= cinemaHeroItems.size()) return;
+        Movie item = cinemaHeroItems.get(currentCinemaHeroIdx);
+        if (item.isSeries) {
+            if (cachedSeries != null) {
+                for (Series s : cachedSeries) {
+                    if (s.series_id != null && s.series_id.equals(item.stream_id)) {
+                        openSeriesDetail(s);
+                        return;
+                    }
+                }
+            }
+            openVodExplorer("series");
+        } else {
+            playMovie(item);
+        }
+    }
+
+    private void toggleHeroItemFav() {
+        if (cinemaHeroItems.isEmpty() || currentCinemaHeroIdx >= cinemaHeroItems.size()) return;
+        Movie item = cinemaHeroItems.get(currentCinemaHeroIdx);
+        String type = item.isSeries ? "series" : "movie";
+        AccountManager.getInstance(this).toggleFavorite(type, item.stream_id, item.name != null ? item.name : item.title, item.stream_icon, (isFav, message) -> {
+            mainHandler.post(() -> {
+                Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+                displayCinemaHero(currentCinemaHeroIdx);
+                setupFavoritesRail();
+            });
+        });
+    }
+
+    private void setupContinueWatchingRail() {
+        if (continueWatchingRail == null || continueWatchingLayout == null) return;
+
+        List<Movie> continueWatchingItems = new ArrayList<>();
+        List<WatchProgressItem> progressList = AccountManager.getInstance(this).getMemoryProgress();
+
+        if (progressList != null && !progressList.isEmpty()) {
+            for (WatchProgressItem item : progressList) {
+                if (item.isCompleted()) continue;
+                if ("series".equalsIgnoreCase(item.contentType)) {
+                    if (cachedSeries != null) {
+                        for (Series s : cachedSeries) {
+                            if (s.series_id != null && (s.series_id.equals(item.seriesId) || s.series_id.equals(item.contentId))) {
+                                Movie pseudo = new Movie();
+                                pseudo.stream_id = s.series_id;
+                                pseudo.name = (item.title != null && !item.title.isEmpty()) ? item.title : s.name;
+                                pseudo.title = s.title;
+                                pseudo.stream_icon = (item.poster != null && !item.poster.isEmpty()) ? item.poster : s.cover;
+                                pseudo.plot = s.plot;
+                                pseudo.rating = s.rating;
+                                pseudo.genre = s.genre;
+                                pseudo.isSeries = true;
+                                pseudo.progressPercent = item.getProgressPercent();
+                                pseudo.isFavorite = AccountManager.getInstance(this).isFavorite("series", s.series_id);
+                                continueWatchingItems.add(pseudo);
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    if (cachedMovies != null) {
+                        for (Movie m : cachedMovies) {
+                            if (m.stream_id != null && m.stream_id.equals(item.contentId)) {
+                                Movie copy = new Movie();
+                                copy.stream_id = m.stream_id;
+                                copy.name = m.name;
+                                copy.title = m.title;
+                                copy.stream_icon = m.stream_icon;
+                                copy.plot = m.plot;
+                                copy.rating = m.rating;
+                                copy.genre = m.genre;
+                                copy.progressPercent = item.getProgressPercent();
+                                copy.isFavorite = AccountManager.getInstance(this).isFavorite("movie", m.stream_id);
+                                continueWatchingItems.add(copy);
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (continueWatchingItems.size() >= 20) break;
+            }
+        }
+
+        // Se a lista remota estiver vazia, verifica o histórico local de progresso
+        if (continueWatchingItems.isEmpty() && cachedMovies != null) {
+            List<String> recentMovieIds = getRecentMovieIds();
+            for (String id : recentMovieIds) {
+                String key = "movie_" + id;
+                long dur = getVodDuration(key);
+                long pos = getVodProgress(key);
+                if (dur > 0 && pos > 5000 && pos < (long)(dur * 0.95)) {
+                    for (Movie m : cachedMovies) {
+                        if (m.stream_id != null && m.stream_id.equals(id)) {
+                            Movie copy = new Movie();
+                            copy.stream_id = m.stream_id;
+                            copy.name = m.name;
+                            copy.title = m.title;
+                            copy.stream_icon = m.stream_icon;
+                            copy.plot = m.plot;
+                            copy.rating = m.rating;
+                            copy.genre = m.genre;
+                            copy.progressPercent = (int) Math.min(100, Math.max(0, (pos * 100) / dur));
+                            copy.isFavorite = AccountManager.getInstance(this).isFavorite("movie", m.stream_id);
+                            continueWatchingItems.add(copy);
+                            break;
+                        }
+                    }
+                }
+                if (continueWatchingItems.size() >= 20) break;
+            }
+        }
+
+        if (continueWatchingItems.isEmpty()) {
+            continueWatchingLayout.setVisibility(View.GONE);
+        } else {
+            continueWatchingLayout.setVisibility(View.VISIBLE);
+            continueWatchingRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+            continueWatchingRail.setAdapter(new MoviePosterAdapter(this, continueWatchingItems, new MoviePosterAdapter.OnMovieActionListener() {
+                @Override
+                public void onMovieClick(Movie m) {
+                    if (m.isSeries) {
+                        if (cachedSeries != null) {
+                            for (Series s : cachedSeries) {
+                                if (s.series_id != null && s.series_id.equals(m.stream_id)) {
+                                    openSeriesDetail(s);
+                                    return;
+                                }
+                            }
+                        }
+                    } else {
+                        playMovie(m);
+                    }
+                }
+
+                @Override
+                public void onMovieFocus(Movie movie) {}
+            }));
+        }
+    }
+
+    private void setupFavoritesRail() {
+        if (favoritesRail == null || favoritesLayout == null) return;
+
+        List<Movie> favoriteItems = new ArrayList<>();
+        List<FavoriteItem> favList = AccountManager.getInstance(this).getFavorites();
+
+        if (favList != null && !favList.isEmpty()) {
+            for (FavoriteItem fav : favList) {
+                if ("series".equalsIgnoreCase(fav.contentType)) {
+                    Series found = null;
+                    if (cachedSeries != null) {
+                        for (Series s : cachedSeries) {
+                            if (s.series_id != null && s.series_id.equals(fav.contentId)) {
+                                found = s;
+                                break;
+                            }
+                        }
+                    }
+                    Movie pseudo = new Movie();
+                    pseudo.stream_id = fav.contentId;
+                    pseudo.name = (found != null && found.name != null) ? found.name : fav.title;
+                    pseudo.title = pseudo.name;
+                    pseudo.stream_icon = (found != null && found.cover != null) ? found.cover : fav.poster;
+                    pseudo.plot = found != null ? found.plot : "";
+                    pseudo.rating = found != null ? found.rating : "";
+                    pseudo.genre = found != null ? found.genre : "";
+                    pseudo.isSeries = true;
+                    pseudo.isFavorite = true;
+                    favoriteItems.add(pseudo);
+                } else {
+                    Movie found = null;
+                    if (cachedMovies != null) {
+                        for (Movie m : cachedMovies) {
+                            if (m.stream_id != null && m.stream_id.equals(fav.contentId)) {
+                                found = m;
+                                break;
+                            }
+                        }
+                    }
+                    Movie copy = new Movie();
+                    copy.stream_id = fav.contentId;
+                    copy.name = (found != null && found.name != null) ? found.name : fav.title;
+                    copy.title = copy.name;
+                    copy.stream_icon = (found != null && found.stream_icon != null) ? found.stream_icon : fav.poster;
+                    copy.plot = found != null ? found.plot : "";
+                    copy.rating = found != null ? found.rating : "";
+                    copy.genre = found != null ? found.genre : "";
+                    copy.isFavorite = true;
+                    favoriteItems.add(copy);
+                }
+                if (favoriteItems.size() >= 25) break;
+            }
+        }
+
+        if (favoriteItems.isEmpty()) {
+            favoritesLayout.setVisibility(View.GONE);
+        } else {
+            favoritesLayout.setVisibility(View.VISIBLE);
+            favoritesRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+            favoritesRail.setAdapter(new MoviePosterAdapter(this, favoriteItems, new MoviePosterAdapter.OnMovieActionListener() {
+                @Override
+                public void onMovieClick(Movie m) {
+                    if (m.isSeries) {
+                        if (cachedSeries != null) {
+                            for (Series s : cachedSeries) {
+                                if (s.series_id != null && s.series_id.equals(m.stream_id)) {
+                                    openSeriesDetail(s);
+                                    return;
+                                }
+                            }
+                        }
+                    } else {
+                        playMovie(m);
+                    }
+                }
+
+                @Override
+                public void onMovieFocus(Movie movie) {}
+            }));
+        }
+    }
+
+    private void showVodFavoritesContent() {
+        if (isViewingSeries) {
+            ensureSeriesLoaded(() -> {
+                List<Series> favSeriesList = new ArrayList<>();
+                for (Series s : cachedSeries) {
+                    if (s.series_id != null && AccountManager.getInstance(this).isFavorite("series", s.series_id)) {
+                        favSeriesList.add(s);
+                    }
+                }
+                if (favSeriesList.isEmpty()) {
+                    Toast.makeText(this, "Nenhuma série favoritada ainda.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                List<Movie> converted = new ArrayList<>();
+                for (Series s : favSeriesList) {
+                    Movie pseudo = new Movie();
+                    pseudo.stream_id = s.series_id;
+                    pseudo.name = s.name;
+                    pseudo.title = s.title;
+                    pseudo.stream_icon = s.cover;
+                    pseudo.plot = s.plot;
+                    pseudo.rating = s.rating;
+                    pseudo.genre = s.genre;
+                    pseudo.isSeries = true;
+                    pseudo.isFavorite = true;
+                    converted.add(pseudo);
+                }
+                vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+                vodGridRecycler.setAdapter(new MoviePosterAdapter(this, converted, true, new MoviePosterAdapter.OnMovieActionListener() {
+                    @Override
+                    public void onMovieClick(Movie m) {
+                        for (Series s : favSeriesList) {
+                            if (s.series_id != null && s.series_id.equals(m.stream_id)) {
+                                openSeriesDetail(s);
+                                break;
+                            }
+                        }
+                    }
+
+                    @Override
+                    public void onMovieFocus(Movie movie) {
+                        updateVodHero(movie);
+                    }
+                }));
+                if (!converted.isEmpty()) {
+                    updateVodHero(converted.get(0));
+                }
+                vodGridRecycler.requestFocus();
+            });
+        } else {
+            ensureMoviesLoaded(() -> {
+                List<Movie> favMoviesList = new ArrayList<>();
+                for (Movie m : cachedMovies) {
+                    if (m.stream_id != null && AccountManager.getInstance(this).isFavorite("movie", m.stream_id)) {
+                        m.isFavorite = true;
+                        favMoviesList.add(m);
+                    }
+                }
+                if (favMoviesList.isEmpty()) {
+                    Toast.makeText(this, "Nenhum filme favoritado ainda.", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                vodGridRecycler.setLayoutManager(new GridLayoutManager(this, 7));
+                vodGridRecycler.setAdapter(new MoviePosterAdapter(this, favMoviesList, true, new MoviePosterAdapter.OnMovieActionListener() {
+                    @Override
+                    public void onMovieClick(Movie movie) {
+                        playMovie(movie);
+                    }
+
+                    @Override
+                    public void onMovieFocus(Movie movie) {
+                        updateVodHero(movie);
+                    }
+                }));
+                if (!favMoviesList.isEmpty()) {
+                    updateVodHero(favMoviesList.get(0));
+                }
+                vodGridRecycler.requestFocus();
+            });
+        }
+    }
+
+    private void openUserActivity() {
+        Intent intent = new Intent(this, UserActivity.class);
+        startActivityForResult(intent, REQ_USER_ACTIVITY);
     }
 
     private void triggerViewTap(View view) {
@@ -4764,22 +5537,33 @@ public class MainActivity extends Activity {
                 showOsdBannerLoading();
             }
         } else if (mode == ScreenMode.CENTRAL) {
-            // Reanexa o player unificado no host do PiP sem recarregar o vídeo
             closeDrawer();
             hideOsdBanner();
-            attachPlayerToHost(pipPlayerHost);
-            if (pipContainer != null) {
-                pipContainer.postDelayed(() -> {
-                    pipContainer.setFocusable(true);
-                    pipContainer.requestFocus();
-                    showPipOverlay();
-                }, 100);
-            }
-            setupChannelsRail();
+            String curViewMode = AccountManager.getInstance(this).getViewMode();
+            applyViewMode(curViewMode, false);
             setupMoviesRail();
             setupSeriesRail();
-            if ((currentActiveStreamUrl == null || currentActiveStreamUrl.isEmpty()) && !allChannels.isEmpty()) {
-                tuneChannel(currentChannelIdx, false);
+            setupContinueWatchingRail();
+            setupFavoritesRail();
+
+            if (AccountManager.VIEW_MODE_CINEMA.equals(curViewMode)) {
+                setupCinemaHero();
+                if (btnCinemaHeroPlay != null) {
+                    btnCinemaHeroPlay.postDelayed(() -> btnCinemaHeroPlay.requestFocus(), 100);
+                }
+            } else {
+                attachPlayerToHost(pipPlayerHost);
+                if (pipContainer != null) {
+                    pipContainer.postDelayed(() -> {
+                        pipContainer.setFocusable(true);
+                        pipContainer.requestFocus();
+                        showPipOverlay();
+                    }, 100);
+                }
+                setupChannelsRail();
+                if ((currentActiveStreamUrl == null || currentActiveStreamUrl.isEmpty()) && !allChannels.isEmpty()) {
+                    tuneChannel(currentChannelIdx, false);
+                }
             }
         } else if (mode == ScreenMode.VOD) {
             closeDrawer();
@@ -6662,8 +7446,8 @@ public class MainActivity extends Activity {
             return false;
         }
 
-        // 3. Trilhos horizontais (Canais, Jogos/Eventos, Filmes, Séries): barreiras esquerda e direita
-        RecyclerView[] rails = new RecyclerView[] { channelsRail, sportsRail, moviesRail, seriesRail };
+        // 3. Trilhos horizontais (Continuar Assistindo, Favoritos, Canais, Jogos/Eventos, Filmes, Séries): barreiras esquerda e direita
+        RecyclerView[] rails = new RecyclerView[] { continueWatchingRail, favoritesRail, channelsRail, sportsRail, moviesRail, seriesRail };
         for (RecyclerView rail : rails) {
             if (rail != null && rail.hasFocus()) {
                 View focused = rail.findFocus();
@@ -7055,7 +7839,8 @@ public class MainActivity extends Activity {
                 "⚡ 1º RDCanais | 2º RDEmbed | 3º StreamVerde",
                 "🚀 1º RDEmbed | 2º StreamVerde | 3º RDCanais",
                 "🟢 1º StreamVerde | 2º RDEmbed | 3º RDCanais",
-                "🛠️ Escolher Provedor Primário (1º Lugar)..."
+                "🛠️ Escolher Provedor Primário (1º Lugar)...",
+                "👤 Perfil e Conta do Usuário..."
         };
 
         int selectedIndex = 0;
@@ -7074,7 +7859,7 @@ public class MainActivity extends Activity {
         }
 
         AlertDialog dialog1 = createThemedDialogBuilder()
-                .setTitle("⚙️ Prioridade dos Provedores de TV")
+                .setTitle("⚙️ Opções do Sistema")
                 .setSingleChoiceItems(options, selectedIndex, (dialog, which) -> {
                     dialog.dismiss();
                     if (which == 0) {
@@ -7107,6 +7892,8 @@ public class MainActivity extends Activity {
                         applyProviderChange("StreamVerde (streamverde.net)");
                     } else if (which == 4) {
                         showCustomProviderOrderDialog();
+                    } else if (which == 5) {
+                        openUserActivity();
                     }
                 })
                 .setNegativeButton("Fechar", null)

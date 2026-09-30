@@ -52,4 +52,32 @@
             android:textColor="#FFC107"
             android:textSize="9sp" />
     </LinearLayout>
+
+    <!-- Barra de Progresso Real (Onde parou) -->
+    <ProgressBar
+        android:id="@+id/movieProgressBar"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:layout_gravity="bottom"
+        android:max="100"
+        android:progress="0"
+        android:visibility="gone" />
+
+    <!-- Badge de Favorito Salvo -->
+    <TextView
+        android:id="@+id/movieFavBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="3dp"
+        android:background="#B3000000"
+        android:paddingStart="4dp"
+        android:paddingTop="1dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="1dp"
+        android:text="★"
+        android:textColor="#FFC107"
+        android:textSize="10sp"
+        android:visibility="gone" />
 </FrameLayout>

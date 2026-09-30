@@ -24,6 +24,9 @@ public class Movie implements Serializable {
     public String genre;
     public String release_date;
     public String duration;
+    public int progressPercent = 0;
+    public boolean isSeries = false;
+    public boolean isFavorite = false;
 
     public String getDisplayTitle() {
         if (name != null && !name.isEmpty()) return name;

@@ -74,6 +74,19 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
             holder.poster.setImageResource(R.drawable.card_focus_bg);
         }
 
+        if (holder.progressBar != null) {
+            if (movie.progressPercent > 0 && movie.progressPercent < 95) {
+                holder.progressBar.setVisibility(View.VISIBLE);
+                holder.progressBar.setProgress(movie.progressPercent);
+            } else {
+                holder.progressBar.setVisibility(View.GONE);
+            }
+        }
+
+        if (holder.favBadge != null) {
+            holder.favBadge.setVisibility(movie.isFavorite ? View.VISIBLE : View.GONE);
+        }
+
         holder.itemView.setOnClickListener(v -> {
             if (listener != null) listener.onMovieClick(movie);
         });
@@ -124,12 +137,16 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
         ImageView poster;
         TextView title;
         TextView subtitle;
+        android.widget.ProgressBar progressBar;
+        TextView favBadge;
 
         ViewHolder(@NonNull View itemView) {
             super(itemView);
             poster = itemView.findViewById(R.id.moviePoster);
             title = itemView.findViewById(R.id.movieTitle);
             subtitle = itemView.findViewById(R.id.movieSubtitle);
+            progressBar = itemView.findViewById(R.id.movieProgressBar);
+            favBadge = itemView.findViewById(R.id.movieFavBadge);
         }
     }
 }
