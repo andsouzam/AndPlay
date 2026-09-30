@@ -13,6 +13,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let watchedReturnMode = 'home';
     let isFavoritesView = false;
     let favoriteReturnMode = 'home';
+    let isHandlingPopstate = false;
     const WATCHED_LIMIT = 500;
     const WATCHED_MOVIES_STORAGE_KEY = 'andplay_web_watched_movies_v1';
     const WATCHED_SERIES_STORAGE_KEY = 'andplay_web_watched_series_v1';
@@ -1136,6 +1137,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
         if (elements.imdbSearchModal && elements.imdbSearchModal.style.display === 'flex') {
           closeImdbSearchModal();
+          return true;
+        }
+        if (elements.contentPage && !elements.contentPage.hidden) {
+          restoreFromContentPage();
           return true;
         }
         return false;
@@ -3293,6 +3298,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.tabFavoritesBtn?.classList.add('active');
       document.querySelectorAll('.mobile-bottom-nav button').forEach(button => button.classList.remove('active'));
       elements.mobileFavoritesBtn?.classList.add('active');
+      startViewTransition();
       window.scrollTo({ top: 0, behavior: 'instant' });
 
       if (elements.searchInput) {
@@ -3420,6 +3426,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.tabMoviesBtn.classList.remove('active');
       elements.tabSeriesBtn.classList.remove('active');
       elements.tabLiveBtn?.classList.remove('active');
+      startViewTransition();
       window.scrollTo({ top: 0, behavior: 'instant' });
 
       elements.searchInput.value = '';
@@ -4189,7 +4196,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       };
 
       scroller.addEventListener('pointerdown', e => {
-        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (e.pointerType !== 'mouse' || e.button !== 0) return;
         if (e.target.closest('button.home-watched-menu, .home-watched-menu-panel, .home-rail-arrow, .home-rail-more')) return;
 
         stopMomentum();
@@ -4728,16 +4735,18 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (!isDown || e.pointerId !== activePointerId) return;
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
+        const absX = Math.abs(dx);
+        const absY = Math.abs(dy);
 
         if (!isSwiping) {
-          if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+          if (absX > 8 && absX >= absY) {
             isSwiping = true;
             track.classList.add('is-swiping');
             if (window.getSelection) window.getSelection().removeAllRanges();
             clearInterval(homeFeaturedTimer);
             homeFeaturedTimer = null;
             try { track.setPointerCapture(e.pointerId); } catch (_) {}
-          } else if (Math.abs(dy) > 10) {
+          } else if (absY > 16 && absY > absX * 1.4) {
             isDown = false;
             return;
           }
@@ -4771,9 +4780,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           window.addEventListener('click', suppressClick, { capture: true, once: true });
           setTimeout(() => window.removeEventListener('click', suppressClick, { capture: true }), 80);
 
-          if (dx < -45 && homeFeaturedIndex < homeFeaturedItems.length - 1) {
+          if (dx < -36 && homeFeaturedIndex < homeFeaturedItems.length - 1) {
             moveHomeFeatured(1);
-          } else if (dx > 45 && homeFeaturedIndex > 0) {
+          } else if (dx > 36 && homeFeaturedIndex > 0) {
             moveHomeFeatured(-1);
           } else {
             updateHomeFeaturedPosition();
@@ -5379,16 +5388,18 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (!isDown || e.pointerId !== activePointerId) return;
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
+        const absX = Math.abs(dx);
+        const absY = Math.abs(dy);
 
         if (!isSwiping) {
-          if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+          if (absX > 8 && absX >= absY) {
             isSwiping = true;
             track.classList.add('is-swiping');
             if (window.getSelection) window.getSelection().removeAllRanges();
             clearInterval(moviesHeroTimer);
             moviesHeroTimer = null;
             try { track.setPointerCapture(e.pointerId); } catch (_) {}
-          } else if (Math.abs(dy) > 10) {
+          } else if (absY > 16 && absY > absX * 1.4) {
             isDown = false;
             return;
           }
@@ -5422,9 +5433,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           window.addEventListener('click', suppressClick, { capture: true, once: true });
           setTimeout(() => window.removeEventListener('click', suppressClick, { capture: true }), 80);
 
-          if (dx < -45 && moviesHeroIndex < moviesHeroItems.length - 1) {
+          if (dx < -36 && moviesHeroIndex < moviesHeroItems.length - 1) {
             moveMoviesHero(1);
-          } else if (dx > 45 && moviesHeroIndex > 0) {
+          } else if (dx > 36 && moviesHeroIndex > 0) {
             moveMoviesHero(-1);
           } else {
             updateMoviesHeroPosition();
@@ -6093,22 +6104,28 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         startX = e.clientX;
         startY = e.clientY;
         currentX = e.clientX;
-
-        track.classList.add('is-swiping');
-        try { track.setPointerCapture(e.pointerId); } catch (_) {}
       };
 
       const onPointerMove = (e) => {
         if (!isDown || e.pointerId !== activePointerId) return;
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
+        const absX = Math.abs(dx);
+        const absY = Math.abs(dy);
 
-        if (!isDragging && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
-          isDragging = true;
+        if (!isDragging) {
+          if (absX > 8 && absX >= absY) {
+            isDragging = true;
+            track.classList.add('is-swiping');
+            try { track.setPointerCapture(e.pointerId); } catch (_) {}
+          } else if (absY > 16 && absY > absX * 1.4) {
+            isDown = false;
+            return;
+          }
         }
 
         if (isDragging) {
-          e.preventDefault();
+          if (e.cancelable) e.preventDefault();
           currentX = e.clientX;
           const trackWidth = track.clientWidth || 1;
           const offsetPercent = (dx / trackWidth) * 100;
@@ -6139,7 +6156,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (isDragging) {
           isDragging = false;
           const dx = currentX - startX;
-          const threshold = Math.max(48, (track.clientWidth || 300) * 0.14);
+          const threshold = Math.max(36, (track.clientWidth || 300) * 0.12);
 
           if (dx < -threshold && seriesHeroIndex < seriesHeroItems.length - 1) {
             moveSeriesHero(1);
@@ -8910,6 +8927,11 @@ function showHome(targetScroll = 0) {
       elements.videoModal.classList.add('eplay-player-page');
       document.body.classList.add('eplay-player-open');
       elements.videoModal.style.display = 'flex';
+      try {
+        if (!window.history.state || window.history.state.page !== 'player') {
+          window.history.pushState({ page: 'player', title }, '');
+        }
+      } catch (_) {}
       elements.modalFormat.textContent = 'Carregando vídeo...';
 
       startVideoLoadTimeout();
@@ -9039,6 +9061,10 @@ function showHome(targetScroll = 0) {
       elements.videoPlayer.pause();
       elements.videoPlayer.src = '';
       activeVideoUrl = '';
+
+      if (!isHandlingPopstate && window.history.state && window.history.state.page === 'player') {
+        try { window.history.back(); } catch (_) {}
+      }
 
       if (elements.movieVersionSwitcher) {
         elements.movieVersionSwitcher.style.display = 'none';
@@ -10586,6 +10612,11 @@ function showHome(targetScroll = 0) {
       currentContentPageType = type;
       currentContentPageItem = item;
       contentPageOpen = true;
+      try {
+        if (!window.history.state || window.history.state.page !== 'content') {
+          window.history.pushState({ page: 'content', title: item?.name || item?.title || '' }, '');
+        }
+      } catch (_) {}
       if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
@@ -10645,6 +10676,10 @@ function showHome(targetScroll = 0) {
       if (elements.contentPage) {
         elements.contentPage.hidden = true;
         elements.contentPage.classList.remove('is-active');
+      }
+
+      if (!isHandlingPopstate && window.history.state && window.history.state.page === 'content') {
+        try { window.history.back(); } catch (_) {}
       }
 
       if (state.mode === 'home' && state.favorites) {
@@ -12528,6 +12563,7 @@ function showHome(targetScroll = 0) {
           if (elements.seriesModal && elements.seriesModal.style.display === 'flex') { closeSeriesModal(); return true; }
           if (elements.movieVersionModal && elements.movieVersionModal.style.display === 'flex') { closeMovieVersionModal(); return true; }
           if (elements.imdbSearchModal && elements.imdbSearchModal.style.display === 'flex') { closeImdbSearchModal(); return true; }
+          if (elements.contentPage && !elements.contentPage.hidden) { restoreFromContentPage(); return true; }
         }
 
         if (tvCurrentMode === 'fullscreen') {
@@ -12565,9 +12601,14 @@ function showHome(targetScroll = 0) {
         return false;
       };
 
-      // Suporte a popstate do Android WebView (webView.goBack())
+      // Suporte a popstate do Android WebView (webView.goBack()) e Navegadores Mobile
       window.addEventListener('popstate', function () {
-        window.handleAndroidBack();
+        isHandlingPopstate = true;
+        try {
+          window.handleAndroidBack();
+        } finally {
+          isHandlingPopstate = false;
+        }
       });
 
       window.onBackPressed = window.handleAndroidBack;

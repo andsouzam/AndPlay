@@ -1157,16 +1157,22 @@
        ========================================== */
     @media (max-width: 768px) {
       body:not(.tv-mode)>header {
-        padding: 12px 16px;
-        flex-direction: column;
-        align-items: stretch;
+        padding: 10px 14px;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
         gap: 12px;
+        flex-wrap: nowrap;
       }
 
       .header-left {
-        justify-content: space-between;
-        width: 100%;
+        width: auto;
+        flex: 0 0 auto;
         gap: 10px;
+      }
+
+      body:not(.tv-mode) .nav-tabs {
+        display: none !important;
       }
 
       .logo {
@@ -1185,29 +1191,32 @@
       }
 
       .controls {
-        flex-direction: column;
-        width: 100%;
-        max-width: 100%;
-        gap: 10px;
+        flex-direction: row;
+        width: auto;
+        flex: 1 1 auto;
+        max-width: 320px;
+        justify-content: flex-end;
+        gap: 8px;
       }
 
       .search-box {
         width: 100%;
         max-width: 100%;
-        min-width: unset;
+        min-width: 0;
       }
 
       .search-box input {
         width: 100%;
-        padding: 10px 16px;
-        font-size: 14px;
+        padding: 9px 14px;
+        font-size: 13.5px;
+      }
+
+      .search-box kbd {
+        display: none !important;
       }
 
       select {
-        width: 100%;
-        max-width: 100%;
-        min-width: unset;
-        padding: 10px 16px;
+        display: none;
       }
 
       .status-bar {
@@ -1224,7 +1233,7 @@
       }
 
       main {
-        padding: 15px 12px 30px;
+        padding: 15px 12px calc(96px + env(safe-area-inset-bottom, 0px)) !important;
       }
 
       /* Grade de 2 colunas perfeita para celular */
@@ -4092,24 +4101,23 @@ header {
     position: sticky;
   }
   .header-left {
-    width: 100%;
+    width: auto;
+    flex: 0 0 auto;
   }
-  header {
-    flex-wrap: wrap;
+  body:not(.tv-mode) header {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    padding: 10px 14px;
   }
   .nav-tabs {
-    display: flex;
-    overflow-x: auto;
-    width: 100%;
-    scrollbar-width: none;
-  }
-  .nav-tabs::-webkit-scrollbar {
-    display: none;
+    display: none !important;
   }
   .controls {
-    width: 100%;
-    display: grid;
-    grid-template-columns: minmax(0,1fr) auto;
+    width: auto;
+    flex: 1 1 auto;
+    max-width: 320px;
+    display: flex;
+    justify-content: flex-end;
   }
   .controls .account-header-btn {
     display: none;
@@ -4118,12 +4126,16 @@ header {
     display: none;
   }
   .search-box {
+    width: 100%;
     min-width: 0;
+  }
+  .search-box kbd {
+    display: none !important;
   }
   .home-dashboard {
     width: min(100% - 20px, 1440px);
     padding-top: 16px;
-    padding-bottom: 90px;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   }
   .home-hero {
     min-height: 300px;
@@ -4137,7 +4149,10 @@ header {
     overflow-x: auto;
     gap: 10px;
     padding-bottom: 5px;
-    touch-action: pan-y;
+    touch-action: pan-x pan-y;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    overscroll-behavior-x: contain;
   }
   .home-continue-card {
     min-width: 230px;
@@ -4154,39 +4169,54 @@ header {
     position: fixed;
     left: 10px;
     right: 10px;
-    bottom: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom, 10px));
     z-index: 500;
     display: grid;
     grid-template-columns: repeat(7, minmax(0,1fr));
     gap: 2px;
-    padding: 6px;
+    padding: 5px 3px;
     border: 1px solid rgba(255,255,255,.09);
-    border-radius: 16px;
-    background: rgba(12,15,22,.94);
-    backdrop-filter: blur(18px);
-    box-shadow: 0 14px 40px rgba(0,0,0,.4);
+    border-radius: 18px;
+    background: rgba(10,14,23,.94);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: 0 14px 40px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.04);
   }
   .mobile-bottom-nav button {
     min-width: 0;
     min-height: 48px;
-    display: grid;
-    place-items: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 2px;
     border: 0;
-    border-radius: 10px;
+    border-radius: 11px;
     background: transparent;
     color: #919baa;
     cursor: pointer;
     font-size: 15px;
+    padding: 4px 1px;
+    transition: background 0.16s ease, color 0.16s ease, transform 0.12s ease;
+    -webkit-tap-highlight-color: transparent;
   }
   .mobile-bottom-nav button span {
-    font-size: 9px;
+    font-size: 9.5px;
+    font-weight: 650;
     line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .mobile-bottom-nav button:active {
+    transform: scale(0.92);
   }
   .mobile-bottom-nav button:focus-visible,
   .mobile-bottom-nav button.active {
-    color: #111;
+    color: #0b0f19;
     background: var(--andplay-accent);
+    font-weight: 800;
     outline: none;
   }
 }
@@ -4494,7 +4524,9 @@ header {
   overscroll-behavior-inline: contain;
   scroll-behavior: auto;
   cursor: grab;
-  touch-action: pan-y;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   user-select: none;
   -webkit-user-select: none;
   mask-image: linear-gradient(90deg, #000 0%, #000 calc(100% - 44px), transparent 100%);
@@ -4798,7 +4830,9 @@ header {
   overscroll-behavior-inline: contain;
   scroll-behavior: auto;
   cursor: grab;
-  touch-action: pan-y;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
   user-select: none;
   -webkit-user-select: none;
   mask-image: linear-gradient(90deg, #000 0%, #000 calc(100% - 44px), transparent 100%);
@@ -6813,6 +6847,7 @@ body.eplay-player-open { overflow: hidden; }
   .series-toolbar {
     flex-direction: column;
     align-items: stretch;
+    gap: 12px;
   }
   .movies-view-group,
   .series-view-group {
@@ -6837,6 +6872,26 @@ body.eplay-player-open { overflow: hidden; }
   }
   .movies-sort-wrap,
   .series-sort-wrap {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
+    gap: 10px;
+  }
+  .movies-sort-box,
+  .series-sort-box {
+    flex: 1 1 auto;
+    min-width: 160px;
+  }
+  .movies-sort-select,
+  .series-sort-select {
+    width: 100%;
+  }
+  .movies-quick-filters,
+  .series-quick-filters {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
 }
