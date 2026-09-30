@@ -13,8 +13,8 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.app.Activity;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
 import com.andplay.app.account.AccountManager;
 import com.bumptech.glide.Glide;
 
@@ -22,7 +22,7 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-public class UserActivity extends AppCompatActivity {
+public class UserActivity extends Activity {
 
     public static final String EXTRA_MODE_CHANGED = "mode_changed";
 

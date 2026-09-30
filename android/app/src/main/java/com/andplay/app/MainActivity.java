@@ -2755,6 +2755,13 @@ public class MainActivity extends Activity {
     }
 
     private void setupChannelsRail() {
+        boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(AccountManager.getInstance(this).getViewMode());
+        if (channelsLayout != null) {
+            channelsLayout.setVisibility(isCinema ? View.GONE : View.VISIBLE);
+        }
+        if (channelsRail != null) {
+            channelsRail.setVisibility(isCinema ? View.GONE : View.VISIBLE);
+        }
         List<Channel> featuredChannels = getFeaturedChannelsList();
         channelsRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         channelsRail.setAdapter(new ChannelRailAdapter(this, featuredChannels, false, (ch, idx) -> {
@@ -2814,6 +2821,11 @@ public class MainActivity extends Activity {
 
     private void updateSportsList(List<SportsEvent> fresh) {
         if (fresh == null || fresh.isEmpty()) return;
+        boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(AccountManager.getInstance(this).getViewMode());
+        if (isCinema) {
+            if (sportsLayout != null) sportsLayout.setVisibility(View.GONE);
+            if (sportsRail != null) sportsRail.setVisibility(View.GONE);
+        }
         if (allSports.isEmpty()) {
             allSports.addAll(fresh);
             if (sportsRail != null && sportsRail.getAdapter() != null) {
@@ -2996,15 +3008,22 @@ public class MainActivity extends Activity {
     }
 
     private void setupSportsRail() {
-        sportsRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
-        sportsRail.setAdapter(new SportsRailAdapter(this, allSports, ev -> {
-            if (ev != null && ev.isFinished) {
-                activeSportsEvent = ev;
-                showSportsOverlay();
-            } else {
-                playSportsEvent(ev);
-            }
-        }));
+        boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(AccountManager.getInstance(this).getViewMode());
+        if (sportsLayout != null) {
+            sportsLayout.setVisibility(isCinema ? View.GONE : View.VISIBLE);
+        }
+        if (sportsRail != null) {
+            sportsRail.setVisibility(isCinema ? View.GONE : View.VISIBLE);
+            sportsRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+            sportsRail.setAdapter(new SportsRailAdapter(this, allSports, ev -> {
+                if (ev != null && ev.isFinished) {
+                    activeSportsEvent = ev;
+                    showSportsOverlay();
+                } else {
+                    playSportsEvent(ev);
+                }
+            }));
+        }
         startSportsRefreshTicker();
     }
 
@@ -3784,7 +3803,9 @@ public class MainActivity extends Activity {
             if (tvTopSection != null) tvTopSection.setVisibility(View.GONE);
             if (cinemaHeroLayout != null) cinemaHeroLayout.setVisibility(View.VISIBLE);
             if (channelsLayout != null) channelsLayout.setVisibility(View.GONE);
+            if (channelsRail != null) channelsRail.setVisibility(View.GONE);
             if (sportsLayout != null) sportsLayout.setVisibility(View.GONE);
+            if (sportsRail != null) sportsRail.setVisibility(View.GONE);
 
             // Parar reprodução ao vivo para economizar banda/processamento no modo cinema
             destroyCurrentStream();
@@ -3800,7 +3821,9 @@ public class MainActivity extends Activity {
             if (tvTopSection != null) tvTopSection.setVisibility(View.VISIBLE);
             if (cinemaHeroLayout != null) cinemaHeroLayout.setVisibility(View.GONE);
             if (channelsLayout != null) channelsLayout.setVisibility(View.VISIBLE);
+            if (channelsRail != null) channelsRail.setVisibility(View.VISIBLE);
             if (sportsLayout != null) sportsLayout.setVisibility(View.VISIBLE);
+            if (sportsRail != null) sportsRail.setVisibility(View.VISIBLE);
 
             if (currentMode == ScreenMode.CENTRAL) {
                 attachPlayerToHost(pipPlayerHost);

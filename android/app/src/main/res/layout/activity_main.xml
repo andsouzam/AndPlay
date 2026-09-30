@@ -580,44 +580,52 @@
                     android:id="@+id/sportsLayout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:layout_marginTop="12dp"
-                    android:layout_marginBottom="4dp">
-                    <TextView
-                        android:id="@+id/sportsTitle"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="⚽ Jogos e Eventos Ao Vivo"
-                        android:textColor="#FFFFFF"
-                        android:textSize="15sp"
-                        android:textStyle="bold" />
-                    <TextView
-                        android:id="@+id/btnAllSports"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="VER TUDO ▶"
-                        android:textSize="12sp"
-                        android:textColor="#4FC3F7"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
-                        android:paddingTop="4dp"
-                        android:paddingBottom="4dp"
-                        android:background="#1A4FC3F7"
-                        android:focusable="true"
-                        android:clickable="true" />
-                </LinearLayout>
+                    android:orientation="vertical">
 
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/sportsRail"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:clipChildren="false"
-                    android:clipToPadding="false"
-                    android:orientation="horizontal"
-                    android:paddingTop="8dp"
-                    android:paddingBottom="12dp" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp">
+
+                        <TextView
+                            android:id="@+id/sportsTitle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="⚽ Jogos e Eventos Ao Vivo"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/btnAllSports"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="VER TUDO ▶"
+                            android:textSize="12sp"
+                            android:textColor="#4FC3F7"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp"
+                            android:background="#1A4FC3F7"
+                            android:focusable="true"
+                            android:clickable="true" />
+                    </LinearLayout>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/sportsRail"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:orientation="horizontal"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="12dp" />
+                </LinearLayout>
 
                 <!-- TRILHO 3: FILMES EM DESTAQUE -->
                 <TextView

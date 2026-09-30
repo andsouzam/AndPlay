@@ -57,10 +57,11 @@
             <!-- CONTEÚDO INFORMATIVO CINEMA (ALINHADO À ESQUERDA) -->
             <LinearLayout
                 android:id="@+id/cinemaContent"
-                android:layout_width="400dp"
+                android:layout_width="320dp"
                 android:layout_height="wrap_content"
                 android:layout_gravity="start|center_vertical"
-                android:layout_marginStart="44dp"
+                android:layout_marginStart="32dp"
+                android:transformPivotX="0dp"
                 android:orientation="vertical">
 
                 <TextView
@@ -203,10 +204,12 @@
             <!-- CONTEÚDO INFORMATIVO TV (ALINHADO À DIREITA) -->
             <LinearLayout
                 android:id="@+id/tvContent"
-                android:layout_width="400dp"
+                android:layout_width="320dp"
                 android:layout_height="wrap_content"
                 android:layout_gravity="end|center_vertical"
-                android:layout_marginEnd="44dp"
+                android:layout_marginEnd="32dp"
+                android:gravity="end"
+                android:transformPivotX="320dp"
                 android:alpha="0.38"
                 android:orientation="vertical">
 
@@ -214,6 +217,7 @@
                     android:id="@+id/badgeTv"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_gravity="end"
                     android:background="@drawable/badge_blue"
                     android:paddingStart="10dp"
                     android:paddingTop="3dp"
@@ -228,6 +232,8 @@
                     android:id="@+id/titleTv"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:gravity="end"
                     android:layout_marginTop="8dp"
                     android:shadowColor="#00E5FF"
                     android:shadowDx="0"
@@ -241,6 +247,8 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:gravity="end"
                     android:layout_marginTop="2dp"
                     android:text="Canais Lineares • Jogos Ao Vivo &amp; EPG"
                     android:textColor="#38BDF8"
@@ -251,6 +259,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
+                    android:gravity="end"
                     android:lineSpacingExtra="2dp"
                     android:text="Experiência completa de TV com miniplayer PiP instantâneo, grade de canais abertos e fechados, guia de programação EPG e hub esportivo com jogos e tabelas."
                     android:textColor="#CBD5E1"
@@ -261,28 +270,35 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
+                    android:gravity="end"
                     android:orientation="vertical">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="⚽ Miniplayer PiP com tela cheia instantânea sem recarga"
+                        android:layout_gravity="end"
+                        android:gravity="end"
+                        android:text="Miniplayer PiP com tela cheia sem recarga ⚽"
                         android:textColor="#FFFFFF"
                         android:textSize="11.5sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_gravity="end"
+                        android:gravity="end"
                         android:layout_marginTop="4dp"
-                        android:text="⚽ Hub esportivo com placar, rodadas e classificação"
+                        android:text="Hub esportivo com placar, rodadas e classificação ⚽"
                         android:textColor="#FFFFFF"
                         android:textSize="11.5sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_gravity="end"
+                        android:gravity="end"
                         android:layout_marginTop="4dp"
-                        android:text="⚽ Troca rápida de canais (Zapping) e Guia EPG completo"
+                        android:text="Troca rápida de canais e Guia EPG completo ⚽"
                         android:textColor="#FFFFFF"
                         android:textSize="11.5sp" />
                 </LinearLayout>
@@ -292,6 +308,7 @@
                     android:id="@+id/btnSelectTv"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
+                    android:layout_gravity="end"
                     android:layout_marginTop="18dp"
                     android:background="@drawable/pill_focus_bg"
                     android:gravity="center"
