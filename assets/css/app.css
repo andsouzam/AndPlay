@@ -4187,6 +4187,11 @@ header {
   height: 100%;
   transition: transform .55s cubic-bezier(.22,.61,.36,1);
   will-change: transform;
+  touch-action: pan-y;
+}
+
+.home-featured-track.is-swiping {
+  transition: none !important;
 }
 
 .home-featured-slide {
@@ -4195,6 +4200,8 @@ header {
   height: 100%;
   overflow: hidden;
   isolation: isolate;
+  cursor: pointer;
+  contain: layout style paint;
 }
 
 .home-featured-backdrop {
@@ -4205,7 +4212,8 @@ header {
   object-fit: cover;
   filter: blur(12px) saturate(.82);
   opacity: .34;
-  transform: scale(1.04);
+  transform: translateZ(0) scale(1.04);
+  backface-visibility: hidden;
   z-index: -3;
 }
 
@@ -4411,13 +4419,14 @@ header {
   cursor: pointer;
   box-shadow: 0 10px 28px rgba(0,0,0,.36), -24px 0 44px rgba(5,7,11,.28);
   backdrop-filter: blur(12px);
-  transition: opacity .18s ease, border-color .18s ease, background .18s ease;
+  transition: opacity .2s ease, border-color .2s ease, background .2s ease, transform .2s ease;
 }
 
 .home-rail-more:hover,
 .home-rail-more:focus-visible {
   border-color: rgba(255,193,7,.6);
   background: rgba(8,10,16,.92);
+  transform: scale(1.1);
   outline: none;
 }
 
@@ -4438,13 +4447,30 @@ header {
   gap: 13px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 2px 54px 10px 54px;
+  padding: 4px 44px 12px 0;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
   -ms-overflow-style: none;
   overscroll-behavior-inline: contain;
-  scroll-behavior: smooth;
-  mask-image: linear-gradient(90deg, #000 0%, #000 93%, transparent 100%);
+  scroll-behavior: auto;
+  cursor: grab;
+  mask-image: linear-gradient(90deg, #000 0%, #000 calc(100% - 44px), transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 calc(100% - 44px), transparent 100%);
+}
+
+.home-watched-rail.has-scroll-left {
+  mask-image: linear-gradient(90deg, transparent 0%, #000 36px, #000 calc(100% - 44px), transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 36px, #000 calc(100% - 44px), transparent 100%);
+}
+
+.home-watched-rail.is-at-end {
+  mask-image: linear-gradient(90deg, transparent 0%, #000 36px, #000 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 36px, #000 100%);
+}
+
+.home-watched-rail.is-dragging {
+  cursor: grabbing !important;
+  user-select: none !important;
 }
 
 .home-watched-rail::-webkit-scrollbar {
@@ -4461,6 +4487,8 @@ header {
   text-align: left;
   cursor: pointer;
   scroll-snap-align: start;
+  contain: paint;
+  will-change: transform;
 }
 
 .home-watched-poster {
@@ -4471,6 +4499,9 @@ header {
   border-radius: 12px;
   background: linear-gradient(145deg,#151b28,#090c13);
   box-shadow: 0 12px 30px rgba(0,0,0,.24);
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  transition: border-color .24s ease, box-shadow .24s ease, transform .24s cubic-bezier(.22,.61,.36,1);
 }
 
 .home-watched-poster img {
@@ -4478,12 +4509,18 @@ header {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform .22s ease;
+  transition: transform .28s cubic-bezier(.22,.61,.36,1);
+}
+
+.home-watched-card:hover .home-watched-poster {
+  border-color: rgba(255,193,7,.48);
+  box-shadow: 0 16px 36px rgba(0,0,0,.45);
+  transform: translateY(-2px);
 }
 
 .home-watched-card:hover .home-watched-poster img,
 .home-watched-card:focus-visible .home-watched-poster img {
-  transform: scale(1.035);
+  transform: scale(1.04);
 }
 
 .home-watched-card:focus-visible {
@@ -4492,6 +4529,8 @@ header {
 
 .home-watched-card:focus-visible .home-watched-poster {
   border-color: rgba(255,193,7,.62);
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 2px rgba(255,193,7,.18);
 }
 
 .home-watched-card > strong {
@@ -4671,14 +4710,30 @@ header {
   gap: 13px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 2px 54px 11px 3px;
-  margin-right: -3px;
+  padding: 4px 44px 12px 0;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
   -ms-overflow-style: none;
   overscroll-behavior-inline: contain;
-  scroll-behavior: smooth;
-  mask-image: linear-gradient(90deg, #000 0%, #000 93%, transparent 100%);
+  scroll-behavior: auto;
+  cursor: grab;
+  mask-image: linear-gradient(90deg, #000 0%, #000 calc(100% - 44px), transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 calc(100% - 44px), transparent 100%);
+}
+
+.home-theme-scroller.has-scroll-left {
+  mask-image: linear-gradient(90deg, transparent 0%, #000 36px, #000 calc(100% - 44px), transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 36px, #000 calc(100% - 44px), transparent 100%);
+}
+
+.home-theme-scroller.is-at-end {
+  mask-image: linear-gradient(90deg, transparent 0%, #000 36px, #000 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 36px, #000 100%);
+}
+
+.home-theme-scroller.is-dragging {
+  cursor: grabbing !important;
+  user-select: none !important;
 }
 
 .home-theme-scroller::-webkit-scrollbar {
@@ -4695,6 +4750,8 @@ header {
   text-align: left;
   cursor: pointer;
   scroll-snap-align: start;
+  contain: paint;
+  will-change: transform;
 }
 
 .home-title-poster {
@@ -4705,6 +4762,9 @@ header {
   border-radius: 12px;
   background: linear-gradient(145deg,#151b28,#090c13);
   box-shadow: 0 12px 30px rgba(0,0,0,.24);
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  transition: border-color .24s ease, box-shadow .24s ease, transform .24s cubic-bezier(.22,.61,.36,1);
 }
 
 .home-title-poster img {
@@ -4712,12 +4772,18 @@ header {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform .22s ease, filter .22s ease;
+  transition: transform .28s cubic-bezier(.22,.61,.36,1), filter .28s ease;
+}
+
+.home-title-card:hover .home-title-poster {
+  border-color: rgba(255,193,7,.48);
+  box-shadow: 0 16px 36px rgba(0,0,0,.45);
+  transform: translateY(-2px);
 }
 
 .home-title-card:hover .home-title-poster img,
 .home-title-card:focus-visible .home-title-poster img {
-  transform: scale(1.035);
+  transform: scale(1.04);
   filter: brightness(1.05);
 }
 
@@ -4727,7 +4793,8 @@ header {
 
 .home-title-card:focus-visible .home-title-poster {
   border-color: rgba(255,193,7,.62);
-  box-shadow: 0 0 0 2px rgba(255,193,7,.12);
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 2px rgba(255,193,7,.18);
 }
 
 .home-title-type,
@@ -4811,13 +4878,14 @@ header {
   box-shadow: 0 10px 28px rgba(0,0,0,.36);
   backdrop-filter: blur(12px);
   pointer-events: auto;
-  transition: opacity .18s ease, border-color .18s ease, background .18s ease;
+  transition: opacity .2s ease, border-color .2s ease, background .2s ease, transform .2s ease;
 }
 
 .home-rail-arrow:hover,
 .home-rail-arrow:focus-visible {
   border-color: rgba(255,193,7,.6);
   background: rgba(8,10,16,.92);
+  transform: scale(1.1);
   outline: none;
 }
 

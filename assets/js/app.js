@@ -146,6 +146,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let homeFeaturedIndex = 0;
     let homeFeaturedTimer = null;
     let homeDisplayUsage = new Map();
+    let lastRenderedRailItemKeys = new Set();
     let homeLastRevalidationAt = 0;
     let homeWatchedCatalogFallback = { movies: [], series: [] };
     const HOME_REVALIDATE_COOLDOWN_MS = 5 * 60 * 1000;
@@ -3403,9 +3404,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         .filter(Boolean);
     }
 
-    const HOME_RAIL_ITEM_LIMIT = 12;
-    const HOME_THEME_COUNT = 6;
-    const HOME_THEME_SOURCE_LIMIT = 220;
+    const HOME_RAIL_ITEM_LIMIT = 24;
+    const HOME_THEME_COUNT = 8;
     const HOME_THEME_MIN_ITEMS = 5;
 
     const HOME_THEME_ALIASES = [
@@ -3582,7 +3582,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
 
       const themeCounts = new Map();
-      items.slice(0, HOME_THEME_SOURCE_LIMIT).forEach(item => {
+      items.forEach(item => {
         getHomeThemesForItem(item).forEach(theme => {
           themeCounts.set(theme, (themeCounts.get(theme) || 0) + 1);
         });
@@ -3647,16 +3647,119 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return card;
     }
 
+    function filterNonSequentialItems(candidates, previousRailKeys) {
+      if (!previousRailKeys || !previousRailKeys.size) return candidates;
+      const clean = [];
+      const deferred = [];
+      (Array.isArray(candidates) ? candidates : []).forEach(item => {
+        const key = getHomeDisplayKey(item);
+        if (key && previousRailKeys.has(key)) deferred.push(item);
+        else clean.push(item);
+      });
+      if (clean.length >= HOME_THEME_MIN_ITEMS) return clean;
+      return [...clean, ...deferred];
+    }
+
+    function getRailScrollStep(scroller) {
+      const card = scroller?.querySelector('.home-title-card, .home-watched-card');
+      if (card) {
+        const cardWidth = card.offsetWidth || 180;
+        const gap = 13;
+        const stride = cardWidth + gap;
+        const visibleCards = Math.max(1, Math.floor(scroller.clientWidth / stride));
+        const count = Math.max(1, visibleCards > 1 ? visibleCards - 1 : 1);
+        return count * stride;
+      }
+      return Math.max(260, Math.round((scroller?.clientWidth || 800) * 0.72));
+    }
+
+    function enableHomeDragToScroll(scroller) {
+      if (!scroller || scroller._hasDragScroll) return;
+      scroller._hasDragScroll = true;
+
+      let isDown = false;
+      let startX = 0;
+      let scrollStart = 0;
+      let isDragging = false;
+      let velocity = 0;
+      let lastX = 0;
+      let lastTime = 0;
+      let momentumRaf = null;
+
+      scroller.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        if (e.target.closest('button.home-watched-menu, .home-watched-menu-panel, .home-rail-arrow, .home-rail-more')) return;
+        isDown = true;
+        isDragging = false;
+        startX = e.pageX;
+        scrollStart = scroller.scrollLeft;
+        lastX = e.pageX;
+        lastTime = Date.now();
+        velocity = 0;
+        cancelAnimationFrame(momentumRaf);
+      });
+
+      window.addEventListener('mousemove', e => {
+        if (!isDown) return;
+        const dx = e.pageX - startX;
+        if (!isDragging && Math.abs(dx) > 5) {
+          isDragging = true;
+          scroller.classList.add('is-dragging');
+        }
+        if (isDragging) {
+          const now = Date.now();
+          const dt = Math.max(1, now - lastTime);
+          velocity = (e.pageX - lastX) / dt;
+          lastX = e.pageX;
+          lastTime = now;
+          scroller.scrollLeft = scrollStart - dx;
+        }
+      });
+
+      const onDragEnd = () => {
+        if (!isDown) return;
+        isDown = false;
+        scroller.classList.remove('is-dragging');
+
+        if (isDragging) {
+          isDragging = false;
+          const suppressClick = clickEv => {
+            clickEv.preventDefault();
+            clickEv.stopPropagation();
+          };
+          window.addEventListener('click', suppressClick, { capture: true, once: true });
+          setTimeout(() => window.removeEventListener('click', suppressClick, { capture: true }), 80);
+
+          if (Math.abs(velocity) > 0.22) {
+            let v = velocity * 15;
+            const applyMomentum = () => {
+              if (Math.abs(v) < 0.5) return;
+              scroller.scrollLeft -= v;
+              v *= 0.92;
+              momentumRaf = requestAnimationFrame(applyMomentum);
+            };
+            momentumRaf = requestAnimationFrame(applyMomentum);
+          }
+        }
+      };
+
+      window.addEventListener('mouseup', onDragEnd);
+    }
+
     function updateHomeRailControls(scroller, prevBtn, nextBtn) {
       if (!scroller || !prevBtn || !nextBtn) return;
       const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
       const scrollLeft = Math.max(0, Math.min(scroller.scrollLeft, maxScrollLeft));
-      const canScrollLeft = maxScrollLeft > 0 && scrollLeft > 1;
-      const canScrollRight = maxScrollLeft > 0 && scrollLeft < maxScrollLeft - 1;
+      const canScrollLeft = maxScrollLeft > 0 && scrollLeft > 6;
+      const canScrollRight = maxScrollLeft > 0 && scrollLeft < maxScrollLeft - 6;
+
       prevBtn.disabled = !canScrollLeft;
       nextBtn.disabled = !canScrollRight;
       prevBtn.classList.toggle('is-hidden', !canScrollLeft);
       nextBtn.classList.toggle('is-hidden', !canScrollRight);
+
+      scroller.classList.toggle('has-scroll-left', canScrollLeft);
+      scroller.classList.toggle('is-at-end', !canScrollRight && canScrollLeft);
     }
 
     function setupHomeRailControls(scroller) {
@@ -3668,23 +3771,28 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       const prevBtn = nav.querySelector('.home-rail-prev');
       const nextBtn = nav.querySelector('.home-rail-next');
-      const step = () => Math.max(260, Math.round(scroller.clientWidth * 0.72));
 
       prevBtn.addEventListener('click', () => {
-        scroller.scrollBy({ left: -step(), behavior: 'smooth' });
+        scroller.scrollBy({ left: -getRailScrollStep(scroller), behavior: 'smooth' });
       });
       nextBtn.addEventListener('click', () => {
-        scroller.scrollBy({ left: step(), behavior: 'smooth' });
+        scroller.scrollBy({ left: getRailScrollStep(scroller), behavior: 'smooth' });
       });
       scroller.addEventListener('scroll', () => updateHomeRailControls(scroller, prevBtn, nextBtn), { passive: true });
+
+      enableHomeDragToScroll(scroller);
 
       updateHomeRailControls(scroller, prevBtn, nextBtn);
       requestAnimationFrame(() => updateHomeRailControls(scroller, prevBtn, nextBtn));
       return nav;
     }
 
-    function renderHomeCatalogRails(type, railElement, sectionElement) {
+    function renderHomeCatalogRails(type, railElement, sectionElement, savedScrolls = new Map()) {
       if (!railElement || !sectionElement) return;
+
+      railElement.querySelectorAll('.home-theme-scroller').forEach(s => {
+        if (s.dataset.railKey) savedScrolls.set(type + ':' + s.dataset.railKey, s.scrollLeft);
+      });
       railElement.innerHTML = '';
 
       const rails = buildHomeCatalogRails(type);
@@ -3695,7 +3803,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       let renderedRails = 0;
       rails.forEach(rail => {
-        const visibleItems = getHomeItemsWithinDisplayLimit(rail.items);
+        const withinLimit = getHomeItemsWithinDisplayLimit(rail.items);
+        const visibleItems = filterNonSequentialItems(withinLimit, lastRenderedRailItemKeys);
         const minItems = rail.key === 'latest' ? 1 : HOME_THEME_MIN_ITEMS;
         if (visibleItems.length < minItems) return;
 
@@ -3715,9 +3824,17 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
         const scroller = document.createElement('div');
         scroller.className = 'home-theme-scroller';
+        scroller.dataset.railKey = rail.key;
         visibleItems.forEach(item => scroller.appendChild(renderHomeTitleCard(item)));
 
         registerHomeDisplayItems(visibleItems);
+        lastRenderedRailItemKeys = new Set(visibleItems.map(item => getHomeDisplayKey(item)).filter(Boolean));
+
+        const prevScroll = savedScrolls.get(type + ':' + rail.key);
+        if (prevScroll > 0) {
+          scroller.scrollLeft = prevScroll;
+        }
+
         block.appendChild(scroller);
         block.appendChild(setupHomeRailControls(scroller));
 
@@ -3741,8 +3858,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const update = () => {
         const maxScrollLeft = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
         const scrollLeft = Math.max(0, Math.min(scroller.scrollLeft, maxScrollLeft));
-        const canScrollLeft = maxScrollLeft > 0 && scrollLeft > 1;
-        const canScrollRight = maxScrollLeft > 0 && scrollLeft < maxScrollLeft - 1;
+        const canScrollLeft = maxScrollLeft > 0 && scrollLeft > 6;
+        const canScrollRight = maxScrollLeft > 0 && scrollLeft < maxScrollLeft - 6;
 
         nextBtn.disabled = !canScrollRight;
         nextBtn.classList.toggle('is-hidden', !canScrollRight);
@@ -3751,14 +3868,19 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           prevBtn.disabled = !canScrollLeft;
           prevBtn.classList.toggle('is-hidden', !canScrollLeft);
         }
+
+        scroller.classList.toggle('has-scroll-left', canScrollLeft);
+        scroller.classList.toggle('is-at-end', !canScrollRight && canScrollLeft);
       };
-      const step = () => Math.max(260, Math.round(scroller.clientWidth * 0.72));
-      const onNext = () => scroller.scrollBy({ left: step(), behavior: 'smooth' });
-      const onPrev = () => scroller.scrollBy({ left: -step(), behavior: 'smooth' });
+
+      const onNext = () => scroller.scrollBy({ left: getRailScrollStep(scroller), behavior: 'smooth' });
+      const onPrev = () => scroller.scrollBy({ left: -getRailScrollStep(scroller), behavior: 'smooth' });
 
       nextBtn.addEventListener('click', onNext);
       if (prevBtn) prevBtn.addEventListener('click', onPrev);
       scroller.addEventListener('scroll', update, { passive: true });
+
+      enableHomeDragToScroll(scroller);
 
       let ro = null;
       if (typeof ResizeObserver !== 'undefined') {
@@ -3781,10 +3903,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       requestAnimationFrame(update);
     }
 
-    function renderHomeRecommendations() {
+    function renderHomeRecommendations(savedScrollLeft = 0) {
       const section = elements.homeRecommendationsSection;
       const rail = elements.homeRecommendationsRail;
       if (!section || !rail) return;
+
+      const currentScroll = savedScrollLeft || rail.scrollLeft || 0;
 
       const allItems = [
         ...getHomeCatalogItems('series'),
@@ -3793,7 +3917,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       const recommendations = getHomeRecommendationMix(allItems);
       const visibleRecommendations = getHomeItemsWithinDisplayLimit(recommendations);
-      if (visibleRecommendations.length < HOME_THEME_MIN_ITEMS) {
+      const nonSequential = filterNonSequentialItems(visibleRecommendations, lastRenderedRailItemKeys);
+
+      if (nonSequential.length < HOME_THEME_MIN_ITEMS) {
         section.style.display = 'none';
         rail.innerHTML = '';
         if (typeof elements.homeRecommendationsNext?._homeRailCleanup === 'function') {
@@ -3808,8 +3934,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       section.style.display = '';
       rail.innerHTML = '';
-      visibleRecommendations.forEach(item => rail.appendChild(renderHomeTitleCard(item)));
-      registerHomeDisplayItems(visibleRecommendations);
+      nonSequential.forEach(item => rail.appendChild(renderHomeTitleCard(item)));
+      registerHomeDisplayItems(nonSequential);
+      lastRenderedRailItemKeys = new Set(nonSequential.map(item => getHomeDisplayKey(item)).filter(Boolean));
+
+      if (currentScroll > 0) {
+        rail.scrollLeft = currentScroll;
+      }
 
       const topThemes = getTasteTopThemes(2);
       const title = section.querySelector('h2');
@@ -3824,13 +3955,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       setupSingleHomeRailArrow(rail, elements.homeRecommendationsNext, elements.homeRecommendationsPrev);
     }
 
-    function renderHomeCatalogSections() {
-      renderHomeRecommendations();
+    function renderHomeCatalogSections(savedScrolls = new Map()) {
+      renderHomeRecommendations(savedScrolls.get('recommendations') || 0);
       requestAnimationFrame(() => {
         if (currentMode !== 'home') return;
-        renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection);
+        renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection, savedScrolls);
         requestAnimationFrame(() => {
-          if (currentMode === 'home') renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection);
+          if (currentMode === 'home') renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection, savedScrolls);
         });
       });
     }
@@ -3875,9 +4006,19 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           '</div>' +
           '<div class="home-featured-poster-wrap"><img class="home-featured-poster" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async"></div>';
 
-        slide.querySelector('.home-featured-watch')?.addEventListener('click', () => {
+        const openItem = () => {
           if (item.type === 'movie') onMovieCardClick(item.item);
           else openSeriesPage(item.item);
+        };
+
+        slide.addEventListener('click', (event) => {
+          if (event.target.closest('.home-featured-watch')) return;
+          openItem();
+        });
+
+        slide.querySelector('.home-featured-watch')?.addEventListener('click', (event) => {
+          event.stopPropagation();
+          openItem();
         });
         elements.homeFeaturedTrack.appendChild(slide);
 
@@ -3889,8 +4030,100 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         elements.homeFeaturedDots?.appendChild(dot);
       });
 
+      setupHomeFeaturedSwipe();
       updateHomeFeaturedPosition();
       startHomeFeaturedTimer();
+    }
+
+    function setupHomeFeaturedSwipe() {
+      const track = elements.homeFeaturedTrack;
+      if (!track || track._swipeInitialized) return;
+      track._swipeInitialized = true;
+
+      let isDown = false;
+      let startX = 0;
+      let startY = 0;
+      let isSwiping = false;
+      let trackWidth = 0;
+      let activePointerId = null;
+
+      track.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (homeFeaturedItems.length < 2) return;
+        isDown = true;
+        isSwiping = false;
+        startX = e.clientX;
+        startY = e.clientY;
+        activePointerId = e.pointerId;
+        trackWidth = track.clientWidth || window.innerWidth || 1;
+      });
+
+      track.addEventListener('pointermove', e => {
+        if (!isDown || e.pointerId !== activePointerId) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        if (!isSwiping) {
+          if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+            isSwiping = true;
+            track.classList.add('is-swiping');
+            clearInterval(homeFeaturedTimer);
+            homeFeaturedTimer = null;
+            try { track.setPointerCapture(e.pointerId); } catch (_) {}
+          } else if (Math.abs(dy) > 10) {
+            isDown = false;
+            return;
+          }
+        }
+
+        if (isSwiping) {
+          if (e.cancelable) e.preventDefault();
+          let deltaPercent = (dx / trackWidth) * 100;
+          if ((homeFeaturedIndex === 0 && dx > 0) || (homeFeaturedIndex === homeFeaturedItems.length - 1 && dx < 0)) {
+            deltaPercent *= 0.35;
+          }
+          track.style.transform = 'translate3d(' + (-(homeFeaturedIndex * 100) + deltaPercent) + '%, 0, 0)';
+        }
+      });
+
+      const onPointerEnd = e => {
+        if (!isDown || e.pointerId !== activePointerId) return;
+        isDown = false;
+        try { track.releasePointerCapture(e.pointerId); } catch (_) {}
+
+        if (isSwiping) {
+          isSwiping = false;
+          track.classList.remove('is-swiping');
+          const dx = e.clientX - startX;
+
+          const suppressClick = ev => {
+            ev.preventDefault();
+            ev.stopPropagation();
+          };
+          window.addEventListener('click', suppressClick, { capture: true, once: true });
+          setTimeout(() => window.removeEventListener('click', suppressClick, { capture: true }), 80);
+
+          if (dx < -45 && homeFeaturedIndex < homeFeaturedItems.length - 1) {
+            moveHomeFeatured(1);
+          } else if (dx > 45 && homeFeaturedIndex > 0) {
+            moveHomeFeatured(-1);
+          } else {
+            updateHomeFeaturedPosition();
+          }
+        }
+        startHomeFeaturedTimer();
+      };
+
+      track.addEventListener('pointerup', onPointerEnd);
+      track.addEventListener('pointercancel', onPointerEnd);
+
+      track.addEventListener('mouseenter', () => {
+        clearInterval(homeFeaturedTimer);
+        homeFeaturedTimer = null;
+      });
+      track.addEventListener('mouseleave', () => {
+        startHomeFeaturedTimer();
+      });
     }
 
     function updateHomeFeaturedPosition() {
@@ -3941,11 +4174,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       });
     }
 
-    function renderHomeWatched() {
+    function renderHomeWatched(savedScrollLeft = 0) {
       if (!elements.homeWatchedRail) return;
+      const currentScroll = savedScrollLeft || elements.homeWatchedRail.scrollLeft || 0;
       const items = getHomeWatchedItems();
       elements.homeWatchedRail.innerHTML = '';
-      elements.homeWatchedRail.scrollLeft = 0;
       elements.homeWatchedPrev?.classList.add('is-hidden');
       elements.homeWatchedPrev && (elements.homeWatchedPrev.disabled = true);
       elements.homeWatchedNext?.classList.add('is-hidden');
@@ -3968,6 +4201,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
 
       registerHomeDisplayItems(items);
+      lastRenderedRailItemKeys = new Set(items.map(item => getHomeDisplayKey(item)).filter(Boolean));
 
       items.forEach(item => {
         const card = document.createElement('div');
@@ -4034,6 +4268,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         elements.homeWatchedRail.appendChild(card);
       });
 
+      if (currentScroll > 0) {
+        elements.homeWatchedRail.scrollLeft = currentScroll;
+      }
+
       setupSingleHomeRailArrow(elements.homeWatchedRail, elements.homeWatchedNext, elements.homeWatchedPrev);
     }
 
@@ -4091,11 +4329,26 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function renderHomeDashboard() {
+      const savedScrolls = new Map();
+      if (elements.homeWatchedRail) {
+        savedScrolls.set('watched', elements.homeWatchedRail.scrollLeft);
+      }
+      if (elements.homeRecommendationsRail) {
+        savedScrolls.set('recommendations', elements.homeRecommendationsRail.scrollLeft);
+      }
+      elements.homeSeriesRails?.querySelectorAll('.home-theme-scroller').forEach(s => {
+        if (s.dataset.railKey) savedScrolls.set('series:' + s.dataset.railKey, s.scrollLeft);
+      });
+      elements.homeMoviesRails?.querySelectorAll('.home-theme-scroller').forEach(s => {
+        if (s.dataset.railKey) savedScrolls.set('movie:' + s.dataset.railKey, s.scrollLeft);
+      });
+
       homeDisplayUsage = new Map();
+      lastRenderedRailItemKeys = new Set();
       renderHomeFeatured();
       registerHomeDisplayItems(homeFeaturedItems);
-      renderHomeWatched();
-      renderHomeCatalogSections();
+      renderHomeWatched(savedScrolls.get('watched') || 0);
+      renderHomeCatalogSections(savedScrolls);
     }
 
     function scheduleHomeCatalogRender() {
