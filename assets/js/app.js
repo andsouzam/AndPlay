@@ -9084,6 +9084,27 @@ function showHome(targetScroll = 0) {
       elements.subCandidateSelect.innerHTML = '<option value="">Identificando...</option>';
       elements.subSelect.innerHTML = '<option value="none">Desativada</option>';
       if (elements.subFileInput) elements.subFileInput.value = '';
+
+      // Sair de tela cheia e restaurar orientação se estiver ativa
+      if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
+        try {
+          if (document.exitFullscreen) document.exitFullscreen();
+          else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        } catch (_) {}
+      }
+      if (elements.videoModal) {
+        elements.videoModal.classList.remove('eplay-fullscreen');
+      }
+      const playerContainer = elements.videoPlayer?.closest('.video-container');
+      if (playerContainer) {
+        playerContainer.classList.remove('eplay-fullscreen');
+      }
+      document.body.classList.remove('eplay-fullscreen-active');
+      try {
+        if (screen.orientation && typeof screen.orientation.unlock === 'function') {
+          screen.orientation.unlock();
+        }
+      } catch (_) {}
     }
 
     // Eventos do player de vídeo para tratamento de disponibilidade
