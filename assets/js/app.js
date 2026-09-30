@@ -469,15 +469,45 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return { type: 'dublado', label: 'Dublado', badge: 'DUB', icon: '🔊', desc: 'Áudio Dublado em Português' };
     }
 
-    // Título limpo e elegante para exibição no card
+    // Título limpo e elegante para exibição no card (remove ano, 4K, tags [dub], etc.)
     function cleanDisplayTitle(rawTitle) {
       if (!rawTitle) return '';
       return rawTitle
         .replace(/^[0-9]+\s*[-–—]\s*/, '')      // '1 - ', '02 - '
         .replace(/\b4k\b/gi, '')                // '4K', '4k'
         .replace(/\[\s*(?:l|leg|legendado|dub|dublado|lan[cç]amentos?|hdr|dv|hybrid|cinema|rec|corrigido)\s*\]/gi, '')
+        .replace(/\s*\(\s*(?:19|20)\d{2}(?:\s*[-–—]\s*(?:(?:19|20)\d{2})?)?\s*\)/gi, '') // Remove '(ano)', e.g. '(2024)', '(1999)', '(2018-2022)'
+        .replace(/\s*\[\s*(?:19|20)\d{2}(?:\s*[-–—]\s*(?:(?:19|20)\d{2})?)?\s*\]/gi, '') // Remove '[ano]'
+        .replace(/\s*\(\s*(?:l|leg|legendado|dub|dublado|lan[cç]amentos?|4k|hdr|dv)\s*\)/gi, '')
         .replace(/\s+/g, ' ')
         .trim();
+    }
+
+    function getItemYear(item) {
+      if (!item) return 0;
+      let y = item.year;
+      if (!y && item.primaryItem) y = item.primaryItem.year;
+      if (!y && item.releaseDate) y = String(item.releaseDate).substring(0, 4);
+      if (!y && item.primaryItem?.releaseDate) y = String(item.primaryItem.releaseDate).substring(0, 4);
+      if (!y) {
+        const raw = item.rawName || item.name || item.title || item.primaryItem?.name || item.primaryItem?.title || '';
+        const match = String(raw).match(/\b(19\d\d|20\d\d)\b/);
+        if (match) y = match[1];
+      }
+      const num = parseInt(y, 10);
+      return (!isNaN(num) && num >= 1900 && num <= 2100) ? num : 0;
+    }
+
+    function compareByReleaseYear(a, b) {
+      const yearA = getItemYear(a);
+      const yearB = getItemYear(b);
+      if (yearB !== yearA) return yearB - yearA; // Mais recentes primeiro (2025, 2024, 2023...)
+      const timeA = Number(a.added || a.last_modified || a.primaryItem?.added || a.primaryItem?.last_modified || 0);
+      const timeB = Number(b.added || b.last_modified || b.primaryItem?.added || b.primaryItem?.last_modified || 0);
+      if (timeB !== timeA) return timeB - timeA;
+      const idA = Number(a.stream_id || a.series_id || a.primaryItem?.stream_id || 0);
+      const idB = Number(b.stream_id || b.series_id || b.primaryItem?.stream_id || 0);
+      return idB - idA;
     }
 
     function isSpecialMovieCategory(catId) {
@@ -660,13 +690,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
       });
 
-      // Manter ordenação decrescente de adição
-      groups.sort((a, b) => {
-        const timeA = Number(a.added || a.last_modified || 0);
-        const timeB = Number(b.added || b.last_modified || 0);
-        if (timeB !== timeA) return timeB - timeA;
-        return Number(b.stream_id || 0) - Number(a.stream_id || 0);
-      });
+      // Ordenar por ano de lançamento / estreia (mais recentes primeiro)
+      groups.sort(compareByReleaseYear);
 
       return groups;
     }
@@ -810,13 +835,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
       });
 
-      // Ordenar por data de adição / atualização (mais recentes primeiro)
-      groups.sort((a, b) => {
-        const timeA = Number(a.last_modified || a.added || 0);
-        const timeB = Number(b.last_modified || b.added || 0);
-        if (timeB !== timeA) return timeB - timeA;
-        return Number(b.series_id || 0) - Number(a.series_id || 0);
-      });
+      // Ordenar por ano de lançamento / estreia (mais recentes primeiro)
+      groups.sort(compareByReleaseYear);
 
       return groups;
     }
@@ -1018,6 +1038,20 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           }
         });
       }, { passive: true });
+
+      // Previne arraste nativo de imagens em carrosséis e cards (evita travar o mouse e solavancos)
+      window.addEventListener('dragstart', (e) => {
+        if (e.target.closest('.home-featured-track, .home-theme-scroller, .home-watched-rail, .media-grid, .home-title-card, .home-watched-card, .media-card')) {
+          e.preventDefault();
+        }
+      });
+
+      // Atualiza o feed da Home se o perfil de gosto ou preferências forem sincronizados remotamente via Supabase
+      window.addEventListener('andplay:remote-preferences-synced', () => {
+        if (currentMode === 'home') {
+          scheduleHomeCatalogRender();
+        }
+      });
 
       initSidebarState();
 
@@ -1527,10 +1561,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         return {
           genres: (parsed && parsed.genres && typeof parsed.genres === 'object') ? parsed.genres : {},
           types: (parsed && parsed.types && typeof parsed.types === 'object') ? parsed.types : { movie: 0, series: 0 },
+          eras: (parsed && parsed.eras && typeof parsed.eras === 'object') ? parsed.eras : {},
           recent: Array.isArray(parsed?.recent) ? parsed.recent : []
         };
       } catch (e) {
-        return { genres: {}, types: { movie: 0, series: 0 }, recent: [] };
+        return { genres: {}, types: { movie: 0, series: 0 }, eras: {}, recent: [] };
       }
     }
 
@@ -1559,6 +1594,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const themeItem = normalizedType === 'series'
         ? {
             type: 'series',
+            year: item.year,
             genre: item.genre || item.genre_name || '',
             imdbId: item.imdbId || item.imdb_id || '',
             added: item.added,
@@ -1566,6 +1602,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           }
         : {
             type: 'movie',
+            year: item.year || item.primaryItem?.year,
             primaryItem: item.primaryItem || item,
             genre: item.genre || item.primaryItem?.genre || item.genre_name || '',
             imdbId: item.imdbId || item.imdb_id || item.primaryItem?.imdbId || item.primaryItem?.imdb_id || '',
@@ -1585,14 +1622,22 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       profile.types[normalizedType] = Number(profile.types[normalizedType] || 0) + 1;
 
+      // Detecta época / década de preferência
+      const y = getItemYear(themeItem);
+      if (y > 0) {
+        profile.eras = profile.eras || {};
+        const era = y >= 2023 ? '2020s' : (y >= 2010 ? '2010s' : (y >= 2000 ? '2000s' : 'classicos'));
+        profile.eras[era] = Number(profile.eras[era] || 0) + 1;
+      }
+
       themes.forEach((theme, index) => {
-        profile.genres[theme] = Number(profile.genres[theme] || 0) + (index === 0 ? 2 : 1);
+        profile.genres[theme] = Number(profile.genres[theme] || 0) + (index === 0 ? 3 : 1.5);
       });
 
       profile.recent.unshift({ key: contentKey, at: Date.now() });
       profile.recent = profile.recent.slice(0, 80);
 
-      // Evita que um histórico muito antigo domine para sempre as recomendações.
+      // Evita que histórico antigo domine eternamente
       const values = Object.entries(profile.genres);
       if (values.length > 40) {
         values.sort((a, b) => Number(b[1]) - Number(a[1]));
@@ -1608,11 +1653,62 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function getTasteTopThemes(limit = 5) {
       const profile = readTasteProfile();
-      return Object.entries(profile.genres || {})
+      const combined = { ...(profile.genres || {}) };
+
+      // Enriquecer dinamicamente com os assistidos recentes
+      const history = getNormalizedRemoteHistory();
+      if (Array.isArray(history)) {
+        history.slice(0, 15).forEach((entry, idx) => {
+          const item = resolveHomeWatchedItem(entry.type, entry.id);
+          if (item) {
+            const themes = getHomeThemesForItem(item);
+            const w = Math.max(1, 4 - Math.floor(idx / 4));
+            themes.forEach(t => {
+              combined[t] = Number(combined[t] || 0) + w;
+            });
+          }
+        });
+      }
+
+      return Object.entries(combined)
         .filter(([, weight]) => Number(weight) > 0)
         .sort((a, b) => Number(b[1]) - Number(a[1]))
         .slice(0, limit)
         .map(([theme]) => theme);
+    }
+
+    function getTasteTypePreference() {
+      const profile = readTasteProfile();
+      let movieScore = Number(profile.types?.movie || 0);
+      let seriesScore = Number(profile.types?.series || 0);
+
+      // Enriquecer com os assistidos recentes (peso decrescente por recência)
+      const history = getNormalizedRemoteHistory();
+      if (Array.isArray(history)) {
+        history.slice(0, 30).forEach((entry, idx) => {
+          const recencyWeight = Math.max(0.6, 2.0 - (idx * 0.06));
+          if (entry.type === 'movie') movieScore += recencyWeight;
+          else if (entry.type === 'series') seriesScore += recencyWeight;
+        });
+      }
+
+      const total = movieScore + seriesScore;
+      if (total === 0) {
+        return { dominant: 'mixed', movieRatio: 0.5, seriesRatio: 0.5 };
+      }
+
+      const movieRatio = movieScore / total;
+      const seriesRatio = seriesScore / total;
+
+      // Se um dos lados tiver pelo menos 62%, domina o topo da tela
+      if (movieRatio >= 0.62) {
+        return { dominant: 'movie', movieRatio, seriesRatio };
+      } else if (seriesRatio >= 0.62) {
+        return { dominant: 'series', movieRatio, seriesRatio };
+      } else {
+        // Misturado: 50%/50%, 60%/40%, 40%/60%
+        return { dominant: 'mixed', movieRatio, seriesRatio };
+      }
     }
 
     function readHomeRatingCache() {
@@ -1642,7 +1738,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       const catalogRating = Number(sourceItem?.rating || item?.rating || 0);
       return catalogRating > 0
-        ? { value: catalogRating, source: 'Catálogo' }
+        ? { value: catalogRating, source: '' }
         : { value: 0, source: '' };
     }
 
@@ -3354,27 +3450,42 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         type: 'movie',
         id: String(item.stream_id || item.primaryItem?.stream_id || ''),
         item,
-        title: item.name || item.title || 'Filme',
+        title: cleanDisplayTitle(item.name || item.title || 'Filme'),
         year: item.year || '',
         rating: item.rating || '',
         poster: getHomeItemPoster({ type: 'movie', primaryItem: item }),
         plot: item.plot || '',
         added: getHomeItemTime(item)
-      })).filter(item => item.id);
+      })).filter(item => item.id && item.poster);
 
       const series = (Array.isArray(fullSeriesCache) ? fullSeriesCache : []).map(item => ({
         type: 'series',
         id: String(item.series_id || ''),
         item,
-        title: item.name || item.title || 'Série',
+        title: cleanDisplayTitle(item.name || item.title || 'Série'),
         year: item.year || '',
         rating: item.rating || '',
         poster: getHomeItemPoster({ type: 'series', cover: item.cover, stream_icon: item.stream_icon }),
         plot: item.plot || '',
         added: getHomeItemTime(item)
-      })).filter(item => item.id);
+      })).filter(item => item.id && item.poster);
 
-      return [...movies, ...series].sort((a, b) => b.added - a.added).slice(0, HOME_FEATURED_LIMIT);
+      const sortedAll = [...movies, ...series].sort((a, b) => compareByReleaseYear(a, b));
+      if (sortedAll.length <= HOME_FEATURED_LIMIT) return sortedAll;
+
+      // Amostragem dinâmica entre os top 30 lançamentos com poster e sinopse
+      const candidates = sortedAll.slice(0, Math.min(30, sortedAll.length));
+      const lead = candidates[0]; // Manter o #1 como âncora principal
+      const rest = candidates.slice(1);
+      const copy = rest.slice();
+      const restSample = [];
+      const needed = HOME_FEATURED_LIMIT - 1;
+      for (let i = 0; i < needed && copy.length > 0; i++) {
+        const idx = Math.floor(Math.random() * copy.length);
+        restSample.push(copy[idx]);
+        copy.splice(idx, 1);
+      }
+      return [lead, ...restSample];
     }
 
     function resolveHomeWatchedItem(type, id) {
@@ -3386,7 +3497,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         type,
         id: String(id),
         item: group,
-        title: group.name || group.title || (type === 'series' ? 'Série ' + id : 'Filme ' + id),
+        title: cleanDisplayTitle(group.name || group.title || (type === 'series' ? 'Série ' + id : 'Filme ' + id)),
         year: group.year || '',
         rating: group.rating || '',
         poster: type === 'series'
@@ -3409,18 +3520,22 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     const HOME_THEME_MIN_ITEMS = 5;
 
     const HOME_THEME_ALIASES = [
-      { keys: ['action', 'ação', 'adventure', 'aventura'], label: 'Ação e Aventura' },
-      { keys: ['comedy', 'comédia', 'comedia'], label: 'Comédia' },
-      { keys: ['crime'], label: 'Crime' },
+      { keys: ['action', 'acao', 'adventure', 'aventura'], label: 'Ação e Aventura' },
+      { keys: ['comedy', 'comedia'], label: 'Comédia' },
+      { keys: ['crime', 'policial', 'investigacao'], label: 'Crime' },
       { keys: ['drama'], label: 'Drama' },
       { keys: ['horror', 'terror'], label: 'Terror' },
-      { keys: ['thriller', 'suspense'], label: 'Suspense' },
-      { keys: ['romance'], label: 'Romance' },
-      { keys: ['science fiction', 'sci-fi', 'ficção científica', 'ficcao cientifica'], label: 'Ficção Científica' },
+      { keys: ['thriller', 'suspense', 'misterio'], label: 'Suspense' },
+      { keys: ['romance', 'romantico'], label: 'Romance' },
+      { keys: ['science fiction', 'sci-fi', 'scifi', 'sci fi', 'ficcao cientifica', 'ficcao'], label: 'Ficção Científica' },
       { keys: ['fantasy', 'fantasia'], label: 'Fantasia' },
-      { keys: ['animation', 'animação', 'animacao'], label: 'Animação' },
-      { keys: ['documentary', 'documentário', 'documentario'], label: 'Documentários' },
-      { keys: ['family', 'família', 'familia'], label: 'Família' }
+      { keys: ['animation', 'animacao', 'anime', 'desenho'], label: 'Animação' },
+      { keys: ['documentary', 'documentario', 'doc'], label: 'Documentários' },
+      { keys: ['family', 'familia', 'infantil', 'kids'], label: 'Família' },
+      { keys: ['war', 'guerra'], label: 'Guerra' },
+      { keys: ['western', 'faroeste'], label: 'Faroeste' },
+      { keys: ['music', 'musical', 'musica'], label: 'Música' },
+      { keys: ['history', 'historia', 'historico'], label: 'História' }
     ];
 
     function getHomeCatalogItems(type) {
@@ -3430,7 +3545,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             type: 'series',
             id: String(item.series_id || ''),
             item,
-            title: item.name || item.title || 'Série',
+            title: cleanDisplayTitle(item.name || item.title || 'Série'),
             year: item.year || '',
             rating: item.rating || '',
             poster: getHomeItemPoster({ type: 'series', cover: item.cover, stream_icon: item.stream_icon }),
@@ -3447,7 +3562,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           type: 'movie',
           id: String(item.stream_id || item.primaryItem?.stream_id || ''),
           item,
-          title: item.name || item.title || 'Filme',
+          title: cleanDisplayTitle(item.name || item.title || 'Filme'),
           year: item.year || '',
           rating: item.rating || '',
           poster: getHomeItemPoster({ type: 'movie', primaryItem: item }),
@@ -3459,23 +3574,33 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         .filter(item => item.id && item.poster);
     }
 
-    function normalizeHomeThemeLabel(raw) {
-      const value = String(raw || '').trim();
-      if (!value) return '';
-      const normalized = value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const alias = HOME_THEME_ALIASES.find(theme =>
-        theme.keys.some(key => normalized.includes(String(key).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')))
-      );
-      return alias ? alias.label : value;
-    }
-
     function getHomeThemesForItem(item) {
       const sourceItem = item?.item || item;
       const rawValues = [
         item?.genre,
         sourceItem?.genre,
-        sourceItem?.genre_name
+        sourceItem?.genre_name,
+        sourceItem?.category_name,
+        item?.category_name
       ].filter(Boolean);
+
+      // Enriquecer com categoria do catálogo (Xtream API geralmente organiza por category_id)
+      const isMovie = item?.type === 'movie' || sourceItem?.stream_id || !sourceItem?.series_id;
+      const catList = isMovie ? movieCategories : seriesCategories;
+      if (Array.isArray(catList) && catList.length > 0) {
+        const cId = String(item?.category_id || sourceItem?.category_id || '');
+        if (cId) {
+          const found = catList.find(c => String(c.category_id) === cId);
+          if (found && found.category_name) rawValues.push(found.category_name);
+        }
+        const catIds = item?.category_ids || sourceItem?.category_ids;
+        if (Array.isArray(catIds)) {
+          catIds.forEach(id => {
+            const found = catList.find(c => String(c.category_id) === String(id));
+            if (found && found.category_name) rawValues.push(found.category_name);
+          });
+        }
+      }
 
       const imdbId = item?.imdbId || item?.imdb_id || sourceItem?.imdbId || sourceItem?.imdb_id || '';
       if (imdbId) {
@@ -3483,14 +3608,32 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (Array.isArray(cached?.genres)) rawValues.push(cached.genres.join(','));
       }
 
-      const parts = rawValues
-        .join(',')
-        .replace(/[\[\]"]+/g, '')
-        .split(/[,;|/]+/)
-        .map(part => normalizeHomeThemeLabel(part))
-        .filter(Boolean);
+      if (!rawValues.length) return [];
 
-      return [...new Set(parts)];
+      const fullCombined = rawValues
+        .join(' ')
+        .replace(/[\[\]",;|/]+/g, ' ')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ');
+
+      const matchedThemes = new Set();
+
+      HOME_THEME_ALIASES.forEach(theme => {
+        const hasMatch = theme.keys.some(k => {
+          if (k.includes(' ')) {
+            return fullCombined.includes(k);
+          }
+          const regex = new RegExp('(?:^|\\s)' + k + '(?:$|\\s)', 'i');
+          return regex.test(fullCombined);
+        });
+        if (hasMatch) {
+          matchedThemes.add(theme.label);
+        }
+      });
+
+      return [...matchedThemes];
     }
 
     function getHomeItemTasteScore(item) {
@@ -3501,6 +3644,77 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const weight = Number(profile.genres?.[theme] || 0);
         return score + weight * (index === 0 ? 1 : 0.72);
       }, 0);
+    }
+
+    // Amostrador caótico estratificado: extrai uma amostra viva e variada do catálogo de 30 mil títulos
+    function sampleChaoticRailItems(candidates, limit = HOME_RAIL_ITEM_LIMIT, options = {}) {
+      if (!Array.isArray(candidates) || !candidates.length) return [];
+      if (candidates.length <= limit) {
+        return [...candidates].sort((a, b) => {
+          const yA = getItemYear(a);
+          const yB = getItemYear(b);
+          return (yB - yA) + (Math.random() * 4 - 2);
+        });
+      }
+
+      const anchorCount = Math.min(options.anchorCount ?? 2, candidates.length);
+      const anchors = candidates.slice(0, anchorCount);
+      const pool = candidates.slice(anchorCount);
+      const needed = limit - anchorCount;
+      if (needed <= 0) return anchors;
+
+      // Estratificação em 3 faixas do catálogo:
+      // Faixa 1 (Recentes): primeiros 30% do pool
+      // Faixa 2 (Consolidados / Meio): 30% a 70% do pool
+      // Faixa 3 (Baú / Clássicos / Obras Cult): 30% finais do pool
+      const cut1 = Math.max(1, Math.floor(pool.length * 0.30));
+      const cut2 = Math.max(cut1 + 1, Math.floor(pool.length * 0.70));
+
+      const tier1 = pool.slice(0, cut1);
+      const tier2 = pool.slice(cut1, cut2);
+      const tier3 = pool.slice(cut2);
+
+      const count1 = Math.min(tier1.length, Math.round(needed * 0.50));
+      const count2 = Math.min(tier2.length, Math.round(needed * 0.30));
+      const count3 = Math.min(tier3.length, needed - count1 - count2);
+
+      const pickRandomSample = (arr, count) => {
+        if (!arr.length || count <= 0) return [];
+        if (arr.length <= count) return [...arr];
+        const copy = arr.slice();
+        const selected = [];
+        for (let i = 0; i < count; i++) {
+          const idx = Math.floor(Math.random() * copy.length);
+          selected.push(copy[idx]);
+          copy.splice(idx, 1);
+        }
+        return selected;
+      };
+
+      const picked1 = pickRandomSample(tier1, count1);
+      const picked2 = pickRandomSample(tier2, count2);
+      const picked3 = pickRandomSample(tier3, count3);
+
+      let combined = [...picked1, ...picked2, ...picked3];
+      if (combined.length < needed) {
+        const usedKeys = new Set(combined.map(x => (x.type || '') + ':' + (x.id || '')));
+        const leftover = pool.filter(x => !usedKeys.has((x.type || '') + ':' + (x.id || '')));
+        const extra = pickRandomSample(leftover, needed - combined.length);
+        combined.push(...extra);
+      }
+
+      // Ordenação caótica: equilíbrio orgânico entre relevância/ano e imprevisibilidade/descoberta
+      combined.sort((a, b) => {
+        const yA = getItemYear(a);
+        const yB = getItemYear(b);
+        const rA = Number(a.rating || a.item?.rating || 0);
+        const rB = Number(b.rating || b.item?.rating || 0);
+        const scoreA = (yA * 2.5) + (rA * 6) + (Math.random() * 35);
+        const scoreB = (yB * 2.5) + (rB * 6) + (Math.random() * 35);
+        return scoreB - scoreA;
+      });
+
+      return [...anchors, ...combined].slice(0, limit);
     }
 
     function getHomeRecommendationMix(items) {
@@ -3529,86 +3743,163 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           };
         })
         .filter(entry => entry.taste > 0 && !watchedKeys.has(entry.item.type + ':' + entry.item.id))
-        .sort((a, b) => b.taste - a.taste || b.item.added - a.item.added);
+        .sort((a, b) => b.taste - a.taste || compareByReleaseYear(b.item, a.item));
 
       const personalized = [];
       const used = new Set();
 
-      ranked.filter(entry => entry.matchesTop).slice(0, 8).forEach(entry => {
-        personalized.push(entry.item);
-        used.add(entry.item.type + ':' + entry.item.id);
+      // Aloca ~75% do trilho para títulos que combinam com os top gêneros do usuário com rotação caótica
+      const tasteQuota = Math.round(HOME_RAIL_ITEM_LIMIT * 0.75);
+      const matchingEntries = ranked.filter(entry => entry.matchesTop);
+      const matchingPool = matchingEntries.slice(0, Math.min(80, matchingEntries.length)).map(e => e.item);
+      const sampledTasteItems = sampleChaoticRailItems(matchingPool, tasteQuota, { anchorCount: 3 });
+
+      sampledTasteItems.forEach(item => {
+        personalized.push(item);
+        used.add(item.type + ':' + item.id);
       });
 
-      // Mantém descoberta fora da bolha: pelo menos parte do trilho vem de temas não preferidos.
-      items
+      // Mantém descoberta (15% a 25% do trilho): títulos aclamados fora da zona de conforto com rotação caótica
+      const discoveryQuota = Math.max(3, Math.min(6, HOME_RAIL_ITEM_LIMIT - personalized.length));
+      const discoveryCandidates = items
         .filter(item =>
           !used.has(item.type + ':' + item.id) &&
           !watchedKeys.has(item.type + ':' + item.id)
         )
-        .sort((a, b) => b.added - a.added)
-        .filter(item => !getHomeThemesForItem(item).some(theme => topThemes.includes(theme)))
-        .slice(0, 4)
-        .forEach(item => {
-          personalized.push(item);
-          used.add(item.type + ':' + item.id);
-        });
+        .sort((a, b) => {
+          const rA = getHomeRatingInfo(a).value;
+          const rB = getHomeRatingInfo(b).value;
+          if (rB !== rA) return rB - rA;
+          return compareByReleaseYear(a, b);
+        })
+        .filter(item => !getHomeThemesForItem(item).some(theme => topThemes.includes(theme)));
+
+      const discoveryPool = discoveryCandidates.slice(0, Math.min(60, discoveryCandidates.length));
+      const sampledDiscoveryItems = sampleChaoticRailItems(discoveryPool, discoveryQuota, { anchorCount: 1 });
+
+      sampledDiscoveryItems.forEach(item => {
+        personalized.push(item);
+        used.add(item.type + ':' + item.id);
+      });
 
       return personalized.slice(0, HOME_RAIL_ITEM_LIMIT);
     }
 
     function buildHomeCatalogRails(type) {
-      const items = getHomeCatalogItems(type).sort((a, b) => b.added - a.added);
+      const items = getHomeCatalogItems(type).sort((a, b) => compareByReleaseYear(a, b));
       if (!items.length) return [];
+
+      const typeLabel = type === 'series' ? 'Séries' : 'Filmes';
+
+      // 1. Novidades: 4 âncoras mais recentes + rotação caótica dos últimos 120 lançamentos
+      const latestPool = items.slice(0, Math.min(120, items.length));
+      const latestItems = sampleChaoticRailItems(latestPool, HOME_RAIL_ITEM_LIMIT, { anchorCount: 4 });
 
       const rails = [{
         key: 'latest',
-        title: type === 'series' ? 'Novidades em Séries' : 'Novidades em Filmes',
-        items: items.slice(0, HOME_RAIL_ITEM_LIMIT)
+        title: 'Novidades em ' + typeLabel,
+        items: latestItems
       }];
 
-      const ratedItems = items
+      // 2. Mais bem avaliados: amostragem caótica entre os melhores avaliados do catálogo
+      const ratedCandidates = items
         .map(item => ({ item, rating: getHomeRatingInfo(item).value }))
-        .filter(entry => entry.rating > 0)
-        .sort((a, b) => b.rating - a.rating || b.item.added - a.item.added)
-        .slice(0, HOME_RAIL_ITEM_LIMIT)
+        .filter(entry => entry.rating >= 6.0)
+        .sort((a, b) => b.rating - a.rating || compareByReleaseYear(b.item, a.item))
         .map(entry => entry.item);
 
-      if (ratedItems.length >= HOME_THEME_MIN_ITEMS) {
+      if (ratedCandidates.length >= HOME_THEME_MIN_ITEMS) {
+        const topRatedPool = ratedCandidates.slice(0, Math.min(150, ratedCandidates.length));
+        const ratedItems = sampleChaoticRailItems(topRatedPool, HOME_RAIL_ITEM_LIMIT, { anchorCount: 2 });
         rails.push({
           key: 'top-rated',
-          title: '⭐ Mais bem avaliados',
+          title: '⭐ Mais bem avaliados • ' + typeLabel,
           items: ratedItems
         });
       }
 
+      // 3. Mapear todos os itens por tema para não re-filtrar 15.000 itens repetidamente
       const themeCounts = new Map();
+      const themeItemsMap = new Map();
+
       items.forEach(item => {
         getHomeThemesForItem(item).forEach(theme => {
           themeCounts.set(theme, (themeCounts.get(theme) || 0) + 1);
+          if (!themeItemsMap.has(theme)) themeItemsMap.set(theme, []);
+          themeItemsMap.get(theme).push(item);
         });
       });
 
       const tasteWeights = readTasteProfile().genres || {};
-      const themes = [...themeCounts.entries()]
-        .filter(([, count]) => count >= HOME_THEME_MIN_ITEMS)
-        .sort((a, b) =>
-          Number(tasteWeights[b[0]] || 0) - Number(tasteWeights[a[0]] || 0) ||
-          b[1] - a[1] ||
-          a[0].localeCompare(b[0], 'pt-BR')
-        )
-        .slice(0, HOME_THEME_COUNT)
-        .map(([theme]) => theme);
+      const eligibleThemes = [...themeCounts.entries()]
+        .filter(([, count]) => count >= HOME_THEME_MIN_ITEMS);
 
-      themes.forEach(theme => {
-        const themedItems = items
-          .filter(item => getHomeThemesForItem(item).includes(theme))
-          .slice(0, HOME_RAIL_ITEM_LIMIT);
+      // Temas com afinidade do usuário
+      const preferredThemes = eligibleThemes
+        .filter(([t]) => Number(tasteWeights[t] || 0) > 0)
+        .sort((a, b) => Number(tasteWeights[b[0]] || 0) - Number(tasteWeights[a[0]] || 0) || b[1] - a[1])
+        .map(([t]) => t);
+
+      // Temas para exploração/descoberta (fora da zona de conforto)
+      const discoveryThemes = eligibleThemes
+        .filter(([t]) => !tasteWeights[t] || Number(tasteWeights[t]) === 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([t]) => t);
+
+      const discoveryRailCount = Math.max(1, Math.min(2, Math.round(HOME_THEME_COUNT * 0.25)));
+      const preferredRailCount = Math.max(1, HOME_THEME_COUNT - discoveryRailCount);
+
+      const chosenThemes = [];
+
+      // Rotação dinâmica de temas: os top 1 ou 2 gêneros preferidos são sempre mantidos como âncoras
+      const topFavoriteAnchors = preferredThemes.slice(0, 2);
+      topFavoriteAnchors.forEach(t => chosenThemes.push({ theme: t, isDiscovery: false }));
+
+      // Para as vagas preferidas restantes, rotaciona aleatoriamente entre outros gêneros curtidos
+      const remainingPreferred = preferredThemes.slice(2);
+      if (remainingPreferred.length > 0) {
+        const shuffledPreferred = [...remainingPreferred].sort(() => Math.random() - 0.5);
+        shuffledPreferred.slice(0, preferredRailCount - chosenThemes.length).forEach(t => {
+          chosenThemes.push({ theme: t, isDiscovery: false });
+        });
+      }
+
+      // Rotação dinâmica nos temas de descoberta (gêneros diferentes a cada visita)
+      if (discoveryThemes.length > 0) {
+        const shuffledDiscovery = [...discoveryThemes].sort(() => Math.random() - 0.5);
+        shuffledDiscovery.slice(0, discoveryRailCount).forEach(t => {
+          chosenThemes.push({ theme: t, isDiscovery: true });
+        });
+      }
+
+      // Completar se faltar trilhos para HOME_THEME_COUNT
+      if (chosenThemes.length < HOME_THEME_COUNT) {
+        const chosenSet = new Set(chosenThemes.map(x => x.theme));
+        eligibleThemes.forEach(([t]) => {
+          if (!chosenSet.has(t) && chosenThemes.length < HOME_THEME_COUNT) {
+            chosenThemes.push({ theme: t, isDiscovery: !tasteWeights[t] });
+            chosenSet.add(t);
+          }
+        });
+      }
+
+      // Para cada tema escolhido, aplicar amostragem caótica estratificada sobre TODOS os títulos do catálogo
+      chosenThemes.forEach(({ theme, isDiscovery }) => {
+        const allThemedItems = themeItemsMap.get(theme) || [];
+        if (allThemedItems.length < HOME_THEME_MIN_ITEMS) return;
+
+        const themedItems = sampleChaoticRailItems(allThemedItems, HOME_RAIL_ITEM_LIMIT, {
+          anchorCount: isDiscovery ? 1 : 2
+        });
 
         if (themedItems.length >= HOME_THEME_MIN_ITEMS) {
-          const preferred = Number(tasteWeights[theme] || 0) > 0;
+          const title = isDiscovery
+            ? 'Descubra no catálogo • ' + theme
+            : (Number(tasteWeights[theme] || 0) > 0 ? 'Porque você assiste • ' + theme : theme + ' • ' + typeLabel);
           rails.push({
             key: theme,
-            title: preferred ? 'Porque você assiste • ' + theme : 'Mais recentes • ' + theme,
+            title,
+            isDiscovery,
             items: themedItems
           });
         }
@@ -3625,15 +3916,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const ratingInfo = getHomeRatingInfo(item);
       const meta = [
         item.year,
-        ratingInfo.value > 0 ? '★ ' + ratingInfo.value.toFixed(1) + ' ' + ratingInfo.source : ''
+        ratingInfo.value > 0 ? '★ ' + ratingInfo.value.toFixed(1) + (ratingInfo.source ? ' ' + ratingInfo.source : '') : ''
       ].filter(Boolean).join(' • ');
 
       card.innerHTML =
         '<div class="home-title-poster">' +
-          '<img src="' + escapeHtml(item.poster) + '" alt="" loading="lazy" decoding="async" data-hide-on-error>' +
+          '<img src="' + escapeHtml(item.poster) + '" alt="" loading="lazy" decoding="async" data-hide-on-error draggable="false">' +
           '<span class="home-title-type">' + (item.type === 'series' ? 'SÉRIE' : 'FILME') + '</span>' +
           (ratingInfo.value > 0
-            ? '<span class="home-title-rating">★ ' + ratingInfo.value.toFixed(1) + ' <em>' + escapeHtml(ratingInfo.source) + '</em></span>'
+            ? '<span class="home-title-rating">★ ' + ratingInfo.value.toFixed(1) + (ratingInfo.source ? ' <em>' + escapeHtml(ratingInfo.source) + '</em>' : '') + '</span>'
             : '') +
         '</div>' +
         '<strong title="' + escapeHtml(item.title) + '">' + escapeHtml(item.title) + '</strong>' +
@@ -3677,6 +3968,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!scroller || scroller._hasDragScroll) return;
       scroller._hasDragScroll = true;
 
+      scroller.addEventListener('dragstart', e => e.preventDefault());
+
       let isDown = false;
       let startX = 0;
       let scrollStart = 0;
@@ -3689,6 +3982,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       scroller.addEventListener('mousedown', e => {
         if (e.button !== 0) return;
         if (e.target.closest('button.home-watched-menu, .home-watched-menu-panel, .home-rail-arrow, .home-rail-more')) return;
+        if (window.getSelection) window.getSelection().removeAllRanges();
         isDown = true;
         isDragging = false;
         startX = e.pageX;
@@ -3705,8 +3999,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (!isDragging && Math.abs(dx) > 5) {
           isDragging = true;
           scroller.classList.add('is-dragging');
+          if (window.getSelection) window.getSelection().removeAllRanges();
         }
         if (isDragging) {
+          if (window.getSelection) window.getSelection().removeAllRanges();
           const now = Date.now();
           const dt = Math.max(1, now - lastTime);
           velocity = (e.pageX - lastX) / dt;
@@ -3787,13 +4083,60 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return nav;
     }
 
+    function renderHomeRailBlock(rail, type, savedScrolls) {
+      const withinLimit = getHomeItemsWithinDisplayLimit(rail.items);
+      const visibleItems = filterNonSequentialItems(withinLimit, lastRenderedRailItemKeys);
+      const minItems = rail.key === 'latest' ? 1 : HOME_THEME_MIN_ITEMS;
+      if (visibleItems.length < minItems) return null;
+
+      const block = document.createElement('section');
+      block.className = 'home-theme-rail';
+
+      const heading = document.createElement('div');
+      heading.className = 'home-theme-heading';
+      const tasteHint = rail.isDiscovery
+        ? '<small>Novos horizontes • Títulos aclamados fora da sua zona de conforto</small>'
+        : (rail.key === 'for-you' ? '<small>Baseado no seu histórico • com espaço para descoberta</small>' : '');
+      heading.innerHTML =
+        '<div class="home-theme-title-wrap">' +
+          '<h3>' + escapeHtml(rail.title) + '</h3>' +
+          tasteHint +
+        '</div>' +
+        '<span>' + visibleItems.length + ' títulos</span>';
+      block.appendChild(heading);
+
+      const scroller = document.createElement('div');
+      scroller.className = 'home-theme-scroller';
+      const uniqueKey = type + ':' + rail.key;
+      scroller.dataset.railKey = uniqueKey;
+      visibleItems.forEach(item => scroller.appendChild(renderHomeTitleCard(item)));
+
+      registerHomeDisplayItems(visibleItems);
+      lastRenderedRailItemKeys = new Set(visibleItems.map(item => getHomeDisplayKey(item)).filter(Boolean));
+
+      const prevScroll = savedScrolls.get(uniqueKey);
+      if (prevScroll > 0) {
+        scroller.scrollLeft = prevScroll;
+      }
+
+      block.appendChild(scroller);
+      block.appendChild(setupHomeRailControls(scroller));
+      return block;
+    }
+
     function renderHomeCatalogRails(type, railElement, sectionElement, savedScrolls = new Map()) {
       if (!railElement || !sectionElement) return;
 
       railElement.querySelectorAll('.home-theme-scroller').forEach(s => {
-        if (s.dataset.railKey) savedScrolls.set(type + ':' + s.dataset.railKey, s.scrollLeft);
+        if (s.dataset.railKey) {
+          const k = s.dataset.railKey.startsWith(type + ':') ? s.dataset.railKey : (type + ':' + s.dataset.railKey);
+          savedScrolls.set(k, s.scrollLeft);
+        }
       });
       railElement.innerHTML = '';
+
+      const head = sectionElement.querySelector('.home-content-section-head');
+      if (head) head.style.display = '';
 
       const rails = buildHomeCatalogRails(type);
       if (!rails.length) {
@@ -3803,46 +4146,64 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       let renderedRails = 0;
       rails.forEach(rail => {
-        const withinLimit = getHomeItemsWithinDisplayLimit(rail.items);
-        const visibleItems = filterNonSequentialItems(withinLimit, lastRenderedRailItemKeys);
-        const minItems = rail.key === 'latest' ? 1 : HOME_THEME_MIN_ITEMS;
-        if (visibleItems.length < minItems) return;
-
-        const block = document.createElement('section');
-        block.className = 'home-theme-rail';
-
-        const heading = document.createElement('div');
-        heading.className = 'home-theme-heading';
-        const tasteHint = rail.key === 'for-you' ? '<small>Baseado no seu histórico • com espaço para descoberta</small>' : '';
-        heading.innerHTML =
-          '<div class="home-theme-title-wrap">' +
-            '<h3>' + escapeHtml(rail.title) + '</h3>' +
-            tasteHint +
-          '</div>' +
-          '<span>' + visibleItems.length + ' títulos</span>';
-        block.appendChild(heading);
-
-        const scroller = document.createElement('div');
-        scroller.className = 'home-theme-scroller';
-        scroller.dataset.railKey = rail.key;
-        visibleItems.forEach(item => scroller.appendChild(renderHomeTitleCard(item)));
-
-        registerHomeDisplayItems(visibleItems);
-        lastRenderedRailItemKeys = new Set(visibleItems.map(item => getHomeDisplayKey(item)).filter(Boolean));
-
-        const prevScroll = savedScrolls.get(type + ':' + rail.key);
-        if (prevScroll > 0) {
-          scroller.scrollLeft = prevScroll;
+        const block = renderHomeRailBlock(rail, type, savedScrolls);
+        if (block) {
+          railElement.appendChild(block);
+          renderedRails++;
         }
-
-        block.appendChild(scroller);
-        block.appendChild(setupHomeRailControls(scroller));
-
-        railElement.appendChild(block);
-        renderedRails++;
       });
 
       sectionElement.style.display = renderedRails ? '' : 'none';
+    }
+
+    function renderHomeInterleavedRails(container, activeSection, otherSection, savedScrolls = new Map(), pref = null) {
+      if (!container || !activeSection) return;
+
+      container.querySelectorAll('.home-theme-scroller').forEach(s => {
+        if (s.dataset.railKey) savedScrolls.set(s.dataset.railKey, s.scrollLeft);
+      });
+      container.innerHTML = '';
+
+      if (otherSection) {
+        otherSection.style.display = 'none';
+        const otherRails = otherSection.querySelector('.home-theme-rails');
+        if (otherRails) otherRails.innerHTML = '';
+      }
+
+      // Ocultar cabeçalho individual para transformar em feed unificado e contínuo
+      const head = activeSection.querySelector('.home-content-section-head');
+      if (head) head.style.display = 'none';
+
+      const movieRails = buildHomeCatalogRails('movie').map(r => ({ ...r, _railType: 'movie' }));
+      const seriesRails = buildHomeCatalogRails('series').map(r => ({ ...r, _railType: 'series' }));
+
+      if (!movieRails.length && !seriesRails.length) {
+        activeSection.style.display = 'none';
+        return;
+      }
+
+      // Intercalar trilhos de filmes e séries:
+      // Se o usuário tiver preferência maior ou igual por filmes, começa com filmes; senão séries.
+      const firstList = (pref && pref.movieRatio >= pref.seriesRatio) ? movieRails : seriesRails;
+      const secondList = (firstList === movieRails) ? seriesRails : movieRails;
+
+      const interleaved = [];
+      const maxLen = Math.max(firstList.length, secondList.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (i < firstList.length) interleaved.push(firstList[i]);
+        if (i < secondList.length) interleaved.push(secondList[i]);
+      }
+
+      let renderedRails = 0;
+      interleaved.forEach(rail => {
+        const block = renderHomeRailBlock(rail, rail._railType, savedScrolls);
+        if (block) {
+          container.appendChild(block);
+          renderedRails++;
+        }
+      });
+
+      activeSection.style.display = renderedRails ? '' : 'none';
     }
 
     function setupSingleHomeRailArrow(scroller, nextBtn, prevBtn = null) {
@@ -3913,7 +4274,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const allItems = [
         ...getHomeCatalogItems('series'),
         ...getHomeCatalogItems('movie')
-      ].sort((a, b) => b.added - a.added);
+      ].sort(compareByReleaseYear);
 
       const recommendations = getHomeRecommendationMix(allItems);
       const visibleRecommendations = getHomeItemsWithinDisplayLimit(recommendations);
@@ -3959,10 +4320,34 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       renderHomeRecommendations(savedScrolls.get('recommendations') || 0);
       requestAnimationFrame(() => {
         if (currentMode !== 'home') return;
-        renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection, savedScrolls);
-        requestAnimationFrame(() => {
-          if (currentMode === 'home') renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection, savedScrolls);
-        });
+
+        const pref = getTasteTypePreference();
+
+        if (pref.dominant === 'mixed') {
+          renderHomeInterleavedRails(elements.homeSeriesRails, elements.homeSeriesSection, elements.homeMoviesSection, savedScrolls, pref);
+        } else if (pref.dominant === 'movie') {
+          // Dominância de filmes: reordenar seções no DOM para filmes ficarem no topo
+          if (elements.homeMoviesSection && elements.homeSeriesSection && elements.homeSeriesSection.parentNode) {
+            elements.homeSeriesSection.parentNode.insertBefore(elements.homeMoviesSection, elements.homeSeriesSection);
+          }
+          renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection, savedScrolls);
+          requestAnimationFrame(() => {
+            if (currentMode === 'home') {
+              renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection, savedScrolls);
+            }
+          });
+        } else {
+          // Dominância de séries: reordenar seções no DOM para séries ficarem no topo
+          if (elements.homeSeriesSection && elements.homeMoviesSection && elements.homeMoviesSection.parentNode) {
+            elements.homeMoviesSection.parentNode.insertBefore(elements.homeSeriesSection, elements.homeMoviesSection);
+          }
+          renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection, savedScrolls);
+          requestAnimationFrame(() => {
+            if (currentMode === 'home') {
+              renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection, savedScrolls);
+            }
+          });
+        }
       });
     }
 
@@ -3991,11 +4376,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const meta = [
           typeLabel,
           item.year,
-          ratingInfo.value > 0 ? '★ ' + ratingInfo.value.toFixed(1) + ' ' + ratingInfo.source : ''
+          ratingInfo.value > 0 ? '★ ' + ratingInfo.value.toFixed(1) + (ratingInfo.source ? ' ' + ratingInfo.source : '') : ''
         ].filter(Boolean).join('  •  ');
 
         slide.innerHTML =
-          '<img class="home-featured-backdrop" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async">' +
+          '<img class="home-featured-backdrop" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async" draggable="false">' +
           '<div class="home-featured-shade"></div>' +
           '<div class="home-featured-content">' +
             '<span class="home-featured-kicker">NOVIDADE NO CATÁLOGO • ' + typeLabel + '</span>' +
@@ -4004,7 +4389,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             '<p>' + escapeHtml(item.plot || 'Acabou de chegar ao catálogo do EPlay.') + '</p>' +
             '<button class="home-featured-watch" type="button">▶ Assistir</button>' +
           '</div>' +
-          '<div class="home-featured-poster-wrap"><img class="home-featured-poster" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async"></div>';
+          '<div class="home-featured-poster-wrap"><img class="home-featured-poster" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async" draggable="false"></div>';
 
         const openItem = () => {
           if (item.type === 'movie') onMovieCardClick(item.item);
@@ -4040,6 +4425,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!track || track._swipeInitialized) return;
       track._swipeInitialized = true;
 
+      track.addEventListener('dragstart', e => e.preventDefault());
+
       let isDown = false;
       let startX = 0;
       let startY = 0;
@@ -4050,6 +4437,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       track.addEventListener('pointerdown', e => {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         if (homeFeaturedItems.length < 2) return;
+        if (window.getSelection) window.getSelection().removeAllRanges();
         isDown = true;
         isSwiping = false;
         startX = e.clientX;
@@ -4067,6 +4455,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
             isSwiping = true;
             track.classList.add('is-swiping');
+            if (window.getSelection) window.getSelection().removeAllRanges();
             clearInterval(homeFeaturedTimer);
             homeFeaturedTimer = null;
             try { track.setPointerCapture(e.pointerId); } catch (_) {}
@@ -4077,6 +4466,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
 
         if (isSwiping) {
+          if (window.getSelection) window.getSelection().removeAllRanges();
           if (e.cancelable) e.preventDefault();
           let deltaPercent = (dx / trackWidth) * 100;
           if ((homeFeaturedIndex === 0 && dx > 0) || (homeFeaturedIndex === homeFeaturedItems.length - 1 && dx < 0)) {
@@ -4218,7 +4608,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         card.innerHTML =
           '<div class="home-watched-poster">' +
             (item.poster
-              ? '<img src="' + escapeHtml(item.poster) + '" alt="" loading="lazy" decoding="async" data-hide-on-error>'
+              ? '<img src="' + escapeHtml(item.poster) + '" alt="" loading="lazy" decoding="async" data-hide-on-error draggable="false">'
               : '<span>🎬</span>') +
             (progress > 0 && progress < 95 ? '<div class="home-watched-progress"><span style="width:' + progress + '%"></span></div>' : '') +
             '<span class="home-watched-type">' + (item.type === 'movie' ? 'FILME' : 'SÉRIE') + '</span>' +
@@ -4337,10 +4727,16 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         savedScrolls.set('recommendations', elements.homeRecommendationsRail.scrollLeft);
       }
       elements.homeSeriesRails?.querySelectorAll('.home-theme-scroller').forEach(s => {
-        if (s.dataset.railKey) savedScrolls.set('series:' + s.dataset.railKey, s.scrollLeft);
+        if (s.dataset.railKey) {
+          const k = s.dataset.railKey.startsWith('series:') || s.dataset.railKey.startsWith('movie:') ? s.dataset.railKey : ('series:' + s.dataset.railKey);
+          savedScrolls.set(k, s.scrollLeft);
+        }
       });
       elements.homeMoviesRails?.querySelectorAll('.home-theme-scroller').forEach(s => {
-        if (s.dataset.railKey) savedScrolls.set('movie:' + s.dataset.railKey, s.scrollLeft);
+        if (s.dataset.railKey) {
+          const k = s.dataset.railKey.startsWith('movie:') || s.dataset.railKey.startsWith('series:') ? s.dataset.railKey : ('movie:' + s.dataset.railKey);
+          savedScrolls.set(k, s.scrollLeft);
+        }
       });
 
       homeDisplayUsage = new Map();
@@ -5204,13 +5600,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           const demoCatIds = new Set(catArr.filter(c => c && c.category_name && typeof c.category_name === 'string' && c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
           const validMovies = rawList.filter(m => !demoCatIds.has(String(m.category_id)) && (!m.name || m.name.toLowerCase().trim() !== 'demo'));
 
-          // Ordenar por data de adição (mais recentes primeiro)
-          validMovies.sort((a, b) => {
-            const timeA = Number(a.added || a.last_modified || 0);
-            const timeB = Number(b.added || b.last_modified || 0);
-            if (timeB !== timeA) return timeB - timeA;
-            return Number(b.stream_id || 0) - Number(a.stream_id || 0);
-          });
+          // Ordenar por ano de lançamento / estreia (mais recentes primeiro)
+          validMovies.sort(compareByReleaseYear);
 
           // Cache de overrides de usuário do localStorage em memória (elimina 66.000 chamadas síncronas que travam a TV)
           const userPosterOverrides = new Map();
@@ -5352,13 +5743,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           const demoCatIds = new Set(catArr.filter(c => c && c.category_name && typeof c.category_name === 'string' && c.category_name.toLowerCase().includes('demo')).map(c => String(c.category_id)));
           const validSeries = rawList.filter(s => !demoCatIds.has(String(s.category_id)) && (!s.name || s.name.toLowerCase().trim() !== 'demo'));
 
-          // Ordenar por data de adição / atualização (mais recentes primeiro)
-          validSeries.sort((a, b) => {
-            const timeA = Number(a.last_modified || a.added || 0);
-            const timeB = Number(b.last_modified || b.added || 0);
-            if (timeB !== timeA) return timeB - timeA;
-            return Number(b.series_id || 0) - Number(a.series_id || 0);
-          });
+          // Ordenar por ano de lançamento / estreia (mais recentes primeiro)
+          validSeries.sort(compareByReleaseYear);
 
           // Unificar versões duplicadas (Dublado, Legendado e Lançamento) em cards únicos
           fullSeriesCache = groupSeriesByTitle(validSeries);
@@ -5574,7 +5960,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const itemSearchType = item._searchType || item.type || '';
         const isLive = itemSearchType ? itemSearchType === 'live' : currentMode === 'live';
         const isMovie = itemSearchType ? itemSearchType === 'movie' : currentMode === 'movies';
-        const title = item.name || item.title || '';
+        const title = isLive ? (item.name || item.title || '') : cleanDisplayTitle(item.name || item.title || '');
         card.title = title;
 
         if (isLive) {
@@ -5690,7 +6076,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
         card.innerHTML = `
           <div class="poster-wrap">
-            ${poster ? `<img src="${escapeHtml(poster)}" alt="${escapeHtml(title)}" loading="lazy" decoding="async" data-poster-error="${escapeHtml(title)}">` : ''}
+            ${poster ? `<img src="${escapeHtml(poster)}" alt="${escapeHtml(title)}" loading="lazy" decoding="async" data-poster-error="${escapeHtml(title)}" draggable="false">` : ''}
             <div class="poster-fallback" style="${poster ? 'display:none;' : ''}">🎬<br>${escapeHtml(title)}</div>
             ${badgeHtml}
             ${rating ? `<div class="rating-badge">★ ${rating}</div>` : ''}

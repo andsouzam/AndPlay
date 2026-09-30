@@ -15,6 +15,12 @@
       padding: 0;
     }
 
+    img {
+      -webkit-user-drag: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
     body {
       background-color: var(--bg-dark);
       color: var(--text);
@@ -4188,6 +4194,8 @@ header {
   transition: transform .55s cubic-bezier(.22,.61,.36,1);
   will-change: transform;
   touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .home-featured-track.is-swiping {
@@ -4202,6 +4210,8 @@ header {
   isolation: isolate;
   cursor: pointer;
   contain: layout style paint;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .home-featured-backdrop {
@@ -4489,6 +4499,8 @@ header {
   scroll-snap-align: start;
   contain: paint;
   will-change: transform;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .home-watched-poster {
@@ -4752,6 +4764,8 @@ header {
   scroll-snap-align: start;
   contain: paint;
   will-change: transform;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .home-title-poster {

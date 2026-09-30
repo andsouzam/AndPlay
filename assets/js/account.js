@@ -165,6 +165,7 @@
     const result = {
       genres: {},
       types: {},
+      eras: {},
       recent: []
     };
 
@@ -178,6 +179,12 @@
       result.types[type] = Math.max(
         Number(a.types?.[type] || 0),
         Number(b.types?.[type] || 0)
+      );
+    });
+    new Set([...Object.keys(a.eras || {}), ...Object.keys(b.eras || {})]).forEach(era => {
+      result.eras[era] = Math.max(
+        Number(a.eras?.[era] || 0),
+        Number(b.eras?.[era] || 0)
       );
     });
 
@@ -715,8 +722,12 @@
     const prefs = await client.from('user_preferences')
       .select('preferences,updated_at')
       .maybeSingle();
-    if (prefs.error) throw prefs.error;
-    if (prefs.data?.preferences) mergePreferences(prefs.data.preferences);
+    if (prefs.data?.preferences) {
+      mergePreferences(prefs.data.preferences);
+      window.dispatchEvent(new CustomEvent('andplay:remote-preferences-synced', {
+        detail: { preferences: prefs.data.preferences }
+      }));
+    }
   }
 
   async function deleteRemoteProgress(type, id) {
