@@ -858,8 +858,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.tabSeriesBtn.addEventListener('click', () => switchMode('series', true));
       if (elements.tabWatchedBtn) {
         elements.tabWatchedBtn.addEventListener('click', () => {
-          if (isWatchedView) restoreCatalogView();
-          else showWatchedContent();
+          if (isWatchedView) return;
+          showWatchedContent();
         });
       }
       elements.tabFavoritesBtn?.addEventListener('click', () => {
@@ -902,8 +902,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.mobileSeriesBtn?.addEventListener('click', () => switchMode('series', true));
       elements.mobileLiveBtn?.addEventListener('click', () => switchMode('live', true));
       elements.mobileWatchedBtn?.addEventListener('click', () => {
-        if (isWatchedView) restoreCatalogView();
-        else showWatchedContent();
+        if (isWatchedView) return;
+        showWatchedContent();
       });
       elements.mobileFavoritesBtn?.addEventListener('click', () => {
         if (isFavoritesView) restoreFavoritesView();
@@ -1178,10 +1178,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           } else if (active === elements.tabWatchedBtn) {
             if (key === 'ArrowLeft') { e.preventDefault(); elements.tabLiveBtn?.focus(); return; }
             if (key === 'ArrowRight') { e.preventDefault(); elements.tabFavoritesBtn?.focus(); return; }
-            if (key === 'ArrowDown') { e.preventDefault(); elements.categorySelect.focus(); return; }
+            if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
           } else if (active === elements.tabFavoritesBtn) {
             if (key === 'ArrowLeft') { e.preventDefault(); elements.tabWatchedBtn?.focus(); return; }
-            if (key === 'ArrowDown') { e.preventDefault(); elements.categorySelect.focus(); return; }
+            if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
           } else if (active === elements.categorySelect) {
             if (key === 'ArrowUp') {
               e.preventDefault();
@@ -3116,8 +3116,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     async function showWatchedContent() {
-
-      watchedReturnMode = currentMode;
       isWatchedView = true;
       isFavoritesView = false;
       elements.homeDashboard?.classList.remove('is-active');
@@ -3129,7 +3127,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       document.querySelectorAll('.mobile-bottom-nav button').forEach(button => button.classList.remove('active'));
       elements.mobileWatchedBtn?.classList.add('active');
       if (elements.categorySelect) {
-        elements.categorySelect.style.removeProperty('display');
+        elements.categorySelect.style.display = 'none';
       }
       elements.tabWatchedBtn?.classList.add('active');
       elements.tabFavoritesBtn?.classList.remove('active');
@@ -3141,6 +3139,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.resetCategoryBtn.style.display = 'none';
       elements.categorySelect.value = 'ALL';
       elements.categorySelect.disabled = true;
+      elements.categoryLabel.textContent = '👁 Assistidos';
+      elements.searchInput.placeholder = 'Pesquisar nos filmes e séries assistidos...';
+      elements.mediaGrid.innerHTML =
+        '<div style="grid-column:1/-1;text-align:center;color:#888;padding:55px 20px;">' +
+        '<div class="spinner" style="margin:0 auto 14px;"></div>' +
+        '<div style="font-size:15px;color:#fff;font-weight:700;">Carregando seus assistidos...</div>' +
+        '</div>';
+      elements.mediaCount.textContent = 'Carregando assistidos...';
+      elements.loadMoreContainer.style.display = 'none';
 
       try {
         await window.AndPlayAccount?.ready?.();
@@ -7836,7 +7843,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function restoreFromContentPage() {
-      const state = contentPageReturnState || { mode: 'home', watched: false, favorites: false };
+      const state = contentPageReturnState || {
+        mode: 'home',
+        watched: false,
+        favorites: false,
+        category: 'ALL',
+        search: ''
+      };
       contentPageOpen = false;
       currentContentPageType = '';
       currentContentPageItem = null;
@@ -7856,17 +7869,66 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         return;
       }
 
-      switchMode(state.mode, false).then(() => {
-        if (state.favorites) {
-          showFavoritesContent();
-        } else if (state.watched && (state.mode === 'movies' || state.mode === 'series')) {
-          showWatchedContent(state.mode);
-        }
-      }).catch(() => {});
+      if (state.watched) {
+        showWatchedContent();
+        return;
+      }
+      if (state.favorites) {
+        showFavoritesContent();
+        return;
+      }
+
+      const mode = state.mode === 'series' ? 'series' : 'movies';
+      isWatchedView = false;
+      isFavoritesView = false;
+      currentMode = mode;
+      elements.tabHomeBtn?.classList.remove('active');
+      elements.tabMoviesBtn.classList.toggle('active', mode === 'movies');
+      elements.tabSeriesBtn.classList.toggle('active', mode === 'series');
+      elements.tabLiveBtn?.classList.remove('active');
+      elements.tabWatchedBtn?.classList.remove('active');
+      elements.tabFavoritesBtn?.classList.remove('active');
+      document.querySelectorAll('.mobile-bottom-nav button').forEach(button => button.classList.remove('active'));
+      if (mode === 'movies') elements.mobileMoviesBtn?.classList.add('active');
+      else elements.mobileSeriesBtn?.classList.add('active');
+
+      document.querySelector('.status-bar')?.style.removeProperty('display');
+      document.querySelector('main')?.style.removeProperty('display');
+      elements.categorySelect.disabled = false;
+      elements.categorySelect.style.removeProperty('display');
+      elements.searchInput.value = String(state.search || '');
+      currentMediaList = mode === 'movies' ? (fullMoviesCache || []) : (fullSeriesCache || []);
+
+      const savedCategory = String(state.category || 'ALL');
+      const hasSavedCategory = savedCategory === 'ALL' || Array.from(elements.categorySelect.options).some(option => option.value === savedCategory);
+      elements.categorySelect.value = hasSavedCategory ? savedCategory : 'ALL';
+      elements.resetCategoryBtn.style.display = elements.categorySelect.value === 'ALL' ? 'none' : 'inline-flex';
+      if (elements.categorySelect.value === 'ALL') {
+        elements.categoryLabel.textContent = mode === 'movies'
+          ? 'Catálogo Geral: Todos os Filmes'
+          : 'Catálogo Geral: Todas as Séries';
+      } else {
+        const selected = elements.categorySelect.options[elements.categorySelect.selectedIndex];
+        elements.categoryLabel.textContent = 'Categoria: ' + (selected ? selected.textContent : '');
+        currentMediaList = currentMediaList.filter(item => {
+          if (String(item.category_id) === elements.categorySelect.value) return true;
+          return Array.isArray(item.category_ids) && item.category_ids.some(id => String(id) === elements.categorySelect.value);
+        });
+      }
+      elements.searchInput.placeholder = mode === 'movies'
+        ? 'Pesquisar filme (ex: Harry Potter, Carros)...'
+        : 'Pesquisar série (ex: Breaking Bad, Stranger Things)...';
+      applyFilterAndRender(elements.searchInput.value);
     }
 
     async function openMoviePage(groupOrMovie) {
-      contentPageReturnState = { mode: currentMode, watched: isWatchedView, favorites: isFavoritesView };
+      contentPageReturnState = {
+        mode: currentMode,
+        watched: isWatchedView,
+        favorites: isFavoritesView,
+        category: elements.categorySelect?.value || 'ALL',
+        search: elements.searchInput?.value || ''
+      };
       showContentPageShell('movie', groupOrMovie);
 
       elements.contentSeriesPanel.hidden = true;
@@ -7911,7 +7973,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     async function openSeriesPage(seriesGroupOrItem) {
-      contentPageReturnState = { mode: currentMode, watched: isWatchedView, favorites: isFavoritesView };
+      contentPageReturnState = {
+        mode: currentMode,
+        watched: isWatchedView,
+        favorites: isFavoritesView,
+        category: elements.categorySelect?.value || 'ALL',
+        search: elements.searchInput?.value || ''
+      };
       currentContentPageType = 'series';
       currentSeriesGroup = seriesGroupOrItem;
       showContentPageShell('series', seriesGroupOrItem);
