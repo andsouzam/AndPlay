@@ -263,6 +263,16 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       seriesFilterLegBtn: document.getElementById('seriesFilterLegBtn'),
       seriesCuratedRails: document.getElementById('seriesCuratedRails'),
 
+      // Live Hub
+      liveHub: document.getElementById('liveHub'),
+      liveCategoryPills: document.getElementById('liveCategoryPills'),
+      liveFilterAllBtn: document.getElementById('liveFilterAllBtn'),
+      liveFilterNowBtn: document.getElementById('liveFilterNowBtn'),
+      liveFilterMatchesBtn: document.getElementById('liveFilterMatchesBtn'),
+      liveFilterChannelsBtn: document.getElementById('liveFilterChannelsBtn'),
+      liveSpotlightSection: document.getElementById('liveSpotlightSection'),
+      liveSpotlightTrack: document.getElementById('liveSpotlightTrack'),
+
       // Video Modal
       videoModal: document.getElementById('videoModal'),
       modalTitle: document.getElementById('modalTitle'),
@@ -3300,7 +3310,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       favoriteReturnMode = ['home', 'movies', 'series', 'live'].includes(currentMode) ? currentMode : 'home';
       isFavoritesView = true;
       isWatchedView = false;
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none'; if (elements.liveHub) elements.liveHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
@@ -3372,7 +3382,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!isFavoritesView) return;
       const returnMode = favoriteReturnMode;
       isFavoritesView = false;
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none'; if (elements.liveHub) elements.liveHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
@@ -3421,7 +3431,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     async function showWatchedContent() {
       isWatchedView = true;
       isFavoritesView = false;
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none'; if (elements.liveHub) elements.liveHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
@@ -3747,6 +3757,45 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       { keys: ['history', 'historia', 'historico'], label: 'História' }
     ];
 
+    const LIVE_THEME_ALIASES = [
+      {
+        keys: ['futebol', 'jogo', 'jogos', 'partida', 'soccer', 'football', 'campeonato', 'libertadores', 'brasileirao', 'champions', 'premier', 'copa', 'serie a', 'serie b', 'esporte', 'esportes', 'sports', 'sport', 'premiere', 'sportv', 'espn', 'cazetv', 'tnt', 'combate', 'nba', 'ufc', 'f1', 'formula 1'],
+        categories: ['JOGOS', 'sports']
+      },
+      {
+        keys: ['noticia', 'noticias', 'news', 'jornal', 'jornalismo', 'politica', 'economia', 'cnn', 'globonews', 'bandnews', 'jovempan'],
+        categories: ['news']
+      },
+      {
+        keys: ['infantil', 'desenho', 'desenhos', 'kids', 'animacao', 'anime', 'cartoon', 'disney', 'nickelodeon', 'gloob', 'discovery kids'],
+        categories: ['kids']
+      },
+      {
+        keys: ['tv aberta', 'aberta', 'abertos', 'nacional', 'regional', 'globo', 'sbt', 'record', 'band', 'redetv', 'cultura'],
+        categories: ['open_tv']
+      },
+      {
+        keys: ['filme', 'filmes', 'serie', 'series', 'cinema', 'telecine', 'hbo', 'max', 'tnt', 'megapix', 'paramount', 'universal', 'warner', 'axn', 'space'],
+        categories: ['movies']
+      },
+      {
+        keys: ['24h', '24 horas', 'classicos', 'retro', 'chaves', 'maratona'],
+        categories: ['channels_24h']
+      },
+      {
+        keys: ['reality', 'reality show', 'bbb', 'big brother', 'fazenda', 'de ferias com o ex', 'masterchef'],
+        categories: ['reality']
+      },
+      {
+        keys: ['variedades', 'documentario', 'documentarios', 'doc', 'cultura', 'natureza', 'discovery', 'national geographic', 'natgeo', 'history', 'animal planet', 'h&h'],
+        categories: ['variety']
+      },
+      {
+        keys: ['adulto', 'adultos', 'porn', 'sexy', 'playboy', 'venus', 'sextreme'],
+        categories: ['adult']
+      }
+    ];
+
     function getHomeCatalogItems(type) {
       if (type === 'series') {
         return (Array.isArray(fullSeriesCache) ? fullSeriesCache : [])
@@ -3971,6 +4020,32 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (item.league) parts.push(item.league);
       if (item.homeTeam) parts.push(item.homeTeam);
       if (item.awayTeam) parts.push(item.awayTeam);
+      if (item.sport) parts.push(item.sport);
+      if (item.competition) parts.push(item.competition);
+      if (item.tournament) parts.push(item.tournament);
+      if (item.matchTime) parts.push(item.matchTime);
+      if (item.nowTitle) parts.push(item.nowTitle);
+      if (Array.isArray(item.nextProgrammes)) {
+        item.nextProgrammes.forEach(p => {
+          if (p?.t) parts.push(p.t);
+        });
+      }
+      if (Array.isArray(item.fallbacks)) {
+        item.fallbacks.forEach(fb => {
+          if (fb?.name) parts.push(fb.name);
+        });
+      }
+      if (item.channelSlug) parts.push(item.channelSlug);
+      if (item.badge) parts.push(item.badge);
+
+      const catKey = item.categoryKey || item.category_id || '';
+      if (catKey) {
+        LIVE_THEME_ALIASES.forEach(alias => {
+          if (alias.categories.includes(catKey) || (item.isLiveMatch && alias.categories.includes('JOGOS'))) {
+            parts.push(...alias.keys);
+          }
+        });
+      }
 
       const searchable = normalizeSearch(parts.join(' '));
       item._searchableText = searchable;
@@ -5934,11 +6009,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function renderMoviesHub() {
       if (currentMode !== 'movies' || isWatchedView || isFavoritesView) {
-        if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+        if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none'; if (elements.liveHub) elements.liveHub.style.display = 'none';
         return;
       }
 
       initMoviesHub();
+      if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+      if (elements.liveHub) elements.liveHub.style.display = 'none';
       elements.moviesHub.style.display = 'block';
 
       renderMoviesHero();
@@ -6678,11 +6755,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     function renderSeriesHub() {
       if (currentMode !== 'series' || isWatchedView || isFavoritesView) {
         if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+        if (elements.liveHub) elements.liveHub.style.display = 'none';
         return;
       }
 
       initSeriesHub();
       if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (elements.liveHub) elements.liveHub.style.display = 'none';
       if (elements.seriesHub) elements.seriesHub.style.display = 'block';
 
       renderSeriesHero();
@@ -6713,7 +6792,7 @@ function showHome(targetScroll = 0) {
         liveLoadGeneration++;
         window.EPlayTvEpg?.deactivate();
       }
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none'; if (elements.liveHub) elements.liveHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
@@ -6814,6 +6893,9 @@ function showHome(targetScroll = 0) {
           seriesHeroTimer = null;
         }
       }
+      if (mode !== 'live') {
+        if (elements.liveHub) elements.liveHub.style.display = 'none';
+      }
       currentMode = mode;
 
       elements.tabMoviesBtn.classList.toggle('active', mode === 'movies');
@@ -6886,14 +6968,14 @@ function showHome(targetScroll = 0) {
           }
         }
       } else if (mode === 'live') {
-        elements.searchInput.placeholder = 'Pesquisar canal ou partida (ex: SporTV, Premiere, São Paulo, Real Madrid)...';
+        elements.searchInput.placeholder = 'Pesquisar canais, jogos, times, ligas ou programas no ar...';
         populateLiveCategoriesSelect();
         if (fullLiveCache) {
           currentMediaList = fullLiveCache;
           elements.categorySelect.value = 'ALL';
           elements.resetCategoryBtn.style.display = 'none';
           elements.categoryLabel.textContent = 'TV & Jogos Ao Vivo: Todos os Canais e Partidas';
-          applyFilterAndRender('');
+          renderLiveHub();
           fetchLiveChannelsFromApi().catch(() => {});
         } else {
           await loadFullLive();
@@ -6903,7 +6985,7 @@ function showHome(targetScroll = 0) {
             elements.categorySelect.value = 'ALL';
             elements.resetCategoryBtn.style.display = 'none';
             elements.categoryLabel.textContent = 'TV & Jogos Ao Vivo: Todos os Canais e Partidas';
-            applyFilterAndRender('');
+            renderLiveHub();
           }
         }
       }
@@ -7149,6 +7231,243 @@ function showHome(targetScroll = 0) {
         opt.textContent = cat.name;
         elements.categorySelect.appendChild(opt);
       });
+      elements.categorySelect.value = currentLiveCategoryFilter || 'ALL';
+    }
+
+    // ==========================================
+    // LIVE HUB: PÍLULAS, FILTROS RÁPIDOS & SPOTLIGHT
+    // ==========================================
+    let liveHubInitialized = false;
+    let currentLiveCategoryFilter = 'ALL';
+    let currentLiveQuickFilter = 'all'; // 'all' | 'now' | 'matches' | 'channels'
+
+    const LIVE_PILL_CATEGORIES = [
+      { id: 'ALL', label: 'Todos', icon: '📺' },
+      { id: 'JOGOS', label: 'Jogos Hoje', icon: '⚽' },
+      { id: 'sports', label: 'Esportes', icon: '🏆' },
+      { id: 'open_tv', label: 'TV Aberta', icon: '📡' },
+      { id: 'movies', label: 'Filmes & Séries', icon: '🎬' },
+      { id: 'kids', label: 'Infantil', icon: '🧸' },
+      { id: 'news', label: 'Notícias', icon: '📰' },
+      { id: 'channels_24h', label: '24 Horas', icon: '⭐' },
+      { id: 'reality', label: 'Reality Shows', icon: '🤠' },
+      { id: 'variety', label: 'Variedades & Doc', icon: '🎭' },
+      { id: 'adult', label: 'Adulto +18', icon: '🔞' }
+    ];
+
+    function initLiveHub() {
+      if (liveHubInitialized || !elements.liveHub) return;
+      liveHubInitialized = true;
+
+      const setFilter = (key) => {
+        currentLiveQuickFilter = key;
+        updateLiveQuickFiltersUI();
+        applyLiveFiltersAndSort();
+      };
+
+      elements.liveFilterAllBtn?.addEventListener('click', () => setFilter('all'));
+      elements.liveFilterNowBtn?.addEventListener('click', () => setFilter('now'));
+      elements.liveFilterMatchesBtn?.addEventListener('click', () => setFilter('matches'));
+      elements.liveFilterChannelsBtn?.addEventListener('click', () => setFilter('channels'));
+    }
+
+    function updateLiveQuickFiltersUI() {
+      const chips = [
+        { btn: elements.liveFilterAllBtn, key: 'all' },
+        { btn: elements.liveFilterNowBtn, key: 'now' },
+        { btn: elements.liveFilterMatchesBtn, key: 'matches' },
+        { btn: elements.liveFilterChannelsBtn, key: 'channels' }
+      ];
+      chips.forEach(({ btn, key }) => {
+        if (!btn) return;
+        btn.classList.toggle('active', currentLiveQuickFilter === key);
+      });
+    }
+
+    function renderLiveCategoryPills() {
+      if (!elements.liveCategoryPills) return;
+      elements.liveCategoryPills.innerHTML = '';
+
+      LIVE_PILL_CATEGORIES.forEach(cat => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `live-pill ${currentLiveCategoryFilter === cat.id ? 'active' : ''}`;
+        btn.dataset.liveCategory = cat.id;
+        btn.setAttribute('role', 'tab');
+        btn.setAttribute('aria-selected', currentLiveCategoryFilter === cat.id ? 'true' : 'false');
+        btn.innerHTML = `<span>${cat.icon}</span> <span>${escapeHtml(cat.label)}</span>`;
+
+        btn.addEventListener('click', () => {
+          currentLiveCategoryFilter = cat.id;
+          elements.liveCategoryPills.querySelectorAll('.live-pill').forEach(p => {
+            const isActive = p.dataset.liveCategory === cat.id;
+            p.classList.toggle('active', isActive);
+            p.setAttribute('aria-selected', isActive ? 'true' : 'false');
+          });
+
+          if (elements.categorySelect) {
+            elements.categorySelect.value = cat.id;
+          }
+          if (elements.resetCategoryBtn) {
+            elements.resetCategoryBtn.style.display = (cat.id === 'ALL' ? 'none' : 'inline-flex');
+          }
+
+          applyLiveFiltersAndSort();
+        });
+
+        elements.liveCategoryPills.appendChild(btn);
+      });
+    }
+
+    function renderLiveSpotlightRail() {
+      if (!elements.liveSpotlightSection || !elements.liveSpotlightTrack) return;
+      const matches = (fullLiveCache || []).filter(item => item.isLiveMatch);
+
+      if (matches.length === 0) {
+        elements.liveSpotlightSection.style.display = 'none';
+        return;
+      }
+
+      const sorted = [...matches].sort((a, b) => (b.isLiveNow ? 1 : 0) - (a.isLiveNow ? 1 : 0));
+
+      elements.liveSpotlightTrack.innerHTML = '';
+      sorted.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'live-spotlight-card';
+        card.tabIndex = 0;
+        card.setAttribute('role', 'button');
+        card.setAttribute('aria-label', `${item.name || 'Partida'} - ${item.league || 'Ao Vivo'}`);
+
+        const homeLogo = getTvTeamLogoUrl(item.homeTeam, item.homeLogo);
+        const awayLogo = getTvTeamLogoUrl(item.awayTeam, item.awayLogo);
+        const isNow = Boolean(item.isLiveNow);
+
+        card.innerHTML = `
+          <div class="live-spotlight-teams">
+            <div class="live-spotlight-team">
+              ${homeLogo ? `<img class="live-spotlight-logo" src="${escapeHtml(homeLogo)}" alt="${escapeHtml(item.homeTeam || '')}" data-dim-on-error loading="lazy">` : `<span style="font-size:28px">⚽</span>`}
+              <span class="live-spotlight-team-name">${escapeHtml(item.homeTeam || 'Mandante')}</span>
+            </div>
+            <div class="live-spotlight-center">
+              <span class="live-spotlight-vs">${isNow ? '🔴 AO VIVO' : 'VS'}</span>
+            </div>
+            <div class="live-spotlight-team">
+              ${awayLogo ? `<img class="live-spotlight-logo" src="${escapeHtml(awayLogo)}" alt="${escapeHtml(item.awayTeam || '')}" data-dim-on-error loading="lazy">` : `<span style="font-size:28px">⚽</span>`}
+              <span class="live-spotlight-team-name">${escapeHtml(item.awayTeam || 'Visitante')}</span>
+            </div>
+          </div>
+          <div class="live-spotlight-meta">
+            <span class="live-spotlight-league">${escapeHtml(item.league || item.categoryLabel || 'Futebol')}</span>
+            <span class="live-spotlight-time">${escapeHtml(item.matchTime || (isNow ? 'No Ar' : 'Hoje'))}</span>
+          </div>
+        `;
+
+        card.addEventListener('click', () => onLiveItemClick(item));
+        card.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onLiveItemClick(item);
+          }
+        });
+
+        elements.liveSpotlightTrack.appendChild(card);
+      });
+
+      enableHomeDragToScroll(elements.liveSpotlightTrack);
+      elements.liveSpotlightSection.style.display = 'block';
+    }
+
+    function applyLiveFiltersAndSort() {
+      if (currentMode !== 'live') return;
+      const source = fullLiveCache || [];
+      const searchTerm = elements.searchInput ? elements.searchInput.value.trim() : '';
+      const q = normalizeSearch(searchTerm);
+
+      // 1. Filtro por categoria
+      let list = source;
+      if (currentLiveCategoryFilter === 'JOGOS') {
+        list = list.filter(item => item.isLiveMatch);
+      } else if (currentLiveCategoryFilter !== 'ALL') {
+        list = list.filter(item => item.categoryKey === currentLiveCategoryFilter || String(item.category_id) === String(currentLiveCategoryFilter));
+      }
+
+      // 2. Filtro rápido de exibição
+      if (currentLiveQuickFilter === 'now') {
+        list = list.filter(item => item.isLiveNow || (item.nowTitle && item.nowTitle !== 'Programação Indisponível' && item.nowTitle !== 'Carregando guia...'));
+      } else if (currentLiveQuickFilter === 'matches') {
+        list = list.filter(item => item.isLiveMatch);
+      } else if (currentLiveQuickFilter === 'channels') {
+        list = list.filter(item => !item.isLiveMatch || item.isChannel);
+      }
+
+      // 3. Filtro textual contextual
+      if (q) {
+        list = list.filter(item => matchesSearchQuery(item, q));
+      }
+
+      // 4. Ordenação inteligente
+      list.sort((a, b) => {
+        const aScore = a.isLiveNow ? 4 : (a.nowTitle && a.nowTitle !== 'Programação Indisponível' && a.nowTitle !== 'Carregando guia...' ? 3 : (a.isLiveMatch ? 2 : 1));
+        const bScore = b.isLiveNow ? 4 : (b.nowTitle && b.nowTitle !== 'Programação Indisponível' && b.nowTitle !== 'Carregando guia...' ? 3 : (b.isLiveMatch ? 2 : 1));
+        return bScore - aScore;
+      });
+
+      // 5. Atualizar trilho de destaque (Live Spotlight)
+      if (elements.liveSpotlightSection && elements.liveSpotlightTrack) {
+        if (!q && (currentLiveCategoryFilter === 'ALL' || currentLiveCategoryFilter === 'JOGOS' || currentLiveQuickFilter === 'matches')) {
+          renderLiveSpotlightRail();
+        } else {
+          elements.liveSpotlightSection.style.display = 'none';
+        }
+      }
+
+      // 6. Atualizar Grid de Mídia
+      currentFilteredList = list;
+      renderedCount = 0;
+      elements.mediaGrid.innerHTML = '';
+
+      if (list.length === 0) {
+        elements.mediaGrid.innerHTML = `
+          <div style="grid-column: 1/-1; text-align: center; padding: 48px 16px; color: #94a3b8;">
+            <span style="font-size: 40px; display: block; margin-bottom: 12px;">📡</span>
+            <strong style="color: #f1f5f9; font-size: 16px; display: block; margin-bottom: 6px;">Nenhum canal ou jogo encontrado</strong>
+            <p style="font-size: 13px; max-width: 420px; margin: 0 auto;">Tente buscar por outro termo (ex: futebol, filme, SporTV, Flamengo) ou ajustar as categorias.</p>
+          </div>
+        `;
+        elements.loadMoreContainer.style.display = 'none';
+      } else {
+        renderNextBatch();
+      }
+
+      // Atualiza contador e rótulo
+      updateCountDisplay();
+      if (elements.categoryLabel) {
+        const catObj = LIVE_PILL_CATEGORIES.find(c => c.id === currentLiveCategoryFilter);
+        const catName = catObj ? `${catObj.icon} ${catObj.label}` : 'Todos os Canais';
+        if (q) {
+          elements.categoryLabel.textContent = `Busca em Ao Vivo: "${searchTerm}" (${list.length})`;
+        } else if (currentLiveCategoryFilter === 'ALL') {
+          elements.categoryLabel.textContent = 'TV & Jogos Ao Vivo: Todos os Canais e Partidas';
+        } else {
+          elements.categoryLabel.textContent = `Categoria: ${catName}`;
+        }
+      }
+    }
+
+    function renderLiveHub() {
+      if (currentMode !== 'live' || isWatchedView || isFavoritesView) {
+        if (elements.liveHub) elements.liveHub.style.display = 'none';
+        return;
+      }
+
+      initLiveHub();
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+      if (elements.liveHub) elements.liveHub.style.display = 'block';
+
+      renderLiveCategoryPills();
+      updateLiveQuickFiltersUI();
+      applyLiveFiltersAndSort();
     }
 
     async function fetchLiveSportsEvents() {
@@ -7371,6 +7690,7 @@ function showHome(targetScroll = 0) {
                 const fresh = map.get(item.channelSlug);
                 if (fresh.epg && fresh.epg.current) {
                   item.nowTitle = fresh.epg.current.title || item.nowTitle;
+                  item._searchableText = null;
                   if (fresh.epg.current.start_time && fresh.epg.current.end_time) {
                     const elapsed = Date.now() / 1000 - fresh.epg.current.start_time;
                     const duration = fresh.epg.current.end_time - fresh.epg.current.start_time;
@@ -7385,7 +7705,13 @@ function showHome(targetScroll = 0) {
                 updated = true;
               }
             });
-            if (updated && currentMode === 'live') applyFilterAndRender(elements.searchInput.value);
+            if (updated && currentMode === 'live') {
+              if (!document.body.classList.contains('tv-mode')) {
+                applyLiveFiltersAndSort();
+              } else {
+                applyFilterAndRender(elements.searchInput.value);
+              }
+            }
           }
         }
       } catch (err) { /* silencioso */ }
@@ -7428,7 +7754,7 @@ function showHome(targetScroll = 0) {
           currentMediaList = fullLiveCache;
           hasPersistentCache = true;
           if (currentMode === 'live' && !document.body.classList.contains('tv-mode')) {
-            applyFilterAndRender('');
+            renderLiveHub();
           }
         }
       } catch (e) {}
@@ -7473,7 +7799,11 @@ function showHome(targetScroll = 0) {
         elements.categorySelect.value = 'ALL';
         elements.resetCategoryBtn.style.display = 'none';
         elements.categoryLabel.textContent = 'TV & Jogos Ao Vivo: Todos os Canais e Partidas';
-        applyFilterAndRender('');
+        if (currentMode === 'live' && !document.body.classList.contains('tv-mode')) {
+          renderLiveHub();
+        } else {
+          applyFilterAndRender('');
+        }
 
         // Atualiza guia EPG dos canais somente enquanto a área de TV estiver ativa.
         if (currentMode === 'live' || document.body.classList.contains('tv-mode')) {
@@ -7742,7 +8072,12 @@ function showHome(targetScroll = 0) {
         currentMediaList = fullSeriesCache || [];
       } else if (currentMode === 'live') {
         elements.categoryLabel.textContent = 'TV & Jogos Ao Vivo: Todos os Canais e Partidas';
-        currentMediaList = fullLiveCache || [];
+        currentLiveCategoryFilter = 'ALL';
+        currentLiveQuickFilter = 'all';
+        renderLiveCategoryPills();
+        updateLiveQuickFiltersUI();
+        applyLiveFiltersAndSort();
+        return;
       }
       applyFilterAndRender('');
     }
@@ -7759,13 +8094,9 @@ function showHome(targetScroll = 0) {
       elements.searchInput.value = '';
 
       if (currentMode === 'live') {
-        const sourceList = fullLiveCache || [];
-        if (catId === 'JOGOS') {
-          currentMediaList = sourceList.filter(item => item.isLiveMatch);
-        } else {
-          currentMediaList = sourceList.filter(item => item.categoryKey === catId || String(item.category_id) === String(catId));
-        }
-        applyFilterAndRender('');
+        currentLiveCategoryFilter = catId;
+        renderLiveCategoryPills();
+        applyLiveFiltersAndSort();
         return;
       }
 
@@ -7795,7 +8126,7 @@ function showHome(targetScroll = 0) {
       currentMode = 'search';
       isWatchedView = false;
       isFavoritesView = false;
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none'; if (elements.liveHub) elements.liveHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
@@ -7936,6 +8267,12 @@ function showHome(targetScroll = 0) {
         elements.seriesViewGridBtn?.classList.add('active');
         applySeriesFiltersAndSort();
         return;
+      }
+      if (currentMode === 'live') {
+        if (!document.body.classList.contains('tv-mode')) {
+          applyLiveFiltersAndSort();
+          return;
+        }
       }
       applyFilterAndRender(term);
     }
@@ -8181,7 +8518,7 @@ function showHome(targetScroll = 0) {
         ? 'assistido(s)'
         : (isFavoritesView
           ? 'favoritos'
-          : (currentMode === 'search' ? 'resultado(s)' : ((currentMode === 'movies') ? 'filme(s)' : 'série(s)')));
+          : (currentMode === 'search' ? 'resultado(s)' : ((currentMode === 'movies') ? 'filme(s)' : ((currentMode === 'live') ? 'canal/partida(s)' : 'série(s)'))));
       if (total === 0) {
         elements.mediaCount.textContent = `0 ${typeLabel}`;
       } else {
@@ -10854,7 +11191,7 @@ function showHome(targetScroll = 0) {
           window.history.pushState({ page: 'content', title: item?.name || item?.title || '' }, '');
         }
       } catch (_) {}
-      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none';
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none'; if (elements.seriesHub) elements.seriesHub.style.display = 'none'; if (elements.liveHub) elements.liveHub.style.display = 'none';
       if (moviesHeroTimer) {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;

@@ -521,6 +521,35 @@
       <div id="seriesCuratedRails" class="series-curated-rails"></div>
     </section>
 
+    <!-- Live Hub: Central de TV Ao Vivo, Jogos e Transmissões Esportivas -->
+    <section id="liveHub" class="live-hub" style="display: none;" aria-label="Central de TV Ao Vivo">
+      <!-- 1. Barra de Pílulas de Categorias de Canais e Esportes -->
+      <div class="live-pills-bar-wrap">
+        <div id="liveCategoryPills" class="live-category-pills" role="tablist" aria-label="Filtro por categoria de TV"></div>
+      </div>
+
+      <!-- 2. Barra de Filtros Rápidos Ao Vivo -->
+      <div class="live-toolbar">
+        <div class="live-quick-filters">
+          <button id="liveFilterAllBtn" class="live-filter-chip active" type="button" data-live-filter="all">📺 Todos os Canais e Jogos</button>
+          <button id="liveFilterNowBtn" class="live-filter-chip" type="button" data-live-filter="now">🔴 No Ar Agora</button>
+          <button id="liveFilterMatchesBtn" class="live-filter-chip" type="button" data-live-filter="matches">⚽ Apenas Jogos</button>
+          <button id="liveFilterChannelsBtn" class="live-filter-chip" type="button" data-live-filter="channels">📡 Apenas Canais 24H</button>
+        </div>
+      </div>
+
+      <!-- 3. Trilho de Destaques de Jogos Ao Vivo / No Ar Agora -->
+      <div id="liveSpotlightSection" class="live-spotlight-section" style="display: none;">
+        <div class="live-spotlight-head">
+          <div class="live-spotlight-title-wrap">
+            <span class="live-spotlight-title">⚽ TRANSMISSÕES & JOGOS AO VIVO</span>
+            <span class="live-pulse-badge"><span class="live-pulse-dot"></span> NO AR</span>
+          </div>
+        </div>
+        <div id="liveSpotlightTrack" class="live-spotlight-track" aria-label="Transmissões de jogos ao vivo"></div>
+      </div>
+    </section>
+
     <div id="mediaGrid" class="media-grid"></div>
     <div id="loadMoreContainer" class="load-more-container" style="display: none;">
       <button id="loadMoreBtn" class="load-more-btn">Carregar mais títulos...</button>
