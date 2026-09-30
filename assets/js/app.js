@@ -3205,6 +3205,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
       }
+      if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
+      if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
       elements.homeDashboard?.classList.remove('is-active');
       elements.contentPage?.classList.remove('is-active');
       if (elements.contentPage) elements.contentPage.hidden = true;
@@ -3265,6 +3267,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!isFavoritesView) return;
       const returnMode = favoriteReturnMode;
       isFavoritesView = false;
+      if (elements.moviesHub) elements.moviesHub.style.display = 'none';
+      if (moviesHeroTimer) {
+        clearInterval(moviesHeroTimer);
+        moviesHeroTimer = null;
+      }
+      if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
+      if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
       elements.tabFavoritesBtn?.classList.remove('active');
       elements.mobileFavoritesBtn?.classList.remove('active');
       elements.searchInput.value = '';
@@ -3308,6 +3317,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
       }
+      if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
+      if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
       elements.homeDashboard?.classList.remove('is-active');
       elements.contentPage?.classList.remove('is-active');
       if (elements.contentPage) elements.contentPage.hidden = true;
@@ -3792,7 +3803,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!items.length) return [];
       const profile = readTasteProfile();
       const topThemes = getTasteTopThemes(4);
-      const hasEnoughHistory = Array.isArray(profile.recent) && profile.recent.length >= 3;
+      const normalizedHistory = getNormalizedRemoteHistory();
+      const hasEnoughHistory = (Array.isArray(profile.recent) && profile.recent.length >= 3) ||
+                               (Array.isArray(normalizedHistory) && normalizedHistory.length >= 3);
 
       if (!hasEnoughHistory || !topThemes.length) return [];
 
@@ -3815,6 +3828,33 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         })
         .filter(entry => entry.taste > 0 && !watchedKeys.has(entry.item.type + ':' + entry.item.id))
         .sort((a, b) => b.taste - a.taste || compareByReleaseYear(b.item, a.item));
+
+      // Aloca ~75% do trilho para títulos que combinam com os top gêneros do usuário com rotação viva
+      const tasteQuota = Math.round(HOME_RAIL_ITEM_LIMIT * 0.75);
+      const matchingEntries = ranked.filter(entry => entry.matchesTop);
+      const fallbackEntries = ranked.filter(entry => !entry.matchesTop);
+      const combinedTastePool = [...matchingEntries, ...fallbackEntries].slice(0, 80).map(e => e.item);
+      const sampledTasteItems = sampleChaoticRailItems(combinedTastePool, tasteQuota);
+
+      const used = new Set(sampledTasteItems.map(item => (item.type || '') + ':' + (item.id || '')));
+
+      // Mantém descoberta (15% a 25% do trilho): títulos aclamados fora da zona de conforto com rotação viva
+      const discoveryQuota = Math.max(3, Math.min(6, HOME_RAIL_ITEM_LIMIT - sampledTasteItems.length));
+      const discoveryCandidates = items
+        .filter(item =>
+          !used.has((item.type || '') + ':' + (item.id || '')) &&
+          !watchedKeys.has((item.type || '') + ':' + (item.id || ''))
+        )
+        .sort((a, b) => {
+          const rA = getHomeRatingInfo(a).value;
+          const rB = getHomeRatingInfo(b).value;
+          if (rB !== rA) return rB - rA;
+          return compareByReleaseYear(a, b);
+        })
+        .filter(item => !getHomeThemesForItem(item).some(theme => topThemes.includes(theme)));
+
+      const discoveryPool = discoveryCandidates.slice(0, Math.min(60, discoveryCandidates.length));
+      const sampledDiscoveryItems = sampleChaoticRailItems(discoveryPool, discoveryQuota);
 
       // Intercalar suavemente as descobertas ao longo do trilho para criar uma experiência equilibrada e orgânica
       const combinedMix = [];
@@ -4461,36 +4501,45 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function renderHomeCatalogSections(savedScrolls = new Map()) {
-      renderHomeRecommendations(savedScrolls.get('recommendations') || 0);
+      try {
+        renderHomeRecommendations(savedScrolls.get('recommendations') || 0);
+      } catch (err) {
+        console.error('Erro ao renderizar recomendações da Home:', err);
+      }
+
       requestAnimationFrame(() => {
         if (currentMode !== 'home') return;
 
-        const pref = getTasteTypePreference();
+        try {
+          const pref = getTasteTypePreference();
 
-        if (pref.dominant === 'mixed') {
-          renderHomeInterleavedRails(elements.homeSeriesRails, elements.homeSeriesSection, elements.homeMoviesSection, savedScrolls, pref);
-        } else if (pref.dominant === 'movie') {
-          // Dominância de filmes: reordenar seções no DOM para filmes ficarem no topo
-          if (elements.homeMoviesSection && elements.homeSeriesSection && elements.homeSeriesSection.parentNode) {
-            elements.homeSeriesSection.parentNode.insertBefore(elements.homeMoviesSection, elements.homeSeriesSection);
-          }
-          renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection, savedScrolls);
-          requestAnimationFrame(() => {
-            if (currentMode === 'home') {
-              renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection, savedScrolls);
+          if (pref.dominant === 'mixed') {
+            renderHomeInterleavedRails(elements.homeSeriesRails, elements.homeSeriesSection, elements.homeMoviesSection, savedScrolls, pref);
+          } else if (pref.dominant === 'movie') {
+            // Dominância de filmes: reordenar seções no DOM para filmes ficarem no topo
+            if (elements.homeMoviesSection && elements.homeSeriesSection && elements.homeSeriesSection.parentNode) {
+              elements.homeSeriesSection.parentNode.insertBefore(elements.homeMoviesSection, elements.homeSeriesSection);
             }
-          });
-        } else {
-          // Dominância de séries: reordenar seções no DOM para séries ficarem no topo
-          if (elements.homeSeriesSection && elements.homeMoviesSection && elements.homeMoviesSection.parentNode) {
-            elements.homeMoviesSection.parentNode.insertBefore(elements.homeSeriesSection, elements.homeMoviesSection);
-          }
-          renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection, savedScrolls);
-          requestAnimationFrame(() => {
-            if (currentMode === 'home') {
-              renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection, savedScrolls);
+            renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection, savedScrolls);
+            requestAnimationFrame(() => {
+              if (currentMode === 'home') {
+                renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection, savedScrolls);
+              }
+            });
+          } else {
+            // Dominância de séries: reordenar seções no DOM para séries ficarem no topo
+            if (elements.homeSeriesSection && elements.homeMoviesSection && elements.homeMoviesSection.parentNode) {
+              elements.homeMoviesSection.parentNode.insertBefore(elements.homeSeriesSection, elements.homeMoviesSection);
             }
-          });
+            renderHomeCatalogRails('series', elements.homeSeriesRails, elements.homeSeriesSection, savedScrolls);
+            requestAnimationFrame(() => {
+              if (currentMode === 'home') {
+                renderHomeCatalogRails('movie', elements.homeMoviesRails, elements.homeMoviesSection, savedScrolls);
+              }
+            });
+          }
+        } catch (err) {
+          console.error('Erro ao renderizar trilhos do catálogo na Home:', err);
         }
       });
     }
@@ -5563,6 +5612,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         clearInterval(moviesHeroTimer);
         moviesHeroTimer = null;
       }
+      if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
+      if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
       isWatchedView = false;
       isFavoritesView = false;
       contentPageOpen = false;
@@ -5620,6 +5671,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           clearInterval(moviesHeroTimer);
           moviesHeroTimer = null;
         }
+        if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
+        if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
       }
       clearInterval(homeFeaturedTimer);
       homeFeaturedTimer = null;
@@ -5640,6 +5693,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       contentPageReturnState = null;
       document.querySelector('.status-bar')?.style.removeProperty('display');
       document.querySelector('main')?.style.removeProperty('display');
+      if (mode !== 'movies') {
+        if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
+        if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
+      }
       currentMode = mode;
 
       elements.tabMoviesBtn.classList.toggle('active', mode === 'movies');
@@ -5703,6 +5760,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         } else {
           await loadFullSeries();
           if (currentMode !== mode || isWatchedView || isFavoritesView) return;
+          if (fullSeriesCache && fullSeriesCache.length > 0) {
+            currentMediaList = fullSeriesCache;
+            elements.categorySelect.value = 'ALL';
+            elements.resetCategoryBtn.style.display = 'none';
+            elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
+            applyFilterAndRender('');
+          }
         }
       } else if (mode === 'live') {
         elements.searchInput.placeholder = 'Pesquisar canal ou partida (ex: SporTV, Premiere, São Paulo, Real Madrid)...';
@@ -5717,6 +5781,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         } else {
           await loadFullLive();
           if (currentMode !== mode || isWatchedView || isFavoritesView) return;
+          if (fullLiveCache && fullLiveCache.length > 0) {
+            currentMediaList = fullLiveCache;
+            elements.categorySelect.value = 'ALL';
+            elements.resetCategoryBtn.style.display = 'none';
+            elements.categoryLabel.textContent = 'TV & Jogos Ao Vivo: Todos os Canais e Partidas';
+            applyFilterAndRender('');
+          }
         }
       }
     }
@@ -13050,12 +13121,18 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       window.AndPlayApp = {
         refreshAfterAccountSync() {
-          if (isWatchedView) {
-            showWatchedContent();
-          } else if (isFavoritesView) {
-            showFavoritesContent();
-          } else if (currentMode === 'home') {
-            renderHomeDashboard();
+          try {
+            if (isWatchedView) {
+              showWatchedContent();
+            } else if (isFavoritesView) {
+              showFavoritesContent();
+            } else if (currentMode === 'home') {
+              renderHomeDashboard();
+            } else if (currentMode === 'movies') {
+              renderMoviesHub();
+            }
+          } catch (err) {
+            console.error('[EPlay App] Erro ao atualizar após sincronização da conta:', err);
           }
         },
         getAccountUsageSnapshot,
