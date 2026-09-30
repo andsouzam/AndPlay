@@ -234,6 +234,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       moviesGenrePills: document.getElementById('moviesGenrePills'),
       moviesViewCuratedBtn: document.getElementById('moviesViewCuratedBtn'),
       moviesViewGridBtn: document.getElementById('moviesViewGridBtn'),
+      moviesSurpriseBtn: document.getElementById('moviesSurpriseBtn'),
       moviesSortWrap: document.getElementById('moviesSortWrap'),
       moviesSortSelect: document.getElementById('moviesSortSelect'),
       moviesFilter4kBtn: document.getElementById('moviesFilter4kBtn'),
@@ -5077,6 +5078,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         renderMoviesHub();
       });
 
+      elements.moviesSurpriseBtn?.addEventListener('click', () => {
+        pickSurpriseMovie();
+      });
+
       elements.moviesSortSelect?.addEventListener('change', (e) => {
         moviesSortBy = e.target.value;
         if (isMoviesCuratedMode && currentMovieGenreFilter === 'ALL') {
@@ -5213,7 +5218,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             '<div class="movies-hero-actions">' +
               '<button class="movies-hero-watch" type="button">▶ Assistir</button>' +
               '<button class="movies-hero-details" type="button">ℹ Ficha Técnica</button>' +
-              '<button class="movies-hero-surprise" type="button" title="Sorteia um filme imperdível do catálogo">🎲 Surpreenda-me</button>' +
             '</div>' +
           '</div>' +
           '<div class="movies-hero-poster-wrap"><img class="movies-hero-poster" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async" draggable="false"></div>';
@@ -5235,11 +5239,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         slide.querySelector('.movies-hero-details')?.addEventListener('click', (event) => {
           event.stopPropagation();
           if (item.item) openMoviePage(item.item);
-        });
-
-        slide.querySelector('.movies-hero-surprise')?.addEventListener('click', (event) => {
-          event.stopPropagation();
-          pickSurpriseMovie();
         });
 
         elements.moviesHeroTrack.appendChild(slide);

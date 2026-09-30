@@ -438,9 +438,12 @@
 
       <!-- 3. Barra de Controles: Alternador Curadoria/Grade + Ordenação + Filtros Rápidos -->
       <div class="movies-toolbar">
-        <div class="movies-view-toggle" role="group" aria-label="Modo de visualização">
-          <button id="moviesViewCuratedBtn" class="movies-toggle-btn active" type="button">🎬 Destaques & Trilhos</button>
-          <button id="moviesViewGridBtn" class="movies-toggle-btn" type="button">▦ Catálogo Completo</button>
+        <div class="movies-view-group">
+          <div class="movies-view-toggle" role="group" aria-label="Modo de visualização">
+            <button id="moviesViewCuratedBtn" class="movies-toggle-btn active" type="button">🎬 Destaques & Trilhos</button>
+            <button id="moviesViewGridBtn" class="movies-toggle-btn" type="button">▦ Catálogo Completo</button>
+          </div>
+          <button id="moviesSurpriseBtn" class="movies-surprise-btn" type="button" title="Sorteia um filme imperdível do catálogo">🎲 Surpreenda-me</button>
         </div>
 
         <div class="movies-sort-wrap" id="moviesSortWrap">
