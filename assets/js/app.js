@@ -2884,6 +2884,17 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       watchedReturnMode = currentMode;
       isWatchedView = true;
+      elements.homeDashboard?.classList.remove('is-active');
+      elements.contentPage?.classList.remove('is-active');
+      if (elements.contentPage) elements.contentPage.hidden = true;
+      document.querySelector('.status-bar')?.style.removeProperty('display');
+      document.querySelector('main')?.style.removeProperty('display');
+      elements.tabHomeBtn?.classList.remove('active');
+      document.querySelectorAll('.mobile-bottom-nav button').forEach(button => button.classList.remove('active'));
+      elements.mobileWatchedBtn?.classList.add('active');
+      if (elements.categorySelect) {
+        elements.categorySelect.style.removeProperty('display');
+      }
       elements.tabWatchedBtn?.classList.add('active');
       elements.tabMoviesBtn.classList.remove('active');
       elements.tabSeriesBtn.classList.remove('active');
@@ -2900,6 +2911,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           throw new Error('Entre na sua conta para consultar seu histórico de assistidos.');
         }
         await window.AndPlayAccount.refreshWatchHistory?.();
+        if (!isWatchedView) return;
 
         const history = getNormalizedRemoteHistory();
         const hasMovies = history.some(entry => entry.type === 'movie');
@@ -2908,6 +2920,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           hasMovies ? loadFullMovies() : Promise.resolve(fullMoviesCache || []),
           hasSeries ? loadFullSeries() : Promise.resolve(fullSeriesCache || [])
         ]);
+        if (!isWatchedView) return;
         const seriesHistory = history.filter(entry => entry.type === 'series');
 
         // O histórico guarda o series_id. Caso o cache local esteja desatualizado,
@@ -2918,6 +2931,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const resolvedSeriesCatalog = hasMissingSeries
           ? await loadFullSeries(true)
           : seriesCatalog;
+        if (!isWatchedView) return;
 
         const movieMap = new Map();
         const seriesMap = new Map();
@@ -3828,11 +3842,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.contentPage?.classList.remove('is-active');
       if (elements.contentPage) elements.contentPage.hidden = true;
       currentMode = 'home';
+      document.querySelectorAll('.nav-tabs .nav-tab').forEach(button => button.classList.remove('active'));
       elements.tabHomeBtn?.classList.add('active');
-      elements.tabMoviesBtn?.classList.remove('active');
-      elements.tabSeriesBtn?.classList.remove('active');
-      elements.tabLiveBtn?.classList.remove('active');
-      elements.tabWatchedBtn?.classList.remove('active');
       document.querySelectorAll('.mobile-bottom-nav button').forEach(button => button.classList.remove('active'));
       elements.mobileHomeBtn?.classList.add('active');
 
@@ -3912,10 +3923,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       startViewTransition();
       await yieldToBrowser();
 
+      if (currentMode !== mode || isWatchedView) return;
+
       if (mode === 'movies') {
         elements.searchInput.placeholder = 'Pesquisar filme (ex: Harry Potter, Carros)...';
         if (movieCategories.length === 0) {
           await loadMovieCategories();
+          if (currentMode !== mode || isWatchedView) return;
         } else {
           populateCategoriesSelect(movieCategories, 'Filmes');
         }
@@ -3927,11 +3941,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           applyFilterAndRender('');
         } else {
           await loadFullMovies();
+          if (currentMode !== mode || isWatchedView) return;
         }
       } else if (mode === 'series') {
         elements.searchInput.placeholder = 'Pesquisar série (ex: Breaking Bad, Stranger Things)...';
         if (seriesCategories.length === 0) {
           await loadSeriesCategories();
+          if (currentMode !== mode || isWatchedView) return;
         } else {
           populateCategoriesSelect(seriesCategories, 'Séries');
         }
@@ -3943,6 +3959,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           applyFilterAndRender('');
         } else {
           await loadFullSeries();
+          if (currentMode !== mode || isWatchedView) return;
         }
       } else if (mode === 'live') {
         elements.searchInput.placeholder = 'Pesquisar canal ou partida (ex: SporTV, Premiere, São Paulo, Real Madrid)...';
@@ -3956,6 +3973,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           fetchLiveChannelsFromApi().catch(() => {});
         } else {
           await loadFullLive();
+          if (currentMode !== mode || isWatchedView) return;
         }
       }
     }
