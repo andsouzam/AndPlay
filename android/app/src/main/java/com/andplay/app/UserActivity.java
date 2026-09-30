@@ -39,6 +39,8 @@ public class UserActivity extends AppCompatActivity {
     private View btnUserSyncNow;
     private View btnUserSignOut;
 
+    private View cardModeSelection;
+    private View btnOpenModeModal;
     private LinearLayout cardModeTv;
     private TextView tagModeTvActive;
     private LinearLayout cardModeCinema;
@@ -49,6 +51,7 @@ public class UserActivity extends AppCompatActivity {
     private TextView statFavsVal;
     private View btnUserClearCache;
 
+    private static final int REQ_MODE_SELECTION = 2001;
     private boolean modeChanged = false;
 
     @Override
@@ -75,6 +78,8 @@ public class UserActivity extends AppCompatActivity {
         btnUserSyncNow = findViewById(R.id.btnUserSyncNow);
         btnUserSignOut = findViewById(R.id.btnUserSignOut);
 
+        cardModeSelection = findViewById(R.id.cardModeSelection);
+        btnOpenModeModal = findViewById(R.id.btnOpenModeModal);
         cardModeTv = findViewById(R.id.cardModeTv);
         tagModeTvActive = findViewById(R.id.tagModeTvActive);
         cardModeCinema = findViewById(R.id.cardModeCinema);
@@ -87,21 +92,39 @@ public class UserActivity extends AppCompatActivity {
     }
 
     private void setupListeners() {
+        // Clicar no cabeçalho ou cards de modo abre o modal com corte diagonal
+        if (cardModeSelection != null) {
+            cardModeSelection.setOnClickListener(v -> openModeSelectionModal());
+            cardModeSelection.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
+                    openModeSelectionModal();
+                    return true;
+                }
+                return false;
+            });
+            setupFocusAnimation(cardModeSelection);
+        }
+
+        if (btnOpenModeModal != null) {
+            btnOpenModeModal.setOnClickListener(v -> openModeSelectionModal());
+            setupFocusAnimation(btnOpenModeModal);
+        }
+
         // Modo TV
-        cardModeTv.setOnClickListener(v -> selectViewMode(AccountManager.VIEW_MODE_TV));
+        cardModeTv.setOnClickListener(v -> openModeSelectionModal());
         cardModeTv.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
-                selectViewMode(AccountManager.VIEW_MODE_TV);
+                openModeSelectionModal();
                 return true;
             }
             return false;
         });
 
         // Modo Cinema
-        cardModeCinema.setOnClickListener(v -> selectViewMode(AccountManager.VIEW_MODE_CINEMA));
+        cardModeCinema.setOnClickListener(v -> openModeSelectionModal());
         cardModeCinema.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
-                selectViewMode(AccountManager.VIEW_MODE_CINEMA);
+                openModeSelectionModal();
                 return true;
             }
             return false;
@@ -289,6 +312,11 @@ public class UserActivity extends AppCompatActivity {
                     Toast.makeText(UserActivity.this, "Conectado como " + uName + "!", Toast.LENGTH_LONG).show();
                     modeChanged = true;
                     updateUi();
+
+                    // Se for o primeiro login/acesso e ainda não escolheu o modo, abre a tela de escolha
+                    if (!AccountManager.getInstance(UserActivity.this).hasChosenInitialMode()) {
+                        openModeSelectionModal();
+                    }
                 }
 
                 @Override
@@ -320,6 +348,30 @@ public class UserActivity extends AppCompatActivity {
         builder.setNegativeButton("Cancelar", null);
         AlertDialog dialog = builder.create();
         dialog.show();
+    }
+
+    private void openModeSelectionModal() {
+        Intent intent = new Intent(this, ModeSelectionActivity.class);
+        startActivityForResult(intent, REQ_MODE_SELECTION);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_MODE_SELECTION && resultCode == RESULT_OK && data != null) {
+            String chosenMode = data.getStringExtra(ModeSelectionActivity.EXTRA_SELECTED_MODE);
+            if (chosenMode != null) {
+                AccountManager.getInstance(this).setViewMode(chosenMode);
+            }
+            modeChanged = true;
+            updateUi();
+            // Não é necessário confirmação para troca, apenas recarrega o app com a interface escolhida
+            Intent result = new Intent();
+            result.putExtra(EXTRA_MODE_CHANGED, true);
+            result.putExtra("selected_mode", chosenMode);
+            setResult(RESULT_OK, result);
+            finish();
+        }
     }
 
     @Override

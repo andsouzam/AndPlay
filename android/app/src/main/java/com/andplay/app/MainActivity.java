@@ -163,10 +163,9 @@ public class MainActivity extends Activity {
     private RecyclerView seriesRail;
     private static final int REQ_SPORTS_HUB = 1001;
     private static final int REQ_USER_ACTIVITY = 1002;
+    private static final int REQ_MODE_SELECTION = 1003;
 
     // View Mode & Header Elements
-    private LinearLayout btnHeaderSwitchView;
-    private TextView btnHeaderSwitchViewText;
     private LinearLayout btnHeaderUser;
     private TextView btnHeaderUserText;
 
@@ -410,6 +409,13 @@ public class MainActivity extends Activity {
         // Aplica o modo de visualização inicial salvo (TV ou Cinema)
         String initialViewMode = AccountManager.getInstance(this).getViewMode();
         applyViewMode(initialViewMode, false);
+
+        // Se for o primeiro acesso e ainda não escolheu o modo, abre a tela de seleção diagonal
+        if (!AccountManager.getInstance(this).hasChosenInitialMode()) {
+            Intent intent = new Intent(this, ModeSelectionActivity.class);
+            intent.putExtra(ModeSelectionActivity.EXTRA_IS_FIRST_ACCESS, true);
+            startActivityForResult(intent, REQ_MODE_SELECTION);
+        }
     }
 
     private void bindViews() {
@@ -428,8 +434,6 @@ public class MainActivity extends Activity {
         headerClock = findViewById(R.id.headerClock);
         headerDate = findViewById(R.id.headerDate);
         btnHeaderOptions = findViewById(R.id.btnHeaderOptions);
-        btnHeaderSwitchView = findViewById(R.id.btnHeaderSwitchView);
-        btnHeaderSwitchViewText = findViewById(R.id.btnHeaderSwitchViewText);
         btnHeaderUser = findViewById(R.id.btnHeaderUser);
         btnHeaderUserText = findViewById(R.id.btnHeaderUserText);
 
@@ -2702,23 +2706,6 @@ public class MainActivity extends Activity {
             });
         }
 
-        if (btnHeaderSwitchView != null) {
-            btnHeaderSwitchView.setOnClickListener(v -> toggleViewMode());
-            btnHeaderSwitchView.setOnKeyListener((v, keyCode, event) -> {
-                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
-                    toggleViewMode();
-                    return true;
-                }
-                return false;
-            });
-            btnHeaderSwitchView.setOnFocusChangeListener((v, hasFocus) -> {
-                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(120).start();
-                if (hasFocus && centralScroll != null) {
-                    centralScroll.smoothScrollTo(0, 0);
-                }
-            });
-        }
-
         if (btnHeaderUser != null) {
             btnHeaderUser.setOnClickListener(v -> openUserActivity());
             btnHeaderUser.setOnKeyListener((v, keyCode, event) -> {
@@ -2990,6 +2977,19 @@ public class MainActivity extends Activity {
             setupContinueWatchingRail();
             setupFavoritesRail();
             if (AccountManager.VIEW_MODE_CINEMA.equals(curMode)) {
+                setupCinemaHero();
+            }
+        } else if (requestCode == REQ_MODE_SELECTION && resultCode == RESULT_OK && data != null) {
+            String chosenMode = data.getStringExtra(ModeSelectionActivity.EXTRA_SELECTED_MODE);
+            if (chosenMode == null || chosenMode.isEmpty()) {
+                chosenMode = AccountManager.getInstance(this).getViewMode();
+            }
+            applyViewMode(chosenMode, true);
+            setupMoviesRail();
+            setupSeriesRail();
+            setupContinueWatchingRail();
+            setupFavoritesRail();
+            if (AccountManager.VIEW_MODE_CINEMA.equals(chosenMode)) {
                 setupCinemaHero();
             }
         }
@@ -3779,10 +3779,6 @@ public class MainActivity extends Activity {
 
     private void applyViewMode(String mode, boolean requestFocus) {
         boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(mode);
-
-        if (btnHeaderSwitchViewText != null) {
-            btnHeaderSwitchViewText.setText(isCinema ? "📺 MODO TV" : "🎬 MODO CINEMA");
-        }
 
         if (isCinema) {
             if (tvTopSection != null) tvTopSection.setVisibility(View.GONE);

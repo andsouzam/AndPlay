@@ -62,6 +62,12 @@
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:screenOrientation="landscape"
             android:theme="@style/Theme.AndPlay.Fullscreen" />
+        <activity
+            android:name=".ModeSelectionActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.AndPlay.Fullscreen" />
     </application>
 
 </manifest>

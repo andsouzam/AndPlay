@@ -1,0 +1,360 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#050811"
+    android:clipChildren="false">
+
+    <!-- CONTAINER DOS PAINÉIS DIAGONAIS -->
+    <FrameLayout
+        android:id="@+id/splitPanelsContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <!-- PAINEL ESQUERDO: MODO CINEMA -->
+        <com.andplay.app.view.DiagonalPaneView
+            android:id="@+id/paneCinema"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true">
+
+            <!-- FOTO DE FILMES E SÉRIES -->
+            <ImageView
+                android:id="@+id/imgCinemaBg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:src="@drawable/banner_mode_cinema" />
+
+            <!-- GRADIENTE ESCURO DE CONTRASTE -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#80060914" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/osd_gradient_bg" />
+
+            <!-- LUZ DE SELEÇÃO CINEMA (WARM GOLDEN BLOOM) -->
+            <View
+                android:id="@+id/cinemaLightOverlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#44FFC107"
+                android:alpha="1.0" />
+
+            <!-- SOMBRA DE DESATIVAÇÃO CINEMA (QUANDO TV ESTIVER SELECIONADA) -->
+            <View
+                android:id="@+id/cinemaShadowScrim"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#D9000000"
+                android:alpha="0.0" />
+
+            <!-- CONTEÚDO INFORMATIVO CINEMA (ALINHADO À ESQUERDA) -->
+            <LinearLayout
+                android:id="@+id/cinemaContent"
+                android:layout_width="400dp"
+                android:layout_height="wrap_content"
+                android:layout_gravity="start|center_vertical"
+                android:layout_marginStart="44dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/badgeCinema"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/badge_gold"
+                    android:paddingStart="10dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="3dp"
+                    android:text="🎬 MODO CINEMA"
+                    android:textColor="#000000"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/titleCinema"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:shadowColor="#FFC107"
+                    android:shadowDx="0"
+                    android:shadowDy="0"
+                    android:shadowRadius="14"
+                    android:text="Filmes &amp; Séries"
+                    android:textColor="#FFFFFF"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Catálogo On-Demand • Lançamentos &amp; Clássicos"
+                    android:textColor="#FFC107"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:lineSpacingExtra="2dp"
+                    android:text="Interface fluida focada no catálogo cinematográfico, com capa em destaque, trilho de continuar assistindo com progresso real e favoritos sincronizados."
+                    android:textColor="#CBD5E1"
+                    android:textSize="12sp" />
+
+                <!-- LISTA DE BENEFÍCIOS -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⭐ Hero Carousel em destaque com notas e sinopses"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11.5sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="⭐ Barra de progresso contínuo em cada filme e episódio"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11.5sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="⭐ Player inteligente e integração na nuvem Supabase"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11.5sp" />
+                </LinearLayout>
+
+                <!-- BOTÃO DE ATIVAÇÃO / FEEDBACK DE SELEÇÃO -->
+                <TextView
+                    android:id="@+id/btnSelectCinema"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="18dp"
+                    android:background="@drawable/badge_gold"
+                    android:gravity="center"
+                    android:paddingStart="22dp"
+                    android:paddingEnd="22dp"
+                    android:text="▶ ATIVAR MODO CINEMA"
+                    android:textColor="#000000"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </com.andplay.app.view.DiagonalPaneView>
+
+        <!-- PAINEL DIREITO: MODO TV -->
+        <com.andplay.app.view.DiagonalPaneView
+            android:id="@+id/paneTv"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="true"
+            android:focusable="true">
+
+            <!-- FOTO DE ESPORTES E CANAIS DE TV -->
+            <ImageView
+                android:id="@+id/imgTvBg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:src="@drawable/banner_mode_tv" />
+
+            <!-- GRADIENTE ESCURO DE CONTRASTE -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#80060914" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/osd_gradient_bg" />
+
+            <!-- LUZ DE SELEÇÃO TV (ELECTRIC BLUE BLOOM) -->
+            <View
+                android:id="@+id/tvLightOverlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#4400E5FF"
+                android:alpha="0.0" />
+
+            <!-- SOMBRA DE DESATIVAÇÃO TV (QUANDO CINEMA ESTIVER SELECIONADO) -->
+            <View
+                android:id="@+id/tvShadowScrim"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="#D9000000"
+                android:alpha="0.82" />
+
+            <!-- CONTEÚDO INFORMATIVO TV (ALINHADO À DIREITA) -->
+            <LinearLayout
+                android:id="@+id/tvContent"
+                android:layout_width="400dp"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end|center_vertical"
+                android:layout_marginEnd="44dp"
+                android:alpha="0.38"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/badgeTv"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/badge_blue"
+                    android:paddingStart="10dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="10dp"
+                    android:paddingBottom="3dp"
+                    android:text="📺 MODO TV AO VIVO"
+                    android:textColor="#000000"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/titleTv"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:shadowColor="#00E5FF"
+                    android:shadowDx="0"
+                    android:shadowDy="0"
+                    android:shadowRadius="14"
+                    android:text="TV &amp; Esportes"
+                    android:textColor="#FFFFFF"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Canais Lineares • Jogos Ao Vivo &amp; EPG"
+                    android:textColor="#38BDF8"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:lineSpacingExtra="2dp"
+                    android:text="Experiência completa de TV com miniplayer PiP instantâneo, grade de canais abertos e fechados, guia de programação EPG e hub esportivo com jogos e tabelas."
+                    android:textColor="#CBD5E1"
+                    android:textSize="12sp" />
+
+                <!-- LISTA DE BENEFÍCIOS -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⚽ Miniplayer PiP com tela cheia instantânea sem recarga"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11.5sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="⚽ Hub esportivo com placar, rodadas e classificação"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11.5sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="⚽ Troca rápida de canais (Zapping) e Guia EPG completo"
+                        android:textColor="#FFFFFF"
+                        android:textSize="11.5sp" />
+                </LinearLayout>
+
+                <!-- BOTÃO DE ATIVAÇÃO / FEEDBACK DE SELEÇÃO -->
+                <TextView
+                    android:id="@+id/btnSelectTv"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginTop="18dp"
+                    android:background="@drawable/pill_focus_bg"
+                    android:gravity="center"
+                    android:paddingStart="22dp"
+                    android:paddingEnd="22dp"
+                    android:text="▶ ATIVAR MODO TV"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </com.andplay.app.view.DiagonalPaneView>
+    </FrameLayout>
+
+    <!-- LINHA DIVISÓRIA DIAGONAL COM BRILHO NEON -->
+    <com.andplay.app.view.DiagonalDividerView
+        android:id="@+id/diagonalDivider"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- CABEÇALHO COM TÍTULO E ORIENTAÇÃO -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="#D0050811"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingTop="14dp"
+        android:paddingBottom="14dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="SELECIONE SUA EXPERIÊNCIA EPLAY"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Use ◀ ESQUERDA e DIREITA ▶ no controle para alternar • Pressione OK / ENTER para ativar"
+            android:textColor="#94A3B8"
+            android:textSize="11.5sp" />
+    </LinearLayout>
+
+    <!-- RODAPÉ INFORMATIVO -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#D0050811"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="💡 Você pode alterar esta escolha a qualquer momento acessando o seu Perfil de Usuário."
+            android:textColor="#CBD5E1"
+            android:textSize="11sp" />
+    </LinearLayout>
+</FrameLayout>

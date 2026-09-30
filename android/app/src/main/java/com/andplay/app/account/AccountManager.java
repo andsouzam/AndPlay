@@ -45,6 +45,7 @@ public class AccountManager {
     private static final String KEY_DISPLAY_NAME = "auth_display_name";
     private static final String KEY_AVATAR = "auth_avatar";
     private static final String KEY_VIEW_MODE = "pref_view_mode";
+    private static final String KEY_HAS_CHOSEN_MODE = "has_chosen_initial_mode";
     private static final String KEY_FAVORITES_JSON = "cached_favorites_json";
     private static final String KEY_LAST_SYNC = "last_sync_timestamp";
 
@@ -152,6 +153,14 @@ public class AccountManager {
 
     public void setViewMode(String mode) {
         prefs.edit().putString(KEY_VIEW_MODE, mode).apply();
+    }
+
+    public boolean hasChosenInitialMode() {
+        return prefs.getBoolean(KEY_HAS_CHOSEN_MODE, false);
+    }
+
+    public void setHasChosenInitialMode(boolean chosen) {
+        prefs.edit().putBoolean(KEY_HAS_CHOSEN_MODE, chosen).apply();
     }
 
     public long getLastSyncTimestamp() {

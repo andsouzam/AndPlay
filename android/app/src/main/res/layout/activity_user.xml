@@ -228,27 +228,52 @@
 
                 <!-- SELETOR DE MODO DE VISUALIZAÇÃO PRINCIPAL -->
                 <LinearLayout
+                    android:id="@+id/cardModeSelection"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
                     android:background="@drawable/card_focus_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
                     android:orientation="vertical"
                     android:padding="16dp">
 
-                    <TextView
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="📺 MODO DE VISUALIZAÇÃO PRINCIPAL"
-                        android:textColor="#FFFFFF"
-                        android:textSize="14sp"
-                        android:textStyle="bold" />
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="🎬 MODO DE EXIBIÇÃO PRINCIPAL"
+                            android:textColor="#FFFFFF"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/btnOpenModeModal"
+                            android:layout_width="wrap_content"
+                            android:layout_height="32dp"
+                            android:background="@drawable/badge_gold"
+                            android:gravity="center"
+                            android:paddingStart="14dp"
+                            android:paddingEnd="14dp"
+                            android:text="⚡ ALTERAR MODO"
+                            android:textColor="#000000"
+                            android:textSize="11.5sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
+                        android:layout_marginTop="3dp"
                         android:layout_marginBottom="12dp"
-                        android:text="Escolha a experiência inicial ao abrir o aplicativo. Você pode alternar a qualquer momento."
+                        android:text="Abra o seletor visual em tela cheia para escolher entre o Modo Cinema e o Modo TV Ao Vivo."
                         android:textColor="#94A3B8"
                         android:textSize="11.5sp" />
 
