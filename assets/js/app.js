@@ -201,6 +201,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       contentPageMeta: document.getElementById('contentPageMeta'),
       contentPageGenres: document.getElementById('contentPageGenres'),
       contentPagePlot: document.getElementById('contentPagePlot'),
+      contentPageDirector: document.getElementById('contentPageDirector'),
+      contentPageCast: document.getElementById('contentPageCast'),
       contentMoviePanel: document.getElementById('contentMoviePanel'),
       contentMovieVersions: document.getElementById('contentMovieVersions'),
       contentSeriesPanel: document.getElementById('contentSeriesPanel'),
@@ -818,6 +820,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           if (!matchedGroup.year && itemYear) {
             matchedGroup.year = itemYear;
           }
+          if (!matchedGroup.cast && (item.cast || item.actors)) matchedGroup.cast = item.cast || item.actors;
+          if (!matchedGroup.director && item.director) matchedGroup.director = item.director;
+          if (!matchedGroup.genre && item.genre) matchedGroup.genre = item.genre;
+          if (!matchedGroup.plot && item.plot) matchedGroup.plot = item.plot;
           const itAdd = Number(item.last_modified || item.added || 0);
           if (itAdd > Number(matchedGroup.added || 0)) {
             matchedGroup.added = item.added;
@@ -855,6 +861,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             malId: normalizePositiveId(item.mal_id || item.malId),
             mal_id: normalizePositiveId(item.mal_id || item.malId),
             plot: item.plot,
+            cast: item.cast || item.actors,
+            director: item.director,
             genre: item.genre,
             cover: item.cover || item.stream_icon || '',
             primaryItem: item,
@@ -980,6 +988,16 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         showWatchedContent().catch(() => {});
       });
       elements.contentPageBackBtn?.addEventListener('click', () => restoreFromContentPage());
+      elements.contentPage?.addEventListener('click', (e) => {
+        const target = e.target.closest('[data-context-search]');
+        if (target) {
+          const term = target.getAttribute('data-context-search');
+          const isPerson = target.getAttribute('data-context-person') === 'true';
+          if (term) {
+            searchByContextTerm(term, isPerson);
+          }
+        }
+      });
       elements.contentSeasonSelect?.addEventListener('change', (e) => renderSeasonEpisodes(e.target.value));
 
       // Video Modal
@@ -1815,9 +1833,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
             const rating = Number(meta.imdbRating || 0);
             const genres = Array.isArray(meta.genres) ? meta.genres : [];
+            const cast = Array.isArray(meta.cast) ? meta.cast : [];
+            const director = Array.isArray(meta.director) ? meta.director : (meta.director ? [meta.director] : []);
             cache[String(imdbId)] = {
               rating: rating > 0 ? rating : 0,
               genres,
+              cast,
+              director,
               fetchedAt: Date.now()
             };
           } catch (e) {}
@@ -3385,12 +3407,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (currentMode === 'movies') {
         elements.categorySelect.style.removeProperty('display');
         elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
-        elements.searchInput.placeholder = 'Pesquisar filme (ex: Harry Potter, Carros)...';
+        elements.searchInput.placeholder = 'Pesquisar filmes por título, gênero, ator ou diretor...';
         currentMediaList = fullMoviesCache || [];
       } else {
         elements.categorySelect.style.removeProperty('display');
         elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
-        elements.searchInput.placeholder = 'Pesquisar série (ex: Breaking Bad, Stranger Things)...';
+        elements.searchInput.placeholder = 'Pesquisar séries por título, gênero ou elenco...';
         currentMediaList = fullSeriesCache || [];
       }
       applyFilterAndRender('');
@@ -3562,13 +3584,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         elements.tabMoviesBtn.classList.add('active');
         elements.tabSeriesBtn.classList.remove('active');
         elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
-        elements.searchInput.placeholder = 'Pesquisar filme (ex: Harry Potter, Carros)...';
+        elements.searchInput.placeholder = 'Pesquisar filmes por título, gênero, ator ou diretor...';
         currentMediaList = fullMoviesCache || [];
       } else {
         elements.tabMoviesBtn.classList.remove('active');
         elements.tabSeriesBtn.classList.add('active');
         elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
-        elements.searchInput.placeholder = 'Pesquisar série (ex: Breaking Bad, Stranger Things)...';
+        elements.searchInput.placeholder = 'Pesquisar séries por título, gênero ou elenco...';
         currentMediaList = fullSeriesCache || [];
       }
       applyFilterAndRender('');
@@ -3831,6 +3853,143 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const weight = Number(profile.genres?.[theme] || 0);
         return score + weight * (index === 0 ? 1 : 0.72);
       }, 0);
+    }
+
+    function parseCastList(castVal) {
+      if (!castVal) return [];
+      if (Array.isArray(castVal)) {
+        return castVal.map(c => String(c).trim()).filter(c => c && c !== 'N/A' && c !== '-' && c !== 'None');
+      }
+      if (typeof castVal === 'string') {
+        return castVal
+          .split(/[,;\/]+/)
+          .map(c => c.trim())
+          .filter(c => c && c !== 'N/A' && c !== '-' && c !== 'None');
+      }
+      return [];
+    }
+
+    function parseDirectorList(dirVal) {
+      if (!dirVal) return [];
+      if (Array.isArray(dirVal)) {
+        return dirVal.map(d => String(d).trim()).filter(d => d && d !== 'N/A' && d !== '-' && d !== 'None');
+      }
+      if (typeof dirVal === 'string') {
+        return dirVal
+          .split(/[,;\/]+/)
+          .map(d => d.trim())
+          .filter(d => d && d !== 'N/A' && d !== '-' && d !== 'None');
+      }
+      return [];
+    }
+
+    function getItemSearchableText(item) {
+      if (!item) return '';
+      if (typeof item._searchableText === 'string') return item._searchableText;
+
+      const parts = [];
+
+      // 1. Títulos e identificadores limpos
+      if (item.name) parts.push(item.name);
+      if (item.title && item.title !== item.name) parts.push(item.title);
+      if (item.cleanKey) parts.push(item.cleanKey);
+      if (item.originalName) parts.push(item.originalName);
+
+      // 2. Versões agrupadas (Dublado, Legendado, 4K)
+      if (Array.isArray(item.versions)) {
+        item.versions.forEach(v => {
+          const vName = v.item?.name || v.item?.title;
+          if (vName) parts.push(vName);
+          if (v.versionInfo?.label) parts.push(v.versionInfo.label);
+        });
+      }
+
+      // 3. Gênero textual direto e categorias
+      if (item.genre) parts.push(item.genre);
+      if (item.category_name) parts.push(item.category_name);
+      if (item.categoryLabel) parts.push(item.categoryLabel);
+
+      // 4. Categorias do catálogo Xtream
+      const isMovie = item.type === 'movie' || item._searchType === 'movie' || item.stream_id || (!item.series_id && currentMode === 'movies');
+      const catList = isMovie ? movieCategories : seriesCategories;
+      if (Array.isArray(catList) && catList.length > 0) {
+        const cId = String(item.category_id || '');
+        if (cId) {
+          const found = catList.find(c => String(c.category_id) === cId);
+          if (found && found.category_name) parts.push(found.category_name);
+        }
+        if (Array.isArray(item.category_ids)) {
+          item.category_ids.forEach(id => {
+            const found = catList.find(c => String(c.category_id) === String(id));
+            if (found && found.category_name) parts.push(found.category_name);
+          });
+        }
+      }
+
+      // 5. Temas mapeados pelo sistema Home e seus sinônimos (ex: Ação -> acao, action, aventura)
+      const themes = getHomeThemesForItem(item);
+      if (Array.isArray(themes)) {
+        themes.forEach(t => {
+          parts.push(t);
+          const aliasObj = HOME_THEME_ALIASES.find(a => a.label === t);
+          if (aliasObj && Array.isArray(aliasObj.keys)) {
+            parts.push(...aliasObj.keys);
+          }
+        });
+      }
+
+      // 6. Elenco e Atores
+      const rawCast = item.cast || item.actors || item.primaryItem?.cast || item.primaryItem?.actors;
+      const castList = parseCastList(rawCast);
+      if (castList.length) parts.push(...castList);
+
+      // 7. Diretor
+      const rawDir = item.director || item.primaryItem?.director;
+      const dirList = parseDirectorList(rawDir);
+      if (dirList.length) parts.push(...dirList);
+
+      // 8. Metadados do cache de enriquecimento IMDb (Cinemeta)
+      const imdbId = item.imdbId || item.imdb_id || item.primaryItem?.imdbId || item.primaryItem?.imdb_id;
+      if (imdbId) {
+        const cached = readHomeRatingCache()[String(imdbId)];
+        if (cached) {
+          if (Array.isArray(cached.genres)) parts.push(...cached.genres);
+          if (Array.isArray(cached.cast)) parts.push(...cached.cast);
+          if (Array.isArray(cached.director)) parts.push(...cached.director);
+        }
+      }
+
+      // 9. Tags contextuais dinâmicas
+      if (Array.isArray(item._contextualKeywords)) {
+        parts.push(...item._contextualKeywords);
+      }
+
+      // 10. Ano
+      if (item.year) parts.push(String(item.year));
+
+      // 11. Esportes e Canais Ao Vivo
+      if (item.league) parts.push(item.league);
+      if (item.homeTeam) parts.push(item.homeTeam);
+      if (item.awayTeam) parts.push(item.awayTeam);
+
+      const searchable = normalizeSearch(parts.join(' '));
+      item._searchableText = searchable;
+      return searchable;
+    }
+
+    function matchesSearchQuery(item, query) {
+      if (!query) return true;
+      const q = normalizeSearch(query);
+      if (!q) return true;
+      const text = getItemSearchableText(item);
+      if (!text) return false;
+      if (text.includes(q)) return true;
+
+      const tokens = q.split(' ').filter(Boolean);
+      if (tokens.length > 1) {
+        return tokens.every(token => text.includes(token));
+      }
+      return false;
     }
 
     // Amostrador caótico estratificado: extrai uma amostra viva, orgânica e variada do catálogo de 30 mil títulos,
@@ -5718,11 +5877,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       const query = normalizeSearch(elements.searchInput?.value || '');
       if (query) {
-        list = list.filter(item => {
-          const name = normalizeSearch(item.name || item.title || '');
-          const orig = normalizeSearch(item.originalName || '');
-          return name.includes(query) || orig.includes(query);
-        });
+        list = list.filter(item => matchesSearchQuery(item, query));
       }
 
       if (moviesFilter4K) {
@@ -6487,6 +6642,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         list = list.filter(s => s.versions ? s.versions.some(v => v.versionInfo.type === 'legendado') : /\[\s*L\s*\]/i.test(s.name || s.title || ''));
       }
 
+      const query = normalizeSearch(elements.searchInput?.value || '');
+      if (query) {
+        list = list.filter(item => matchesSearchQuery(item, query));
+      }
+
       if (seriesSortBy === 'added') {
         list.sort((a, b) => getHomeItemTime(b) - getHomeItemTime(a));
       } else if (seriesSortBy === 'year') {
@@ -6682,7 +6842,7 @@ function showHome(targetScroll = 0) {
       if (currentMode !== mode || isWatchedView || isFavoritesView) return;
 
       if (mode === 'movies') {
-        elements.searchInput.placeholder = 'Pesquisar filme (ex: Harry Potter, Carros)...';
+        elements.searchInput.placeholder = 'Pesquisar filmes por título, gênero, ator ou diretor...';
         if (movieCategories.length === 0) {
           await loadMovieCategories();
           if (currentMode !== mode || isWatchedView || isFavoritesView) return;
@@ -6701,7 +6861,7 @@ function showHome(targetScroll = 0) {
           renderMoviesHub();
         }
       } else if (mode === 'series') {
-        elements.searchInput.placeholder = 'Pesquisar série (ex: Breaking Bad, Stranger Things)...';
+        elements.searchInput.placeholder = 'Pesquisar séries por título, gênero ou elenco...';
         if (seriesCategories.length === 0) {
           await loadSeriesCategories();
           if (currentMode !== mode || isWatchedView || isFavoritesView) return;
@@ -7656,7 +7816,7 @@ function showHome(targetScroll = 0) {
       }
       if (elements.resetCategoryBtn) elements.resetCategoryBtn.style.display = 'none';
       if (elements.categoryLabel) elements.categoryLabel.textContent = 'Resultados da busca';
-      if (elements.searchInput) elements.searchInput.placeholder = 'Pesquisar filmes e séries...';
+      if (elements.searchInput) elements.searchInput.placeholder = 'Pesquisar por título, gênero, ator ou diretor...';
       showLoading('Buscando por: ' + term);
 
       try {
@@ -7676,6 +7836,7 @@ function showHome(targetScroll = 0) {
         elements.categorySelect.value = 'ALL';
         if (elements.categoryLabel) elements.categoryLabel.textContent = 'Busca: ' + term;
         applyFilterAndRender(term);
+        void resolveOnlineContextualSearch(term, requestId);
       } catch (error) {
         if (requestId !== globalSearchRequestId) return;
         elements.mediaGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#888;padding:60px 20px;">Não foi possível realizar a busca agora.</div>';
@@ -7683,6 +7844,62 @@ function showHome(targetScroll = 0) {
         elements.mediaCount.textContent = 'Busca indisponível';
         console.warn('[EPlay Search] Falha na busca global:', error);
       }
+    }
+
+    let _onlineSearchResolutionToken = 0;
+    async function resolveOnlineContextualSearch(query, requestId) {
+      const q = normalizeSearch(query);
+      if (!q || q.length < 3) return;
+      const myToken = ++_onlineSearchResolutionToken;
+
+      try {
+        const [movieData, seriesData] = await Promise.all([
+          fetchJsonWithTimeout(`https://v3-cinemeta.strem.io/catalog/movie/top/search=${encodeURIComponent(query)}.json`, 3500).catch(() => null),
+          fetchJsonWithTimeout(`https://v3-cinemeta.strem.io/catalog/series/top/search=${encodeURIComponent(query)}.json`, 3500).catch(() => null)
+        ]);
+
+        if (myToken !== _onlineSearchResolutionToken || requestId !== globalSearchRequestId) return;
+        if (normalizeSearch(elements.searchInput?.value || '') !== q) return;
+
+        const candidateMetas = [
+          ...(Array.isArray(movieData?.metas) ? movieData.metas : []),
+          ...(Array.isArray(seriesData?.metas) ? seriesData.metas : [])
+        ];
+
+        if (!candidateMetas.length) return;
+
+        const matchedImdbIds = new Set();
+        const matchedCleanKeys = new Set();
+
+        candidateMetas.forEach(meta => {
+          if (meta.id) matchedImdbIds.add(String(meta.id).toLowerCase());
+          if (meta.imdb_id) matchedImdbIds.add(String(meta.imdb_id).toLowerCase());
+          const cKey = cleanTitleKey(meta.name);
+          if (cKey) matchedCleanKeys.add(cKey);
+        });
+
+        let newlyMatchedCount = 0;
+        const catalog = Array.isArray(globalSearchCatalogCache) ? globalSearchCatalogCache : [];
+
+        catalog.forEach(item => {
+          const itemImdb = String(item.imdbId || item.imdb_id || item.primaryItem?.imdbId || item.primaryItem?.imdb_id || '').toLowerCase();
+          const itemClean = cleanTitleKey(item.name || item.title || '');
+
+          const isMatch = (itemImdb && matchedImdbIds.has(itemImdb)) || (itemClean && matchedCleanKeys.has(itemClean));
+          if (isMatch) {
+            if (!item._contextualKeywords) item._contextualKeywords = [];
+            if (!item._contextualKeywords.includes(q)) {
+              item._contextualKeywords.push(q);
+              item._searchableText = null;
+              newlyMatchedCount++;
+            }
+          }
+        });
+
+        if (newlyMatchedCount > 0 && requestId === globalSearchRequestId && currentMode === 'search') {
+          applyFilterAndRender(query);
+        }
+      } catch (_) {}
     }
 
     function onSearch(term) {
@@ -7707,6 +7924,19 @@ function showHome(targetScroll = 0) {
         applyMoviesFiltersAndSort();
         return;
       }
+      if (currentMode === 'series') {
+        if (!q && isSeriesCuratedMode && currentSeriesGenreFilter === 'ALL' && !seriesFilterDub && !seriesFilterLeg && seriesSortBy === 'featured') {
+          renderSeriesHub();
+          return;
+        }
+        if (elements.seriesCuratedRails) elements.seriesCuratedRails.style.display = 'none';
+        if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
+        document.querySelector('.status-bar')?.style.removeProperty('display');
+        elements.seriesViewCuratedBtn?.classList.remove('active');
+        elements.seriesViewGridBtn?.classList.add('active');
+        applySeriesFiltersAndSort();
+        return;
+      }
       applyFilterAndRender(term);
     }
 
@@ -7715,18 +7945,25 @@ function showHome(targetScroll = 0) {
       if (!q) {
         currentFilteredList = currentMediaList;
       } else {
-        currentFilteredList = currentMediaList.filter(item => {
-          const rawName = normalizeSearch(item.name || item.title || '');
-          const cleanKey = cleanTitleKey(item.name || item.title || '');
-          const origName = normalizeSearch(item.originalName || '');
-          const leagueName = normalizeSearch(item.league || item.categoryLabel || '');
-          const teamNames = normalizeSearch(`${item.homeTeam || ''} ${item.awayTeam || ''}`);
-          const hasVersionMatch = item.versions && item.versions.some(v => {
-            const vName = normalizeSearch(v.item?.name || v.item?.title || '');
-            return vName.includes(q);
+        currentFilteredList = currentMediaList.filter(item => matchesSearchQuery(item, q));
+        if (currentMode === 'search') {
+          currentFilteredList.sort((a, b) => {
+            const aTitle = normalizeSearch(a.name || a.title || '');
+            const bTitle = normalizeSearch(b.name || b.title || '');
+            const aExact = aTitle === q;
+            const bExact = bTitle === q;
+            if (aExact !== bExact) return aExact ? -1 : 1;
+            const aStarts = aTitle.startsWith(q);
+            const bStarts = bTitle.startsWith(q);
+            if (aStarts !== bStarts) return aStarts ? -1 : 1;
+            const aIncludes = aTitle.includes(q);
+            const bIncludes = bTitle.includes(q);
+            if (aIncludes !== bIncludes) return aIncludes ? -1 : 1;
+            const aRating = Number(a.rating || 0);
+            const bRating = Number(b.rating || 0);
+            return bRating - aRating;
           });
-          return rawName.includes(q) || cleanKey.includes(q) || origName.includes(q) || leagueName.includes(q) || teamNames.includes(q) || hasVersionMatch;
-        });
+        }
       }
 
       elements.mediaGrid.innerHTML = '';
@@ -10654,10 +10891,266 @@ function showHome(targetScroll = 0) {
 
       const genres = getHomeThemesForItem(item);
       elements.contentPageGenres.innerHTML = genres.map(genre =>
-        '<span class="eplay-content-genre">' + escapeHtml(genre) + '</span>'
+        '<button type="button" class="eplay-content-genre" data-context-search="' + escapeHtml(genre) + '" title="Filtrar por ' + escapeHtml(genre) + '">' + escapeHtml(genre) + '</button>'
       ).join('');
       elements.contentPagePlot.textContent = item?.plot || item?.description || 'Sinopse não disponível.';
+      renderContentPageDirector(item);
+      renderContentPageCast(item);
       updateFavoriteButton(type, item);
+    }
+
+    function renderContentPageDirector(item) {
+      if (!elements.contentPageDirector) return;
+      const imdbId = item?.imdbId || item?.imdb_id || item?.primaryItem?.imdbId || item?.primaryItem?.imdb_id || '';
+      const cached = imdbId ? readHomeRatingCache()[String(imdbId)] : null;
+      const directors = parseDirectorList(
+        item?.director ||
+        item?.primaryItem?.director ||
+        cached?.director
+      );
+      if (!directors.length) {
+        elements.contentPageDirector.style.display = 'none';
+        elements.contentPageDirector.innerHTML = '';
+        return;
+      }
+      elements.contentPageDirector.style.display = 'flex';
+      elements.contentPageDirector.innerHTML =
+        '<span class="eplay-content-meta-label">Direção:</span>' +
+        directors.map(dir =>
+          '<button type="button" class="eplay-director-badge" data-context-search="' + escapeHtml(dir) + '" data-context-person="true" title="Buscar títulos dirigidos por ' + escapeHtml(dir) + '">' +
+            escapeHtml(dir) +
+          '</button>'
+        ).join('');
+    }
+
+    function renderContentPageCast(item) {
+      if (!elements.contentPageCast) return;
+      const imdbId = item?.imdbId || item?.imdb_id || item?.primaryItem?.imdbId || item?.primaryItem?.imdb_id || '';
+      const cached = imdbId ? readHomeRatingCache()[String(imdbId)] : null;
+      const castList = parseCastList(
+        item?.cast ||
+        item?.actors ||
+        item?.primaryItem?.cast ||
+        item?.primaryItem?.actors ||
+        cached?.cast
+      );
+      if (!castList.length) {
+        elements.contentPageCast.style.display = 'none';
+        elements.contentPageCast.innerHTML = '';
+        return;
+      }
+      const topCast = castList.slice(0, 12);
+      elements.contentPageCast.style.display = 'flex';
+      elements.contentPageCast.innerHTML =
+        '<span class="eplay-content-meta-label">Elenco:</span>' +
+        topCast.map(actor =>
+          '<button type="button" class="eplay-cast-badge" data-context-search="' + escapeHtml(actor) + '" data-context-person="true" title="Buscar títulos com ' + escapeHtml(actor) + '">' +
+            escapeHtml(actor) +
+          '</button>'
+        ).join('');
+    }
+
+    function searchByContextTerm(term, forceGlobal = false) {
+      if (!term) return;
+      restoreFromContentPage();
+      if (elements.searchInput) {
+        elements.searchInput.value = term;
+      }
+      if (forceGlobal || currentMode === 'home' || currentMode === 'search') {
+        performGlobalSearch(term);
+      } else {
+        onSearch(term);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function enrichMoviePageMetadata(groupOrMovie, streamId) {
+      if (!groupOrMovie) return;
+      const imdbId = groupOrMovie.imdbId || groupOrMovie.imdb_id || groupOrMovie.primaryItem?.imdbId || groupOrMovie.primaryItem?.imdb_id;
+      const cachedRating = imdbId ? readHomeRatingCache()[String(imdbId)] : null;
+      if (cachedRating && (cachedRating.cast?.length || cachedRating.director?.length)) {
+        if (!groupOrMovie.cast && cachedRating.cast?.length) groupOrMovie.cast = cachedRating.cast;
+        if (!groupOrMovie.director && cachedRating.director?.length) groupOrMovie.director = cachedRating.director;
+        groupOrMovie._searchableText = null;
+        if (contentPageOpen && currentContentPageItem === groupOrMovie) {
+          renderContentPageDirector(groupOrMovie);
+          renderContentPageCast(groupOrMovie);
+        }
+      }
+
+      // 1. Consulta get_vod_info para enriquecer elenco e diretor
+      if ((!groupOrMovie.cast || !groupOrMovie.director) && streamId) {
+        try {
+          const data = await xtreamApi('get_vod_info', '&vod_id=' + encodeURIComponent(streamId));
+          const info = data?.info;
+          if (info) {
+            let updated = false;
+            const cast = info.cast || info.actors;
+            const director = info.director;
+            if (cast && !groupOrMovie.cast) {
+              groupOrMovie.cast = cast;
+              updated = true;
+            }
+            if (director && !groupOrMovie.director) {
+              groupOrMovie.director = director;
+              updated = true;
+            }
+            if (info.genre && !groupOrMovie.genre) {
+              groupOrMovie.genre = info.genre;
+              updated = true;
+            }
+            if (info.plot && (!groupOrMovie.plot || groupOrMovie.plot === 'Sinopse não disponível.')) {
+              groupOrMovie.plot = info.plot;
+              if (contentPageOpen && currentContentPageItem === groupOrMovie && elements.contentPagePlot) {
+                elements.contentPagePlot.textContent = info.plot;
+              }
+            }
+            if (updated) {
+              groupOrMovie._searchableText = null;
+              if (contentPageOpen && currentContentPageItem === groupOrMovie) {
+                renderContentPageDirector(groupOrMovie);
+                renderContentPageCast(groupOrMovie);
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. Se ainda faltar elenco/diretor, consulta Cinemeta
+      if (!groupOrMovie.cast || !groupOrMovie.director) {
+        try {
+          let resolvedImdbId = groupOrMovie.imdbId || groupOrMovie.imdb_id;
+          if (!resolvedImdbId) {
+            const rawTitle = groupOrMovie.name || groupOrMovie.title || '';
+            const searchStr = parseTitleInfo(rawTitle) || cleanTitleKey(rawTitle);
+            if (searchStr) {
+              const sUrl = `https://v3-cinemeta.strem.io/catalog/movie/top/search=${encodeURIComponent(searchStr)}.json`;
+              const sData = await fetchJsonWithTimeout(sUrl, 3500);
+              const metas = Array.isArray(sData?.metas) ? sData.metas : [];
+              if (metas.length > 0) {
+                resolvedImdbId = metas[0].id || metas[0].imdb_id;
+              }
+            }
+          }
+          if (resolvedImdbId) {
+            groupOrMovie.imdbId = resolvedImdbId;
+            groupOrMovie.imdb_id = resolvedImdbId;
+            const mUrl = `https://v3-cinemeta.strem.io/meta/movie/${encodeURIComponent(resolvedImdbId)}.json`;
+            const mData = await fetchJsonWithTimeout(mUrl, 3500);
+            const meta = mData?.meta;
+            if (meta) {
+              let updated = false;
+              if (meta.cast && !groupOrMovie.cast) {
+                groupOrMovie.cast = meta.cast;
+                updated = true;
+              }
+              if (meta.director && !groupOrMovie.director) {
+                groupOrMovie.director = meta.director;
+                updated = true;
+              }
+              if (meta.description && (!groupOrMovie.plot || groupOrMovie.plot === 'Sinopse não disponível.')) {
+                groupOrMovie.plot = meta.description;
+                if (contentPageOpen && currentContentPageItem === groupOrMovie && elements.contentPagePlot) {
+                  elements.contentPagePlot.textContent = meta.description;
+                }
+              }
+              const cache = readHomeRatingCache();
+              cache[String(resolvedImdbId)] = {
+                rating: Number(meta.imdbRating || 0) || cache[String(resolvedImdbId)]?.rating || 0,
+                genres: Array.isArray(meta.genres) ? meta.genres : (cache[String(resolvedImdbId)]?.genres || []),
+                cast: Array.isArray(meta.cast) ? meta.cast : [],
+                director: Array.isArray(meta.director) ? meta.director : (meta.director ? [meta.director] : []),
+                fetchedAt: Date.now()
+              };
+              homeRatingCacheMemory = cache;
+              try { localStorage.setItem(HOME_RATING_CACHE_KEY, JSON.stringify(cache)); } catch (_) {}
+
+              if (updated) {
+                groupOrMovie._searchableText = null;
+                if (contentPageOpen && currentContentPageItem === groupOrMovie) {
+                  renderContentPageDirector(groupOrMovie);
+                  renderContentPageCast(groupOrMovie);
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    async function enrichSeriesPageMetadata(seriesGroupOrItem) {
+      if (!seriesGroupOrItem) return;
+      const imdbId = seriesGroupOrItem.imdbId || seriesGroupOrItem.imdb_id || seriesGroupOrItem.primaryItem?.imdbId || seriesGroupOrItem.primaryItem?.imdb_id;
+      const cachedRating = imdbId ? readHomeRatingCache()[String(imdbId)] : null;
+      if (cachedRating && (cachedRating.cast?.length || cachedRating.director?.length)) {
+        if (!seriesGroupOrItem.cast && cachedRating.cast?.length) seriesGroupOrItem.cast = cachedRating.cast;
+        if (!seriesGroupOrItem.director && cachedRating.director?.length) seriesGroupOrItem.director = cachedRating.director;
+        seriesGroupOrItem._searchableText = null;
+        if (contentPageOpen && currentContentPageItem === seriesGroupOrItem) {
+          renderContentPageDirector(seriesGroupOrItem);
+          renderContentPageCast(seriesGroupOrItem);
+        }
+      }
+
+      if (!seriesGroupOrItem.cast || !seriesGroupOrItem.director) {
+        try {
+          let resolvedImdbId = seriesGroupOrItem.imdbId || seriesGroupOrItem.imdb_id;
+          if (!resolvedImdbId) {
+            const rawTitle = seriesGroupOrItem.name || seriesGroupOrItem.title || '';
+            const searchStr = parseTitleInfo(rawTitle) || cleanTitleKey(rawTitle);
+            if (searchStr) {
+              const sUrl = `https://v3-cinemeta.strem.io/catalog/series/top/search=${encodeURIComponent(searchStr)}.json`;
+              const sData = await fetchJsonWithTimeout(sUrl, 3500);
+              const metas = Array.isArray(sData?.metas) ? sData.metas : [];
+              if (metas.length > 0) {
+                resolvedImdbId = metas[0].id || metas[0].imdb_id;
+              }
+            }
+          }
+          if (resolvedImdbId) {
+            seriesGroupOrItem.imdbId = resolvedImdbId;
+            seriesGroupOrItem.imdb_id = resolvedImdbId;
+            const mUrl = `https://v3-cinemeta.strem.io/meta/series/${encodeURIComponent(resolvedImdbId)}.json`;
+            const mData = await fetchJsonWithTimeout(mUrl, 3500);
+            const meta = mData?.meta;
+            if (meta) {
+              let updated = false;
+              if (meta.cast && !seriesGroupOrItem.cast) {
+                seriesGroupOrItem.cast = meta.cast;
+                updated = true;
+              }
+              if (meta.director && !seriesGroupOrItem.director) {
+                seriesGroupOrItem.director = meta.director;
+                updated = true;
+              }
+              if (meta.description && (!seriesGroupOrItem.plot || seriesGroupOrItem.plot === 'Sinopse não disponível.')) {
+                seriesGroupOrItem.plot = meta.description;
+                if (contentPageOpen && currentContentPageItem === seriesGroupOrItem && elements.contentPagePlot) {
+                  elements.contentPagePlot.textContent = meta.description;
+                }
+              }
+              const cache = readHomeRatingCache();
+              cache[String(resolvedImdbId)] = {
+                rating: Number(meta.imdbRating || 0) || cache[String(resolvedImdbId)]?.rating || 0,
+                genres: Array.isArray(meta.genres) ? meta.genres : (cache[String(resolvedImdbId)]?.genres || []),
+                cast: Array.isArray(meta.cast) ? meta.cast : [],
+                director: Array.isArray(meta.director) ? meta.director : (meta.director ? [meta.director] : []),
+                fetchedAt: Date.now()
+              };
+              homeRatingCacheMemory = cache;
+              try { localStorage.setItem(HOME_RATING_CACHE_KEY, JSON.stringify(cache)); } catch (_) {}
+
+              if (updated) {
+                seriesGroupOrItem._searchableText = null;
+                if (contentPageOpen && currentContentPageItem === seriesGroupOrItem) {
+                  renderContentPageDirector(seriesGroupOrItem);
+                  renderContentPageCast(seriesGroupOrItem);
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
     }
 
     function restoreFromContentPage() {
@@ -10738,8 +11231,8 @@ function showHome(targetScroll = 0) {
         });
       }
       elements.searchInput.placeholder = mode === 'movies'
-        ? 'Pesquisar filme (ex: Harry Potter, Carros)...'
-        : 'Pesquisar série (ex: Breaking Bad, Stranger Things)...';
+        ? 'Pesquisar filmes por título, gênero, ator ou diretor...'
+        : 'Pesquisar séries por título, gênero ou elenco...';
       if (mode === 'movies' && !state.search && (!state.category || state.category === 'ALL')) {
         renderMoviesHub();
       } else {
@@ -10779,6 +11272,9 @@ function showHome(targetScroll = 0) {
         (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99)
       );
 
+      const primaryStreamId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || versions[0]?.streamId;
+      void enrichMoviePageMetadata(groupOrMovie, primaryStreamId);
+
       sortedVersions.forEach(v => {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -10817,6 +11313,7 @@ function showHome(targetScroll = 0) {
       currentContentPageType = 'series';
       currentSeriesGroup = seriesGroupOrItem;
       showContentPageShell('series', seriesGroupOrItem);
+      void enrichSeriesPageMetadata(seriesGroupOrItem);
 
       elements.contentMoviePanel.hidden = true;
       elements.contentSeriesPanel.hidden = false;
@@ -10931,6 +11428,32 @@ function showHome(targetScroll = 0) {
         const data = await xtreamApi('get_series_info', `&series_id=${versionObj.seriesId}`);
         if (myVersionToken !== _seriesVersionLoadToken) return;
         currentSeriesData = data;
+        if (currentSeriesGroup && data?.info) {
+          let updated = false;
+          const sCast = data.info.cast || data.info.actors;
+          const sDirector = data.info.director;
+          if (sCast && !currentSeriesGroup.cast) {
+            currentSeriesGroup.cast = sCast;
+            updated = true;
+          }
+          if (sDirector && !currentSeriesGroup.director) {
+            currentSeriesGroup.director = sDirector;
+            updated = true;
+          }
+          if (data.info.plot && (!currentSeriesGroup.plot || currentSeriesGroup.plot === 'Sinopse não disponível.')) {
+            currentSeriesGroup.plot = data.info.plot;
+            if (contentPageOpen && currentContentPageItem === currentSeriesGroup && elements.contentPagePlot) {
+              elements.contentPagePlot.textContent = data.info.plot;
+            }
+          }
+          if (updated) {
+            currentSeriesGroup._searchableText = null;
+            if (contentPageOpen && currentContentPageItem === currentSeriesGroup) {
+              renderContentPageDirector(currentSeriesGroup);
+              renderContentPageCast(currentSeriesGroup);
+            }
+          }
+        }
 
         const episodesBySeason = currentSeriesData.episodes || {};
         const seasons = Object.keys(episodesBySeason).sort((a, b) => Number(a) - Number(b));
