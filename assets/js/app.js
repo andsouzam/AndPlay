@@ -226,20 +226,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       // Movies Hub
       moviesHub: document.getElementById('moviesHub'),
       moviesHero: document.getElementById('moviesHero'),
-      moviesHeroBackdrop: document.getElementById('moviesHeroBackdrop'),
-      moviesHeroRating: document.getElementById('moviesHeroRating'),
-      moviesHeroYear: document.getElementById('moviesHeroYear'),
-      moviesHeroQuality: document.getElementById('moviesHeroQuality'),
-      moviesHeroTitle: document.getElementById('moviesHeroTitle'),
-      moviesHeroGenres: document.getElementById('moviesHeroGenres'),
-      moviesHeroPlot: document.getElementById('moviesHeroPlot'),
-      moviesHeroPlayBtn: document.getElementById('moviesHeroPlayBtn'),
-      moviesHeroDetailsBtn: document.getElementById('moviesHeroDetailsBtn'),
-      moviesSurpriseBtn: document.getElementById('moviesSurpriseBtn'),
-      moviesHeroPoster: document.getElementById('moviesHeroPoster'),
+      moviesHeroTrack: document.getElementById('moviesHeroTrack'),
       moviesHeroPrev: document.getElementById('moviesHeroPrev'),
       moviesHeroNext: document.getElementById('moviesHeroNext'),
       moviesHeroDots: document.getElementById('moviesHeroDots'),
+      moviesHeroLoading: document.getElementById('moviesHeroLoading'),
       moviesGenrePills: document.getElementById('moviesGenrePills'),
       moviesViewCuratedBtn: document.getElementById('moviesViewCuratedBtn'),
       moviesViewGridBtn: document.getElementById('moviesViewGridBtn'),
@@ -5129,19 +5120,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         applyMoviesFiltersAndSort();
       });
 
-      elements.moviesSurpriseBtn?.addEventListener('click', pickSurpriseMovie);
-
       elements.moviesHeroPrev?.addEventListener('click', () => moveMoviesHero(-1));
       elements.moviesHeroNext?.addEventListener('click', () => moveMoviesHero(1));
-
-      elements.moviesHeroPlayBtn?.addEventListener('click', () => {
-        const item = moviesHeroItems[moviesHeroIndex];
-        if (item?.item) onMovieCardClick(item.item);
-      });
-
-      elements.moviesHeroDetailsBtn?.addEventListener('click', () => {
-        const item = moviesHeroItems[moviesHeroIndex];
-        if (item?.item) openMoviePage(item.item);
+      elements.moviesHeroDots?.addEventListener('click', (event) => {
+        const button = event.target.closest('[data-movies-slide]');
+        if (button) showMoviesHero(Number(button.dataset.moviesSlide));
       });
 
       setupPillsDragScroll(elements.moviesGenrePills);
@@ -5187,97 +5170,218 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return shuffleArray(selected).slice(0, 5);
     }
 
-    function updateMoviesHeroDisplay(item) {
-      if (!item || !elements.moviesHero) return;
-      const poster = item.poster || '';
-      if (elements.moviesHeroBackdrop) {
-        elements.moviesHeroBackdrop.style.backgroundImage = poster ? `url("${String(poster).replace(/"/g, '%22')}")` : 'none';
-      }
-      if (elements.moviesHeroPoster) {
-        elements.moviesHeroPoster.src = poster;
-      }
-      if (elements.moviesHeroTitle) {
-        elements.moviesHeroTitle.textContent = item.title;
-      }
-      if (elements.moviesHeroYear) {
-        elements.moviesHeroYear.textContent = item.year ? String(item.year) : '';
-      }
-      const ratingInfo = getHomeRatingInfo(item);
-      if (elements.moviesHeroRating) {
-        elements.moviesHeroRating.textContent = ratingInfo.value > 0
-          ? `★ ${ratingInfo.value.toFixed(1)} ${ratingInfo.source || 'IMDb'}`
-          : '★ Destaque';
+    function renderMoviesHero() {
+      if (!elements.moviesHeroTrack) return;
+      moviesHeroItems = getMoviesHeroItems();
+      moviesHeroIndex = Math.min(moviesHeroIndex, Math.max(0, moviesHeroItems.length - 1));
+      elements.moviesHeroTrack.innerHTML = '';
+      if (elements.moviesHeroDots) elements.moviesHeroDots.innerHTML = '';
+
+      if (!moviesHeroItems.length) {
+        if (elements.moviesHeroLoading) {
+          elements.moviesHeroLoading.style.display = 'flex';
+          elements.moviesHeroLoading.textContent = 'Carregando novidades do cinema...';
+        }
+        return;
       }
 
-      const is4K = item.item?.versions ? item.item.versions.some(v => v.versionInfo?.type?.startsWith('4k')) : /\b4k\b/i.test(item.title);
-      if (elements.moviesHeroQuality) {
-        elements.moviesHeroQuality.textContent = is4K ? '4K ULTRA HD' : 'FULL HD 1080P';
-      }
+      if (elements.moviesHeroLoading) elements.moviesHeroLoading.style.display = 'none';
 
-      const genres = getHomeThemesForItem(item.item || item);
-      if (elements.moviesHeroGenres) {
-        elements.moviesHeroGenres.innerHTML = genres.slice(0, 4).map(g =>
-          `<span class="movies-hero-genre-tag">${escapeHtml(g)}</span>`
-        ).join('');
-      }
+      moviesHeroItems.forEach((item, index) => {
+        const slide = document.createElement('article');
+        slide.className = 'movies-hero-slide';
+        const ratingInfo = getHomeRatingInfo(item);
+        const is4K = item.item?.versions ? item.item.versions.some(v => v.versionInfo?.type?.startsWith('4k')) : /\b4k\b/i.test(item.title);
+        const qualityLabel = is4K ? '4K ULTRA HD' : '';
+        const topGenre = getHomeThemesForItem(item.item || item)[0] || '';
+        const meta = [
+          'FILME',
+          item.year,
+          ratingInfo.value > 0 ? '★ ' + ratingInfo.value.toFixed(1) + (ratingInfo.source ? ' ' + ratingInfo.source : ' IMDb') : '',
+          qualityLabel,
+          topGenre
+        ].filter(Boolean).join('  •  ');
 
-      if (elements.moviesHeroPlot) {
-        elements.moviesHeroPlot.textContent = item.plot || 'Acompanhe esta incrível produção cinematográfica disponível no catálogo do EPlay.';
-      }
+        slide.innerHTML =
+          '<img class="movies-hero-backdrop" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async" draggable="false">' +
+          '<div class="movies-hero-shade"></div>' +
+          '<div class="movies-hero-content">' +
+            '<span class="movies-hero-kicker">CINEMA EM DESTAQUE • FILME</span>' +
+            '<h1>' + escapeHtml(item.title) + '</h1>' +
+            '<div class="movies-hero-meta">' + escapeHtml(meta) + '</div>' +
+            '<p>' + escapeHtml(item.plot || 'Disponível no catálogo de filmes do EPlay.') + '</p>' +
+            '<div class="movies-hero-actions">' +
+              '<button class="movies-hero-watch" type="button">▶ Assistir</button>' +
+              '<button class="movies-hero-details" type="button">ℹ Ficha Técnica</button>' +
+              '<button class="movies-hero-surprise" type="button" title="Sorteia um filme imperdível do catálogo">🎲 Surpreenda-me</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="movies-hero-poster-wrap"><img class="movies-hero-poster" src="' + escapeHtml(item.poster) + '" alt="" loading="' + (index === 0 ? 'eager' : 'lazy') + '" decoding="async" draggable="false"></div>';
 
-      if (elements.moviesHeroDots) {
-        elements.moviesHeroDots.innerHTML = '';
-        moviesHeroItems.forEach((_, idx) => {
-          const dot = document.createElement('button');
-          dot.type = 'button';
-          dot.className = 'movies-hero-dot' + (idx === moviesHeroIndex ? ' active' : '');
-          dot.setAttribute('aria-label', `Ver destaque ${idx + 1}`);
-          dot.addEventListener('click', () => {
-            moviesHeroIndex = idx;
-            updateMoviesHeroDisplay(moviesHeroItems[moviesHeroIndex]);
-            restartMoviesHeroTimer();
-          });
-          elements.moviesHeroDots.appendChild(dot);
+        const openItem = () => {
+          if (item.item) onMovieCardClick(item.item);
+        };
+
+        slide.addEventListener('click', (event) => {
+          if (event.target.closest('.movies-hero-actions')) return;
+          openItem();
         });
-      }
+
+        slide.querySelector('.movies-hero-watch')?.addEventListener('click', (event) => {
+          event.stopPropagation();
+          openItem();
+        });
+
+        slide.querySelector('.movies-hero-details')?.addEventListener('click', (event) => {
+          event.stopPropagation();
+          if (item.item) openMoviePage(item.item);
+        });
+
+        slide.querySelector('.movies-hero-surprise')?.addEventListener('click', (event) => {
+          event.stopPropagation();
+          pickSurpriseMovie();
+        });
+
+        elements.moviesHeroTrack.appendChild(slide);
+
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.dataset.moviesSlide = String(index);
+        dot.className = 'movies-hero-dot';
+        dot.setAttribute('aria-label', 'Mostrar ' + item.title);
+        elements.moviesHeroDots?.appendChild(dot);
+      });
+
+      setupMoviesHeroSwipe();
+      updateMoviesHeroPosition();
+      startMoviesHeroTimer();
     }
 
-    function moveMoviesHero(dir) {
+    function setupMoviesHeroSwipe() {
+      const track = elements.moviesHeroTrack;
+      if (!track || track._swipeInitialized) return;
+      track._swipeInitialized = true;
+
+      track.addEventListener('dragstart', e => e.preventDefault());
+
+      let isDown = false;
+      let startX = 0;
+      let startY = 0;
+      let isSwiping = false;
+      let trackWidth = 0;
+      let activePointerId = null;
+
+      track.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (moviesHeroItems.length < 2) return;
+        if (window.getSelection) window.getSelection().removeAllRanges();
+        isDown = true;
+        isSwiping = false;
+        startX = e.clientX;
+        startY = e.clientY;
+        activePointerId = e.pointerId;
+        trackWidth = track.clientWidth || window.innerWidth || 1;
+      });
+
+      track.addEventListener('pointermove', e => {
+        if (!isDown || e.pointerId !== activePointerId) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        if (!isSwiping) {
+          if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) {
+            isSwiping = true;
+            track.classList.add('is-swiping');
+            if (window.getSelection) window.getSelection().removeAllRanges();
+            clearInterval(moviesHeroTimer);
+            moviesHeroTimer = null;
+            try { track.setPointerCapture(e.pointerId); } catch (_) {}
+          } else if (Math.abs(dy) > 10) {
+            isDown = false;
+            return;
+          }
+        }
+
+        if (isSwiping) {
+          if (window.getSelection) window.getSelection().removeAllRanges();
+          if (e.cancelable) e.preventDefault();
+          let deltaPercent = (dx / trackWidth) * 100;
+          if ((moviesHeroIndex === 0 && dx > 0) || (moviesHeroIndex === moviesHeroItems.length - 1 && dx < 0)) {
+            deltaPercent *= 0.35;
+          }
+          track.style.transform = 'translate3d(' + (-(moviesHeroIndex * 100) + deltaPercent) + '%, 0, 0)';
+        }
+      });
+
+      const onPointerEnd = e => {
+        if (!isDown || e.pointerId !== activePointerId) return;
+        isDown = false;
+        try { track.releasePointerCapture(e.pointerId); } catch (_) {}
+
+        if (isSwiping) {
+          isSwiping = false;
+          track.classList.remove('is-swiping');
+          const dx = e.clientX - startX;
+
+          const suppressClick = ev => {
+            ev.preventDefault();
+            ev.stopPropagation();
+          };
+          window.addEventListener('click', suppressClick, { capture: true, once: true });
+          setTimeout(() => window.removeEventListener('click', suppressClick, { capture: true }), 80);
+
+          if (dx < -45 && moviesHeroIndex < moviesHeroItems.length - 1) {
+            moveMoviesHero(1);
+          } else if (dx > 45 && moviesHeroIndex > 0) {
+            moveMoviesHero(-1);
+          } else {
+            updateMoviesHeroPosition();
+          }
+        }
+        startMoviesHeroTimer();
+      };
+
+      track.addEventListener('pointerup', onPointerEnd);
+      track.addEventListener('pointercancel', onPointerEnd);
+
+      track.addEventListener('mouseenter', () => {
+        clearInterval(moviesHeroTimer);
+        moviesHeroTimer = null;
+      });
+      track.addEventListener('mouseleave', () => {
+        startMoviesHeroTimer();
+      });
+    }
+
+    function updateMoviesHeroPosition() {
+      if (!elements.moviesHeroTrack) return;
+      elements.moviesHeroTrack.style.transform = 'translate3d(-' + (moviesHeroIndex * 100) + '%, 0, 0)';
+      elements.moviesHeroDots?.querySelectorAll('.movies-hero-dot').forEach((dot, index) => {
+        dot.classList.toggle('active', index === moviesHeroIndex);
+      });
+    }
+
+    function showMoviesHero(index) {
       if (!moviesHeroItems.length) return;
-      moviesHeroIndex = (moviesHeroIndex + dir + moviesHeroItems.length) % moviesHeroItems.length;
-      updateMoviesHeroDisplay(moviesHeroItems[moviesHeroIndex]);
-      restartMoviesHeroTimer();
+      const total = moviesHeroItems.length;
+      moviesHeroIndex = ((Number(index) || 0) % total + total) % total;
+      updateMoviesHeroPosition();
+      startMoviesHeroTimer();
+    }
+
+    function moveMoviesHero(delta) {
+      showMoviesHero(moviesHeroIndex + Number(delta || 0));
     }
 
     function startMoviesHeroTimer() {
-      if (moviesHeroTimer) clearInterval(moviesHeroTimer);
+      clearInterval(moviesHeroTimer);
+      moviesHeroTimer = null;
+      if (moviesHeroItems.length < 2) return;
       moviesHeroTimer = setInterval(() => {
-        if (currentMode !== 'movies' || !elements.moviesHub || elements.moviesHub.style.display === 'none') {
-          clearInterval(moviesHeroTimer);
-          moviesHeroTimer = null;
-          return;
+        if (currentMode === 'movies' && elements.moviesHub && elements.moviesHub.style.display !== 'none' && !document.hidden) {
+          moveMoviesHero(1);
         }
-        moveMoviesHero(1);
       }, 7000);
-    }
-
-    function restartMoviesHeroTimer() {
-      startMoviesHeroTimer();
-    }
-
-    function renderMoviesHero() {
-      if (!elements.moviesHero) return;
-      if (!moviesHeroItems.length) {
-        moviesHeroItems = getMoviesHeroItems();
-      }
-      if (!moviesHeroItems.length) {
-        elements.moviesHero.style.display = 'none';
-        return;
-      }
-      elements.moviesHero.style.display = 'flex';
-      moviesHeroIndex = Math.min(moviesHeroIndex, moviesHeroItems.length - 1);
-      updateMoviesHeroDisplay(moviesHeroItems[moviesHeroIndex]);
-      startMoviesHeroTimer();
     }
 
     function renderMoviesGenrePills() {

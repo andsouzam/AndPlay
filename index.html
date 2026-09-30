@@ -422,33 +422,14 @@
 
     <!-- Movies Hub: Hub Cinematográfico Avançado (Hero, Pílulas, Curadoria, Ordenação) -->
     <section id="moviesHub" class="movies-hub" style="display: none;" aria-label="Central de Filmes">
-      <!-- 1. Hero Spotlight de Cinema -->
-      <div id="moviesHero" class="movies-hero">
-        <div class="movies-hero-backdrop" id="moviesHeroBackdrop"></div>
-        <div class="movies-hero-shade"></div>
-        <div class="movies-hero-content">
-          <div class="movies-hero-badge-row">
-            <span class="movies-hero-kicker">CINEMA EM DESTAQUE</span>
-            <span id="moviesHeroRating" class="movies-hero-rating">★ 8.5 IMDb</span>
-            <span id="moviesHeroYear" class="movies-hero-year">2026</span>
-            <span id="moviesHeroQuality" class="movies-hero-quality">4K ULTRA HD</span>
-          </div>
-          <h1 id="moviesHeroTitle" class="movies-hero-title">Carregando destaque...</h1>
-          <div id="moviesHeroGenres" class="movies-hero-genres"></div>
-          <p id="moviesHeroPlot" class="movies-hero-plot">Selecione para ver a sinopse e detalhes.</p>
-          <div class="movies-hero-actions">
-            <button id="moviesHeroPlayBtn" class="movies-hero-btn movies-hero-play" type="button">▶ Assistir Agora</button>
-            <button id="moviesHeroDetailsBtn" class="movies-hero-btn movies-hero-details" type="button">ℹ Ficha Técnica</button>
-            <button id="moviesSurpriseBtn" class="movies-hero-btn movies-hero-surprise" type="button" title="Sorteia um filme imperdível do catálogo">🎲 Surpreenda-me</button>
-          </div>
-        </div>
-        <div class="movies-hero-poster-wrap">
-          <img id="moviesHeroPoster" class="movies-hero-poster" src="" alt="Capa do filme" loading="lazy" />
-        </div>
-        <button id="moviesHeroPrev" class="movies-hero-arrow movies-hero-prev" type="button" aria-label="Filme anterior">‹</button>
-        <button id="moviesHeroNext" class="movies-hero-arrow movies-hero-next" type="button" aria-label="Próximo filme">›</button>
-        <div id="moviesHeroDots" class="movies-hero-dots"></div>
-      </div>
+      <!-- 1. Hero Spotlight de Cinema (Mesma identidade visual fluida e elegante da Home) -->
+      <section id="moviesHero" class="movies-hero" aria-label="Destaques de Filmes">
+        <div id="moviesHeroTrack" class="movies-hero-track" aria-live="polite"></div>
+        <button class="movies-hero-arrow movies-hero-prev" id="moviesHeroPrev" type="button" aria-label="Filme anterior">‹</button>
+        <button class="movies-hero-arrow movies-hero-next" id="moviesHeroNext" type="button" aria-label="Próximo filme">›</button>
+        <div id="moviesHeroDots" class="movies-hero-dots" aria-label="Selecionar filme em destaque"></div>
+        <div id="moviesHeroLoading" class="movies-hero-loading">Carregando novidades do cinema...</div>
+      </section>
 
       <!-- 2. Barra de Pílulas de Gêneros Deslizantes -->
       <div class="movies-pills-bar-wrap">
