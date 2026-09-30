@@ -2976,6 +2976,18 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
       writeFavorites(current);
       updateFavoriteButton(type, item);
+
+      const favoriteEntry = current.find(entry => entry.type === type && entry.id === id);
+      const active = Boolean(favoriteEntry);
+      const poster = favoriteEntry?.poster || (type === 'series'
+        ? String(item?.cover || item?.stream_icon || '').trim()
+        : String(item?.poster || getBestPosterUrl(item?.primaryItem || item) || item?.stream_icon || '').trim());
+      window.AndPlayAccount?.setFavorite?.(type, id, active, {
+        title: favoriteEntry?.title || String(item?.name || item?.title || '').trim(),
+        poster
+      }).then?.(() => {
+        if (isFavoritesView) showFavoritesContent();
+      });
     }
 
     function buildFavoriteFallbackGroup(entry) {
@@ -11457,6 +11469,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         refreshAfterAccountSync() {
           if (isWatchedView) {
             showWatchedContent();
+          } else if (isFavoritesView) {
+            showFavoritesContent();
           } else if (currentMode === 'home') {
             renderHomeDashboard();
           }

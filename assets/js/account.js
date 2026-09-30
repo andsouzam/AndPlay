@@ -8,11 +8,16 @@
   const WATCH_STATS_KEY = 'andplay_web_watch_stats_v1';
   const LIVE_HISTORY_KEY = 'andplay_web_live_history_v1';
   const WATCH_HISTORY_PENDING_KEY = 'andplay_web_watch_history_pending_v1';
+  const FAVORITES_STORAGE_KEY = 'andplay_web_favorites_v1';
+  const FAVORITES_PENDING_KEY = 'andplay_web_favorites_pending_v1';
+  const FAVORITES_MIGRATED_KEY = 'andplay_web_favorites_migrated_v1';
 
   let supabaseClientPromise = null;
   let currentSession = null;
   let remoteWatchHistory = { movies: [], series: [] };
   let remoteWatchProgress = [];
+  let remoteFavorites = [];
+  let remoteFavoritesLoaded = false;
   let remoteWatchHistoryLoaded = false;
   let syncing = false;
   let syncQueued = false;
@@ -258,6 +263,219 @@
     ].sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
   }
 
+  function normalizeFavoriteEntry(item) {
+    const type = item?.type === 'series' ? 'series' : 'movie';
+    const id = String(item?.id || '').trim();
+    if (!id) return null;
+    return {
+      type,
+      id,
+      title: String(item?.title || '').trim(),
+      poster: String(item?.poster || '').trim(),
+      updatedAt: Number(item?.updatedAt || 0) || Date.now()
+    };
+  }
+
+  function readLocalFavorites() {
+    const raw = readJson(FAVORITES_STORAGE_KEY, []);
+    if (!Array.isArray(raw)) return [];
+    const map = new Map();
+    raw.forEach(item => {
+      const normalized = normalizeFavoriteEntry(item);
+      if (!normalized) return;
+      const key = normalized.type + ':' + normalized.id;
+      const current = map.get(key);
+      if (!current || normalized.updatedAt >= current.updatedAt) map.set(key, normalized);
+    });
+    return [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, REMOTE_WATCH_HISTORY_LIMIT);
+  }
+
+  function writeLocalFavorites(items) {
+    writeJson(FAVORITES_STORAGE_KEY, (Array.isArray(items) ? items : [])
+      .map(normalizeFavoriteEntry)
+      .filter(Boolean)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, REMOTE_WATCH_HISTORY_LIMIT));
+  }
+
+  function readPendingFavorites() {
+    const raw = readJson(FAVORITES_PENDING_KEY, []);
+    if (!Array.isArray(raw)) return [];
+    return raw.map(item => ({
+      type: item?.type === 'series' ? 'series' : 'movie',
+      id: String(item?.id || '').trim(),
+      active: item?.active !== false,
+      title: String(item?.title || '').trim(),
+      poster: String(item?.poster || '').trim(),
+      updatedAt: Number(item?.updatedAt || 0) || Date.now()
+    })).filter(item => item.id);
+  }
+
+  function writePendingFavorites(items) {
+    const map = new Map();
+    (Array.isArray(items) ? items : []).forEach(item => {
+      if (!item?.id) return;
+      map.set(item.type + ':' + item.id, item);
+    });
+    writeJson(FAVORITES_PENDING_KEY, [...map.values()].slice(-REMOTE_WATCH_HISTORY_LIMIT));
+  }
+
+  function queueFavoriteMutation(type, id, active, title, poster) {
+    const key = (type === 'series' ? 'series' : 'movie') + ':' + String(id || '').trim();
+    const current = readPendingFavorites().filter(item => item.type + ':' + item.id !== key);
+    current.push({
+      type: type === 'series' ? 'series' : 'movie',
+      id: String(id || '').trim(),
+      active: Boolean(active),
+      title: String(title || '').trim(),
+      poster: String(poster || '').trim(),
+      updatedAt: Date.now()
+    });
+    writePendingFavorites(current.filter(item => item.id));
+  }
+
+  function removePendingFavoriteMutation(type, id) {
+    const key = (type === 'series' ? 'series' : 'movie') + ':' + String(id || '').trim();
+    writePendingFavorites(readPendingFavorites().filter(item => item.type + ':' + item.id !== key));
+  }
+
+  function setRemoteFavorites(rows) {
+    remoteFavorites = (Array.isArray(rows) ? rows : [])
+      .map(row => normalizeFavoriteEntry({
+        type: row?.content_type,
+        id: row?.content_id,
+        title: row?.title,
+        poster: row?.poster,
+        updatedAt: Date.parse(row?.updated_at || '') || Date.now()
+      }))
+      .filter(Boolean)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, REMOTE_WATCH_HISTORY_LIMIT);
+    remoteFavoritesLoaded = true;
+    return remoteFavorites.slice();
+  }
+
+  function getRemoteFavorites() {
+    return remoteFavorites.slice();
+  }
+
+  async function refreshFavorites(client = null) {
+    if (!currentSession) {
+      remoteFavorites = [];
+      remoteFavoritesLoaded = true;
+      return [];
+    }
+    const supabase = client || await getClient();
+    const result = await supabase.from('user_favorites')
+      .select('content_type,content_id,title,poster,created_at,updated_at')
+      .order('updated_at', { ascending: false });
+    if (result.error) throw result.error;
+    setRemoteFavorites(result.data || []);
+    return getRemoteFavorites();
+  }
+
+  async function upsertFavoriteRows(client, entries) {
+    const rows = (Array.isArray(entries) ? entries : [entries])
+      .map(normalizeFavoriteEntry)
+      .filter(Boolean)
+      .map(entry => ({
+        content_type: entry.type,
+        content_id: entry.id,
+        title: entry.title || '',
+        poster: entry.poster || '',
+        updated_at: new Date(entry.updatedAt || Date.now()).toISOString()
+      }));
+    if (!rows.length) return;
+    const { error } = await client.from('user_favorites').upsert(rows, {
+      onConflict: 'user_id,content_type,content_id'
+    });
+    if (error) throw error;
+  }
+
+  async function deleteFavoriteRow(client, type, id) {
+    const { error } = await client.from('user_favorites')
+      .delete()
+      .eq('content_type', type)
+      .eq('content_id', String(id));
+    if (error) throw error;
+  }
+
+  async function setFavorite(type, id, active, metadata = {}) {
+    const normalized = normalizeFavoriteEntry({
+      type,
+      id,
+      title: metadata.title,
+      poster: metadata.poster,
+      updatedAt: Date.now()
+    });
+    if (!normalized) return false;
+
+    remoteFavorites = [
+      ...(active ? [normalized] : []),
+      ...remoteFavorites.filter(item => !(item.type === normalized.type && item.id === normalized.id))
+    ].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, REMOTE_WATCH_HISTORY_LIMIT);
+    remoteFavoritesLoaded = true;
+
+    if (!currentSession) return false;
+    try {
+      const client = await getClient();
+      if (active) await upsertFavoriteRows(client, normalized);
+      else await deleteFavoriteRow(client, normalized.type, normalized.id);
+      removePendingFavoriteMutation(normalized.type, normalized.id);
+      return true;
+    } catch (error) {
+      queueFavoriteMutation(normalized.type, normalized.id, active, normalized.title, normalized.poster);
+      console.warn('[EPlay Account] Favorite sync:', error);
+      queueSync(1500);
+      return false;
+    }
+  }
+
+  async function reconcileFavorites(client) {
+    const remote = await refreshFavorites(client);
+    const pending = readPendingFavorites();
+    const migrationDone = localStorage.getItem(FAVORITES_MIGRATED_KEY) === '1';
+    const base = migrationDone ? remote : [
+      ...remote,
+      ...readLocalFavorites()
+    ];
+    const map = new Map();
+    base.forEach(item => {
+      const normalized = normalizeFavoriteEntry(item);
+      if (!normalized) return;
+      const key = normalized.type + ':' + normalized.id;
+      const current = map.get(key);
+      if (!current || normalized.updatedAt >= current.updatedAt) map.set(key, normalized);
+    });
+
+    pending.forEach(item => {
+      const key = item.type + ':' + item.id;
+      if (item.active) {
+        map.set(key, normalizeFavoriteEntry(item));
+      } else {
+        map.delete(key);
+      }
+    });
+
+    const merged = [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, REMOTE_WATCH_HISTORY_LIMIT);
+    const mergedKeys = new Set(merged.map(item => item.type + ':' + item.id));
+    if (!migrationDone) {
+      await upsertFavoriteRows(client, merged);
+    } else {
+      await upsertFavoriteRows(client, merged);
+      for (const entry of remote) {
+        const key = entry.type + ':' + entry.id;
+        if (!mergedKeys.has(key)) await deleteFavoriteRow(client, entry.type, entry.id);
+      }
+    }
+    writeLocalFavorites(merged);
+    writePendingFavorites([]);
+    localStorage.setItem(FAVORITES_MIGRATED_KEY, '1');
+    remoteFavorites = merged;
+    remoteFavoritesLoaded = true;
+    return merged;
+  }
+
   async function refreshWatchHistory(client = null) {
     if (!currentSession) {
       remoteWatchHistory = { movies: [], series: [] };
@@ -468,6 +686,7 @@
 
   async function pullRemote(client) {
     await refreshWatchHistory(client);
+    await reconcileFavorites(client);
 
     const progress = await client.from('watch_progress')
       .select('content_type,content_id,position,duration,title,poster,series_id,season_num,episode_num,updated_at')
@@ -1250,6 +1469,10 @@
     queueSyncPreference: queueSync,
     getRemoteWatchedIds,
     getRemoteWatchHistory,
+    getRemoteFavorites,
+    isRemoteFavoritesLoaded: () => remoteFavoritesLoaded,
+    refreshFavorites,
+    setFavorite,
     getRemoteWatchProgress: () => remoteWatchProgress.slice(),
     isRemoteWatchHistoryLoaded: () => remoteWatchHistoryLoaded,
     refreshWatchHistory,

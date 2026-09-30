@@ -9,14 +9,17 @@ normalmente e mantém dados localmente no navegador.
 2. Crie um projeto no plano Free.
 3. Abra o SQL Editor do projeto.
 4. Cole todo o conteúdo de `supabase/schema.sql`.
-5. Execute o script e confirme que as três tabelas foram criadas.
+5. Execute o script e confirme que as quatro tabelas foram criadas.
 
 As tabelas são:
 - `user_preferences`
 - `watch_history`
 - `watch_progress`
+- `user_favorites`
 
 Nenhuma delas armazena vídeos ou o catálogo Xtream.
+
+Se o banco já estiver configurado, execute somente `supabase/migrations/20260929_add_user_favorites.sql` no SQL Editor para adicionar os favoritos à conta existente.
 
 ## 2. Configurar autenticação
 
@@ -63,6 +66,7 @@ Depois publique os arquivos normalmente pelo GitHub Pages.
 
 A conta sincroniza:
 - Assistidos
+- Favoritos
 - Continuar assistindo
 - Pular abertura automaticamente
 - Estado da ficha técnica do player
