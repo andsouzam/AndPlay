@@ -20,10 +20,16 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 
 import java.lang.reflect.Type;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -482,6 +488,11 @@ public class AccountManager {
                         obj.addProperty("content_id", id);
                         obj.addProperty("title", title != null ? title : "");
                         obj.addProperty("poster", poster != null ? poster : "");
+                        try {
+                            SimpleDateFormat isoFmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+                            isoFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+                            obj.addProperty("updated_at", isoFmt.format(new Date()));
+                        } catch (Exception ignored) {}
                         arr.add(obj);
 
                         RequestBody body = RequestBody.create(
@@ -528,6 +539,10 @@ public class AccountManager {
 
         executor.execute(() -> {
             try {
+                SimpleDateFormat isoFmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+                isoFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+                String nowIso = isoFmt.format(new Date());
+
                 // 1. Envia progresso para watch_progress
                 JsonArray progArr = new JsonArray();
                 JsonObject progObj = new JsonObject();
@@ -542,7 +557,7 @@ public class AccountManager {
                     progObj.addProperty("season_num", season);
                     progObj.addProperty("episode_num", episode);
                 }
-                progObj.addProperty("updated_at", System.currentTimeMillis());
+                progObj.addProperty("updated_at", nowIso);
                 progArr.add(progObj);
 
                 RequestBody progBody = RequestBody.create(
@@ -568,7 +583,7 @@ public class AccountManager {
                 histObj.addProperty("content_type", normType);
                 histObj.addProperty("content_id", normType.equals("series") && seriesId != null ? seriesId : id);
                 histObj.addProperty("sort_order", 0);
-                histObj.addProperty("updated_at", System.currentTimeMillis());
+                histObj.addProperty("updated_at", nowIso);
                 histArr.add(histObj);
 
                 RequestBody histBody = RequestBody.create(
@@ -598,6 +613,52 @@ public class AccountManager {
         return new ArrayList<>(memoryProgress);
     }
 
+    public synchronized String refreshTokenSync() {
+        String refreshToken = prefs.getString(KEY_REFRESH_TOKEN, "");
+        if (refreshToken == null || refreshToken.trim().isEmpty()) {
+            return null;
+        }
+
+        try {
+            JsonObject json = new JsonObject();
+            json.addProperty("refresh_token", refreshToken.trim());
+
+            RequestBody body = RequestBody.create(
+                    json.toString(),
+                    MediaType.parse("application/json; charset=utf-8")
+            );
+
+            Request req = new Request.Builder()
+                    .url(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token")
+                    .header("apikey", SUPABASE_ANON_KEY)
+                    .header("Content-Type", "application/json")
+                    .post(body)
+                    .build();
+
+            try (Response resp = httpClient.newCall(req).execute()) {
+                if (resp.isSuccessful() && resp.body() != null) {
+                    JsonObject root = JsonParser.parseString(resp.body().string()).getAsJsonObject();
+                    String newAccessToken = root.has("access_token") ? root.get("access_token").getAsString() : "";
+                    String newRefreshToken = root.has("refresh_token") ? root.get("refresh_token").getAsString() : refreshToken;
+
+                    if (!newAccessToken.isEmpty()) {
+                        prefs.edit()
+                                .putString(KEY_ACCESS_TOKEN, newAccessToken)
+                                .putString(KEY_REFRESH_TOKEN, newRefreshToken)
+                                .apply();
+                        Log.i(TAG, "Token de autenticação Supabase renovado com sucesso.");
+                        return newAccessToken;
+                    }
+                } else {
+                    Log.w(TAG, "Falha ao renovar token Supabase: HTTP " + resp.code());
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Exceção ao renovar token Supabase: " + e.getMessage());
+        }
+        return null;
+    }
+
     public void syncAll(SyncCallback callback) {
         if (!isSignedIn()) {
             if (callback != null) {
@@ -606,14 +667,14 @@ public class AccountManager {
             return;
         }
 
-        final String token = getAccessToken();
-
         executor.execute(() -> {
             boolean success = false;
             int favCount = 0;
             int progCount = 0;
 
             try {
+                String token = getAccessToken();
+
                 // 1. Sincroniza Favoritos
                 Request favReq = new Request.Builder()
                         .url(SUPABASE_URL + "/rest/v1/user_favorites?select=content_type,content_id,title,poster,created_at,updated_at&order=updated_at.desc")
@@ -622,21 +683,94 @@ public class AccountManager {
                         .get()
                         .build();
 
-                try (Response resp = httpClient.newCall(favReq).execute()) {
-                    if (resp.isSuccessful() && resp.body() != null) {
-                        String bodyStr = resp.body().string();
-                        Type listType = new TypeToken<List<FavoriteItem>>(){}.getType();
-                        List<FavoriteItem> remote = gson.fromJson(bodyStr, listType);
-                        if (remote != null) {
-                            synchronized (AccountManager.this) {
-                                memoryFavorites.clear();
-                                memoryFavorites.addAll(remote);
-                                saveFavoritesToPrefs();
-                                favCount = memoryFavorites.size();
+                Response favResp = httpClient.newCall(favReq).execute();
+                if (favResp.code() == 401) {
+                    favResp.close();
+                    String refreshedToken = refreshTokenSync();
+                    if (refreshedToken != null) {
+                        token = refreshedToken;
+                        favReq = new Request.Builder()
+                                .url(SUPABASE_URL + "/rest/v1/user_favorites?select=content_type,content_id,title,poster,created_at,updated_at&order=updated_at.desc")
+                                .header("apikey", SUPABASE_ANON_KEY)
+                                .header("Authorization", "Bearer " + token)
+                                .get()
+                                .build();
+                        favResp = httpClient.newCall(favReq).execute();
+                    }
+                }
+
+                if (favResp.isSuccessful() && favResp.body() != null) {
+                    String bodyStr = favResp.body().string();
+                    Type listType = new TypeToken<List<FavoriteItem>>(){}.getType();
+                    List<FavoriteItem> remote = gson.fromJson(bodyStr, listType);
+
+                    Map<String, FavoriteItem> favMap = new LinkedHashMap<>();
+                    if (remote != null) {
+                        for (FavoriteItem f : remote) {
+                            if (f.contentType != null && f.contentId != null) {
+                                favMap.put(f.contentType + ":" + f.contentId, f);
                             }
                         }
                     }
+
+                    // Mescla com favoritos locais que ainda não existam no servidor
+                    List<FavoriteItem> toUpload = new ArrayList<>();
+                    synchronized (AccountManager.this) {
+                        for (FavoriteItem localFav : memoryFavorites) {
+                            if (localFav.contentType != null && localFav.contentId != null) {
+                                String key = localFav.contentType + ":" + localFav.contentId;
+                                if (!favMap.containsKey(key)) {
+                                    favMap.put(key, localFav);
+                                    toUpload.add(localFav);
+                                }
+                            }
+                        }
+                        memoryFavorites.clear();
+                        memoryFavorites.addAll(favMap.values());
+                        saveFavoritesToPrefs();
+                        favCount = memoryFavorites.size();
+                    }
+
+                    // Se houver favoritos locais novos, envia para Supabase Cloud
+                    if (!toUpload.isEmpty()) {
+                        try {
+                            SimpleDateFormat isoFmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+                            isoFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+                            String nowIso = isoFmt.format(new Date());
+
+                            JsonArray upArr = new JsonArray();
+                            for (FavoriteItem item : toUpload) {
+                                JsonObject obj = new JsonObject();
+                                obj.addProperty("content_type", item.contentType);
+                                obj.addProperty("content_id", item.contentId);
+                                obj.addProperty("title", item.title != null ? item.title : "");
+                                obj.addProperty("poster", item.poster != null ? item.poster : "");
+                                obj.addProperty("updated_at", nowIso);
+                                upArr.add(obj);
+                            }
+
+                            RequestBody upBody = RequestBody.create(
+                                    upArr.toString(),
+                                    MediaType.parse("application/json; charset=utf-8")
+                            );
+                            Request upReq = new Request.Builder()
+                                    .url(SUPABASE_URL + "/rest/v1/user_favorites")
+                                    .header("apikey", SUPABASE_ANON_KEY)
+                                    .header("Authorization", "Bearer " + token)
+                                    .header("Prefer", "resolution=merge-duplicates")
+                                    .post(upBody)
+                                    .build();
+                            try (Response upResp = httpClient.newCall(upReq).execute()) {
+                                Log.d(TAG, "Favoritos locais enviados ao Supabase: " + upResp.code());
+                            }
+                        } catch (Exception eUp) {
+                            Log.w(TAG, "Falha ao enviar favoritos locais: " + eUp.getMessage());
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "Supabase favorites get falhou: HTTP " + favResp.code());
                 }
+                favResp.close();
 
                 // 2. Sincroniza Progresso / Continuar Assistindo
                 Request progReq = new Request.Builder()
@@ -646,9 +780,9 @@ public class AccountManager {
                         .get()
                         .build();
 
-                try (Response resp = httpClient.newCall(progReq).execute()) {
-                    if (resp.isSuccessful() && resp.body() != null) {
-                        String bodyStr = resp.body().string();
+                try (Response progResp = httpClient.newCall(progReq).execute()) {
+                    if (progResp.isSuccessful() && progResp.body() != null) {
+                        String bodyStr = progResp.body().string();
                         Type listType = new TypeToken<List<WatchProgressItem>>(){}.getType();
                         List<WatchProgressItem> remoteProg = gson.fromJson(bodyStr, listType);
                         if (remoteProg != null) {
@@ -664,21 +798,23 @@ public class AccountManager {
                             for (WatchProgressItem item : remoteProg) {
                                 if (item.contentId != null && item.position > 0) {
                                     String key = item.contentType + "_" + item.contentId;
-                                    editor.putLong(key, item.position * 1000L);
+                                    editor.putLong(key, (long) (item.position * 1000L));
                                     if (item.duration > 0) {
-                                        editor.putLong(key + "_dur", item.duration * 1000L);
+                                        editor.putLong(key + "_dur", (long) (item.duration * 1000L));
                                     }
                                 }
                             }
                             editor.apply();
                         }
+                    } else {
+                        Log.w(TAG, "Supabase progress get falhou: HTTP " + progResp.code());
                     }
                 }
 
                 prefs.edit().putLong(KEY_LAST_SYNC, System.currentTimeMillis()).apply();
                 success = true;
             } catch (Exception e) {
-                Log.w(TAG, "Erro durante sincronização: " + e.getMessage());
+                Log.e(TAG, "Erro durante sincronização: " + e.getMessage(), e);
             }
 
             final boolean fSuccess = success;

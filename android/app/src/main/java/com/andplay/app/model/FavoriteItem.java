@@ -20,7 +20,7 @@ public class FavoriteItem implements Serializable {
     public String createdAt;
 
     @SerializedName("updated_at")
-    public long updatedAt;
+    public String updatedAt;
 
     public FavoriteItem() {}
 
@@ -29,6 +29,6 @@ public class FavoriteItem implements Serializable {
         this.contentId = contentId;
         this.title = title;
         this.poster = poster;
-        this.updatedAt = System.currentTimeMillis();
+        this.updatedAt = String.valueOf(System.currentTimeMillis());
     }
 }

@@ -387,7 +387,7 @@ public class UserActivity extends Activity {
 
     private void startGoogleOAuth() {
         try {
-            String redirectUrl = "https://andsouzam.github.io/AndPlay/";
+            String redirectUrl = "andplay://auth-callback";
             String authUrl = "https://zfawwhqogtynuygniskz.supabase.co/auth/v1/authorize?provider=google&redirect_to="
                     + Uri.encode(redirectUrl);
 
@@ -408,6 +408,15 @@ public class UserActivity extends Activity {
         String fragment = uri.getFragment();
         String query = uri.getQuery();
         String rawParams = (fragment != null && !fragment.isEmpty()) ? fragment : query;
+
+        if (rawParams != null && rawParams.contains("error")) {
+            String errDesc = extractParam(rawParams, "error_description");
+            if (errDesc == null) errDesc = extractParam(rawParams, "error");
+            if (errDesc != null) {
+                Toast.makeText(this, "Erro no login Google: " + errDesc.replace('+', ' '), Toast.LENGTH_LONG).show();
+                return;
+            }
+        }
 
         if (rawParams != null && rawParams.contains("access_token")) {
             String accessToken = extractParam(rawParams, "access_token");

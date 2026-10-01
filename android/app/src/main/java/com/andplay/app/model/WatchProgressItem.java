@@ -11,10 +11,10 @@ public class WatchProgressItem implements Serializable {
     public String contentId;
 
     @SerializedName("position")
-    public long position; // segundos
+    public double position; // segundos (suporta inteiro ou decimal)
 
     @SerializedName("duration")
-    public long duration; // segundos
+    public double duration; // segundos
 
     @SerializedName("title")
     public String title;
@@ -32,13 +32,13 @@ public class WatchProgressItem implements Serializable {
     public int episodeNum;
 
     @SerializedName("updated_at")
-    public long updatedAt;
+    public String updatedAt;
 
     public WatchProgressItem() {}
 
     public int getProgressPercent() {
         if (duration <= 0) return 0;
-        int pct = (int) Math.round(((double) position / (double) duration) * 100.0);
+        int pct = (int) Math.round((position / duration) * 100.0);
         return Math.max(0, Math.min(100, pct));
     }
 
