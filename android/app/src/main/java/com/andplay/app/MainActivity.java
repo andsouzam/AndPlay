@@ -4476,29 +4476,32 @@ public class MainActivity extends Activity {
             for (WatchProgressItem item : progressList) {
                 if (item.isCompleted()) continue;
                 if ("series".equalsIgnoreCase(item.contentType)) {
-                    if (cachedSeries != null) {
-                        for (Series s : cachedSeries) {
-                            if (s.series_id != null && (s.series_id.equals(item.seriesId) || s.series_id.equals(item.contentId))) {
-                                Movie pseudo = new Movie();
-                                pseudo.stream_id = s.series_id;
-                                pseudo.name = (item.title != null && !item.title.isEmpty()) ? item.title : s.name;
-                                pseudo.title = s.title;
-                                pseudo.stream_icon = (item.poster != null && !item.poster.isEmpty()) ? item.poster : s.cover;
-                                pseudo.plot = s.plot;
-                                pseudo.rating = s.rating;
-                                pseudo.genre = s.genre;
-                                pseudo.isSeries = true;
-                                pseudo.progressPercent = item.getProgressPercent();
-                                pseudo.isFavorite = AccountManager.getInstance(this).isFavorite("series", s.series_id);
-                                continueWatchingItems.add(pseudo);
-                                break;
-                            }
-                        }
+                    Series s = findSeriesForProgressItem(item);
+                    String seriesKey = s != null && s.series_id != null ? s.series_id : (item.seriesId != null && !item.seriesId.isEmpty() ? item.seriesId : null);
+                    String cleanTitle = cleanSeriesTitle(item.title);
+                    if (seriesKey == null) {
+                        seriesKey = !cleanTitle.isEmpty() ? "series_" + cleanTitle : ("series_" + item.contentId);
                     }
+                    if (containsItem(continueWatchingItems, seriesKey)) continue;
+
+                    Movie pseudo = new Movie();
+                    pseudo.stream_id = seriesKey;
+                    String seriesTitle = s != null ? s.getDisplayTitle() : (!cleanTitle.isEmpty() ? cleanTitle : "Série");
+                    pseudo.name = seriesTitle;
+                    pseudo.title = seriesTitle;
+                    pseudo.stream_icon = (item.poster != null && !item.poster.isEmpty()) ? item.poster : (s != null && s.cover != null ? s.cover : "");
+                    pseudo.plot = s != null ? s.plot : "";
+                    pseudo.rating = s != null ? s.rating : "";
+                    pseudo.genre = s != null ? s.genre : "";
+                    pseudo.isSeries = true;
+                    pseudo.progressPercent = item.getProgressPercent();
+                    pseudo.isFavorite = AccountManager.getInstance(this).isFavorite("series", pseudo.stream_id);
+                    continueWatchingItems.add(pseudo);
                 } else {
                     if (cachedMovies != null) {
                         for (Movie m : cachedMovies) {
                             if (m.stream_id != null && m.stream_id.equals(item.contentId)) {
+                                if (containsItem(continueWatchingItems, m.stream_id)) break;
                                 Movie copy = new Movie();
                                 copy.stream_id = m.stream_id;
                                 copy.name = m.name;
@@ -4523,6 +4526,7 @@ public class MainActivity extends Activity {
         if (continueWatchingItems.isEmpty() && cachedMovies != null) {
             List<String> recentMovieIds = getRecentMovieIds();
             for (String id : recentMovieIds) {
+                if (containsItem(continueWatchingItems, id)) continue;
                 String key = "movie_" + id;
                 long dur = getVodDuration(key);
                 long pos = getVodProgress(key);
@@ -4559,12 +4563,23 @@ public class MainActivity extends Activity {
                     if (m.isSeries) {
                         if (cachedSeries != null) {
                             for (Series s : cachedSeries) {
-                                if (s.series_id != null && s.series_id.equals(m.stream_id)) {
+                                if ((s.series_id != null && s.series_id.equals(m.stream_id))
+                                        || (s.name != null && s.name.equalsIgnoreCase(m.name))
+                                        || (s.getDisplayTitle() != null && s.getDisplayTitle().equalsIgnoreCase(m.name))) {
                                     openSeriesDetail(s);
                                     return;
                                 }
                             }
                         }
+                        Series fallback = new Series();
+                        fallback.series_id = m.stream_id;
+                        fallback.name = m.name;
+                        fallback.title = m.title;
+                        fallback.cover = m.stream_icon;
+                        fallback.plot = m.plot;
+                        fallback.rating = m.rating;
+                        fallback.genre = m.genre;
+                        openSeriesDetail(fallback);
                     } else {
                         playMovie(m);
                     }
@@ -4641,12 +4656,23 @@ public class MainActivity extends Activity {
                     if (m.isSeries) {
                         if (cachedSeries != null) {
                             for (Series s : cachedSeries) {
-                                if (s.series_id != null && s.series_id.equals(m.stream_id)) {
+                                if ((s.series_id != null && s.series_id.equals(m.stream_id))
+                                        || (s.name != null && s.name.equalsIgnoreCase(m.name))
+                                        || (s.getDisplayTitle() != null && s.getDisplayTitle().equalsIgnoreCase(m.name))) {
                                     openSeriesDetail(s);
                                     return;
                                 }
                             }
                         }
+                        Series fallback = new Series();
+                        fallback.series_id = m.stream_id;
+                        fallback.name = m.name;
+                        fallback.title = m.title;
+                        fallback.cover = m.stream_icon;
+                        fallback.plot = m.plot;
+                        fallback.rating = m.rating;
+                        fallback.genre = m.genre;
+                        openSeriesDetail(fallback);
                     } else {
                         playMovie(m);
                     }
@@ -4779,12 +4805,23 @@ public class MainActivity extends Activity {
                 if (m.isSeries) {
                     if (cachedSeries != null) {
                         for (Series s : cachedSeries) {
-                            if (s.series_id != null && s.series_id.equals(m.stream_id)) {
+                            if ((s.series_id != null && s.series_id.equals(m.stream_id))
+                                    || (s.name != null && s.name.equalsIgnoreCase(m.name))
+                                    || (s.getDisplayTitle() != null && s.getDisplayTitle().equalsIgnoreCase(m.name))) {
                                 openSeriesDetail(s);
                                 return;
                             }
                         }
                     }
+                    Series fallback = new Series();
+                    fallback.series_id = m.stream_id;
+                    fallback.name = m.name;
+                    fallback.title = m.title;
+                    fallback.cover = m.stream_icon;
+                    fallback.plot = m.plot;
+                    fallback.rating = m.rating;
+                    fallback.genre = m.genre;
+                    openSeriesDetail(fallback);
                 } else {
                     playMovie(m);
                 }
@@ -4855,29 +4892,27 @@ public class MainActivity extends Activity {
                 if ("SERIES".equals(filter) && !isSeries) continue;
 
                 if (isSeries) {
-                    Series found = null;
-                    if (cachedSeries != null) {
-                        for (Series s : cachedSeries) {
-                            if (s.series_id != null && (s.series_id.equals(item.seriesId) || s.series_id.equals(item.contentId))) {
-                                found = s;
-                                break;
-                            }
-                        }
+                    Series found = findSeriesForProgressItem(item);
+                    String seriesKey = found != null && found.series_id != null ? found.series_id : (item.seriesId != null && !item.seriesId.isEmpty() ? item.seriesId : null);
+                    String cleanTitle = cleanSeriesTitle(item.title);
+                    if (seriesKey == null) {
+                        seriesKey = !cleanTitle.isEmpty() ? "series_" + cleanTitle : ("series_" + item.contentId);
                     }
+                    if (containsItem(watchedItems, seriesKey)) continue;
+
                     Movie pseudo = new Movie();
-                    pseudo.stream_id = found != null && found.series_id != null ? found.series_id : (item.seriesId != null ? item.seriesId : item.contentId);
-                    pseudo.name = (item.title != null && !item.title.isEmpty()) ? item.title : (found != null ? found.name : "Série");
-                    pseudo.title = pseudo.name;
-                    pseudo.stream_icon = (item.poster != null && !item.poster.isEmpty()) ? item.poster : (found != null ? found.cover : "");
+                    pseudo.stream_id = seriesKey;
+                    String seriesTitle = found != null ? found.getDisplayTitle() : (!cleanTitle.isEmpty() ? cleanTitle : "Série");
+                    pseudo.name = seriesTitle;
+                    pseudo.title = seriesTitle;
+                    pseudo.stream_icon = (item.poster != null && !item.poster.isEmpty()) ? item.poster : (found != null && found.cover != null ? found.cover : "");
                     pseudo.plot = found != null ? found.plot : "";
                     pseudo.rating = found != null ? found.rating : "";
                     pseudo.genre = found != null ? found.genre : "";
                     pseudo.isSeries = true;
                     pseudo.progressPercent = item.getProgressPercent();
                     pseudo.isFavorite = AccountManager.getInstance(this).isFavorite("series", pseudo.stream_id);
-                    if (!containsItem(watchedItems, pseudo.stream_id)) {
-                        watchedItems.add(pseudo);
-                    }
+                    watchedItems.add(pseudo);
                 } else {
                     Movie found = null;
                     if (cachedMovies != null) {
@@ -4940,8 +4975,8 @@ public class MainActivity extends Activity {
                     if (s.series_id != null && s.series_id.equals(id)) {
                         Movie pseudo = new Movie();
                         pseudo.stream_id = s.series_id;
-                        pseudo.name = s.name;
-                        pseudo.title = s.title;
+                        pseudo.name = s.getDisplayTitle();
+                        pseudo.title = s.getDisplayTitle();
                         pseudo.stream_icon = s.cover;
                         pseudo.plot = s.plot;
                         pseudo.rating = s.rating;
@@ -4971,12 +5006,23 @@ public class MainActivity extends Activity {
                 if (m.isSeries) {
                     if (cachedSeries != null) {
                         for (Series s : cachedSeries) {
-                            if (s.series_id != null && s.series_id.equals(m.stream_id)) {
+                            if ((s.series_id != null && s.series_id.equals(m.stream_id))
+                                    || (s.name != null && s.name.equalsIgnoreCase(m.name))
+                                    || (s.getDisplayTitle() != null && s.getDisplayTitle().equalsIgnoreCase(m.name))) {
                                 openSeriesDetail(s);
                                 return;
                             }
                         }
                     }
+                    Series fallback = new Series();
+                    fallback.series_id = m.stream_id;
+                    fallback.name = m.name;
+                    fallback.title = m.title;
+                    fallback.cover = m.stream_icon;
+                    fallback.plot = m.plot;
+                    fallback.rating = m.rating;
+                    fallback.genre = m.genre;
+                    openSeriesDetail(fallback);
                 } else {
                     playMovie(m);
                 }
@@ -5057,6 +5103,67 @@ public class MainActivity extends Activity {
             if (id.equals(m.stream_id)) return true;
         }
         return false;
+    }
+
+    private static String cleanSeriesTitle(String title) {
+        if (title == null || title.trim().isEmpty()) return "";
+        String s = title.trim();
+        s = s.replaceAll("(?i)\\s*[•·-]\\s*(T|S|TEMP|TEMPORADA|EP|EPISODIO|EPISÓDIO)?\\s*\\d+.*$", "");
+        s = s.replaceAll("(?i)\\s+(T\\d+:E\\d+|S\\d+E\\d+|T\\d+\\s*E\\d+|S\\d+\\s*E\\d+).*$", "");
+        s = s.replaceAll("(?i)\\s+(TEMPORADA|TEMP|SEASON)\\s*\\d+.*$", "");
+        s = s.replaceAll("(?i)\\s+(EPISODIO|EPISÓDIO|EP)\\s*\\d+.*$", "");
+        int dashIdx = s.indexOf(" - ");
+        if (dashIdx > 0) {
+            String prefix = s.substring(0, dashIdx).trim();
+            if (!prefix.isEmpty()) {
+                s = prefix;
+            }
+        }
+        return s.trim();
+    }
+
+    private Series findSeriesForProgressItem(WatchProgressItem item) {
+        if (item == null || cachedSeries == null || cachedSeries.isEmpty()) return null;
+
+        if (item.seriesId != null && !item.seriesId.trim().isEmpty()) {
+            String sid = item.seriesId.trim();
+            for (Series s : cachedSeries) {
+                if (s.series_id != null && s.series_id.equals(sid)) {
+                    return s;
+                }
+            }
+        }
+
+        if (item.contentId != null && !item.contentId.trim().isEmpty()) {
+            String cid = item.contentId.trim();
+            for (Series s : cachedSeries) {
+                if (s.series_id != null && s.series_id.equals(cid)) {
+                    return s;
+                }
+            }
+        }
+
+        String cleanTitle = cleanSeriesTitle(item.title);
+        if (!cleanTitle.isEmpty()) {
+            for (Series s : cachedSeries) {
+                if ((s.name != null && s.name.equalsIgnoreCase(cleanTitle))
+                        || (s.title != null && s.title.equalsIgnoreCase(cleanTitle))) {
+                    return s;
+                }
+            }
+            String lowerClean = cleanTitle.toLowerCase(Locale.ROOT);
+            for (Series s : cachedSeries) {
+                String sTitle = s.getDisplayTitle();
+                if (sTitle != null && !sTitle.isEmpty()) {
+                    String lowerSTitle = sTitle.toLowerCase(Locale.ROOT);
+                    if (lowerSTitle.equals(lowerClean) || lowerClean.startsWith(lowerSTitle) || lowerSTitle.startsWith(lowerClean)) {
+                        return s;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     private void ensureMoviesAndSeriesLoaded(Runnable onReady) {

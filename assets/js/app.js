@@ -1973,7 +1973,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         // qual série aquele episódio pertence.
         if (entryType === 'series' && !findHistoryCatalogItem('series', id)) {
           const progress = getVodProgress('series', id);
-          const seriesId = String(progress?.seriesId || '').trim();
+          let seriesId = String(progress?.seriesId || '').trim();
+          if (!seriesId) {
+            const rp = window.AndPlayAccount?.getRemoteWatchProgress?.() || [];
+            const found = rp.find(p => String(p.content_id) === id && p.series_id);
+            if (found && found.series_id) seriesId = String(found.series_id).trim();
+          }
           if (seriesId) id = seriesId;
         }
 
@@ -2238,15 +2243,22 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const rawTitle = String(progress?.title || '').trim();
       if (!rawTitle) return '';
 
-      // O progresso de episódio é salvo como "Nome da série - Episódio".
-      // Para IDs históricos que não existem mais no catálogo/API, a primeira
-      // parte desse título continua sendo uma referência confiável ao nome da série.
-      const separatorIndex = rawTitle.indexOf(' - ');
+      // O progresso de episódio pode ser salvo como "Nome da série - Episódio",
+      // "Nome da série • T01:E01", "Nome da série T01:E01", "Nome S01E01", etc.
+      // Remove sufixos de temporada/episódio para obter o nome limpo da série.
+      let cleaned = rawTitle
+        .replace(/\s*[•·-]\s*(?:T|S|TEMP|TEMPORADA|EP|EPISODIO|EPISÓDIO)?\s*\d+.*$/i, '')
+        .replace(/\s+(?:T\d+:E\d+|S\d+E\d+|T\d+\s*E\d+|S\d+\s*E\d+).*$/i, '')
+        .replace(/\s+(?:TEMPORADA|TEMP|SEASON)\s*\d+.*$/i, '')
+        .replace(/\s+(?:EPISODIO|EPISÓDIO|EP)\s*\d+.*$/i, '')
+        .trim();
+
+      const separatorIndex = cleaned.indexOf(' - ');
       if (separatorIndex > 0) {
-        const seriesTitle = rawTitle.slice(0, separatorIndex).trim();
+        const seriesTitle = cleaned.slice(0, separatorIndex).trim();
         if (seriesTitle) return seriesTitle;
       }
-      return rawTitle;
+      return cleaned || rawTitle;
     }
 
     function buildHistoryFallbackGroup(type, id) {
@@ -3751,9 +3763,19 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           const parsed = JSON.parse(rawPending);
           if (Array.isArray(parsed)) {
             parsed.forEach(item => {
-              const id = String(item?.id || '').trim();
+              let id = String(item?.id || '').trim();
               if (!id) return;
               const type = item.type === 'series' ? 'series' : 'movie';
+              if (type === 'series' && !findHistoryCatalogItem('series', id)) {
+                const progress = getVodProgress('series', id);
+                let seriesId = String(progress?.seriesId || '').trim();
+                if (!seriesId) {
+                  const rp = window.AndPlayAccount?.getRemoteWatchProgress?.() || [];
+                  const found = rp.find(p => String(p.content_id) === id && p.series_id);
+                  if (found && found.series_id) seriesId = String(found.series_id).trim();
+                }
+                if (seriesId) id = seriesId;
+              }
               const key = `${type}:${id}`;
               if (!map.has(key)) {
                 map.set(key, { type, id, updatedAt: Number(item.updatedAt) || Date.now() });
@@ -3774,8 +3796,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           let id = sub.replace(/^(series_|movie_)/, '');
           if (!id) continue;
           const progress = getVodProgress(type, id);
-          if (isSeries && progress?.seriesId) {
-            id = progress.seriesId;
+          if (isSeries) {
+            let seriesId = String(progress?.seriesId || '').trim();
+            if (!seriesId) {
+              const rp = window.AndPlayAccount?.getRemoteWatchProgress?.() || [];
+              const found = rp.find(p => String(p.content_id) === id && p.series_id);
+              if (found && found.series_id) seriesId = String(found.series_id).trim();
+            }
+            if (seriesId) id = seriesId;
           }
           const key = `${type}:${id}`;
           const currentEntry = map.get(key);
