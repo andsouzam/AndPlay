@@ -1573,7 +1573,9 @@
       });
       if (error) throw error;
       return true;
-    }
+    },
+    signInWithGoogle: () => signInWithProvider('google'),
+    signInWithProvider
   };
 
   const startAccount = async () => {

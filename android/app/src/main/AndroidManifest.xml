@@ -58,10 +58,29 @@
             android:theme="@style/Theme.AndPlay.Fullscreen" />
         <activity
             android:name=".UserActivity"
-            android:exported="false"
+            android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:screenOrientation="landscape"
-            android:theme="@style/Theme.AndPlay.Fullscreen" />
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.AndPlay.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="andsouzam.github.io"
+                    android:pathPrefix="/AndPlay" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="andplay"
+                    android:host="auth-callback" />
+            </intent-filter>
+        </activity>
         <activity
             android:name=".ModeSelectionActivity"
             android:exported="false"

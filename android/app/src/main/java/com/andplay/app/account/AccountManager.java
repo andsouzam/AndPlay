@@ -262,6 +262,73 @@ public class AccountManager {
         });
     }
 
+    public void saveSessionFromTokens(String accessToken, String refreshToken, AuthCallback callback) {
+        if (accessToken == null || accessToken.trim().isEmpty()) {
+            if (callback != null) callback.onError("Token de acesso inválido.");
+            return;
+        }
+
+        executor.execute(() -> {
+            try {
+                Request req = new Request.Builder()
+                        .url(SUPABASE_URL + "/auth/v1/user")
+                        .header("apikey", SUPABASE_ANON_KEY)
+                        .header("Authorization", "Bearer " + accessToken)
+                        .get()
+                        .build();
+
+                try (Response resp = httpClient.newCall(req).execute()) {
+                    String respBody = resp.body() != null ? resp.body().string() : "";
+                    if (!resp.isSuccessful()) {
+                        mainHandler.post(() -> {
+                            if (callback != null) callback.onError("Falha ao recuperar perfil da conta.");
+                        });
+                        return;
+                    }
+
+                    JsonObject user = JsonParser.parseString(respBody).getAsJsonObject();
+                    String userId = user.has("id") ? user.get("id").getAsString() : "";
+                    String userEmail = user.has("email") ? user.get("email").getAsString() : "";
+                    String displayName = "";
+                    String avatar = "👤";
+
+                    if (user.has("user_metadata") && user.get("user_metadata").isJsonObject()) {
+                        JsonObject meta = user.getAsJsonObject("user_metadata");
+                        if (meta.has("full_name")) displayName = meta.get("full_name").getAsString();
+                        else if (meta.has("name")) displayName = meta.get("name").getAsString();
+                        if (meta.has("avatar_url")) avatar = meta.get("avatar_url").getAsString();
+                    }
+
+                    if (displayName.isEmpty() && userEmail.contains("@")) {
+                        displayName = userEmail.substring(0, userEmail.indexOf('@'));
+                    }
+
+                    prefs.edit()
+                            .putString(KEY_ACCESS_TOKEN, accessToken)
+                            .putString(KEY_REFRESH_TOKEN, refreshToken != null ? refreshToken : "")
+                            .putString(KEY_USER_ID, userId)
+                            .putString(KEY_EMAIL, userEmail)
+                            .putString(KEY_DISPLAY_NAME, displayName)
+                            .putString(KEY_AVATAR, avatar)
+                            .apply();
+
+                    final String finalEmail = userEmail;
+                    final String finalName = displayName;
+                    mainHandler.post(() -> {
+                        if (callback != null) callback.onSuccess(finalEmail, finalName);
+                    });
+
+                    syncAll(null);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Erro ao autenticar com token OAuth", e);
+                mainHandler.post(() -> {
+                    if (callback != null) callback.onError("Erro de conexão: " + e.getMessage());
+                });
+            }
+        });
+    }
+
     public void signUp(String email, String password, AuthCallback callback) {
         if (email == null || email.trim().isEmpty() || password == null || password.trim().isEmpty()) {
             if (callback != null) callback.onError("Preencha todos os campos.");

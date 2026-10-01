@@ -15,6 +15,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.app.Activity;
 import androidx.annotation.Nullable;
+import android.graphics.Color;
+import android.net.Uri;
 import com.andplay.app.account.AccountManager;
 import com.bumptech.glide.Glide;
 
@@ -34,6 +36,7 @@ public class UserActivity extends Activity {
 
     private View userGuestActions;
     private View userLoggedInActions;
+    private View btnUserGoogle;
     private View btnUserLogin;
     private View btnUserRegister;
     private View btnUserSyncNow;
@@ -55,13 +58,21 @@ public class UserActivity extends Activity {
     private boolean modeChanged = false;
 
     @Override
-    protected void onCreate(@Nullable Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_user);
 
         initViews();
         setupListeners();
+        handleAuthRedirect(getIntent());
         updateUi();
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleAuthRedirect(intent);
     }
 
     private void initViews() {
@@ -73,6 +84,7 @@ public class UserActivity extends Activity {
 
         userGuestActions = findViewById(R.id.userGuestActions);
         userLoggedInActions = findViewById(R.id.userLoggedInActions);
+        btnUserGoogle = findViewById(R.id.btnUserGoogle);
         btnUserLogin = findViewById(R.id.btnUserLogin);
         btnUserRegister = findViewById(R.id.btnUserRegister);
         btnUserSyncNow = findViewById(R.id.btnUserSyncNow);
@@ -139,6 +151,7 @@ public class UserActivity extends Activity {
         // Animação de foco
         setupFocusAnimation(cardModeTv);
         setupFocusAnimation(cardModeCinema);
+        setupFocusAnimation(btnUserGoogle);
         setupFocusAnimation(btnUserLogin);
         setupFocusAnimation(btnUserRegister);
         setupFocusAnimation(btnUserSyncNow);
@@ -146,6 +159,9 @@ public class UserActivity extends Activity {
         setupFocusAnimation(btnUserClearCache);
 
         // Ações de Conta
+        if (btnUserGoogle != null) {
+            btnUserGoogle.setOnClickListener(v -> startGoogleOAuth());
+        }
         btnUserLogin.setOnClickListener(v -> showAuthDialog(false));
         btnUserRegister.setOnClickListener(v -> showAuthDialog(true));
 
@@ -351,9 +367,83 @@ public class UserActivity extends Activity {
             });
         }
 
+        TextView tvGoogle = new TextView(this);
+        tvGoogle.setText("🌐 Ou clique aqui para entrar com Google");
+        tvGoogle.setTextColor(Color.parseColor("#38BDF8"));
+        tvGoogle.setTextSize(13f);
+        tvGoogle.setPadding(0, 24, 0, 10);
+        tvGoogle.setFocusable(true);
+        tvGoogle.setClickable(true);
+        layout.addView(tvGoogle);
+
         builder.setNegativeButton("Cancelar", null);
         AlertDialog dialog = builder.create();
+        tvGoogle.setOnClickListener(v -> {
+            dialog.dismiss();
+            startGoogleOAuth();
+        });
         dialog.show();
+    }
+
+    private void startGoogleOAuth() {
+        try {
+            String redirectUrl = "https://andsouzam.github.io/AndPlay/";
+            String authUrl = "https://zfawwhqogtynuygniskz.supabase.co/auth/v1/authorize?provider=google&redirect_to="
+                    + Uri.encode(redirectUrl);
+
+            Toast.makeText(this, "Abrindo login do Google no navegador...", Toast.LENGTH_LONG).show();
+
+            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(authUrl));
+            browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(browserIntent);
+        } catch (Exception e) {
+            Toast.makeText(this, "Não foi possível abrir o navegador: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void handleAuthRedirect(Intent intent) {
+        if (intent == null || intent.getData() == null) return;
+        Uri uri = intent.getData();
+
+        String fragment = uri.getFragment();
+        String query = uri.getQuery();
+        String rawParams = (fragment != null && !fragment.isEmpty()) ? fragment : query;
+
+        if (rawParams != null && rawParams.contains("access_token")) {
+            String accessToken = extractParam(rawParams, "access_token");
+            String refreshToken = extractParam(rawParams, "refresh_token");
+
+            if (accessToken != null && !accessToken.isEmpty()) {
+                Toast.makeText(this, "Finalizando login com Google...", Toast.LENGTH_SHORT).show();
+                AccountManager.getInstance(this).saveSessionFromTokens(accessToken, refreshToken, new AccountManager.AuthCallback() {
+                    @Override
+                    public void onSuccess(String uEmail, String uName) {
+                        Toast.makeText(UserActivity.this, "Conectado como " + uName + "!", Toast.LENGTH_LONG).show();
+                        modeChanged = true;
+                        updateUi();
+                        if (!AccountManager.getInstance(UserActivity.this).hasChosenInitialMode()) {
+                            openModeSelectionModal();
+                        }
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        Toast.makeText(UserActivity.this, "Erro ao autenticar: " + message, Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+        }
+    }
+
+    private String extractParam(String data, String key) {
+        if (data == null) return null;
+        for (String pair : data.split("&")) {
+            String[] parts = pair.split("=", 2);
+            if (parts.length == 2 && parts[0].equals(key)) {
+                return Uri.decode(parts[1]);
+            }
+        }
+        return null;
     }
 
     private void openModeSelectionModal() {

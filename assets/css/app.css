@@ -4023,6 +4023,9 @@ header {
   font-size: 17px;
   font-weight: 900;
 }
+.user-auth-google-group {
+  margin-top: 8px;
+}
 .andplay-account-user {
   padding: 16px;
   border-radius: 12px;

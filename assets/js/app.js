@@ -341,6 +341,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       userAuthPassInput: document.getElementById('userAuthPassInput'),
       userAuthStatusMsg: document.getElementById('userAuthStatusMsg'),
       userAuthSubmitBtn: document.getElementById('userAuthSubmitBtn'),
+      userAuthGoogleGroup: document.getElementById('userAuthGoogleGroup'),
+      userAuthGoogleBtn: document.getElementById('userAuthGoogleBtn'),
       userPrefSkipIntro: document.getElementById('userPrefSkipIntro'),
       userPrefAutoNext: document.getElementById('userPrefAutoNext'),
       userPrefTvMode: document.getElementById('userPrefTvMode'),
@@ -4145,6 +4147,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             else if (currentAuthTab === 'register') elements.userAuthSubmitBtn.textContent = 'Criar Conta Gratuita';
             else elements.userAuthSubmitBtn.textContent = 'Enviar Link de Recuperação';
           }
+          if (elements.userAuthGoogleGroup) {
+            elements.userAuthGoogleGroup.style.display = currentAuthTab === 'recovery' ? 'none' : 'block';
+          }
           if (elements.userAuthStatusMsg) elements.userAuthStatusMsg.textContent = '';
         });
       });
@@ -4178,6 +4183,22 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           renderUserPage();
         } catch (err) {
           if (statusEl) { statusEl.className = 'user-auth-status error'; statusEl.textContent = err.message || 'Falha na autenticação.'; }
+        }
+      });
+
+      elements.userAuthGoogleBtn?.addEventListener('click', async () => {
+        const statusEl = elements.userAuthStatusMsg;
+        if (statusEl) {
+          statusEl.className = 'user-auth-status';
+          statusEl.textContent = 'Iniciando login com Google...';
+        }
+        try {
+          await window.AndPlayAccount?.signInWithGoogle?.();
+        } catch (err) {
+          if (statusEl) {
+            statusEl.className = 'user-auth-status error';
+            statusEl.textContent = err.message || 'Erro ao iniciar login com Google.';
+          }
         }
       });
 
