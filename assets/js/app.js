@@ -144,6 +144,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let homeCatalogRenderTimer = null;
     let viewTransitionTimer = null;
     let homeFeaturedItems = [];
+    let cachedHomeFeaturedItems = null;
     let homeFeaturedIndex = 0;
     let homeFeaturedTimer = null;
     let homeDisplayUsage = new Map();
@@ -4257,6 +4258,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         catalogKeys.forEach(k => localStorage.removeItem(k));
         fullMoviesCache = null;
         fullSeriesCache = null;
+        cachedHomeFeaturedItems = null;
         alert('Cache de catálogos limpo com sucesso! Os catálogos serão recarregados da fonte na próxima consulta.');
         renderUserPage();
       });
@@ -4365,6 +4367,40 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function getHomeFeaturedItems() {
+      // Se já temos destaques selecionados e o catálogo não cresceu significativamente,
+      // preservamos os mesmos itens para evitar reembaralhamento e piscamento no boot
+      if (Array.isArray(cachedHomeFeaturedItems) && cachedHomeFeaturedItems.length > 0) {
+        const currentCatalogSize = (Array.isArray(fullMoviesCache) ? fullMoviesCache.length : 0) +
+          (Array.isArray(fullSeriesCache) ? fullSeriesCache.length : 0);
+        if (cachedHomeFeaturedItems.length >= HOME_FEATURED_LIMIT || currentCatalogSize <= cachedHomeFeaturedItems.length) {
+          const movieMap = new Map();
+          (Array.isArray(fullMoviesCache) ? fullMoviesCache : []).forEach(m => {
+            const id = String(m.stream_id || m.primaryItem?.stream_id || '');
+            if (id) movieMap.set(id, m);
+          });
+          const seriesMap = new Map();
+          (Array.isArray(fullSeriesCache) ? fullSeriesCache : []).forEach(s => {
+            const id = String(s.series_id || '');
+            if (id) seriesMap.set(id, s);
+          });
+
+          cachedHomeFeaturedItems.forEach(item => {
+            const fresh = item.type === 'movie' ? movieMap.get(item.id) : seriesMap.get(item.id);
+            if (!fresh) return;
+            item.item = fresh;
+            item.title = cleanDisplayTitle(fresh.name || fresh.title || item.title);
+            item.year = fresh.year || item.year;
+            item.rating = fresh.rating || item.rating;
+            item.poster = item.type === 'movie'
+              ? (getHomeItemPoster({ type: 'movie', primaryItem: fresh }) || item.poster)
+              : (getHomeItemPoster({ type: 'series', cover: fresh.cover, stream_icon: fresh.stream_icon }) || item.poster);
+            item.plot = fresh.plot || item.plot;
+            item.added = getHomeItemTime(fresh) || item.added;
+          });
+          return cachedHomeFeaturedItems;
+        }
+      }
+
       const movies = (Array.isArray(fullMoviesCache) ? fullMoviesCache : []).map(item => ({
         type: 'movie',
         id: String(item.stream_id || item.primaryItem?.stream_id || ''),
@@ -4390,7 +4426,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       })).filter(item => item.id && item.poster);
 
       const allCatalog = [...movies, ...series];
-      if (allCatalog.length <= HOME_FEATURED_LIMIT) return allCatalog;
+      if (!allCatalog.length) {
+        return cachedHomeFeaturedItems || [];
+      }
+      if (allCatalog.length <= HOME_FEATURED_LIMIT) {
+        cachedHomeFeaturedItems = allCatalog;
+        return cachedHomeFeaturedItems;
+      }
 
       // 1. Reservar exatamente 5 vagas no banner para os últimos 5 itens adicionados ao catálogo
       const sortedByAdded = allCatalog.slice().sort((a, b) => (b.added || 0) - (a.added || 0));
@@ -4418,7 +4460,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (highlights5[i]) featured.push(highlights5[i]);
       }
 
-      return featured.slice(0, HOME_FEATURED_LIMIT);
+      cachedHomeFeaturedItems = featured.slice(0, HOME_FEATURED_LIMIT);
+      return cachedHomeFeaturedItems;
     }
 
     function resolveHomeWatchedItem(type, id) {
@@ -5599,22 +5642,60 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!elements.homeFeaturedTrack) return;
       homeFeaturedItems = getHomeFeaturedItems();
       homeFeaturedIndex = Math.min(homeFeaturedIndex, Math.max(0, homeFeaturedItems.length - 1));
-      elements.homeFeaturedTrack.innerHTML = '';
-      if (elements.homeFeaturedDots) elements.homeFeaturedDots.innerHTML = '';
 
       if (!homeFeaturedItems.length) {
         if (elements.homeFeaturedLoading) {
           elements.homeFeaturedLoading.style.display = 'flex';
           elements.homeFeaturedLoading.textContent = 'Carregando novidades...';
         }
+        elements.homeFeaturedTrack.innerHTML = '';
+        if (elements.homeFeaturedDots) elements.homeFeaturedDots.innerHTML = '';
         return;
       }
 
       if (elements.homeFeaturedLoading) elements.homeFeaturedLoading.style.display = 'none';
 
+      // Verifica se os slides já renderizados no DOM correspondem aos itens atuais
+      const currentSlides = Array.from(elements.homeFeaturedTrack.querySelectorAll('.home-featured-slide'));
+      const isSameItems = currentSlides.length === homeFeaturedItems.length &&
+        currentSlides.every((slide, i) => slide.dataset.itemKey === (homeFeaturedItems[i].type + ':' + homeFeaturedItems[i].id));
+
+      if (isSameItems) {
+        // Preserva o DOM, a animação e o slide atual; apenas atualiza metadados se necessário
+        homeFeaturedItems.forEach((item, index) => {
+          const slide = currentSlides[index];
+          if (!slide) return;
+          const typeLabel = item.type === 'movie' ? 'FILME' : 'SÉRIE';
+          const ratingInfo = getHomeRatingInfo(item);
+          const metaText = [
+            typeLabel,
+            item.year,
+            ratingInfo.value > 0 ? '★ ' + ratingInfo.value.toFixed(1) + (ratingInfo.source ? ' ' + ratingInfo.source : '') : ''
+          ].filter(Boolean).join('  •  ');
+          const metaEl = slide.querySelector('.home-featured-meta');
+          if (metaEl && metaEl.textContent !== metaText) {
+            metaEl.textContent = metaText;
+          }
+          const backdropImg = slide.querySelector('.home-featured-backdrop');
+          if (backdropImg && item.poster && backdropImg.getAttribute('src') !== item.poster) {
+            backdropImg.src = item.poster;
+          }
+          const posterImg = slide.querySelector('.home-featured-poster');
+          if (posterImg && item.poster && posterImg.getAttribute('src') !== item.poster) {
+            posterImg.src = item.poster;
+          }
+        });
+        if (!homeFeaturedTimer) startHomeFeaturedTimer();
+        return;
+      }
+
+      elements.homeFeaturedTrack.innerHTML = '';
+      if (elements.homeFeaturedDots) elements.homeFeaturedDots.innerHTML = '';
+
       homeFeaturedItems.forEach((item, index) => {
         const slide = document.createElement('article');
         slide.className = 'home-featured-slide';
+        slide.dataset.itemKey = item.type + ':' + item.id;
         const typeLabel = item.type === 'movie' ? 'FILME' : 'SÉRIE';
         const ratingInfo = getHomeRatingInfo(item);
         const meta = [
