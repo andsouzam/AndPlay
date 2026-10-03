@@ -343,6 +343,20 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       userAuthSubmitBtn: document.getElementById('userAuthSubmitBtn'),
       userAuthGoogleGroup: document.getElementById('userAuthGoogleGroup'),
       userAuthGoogleBtn: document.getElementById('userAuthGoogleBtn'),
+
+      // Dedicated Auth Screen (Login Obrigatório)
+      authScreen: document.getElementById('authScreen'),
+      authLoadingOverlay: document.getElementById('authLoadingOverlay'),
+      authScreenTabLogin: document.getElementById('authScreenTabLogin'),
+      authScreenTabRegister: document.getElementById('authScreenTabRegister'),
+      authScreenTabRecovery: document.getElementById('authScreenTabRecovery'),
+      authScreenEmailInput: document.getElementById('authScreenEmailInput'),
+      authScreenPassGroup: document.getElementById('authScreenPassGroup'),
+      authScreenPassInput: document.getElementById('authScreenPassInput'),
+      authScreenStatusMsg: document.getElementById('authScreenStatusMsg'),
+      authScreenSubmitBtn: document.getElementById('authScreenSubmitBtn'),
+      authScreenGoogleGroup: document.getElementById('authScreenGoogleGroup'),
+      authScreenGoogleBtn: document.getElementById('authScreenGoogleBtn'),
       userPrefSkipIntro: document.getElementById('userPrefSkipIntro'),
       userPrefAutoNext: document.getElementById('userPrefAutoNext'),
       userPrefTvMode: document.getElementById('userPrefTvMode'),
@@ -1206,6 +1220,17 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       });
 
       initSidebarState();
+      initAuthScreen();
+
+      // Aguarda a verificação da conta do Supabase
+      await window.AndPlayAccount?.ready?.();
+
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
+
+      hideLoginScreen();
 
       // Modo TV acessado unicamente via sublink /tvmode (sem botão e sem redirecionamento automático)
       const isTvMode = window.location.pathname.endsWith('/tvmode') || window.location.pathname.endsWith('/tvmode/') || window.location.pathname.includes('/tvmode') || window.location.hash.includes('tvmode') || window.location.search.includes('tvmode');
@@ -1224,9 +1249,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         return;
       }
 
-      // A Home é a primeira tela. Aguarda a conta terminar a carga do histórico remoto
-      // para que "Últimos assistidos" não seja renderizado antes do Supabase.
-      await window.AndPlayAccount?.ready?.();
       showHome();
     }
 
@@ -3475,6 +3497,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     async function showFavoritesContent() {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
       favoriteReturnMode = ['home', 'movies', 'series', 'live'].includes(currentMode) ? currentMode : 'home';
       isFavoritesView = true;
       isWatchedView = false;
@@ -3840,6 +3866,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     async function showWatchedContent() {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
       watchedReturnMode = ['home', 'movies', 'series', 'live'].includes(currentMode) ? currentMode : 'home';
       isWatchedView = true;
       isFavoritesView = false;
@@ -4253,7 +4283,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.userLogoutBtn?.addEventListener('click', async () => {
         if (!confirm('Deseja realmente sair da sua conta? Seus dados locais permanecerão salvos.')) return;
         await window.AndPlayAccount?.signOutDirect?.();
-        renderUserPage();
+        showLoginScreen('login');
       });
 
       elements.userChangePassBtn?.addEventListener('click', () => {
@@ -4330,7 +4360,226 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       });
     }
 
+    // ==========================================
+    // SISTEMA DE LOGIN OBRIGATÓRIO (AUTH GATE)
+    // ==========================================
+    let currentAuthScreenTab = 'login';
+    let authScreenInitialized = false;
+
+    function setAuthScreenTab(tab) {
+      currentAuthScreenTab = tab;
+      const tabs = [
+        { btn: elements.authScreenTabLogin, name: 'login' },
+        { btn: elements.authScreenTabRegister, name: 'register' },
+        { btn: elements.authScreenTabRecovery, name: 'recovery' }
+      ];
+      tabs.forEach(t => {
+        if (t.btn) t.btn.classList.toggle('active', t.name === tab);
+      });
+
+      if (elements.authScreenPassGroup) {
+        elements.authScreenPassGroup.style.display = tab === 'recovery' ? 'none' : 'flex';
+      }
+      if (elements.authScreenSubmitBtn) {
+        if (tab === 'login') elements.authScreenSubmitBtn.textContent = 'Entrar na Conta';
+        else if (tab === 'register') elements.authScreenSubmitBtn.textContent = 'Criar Conta Gratuita';
+        else elements.authScreenSubmitBtn.textContent = 'Enviar Link de Recuperação';
+      }
+      if (elements.authScreenGoogleGroup) {
+        elements.authScreenGoogleGroup.style.display = tab === 'recovery' ? 'none' : 'block';
+      }
+      if (elements.authScreenStatusMsg) {
+        elements.authScreenStatusMsg.textContent = '';
+        elements.authScreenStatusMsg.className = 'auth-status-msg';
+      }
+    }
+
+    function showLoginScreen(tab = 'login') {
+      if (elements.authLoadingOverlay) {
+        elements.authLoadingOverlay.style.display = 'none';
+      }
+      document.body.classList.remove('auth-pending');
+      document.body.classList.remove('is-authenticated');
+      document.body.classList.add('not-authenticated');
+
+      // Interromper qualquer reprodução ativa ou modal
+      try {
+        if (typeof closePlayer === 'function') closePlayer();
+        if (typeof closeSeriesModal === 'function') closeSeriesModal();
+        if (typeof closeMovieVersionModal === 'function') closeMovieVersionModal();
+      } catch (e) {}
+
+      if (elements.authScreen) {
+        elements.authScreen.style.display = 'flex';
+      }
+
+      setAuthScreenTab(tab);
+      setTimeout(() => {
+        elements.authScreenEmailInput?.focus();
+      }, 60);
+    }
+
+    function hideLoginScreen() {
+      if (elements.authLoadingOverlay) {
+        elements.authLoadingOverlay.style.display = 'none';
+      }
+      document.body.classList.remove('auth-pending');
+      document.body.classList.remove('not-authenticated');
+      document.body.classList.add('is-authenticated');
+
+      if (elements.authScreen) {
+        elements.authScreen.style.display = 'none';
+      }
+    }
+
+    async function handleAuthScreenSubmit() {
+      const email = elements.authScreenEmailInput?.value?.trim() || '';
+      const password = elements.authScreenPassInput?.value || '';
+      const statusEl = elements.authScreenStatusMsg;
+      const submitBtn = elements.authScreenSubmitBtn;
+
+      if (!email) {
+        if (statusEl) {
+          statusEl.className = 'auth-status-msg error';
+          statusEl.textContent = 'Informe seu e-mail.';
+        }
+        elements.authScreenEmailInput?.focus();
+        return;
+      }
+
+      if (currentAuthScreenTab !== 'recovery' && (!password || password.length < 6)) {
+        if (statusEl) {
+          statusEl.className = 'auth-status-msg error';
+          statusEl.textContent = 'A senha deve ter no mínimo 6 caracteres.';
+        }
+        elements.authScreenPassInput?.focus();
+        return;
+      }
+
+      if (statusEl) {
+        statusEl.className = 'auth-status-msg loading';
+        statusEl.textContent = currentAuthScreenTab === 'recovery' ? 'Enviando...' : 'Autenticando...';
+      }
+      if (submitBtn) submitBtn.disabled = true;
+
+      try {
+        if (currentAuthScreenTab === 'login') {
+          await window.AndPlayAccount?.signInDirect?.(email, password);
+          if (statusEl) {
+            statusEl.className = 'auth-status-msg success';
+            statusEl.textContent = 'Login efetuado com sucesso!';
+          }
+          hideLoginScreen();
+          onUserAuthenticated();
+        } else if (currentAuthScreenTab === 'register') {
+          await window.AndPlayAccount?.signUpDirect?.(email, password);
+          if (statusEl) {
+            statusEl.className = 'auth-status-msg success';
+            statusEl.textContent = 'Conta criada com sucesso!';
+          }
+          if (window.AndPlayAccount?.isSignedIn?.()) {
+            hideLoginScreen();
+            onUserAuthenticated();
+          } else {
+            if (statusEl) {
+              statusEl.className = 'auth-status-msg success';
+              statusEl.textContent = 'Conta criada! Verifique seu e-mail para confirmar o acesso.';
+            }
+          }
+        } else {
+          await window.AndPlayAccount?.requestPasswordResetDirect?.(email);
+          if (statusEl) {
+            statusEl.className = 'auth-status-msg success';
+            statusEl.textContent = 'Instruções enviadas para seu e-mail.';
+          }
+        }
+      } catch (err) {
+        if (statusEl) {
+          statusEl.className = 'auth-status-msg error';
+          statusEl.textContent = err.message || 'Falha na autenticação.';
+        }
+      } finally {
+        if (submitBtn) submitBtn.disabled = false;
+      }
+    }
+
+    function onUserAuthenticated() {
+      hideLoginScreen();
+      renderUserPage();
+      const isTvMode = window.location.pathname.endsWith('/tvmode') || window.location.pathname.endsWith('/tvmode/') || window.location.pathname.includes('/tvmode') || window.location.hash.includes('tvmode') || window.location.search.includes('tvmode');
+      if (isTvMode && window.initTvCableBox) {
+        window.initTvCableBox();
+      } else {
+        showHome();
+      }
+    }
+
+    function onUserLoggedOut() {
+      showLoginScreen('login');
+    }
+
+    function initAuthScreen() {
+      if (authScreenInitialized) return;
+      authScreenInitialized = true;
+
+      elements.authScreenTabLogin?.addEventListener('click', () => setAuthScreenTab('login'));
+      elements.authScreenTabRegister?.addEventListener('click', () => setAuthScreenTab('register'));
+      elements.authScreenTabRecovery?.addEventListener('click', () => setAuthScreenTab('recovery'));
+
+      elements.authScreenSubmitBtn?.addEventListener('click', handleAuthScreenSubmit);
+
+      elements.authScreenEmailInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (currentAuthScreenTab === 'recovery') {
+            handleAuthScreenSubmit();
+          } else {
+            elements.authScreenPassInput?.focus();
+          }
+        }
+      });
+
+      elements.authScreenPassInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleAuthScreenSubmit();
+        }
+      });
+
+      elements.authScreenGoogleBtn?.addEventListener('click', async () => {
+        const statusEl = elements.authScreenStatusMsg;
+        if (statusEl) {
+          statusEl.className = 'auth-status-msg loading';
+          statusEl.textContent = 'Iniciando login com Google...';
+        }
+        try {
+          await window.AndPlayAccount?.signInWithGoogle?.();
+        } catch (err) {
+          if (statusEl) {
+            statusEl.className = 'auth-status-msg error';
+            statusEl.textContent = err.message || 'Erro ao iniciar login com Google.';
+          }
+        }
+      });
+
+      window.addEventListener('andplay:auth-changed', (event) => {
+        const isSignedIn = event.detail?.isSignedIn ?? Boolean(window.AndPlayAccount?.isSignedIn?.());
+        if (isSignedIn) {
+          onUserAuthenticated();
+        } else {
+          onUserLoggedOut();
+        }
+      });
+
+      window.showLoginScreen = showLoginScreen;
+      window.hideLoginScreen = hideLoginScreen;
+    }
+
     function showUserPage() {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
       userReturnMode = ['home', 'movies', 'series', 'live', 'favorites', 'watched'].includes(currentMode) ? currentMode : 'home';
       currentMode = 'user';
       isFavoritesView = false;
@@ -7643,6 +7892,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
 function showHome(targetScroll = 0) {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
       if (currentMode === 'live') {
         liveLoadGeneration++;
         window.EPlayTvEpg?.deactivate();
@@ -7704,6 +7957,10 @@ function showHome(targetScroll = 0) {
     // CONTROLE DE ABAS (FILMES / SÉRIES / AO VIVO)
     // ==========================================
     async function switchMode(mode, forceReload = false) {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
       if (mode === 'home') {
         showHome();
         return;
@@ -9091,6 +9348,10 @@ function showHome(targetScroll = 0) {
     }
 
     function onCategoryChange(catId) {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
       if (catId === 'ALL') {
         selectAllMedia();
         return;
@@ -9242,6 +9503,10 @@ function showHome(targetScroll = 0) {
     }
 
     function onSearch(term) {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
       const q = normalizeSearch(term);
       if (isWatchedView || isFavoritesView) {
         applyFilterAndRender(term);
@@ -9840,6 +10105,10 @@ function showHome(targetScroll = 0) {
     }
 
     function playLiveStreamUrl(streamUrl, isEmbed, title, item, fallbackIdx) {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
       hideVideoErrorOverlay();
 
       if (liveDriftInterval) {
@@ -10056,6 +10325,10 @@ function showHome(targetScroll = 0) {
     }
 
     function playMovieVersion(groupOrMovie, selectedVersion, allVersions) {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
       const openedFromContentPage = contentPageOpen && currentContentPageType === 'movie';
       const watchedId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || selectedVersion?.streamId;
       if (watchedId != null) saveWatchedId('movies', watchedId);
@@ -12727,6 +13000,10 @@ function showHome(targetScroll = 0) {
     }
 
     async function openMoviePage(groupOrMovie) {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
       contentPageReturnState = {
         mode: currentMode,
         watched: isWatchedView,
@@ -12782,6 +13059,10 @@ function showHome(targetScroll = 0) {
     }
 
     async function openSeriesPage(seriesGroupOrItem) {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
       void resolveSeriesImdbId(seriesGroupOrItem);
       contentPageReturnState = {
         mode: currentMode,
@@ -13042,6 +13323,10 @@ function showHome(targetScroll = 0) {
     }
 
     function playSeriesEpisode(ep, seasonNum) {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        showLoginScreen();
+        return;
+      }
       const openedFromContentPage = contentPageOpen && currentContentPageType === 'series';
       const watchedId = getSeriesWatchedId(currentSeriesGroup);
       if (watchedId) saveWatchedId('series', watchedId);
@@ -13354,6 +13639,10 @@ function showHome(targetScroll = 0) {
 
       // Inicializa canais e eventos
       window.initTvCableBox = async function () {
+        if (!window.AndPlayAccount?.isSignedIn?.()) {
+          if (typeof window.showLoginScreen === 'function') window.showLoginScreen();
+          return;
+        }
         tvApp.style.display = 'flex';
         window.EPlayTvEpg?.activate();
         startTvClock();
@@ -16363,6 +16652,10 @@ function showHome(targetScroll = 0) {
 
       // ---- Funções de alternância Web ↔ TV (acionadas pelo botão no header) ----
       window.enterTvMode = async function () {
+        if (!window.AndPlayAccount?.isSignedIn?.()) {
+          if (typeof window.showLoginScreen === 'function') window.showLoginScreen();
+          return;
+        }
         if (isTvMode) return; // já está no modo TV
         isTvMode = true;
         console.log('[EPlay TV] Entrando no modo TV via atalho do navegador');

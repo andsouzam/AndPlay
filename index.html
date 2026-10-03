@@ -25,7 +25,16 @@
   <link rel="stylesheet" href="./assets/css/player-ui.css?v=20260929-01">
 </head>
 
-<body>
+<body class="auth-pending not-authenticated">
+  <!-- Overlay de Verificação Inicial de Sessão (Zero Flicker) -->
+  <div id="authLoadingOverlay" class="auth-loading-overlay">
+    <div class="auth-loading-spinner-wrap">
+      <img src="./assets/apple-touch-icon.png" alt="EPlay" class="auth-loading-logo">
+      <div class="auth-loading-spinner"></div>
+      <p class="auth-loading-text">Iniciando EPlay...</p>
+    </div>
+  </div>
+
   <!-- ==================== EPLAY TV / RECEPTOR CABLE BOX ==================== -->
   <div id="tvCableApp" class="tv-cable-app" style="display: none;">
     <!-- Reprodutor de Vídeo Unificado para TV (Muda entre PiP e Tela Cheia sem reiniciar o vídeo) -->
@@ -251,7 +260,57 @@
     </div>
   </div>
 
+  <!-- ==================== TELA DE AUTENTICAÇÃO OBRIGATÓRIA ==================== -->
+  <section id="authScreen" class="auth-screen" style="display: none;" aria-label="Acesso Obrigatório ao EPlay">
+    <div class="auth-screen-backdrop"></div>
+    <div class="auth-card">
+      <div class="auth-card-header">
+        <div class="auth-brand-logo">
+          <img src="./assets/apple-touch-icon.png" alt="EPlay" class="auth-logo-img">
+          <h1 class="auth-brand-title">EPlay</h1>
+        </div>
+        <p class="auth-card-subtitle">Entre na sua conta para acessar filmes, séries e TV ao vivo.</p>
+      </div>
 
+      <div class="auth-tabs" role="tablist">
+        <button id="authScreenTabLogin" class="auth-tab-btn active" type="button" data-auth-tab="login">Entrar</button>
+        <button id="authScreenTabRegister" class="auth-tab-btn" type="button" data-auth-tab="register">Criar Conta</button>
+        <button id="authScreenTabRecovery" class="auth-tab-btn" type="button" data-auth-tab="recovery">Recuperar</button>
+      </div>
+
+      <div class="auth-card-body">
+        <form id="authScreenForm" onsubmit="return false;" novalidate>
+          <div class="auth-input-group">
+            <label for="authScreenEmailInput">E-mail</label>
+            <input type="email" id="authScreenEmailInput" placeholder="seuemail@exemplo.com" autocomplete="email" required />
+          </div>
+          <div id="authScreenPassGroup" class="auth-input-group">
+            <label for="authScreenPassInput">Senha</label>
+            <input type="password" id="authScreenPassInput" placeholder="Sua senha secreta" autocomplete="current-password" />
+          </div>
+          <div id="authScreenStatusMsg" class="auth-status-msg" aria-live="polite"></div>
+          <button id="authScreenSubmitBtn" type="button" class="auth-submit-btn">Entrar na Conta</button>
+        </form>
+
+        <div id="authScreenGoogleGroup" class="auth-google-group">
+          <div class="auth-divider"><span>ou continue com</span></div>
+          <button id="authScreenGoogleBtn" class="auth-google-btn" type="button">
+            <svg class="auth-google-svg" viewBox="0 0 24 24" width="20" height="20">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+            </svg>
+            Continuar com Google
+          </button>
+        </div>
+
+        <p class="auth-card-footer">
+          Acesso seguro e sincronização em tempo real de favoritos, histórico e progresso em todos os seus aparelhos.
+        </p>
+      </div>
+    </div>
+  </section>
 
   <header>
     <div class="header-left">
@@ -374,12 +433,12 @@
         <div class="user-profile-details">
           <div class="user-profile-name-row">
             <h1 id="userProfileName" class="user-profile-name">Usuário EPlay</h1>
-            <span id="userProfileBadge" class="user-status-badge badge-guest">Modo Local</span>
+            <span id="userProfileBadge" class="user-status-badge">Conectado</span>
           </div>
-          <p id="userProfileEmail" class="user-profile-email">Nenhuma conta na nuvem conectada</p>
+          <p id="userProfileEmail" class="user-profile-email">-</p>
           <div class="user-profile-hero-actions">
             <button id="userHeroSyncBtn" class="user-btn user-btn-accent" type="button">🔄 Sincronizar Agora</button>
-            <button id="userHeroAuthBtn" class="user-btn user-btn-secondary" type="button">Conectar Conta</button>
+            <button id="userHeroAuthBtn" class="user-btn user-btn-secondary" type="button">Minha Conta</button>
           </div>
         </div>
       </div>
@@ -435,7 +494,7 @@
     <!-- Painel 1: Minha Conta -->
     <div id="userPanelAccount" class="user-tab-panel active">
       <!-- Bloco se logado -->
-      <div id="userAccountConnectedBlock" class="user-panel-card" style="display: none;">
+      <div id="userAccountConnectedBlock" class="user-panel-card" style="display: block;">
         <h3 class="user-panel-title">Sessão Supabase Ativa</h3>
         <div class="user-info-rows">
           <div class="user-info-row">
@@ -458,7 +517,7 @@
       </div>
 
       <!-- Bloco se deslogado (Formulário) -->
-      <div id="userAccountAuthBlock" class="user-panel-card">
+      <div id="userAccountAuthBlock" class="user-panel-card" style="display: none;">
         <div class="user-auth-tabs">
           <button id="userAuthTabLogin" class="user-auth-tab active" type="button" data-auth-tab="login">Entrar</button>
           <button id="userAuthTabRegister" class="user-auth-tab" type="button" data-auth-tab="register">Criar Conta</button>

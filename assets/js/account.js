@@ -854,7 +854,25 @@
     }
   }
 
+  function notifyAuthChanged(event, session) {
+    try {
+      window.dispatchEvent(new CustomEvent('andplay:auth-changed', {
+        detail: {
+          event: event || (session ? 'SIGNED_IN' : 'SIGNED_OUT'),
+          session: session || null,
+          isSignedIn: Boolean(session)
+        }
+      }));
+    } catch (e) {}
+  }
+
   function openModal() {
+    if (!currentSession) {
+      if (typeof window.showLoginScreen === 'function') {
+        window.showLoginScreen();
+        return;
+      }
+    }
     if (typeof window.showUserPage === 'function') {
       window.showUserPage();
       return;
@@ -895,6 +913,7 @@
       const { data, error } = await client.auth.signInWithPassword({ email, password });
       if (error) throw error;
       currentSession = data.session;
+      notifyAuthChanged('SIGNED_IN', currentSession);
       setAuthView('account');
       setAccountSubtab('overview');
       renderProfile();
@@ -988,6 +1007,7 @@
       if (error) throw error;
       currentSession = data.session;
       if (currentSession) {
+        notifyAuthChanged('SIGNED_IN', currentSession);
         setAuthView('account');
         setAccountSubtab('overview');
         renderProfile();
@@ -1011,6 +1031,7 @@
       setAuthView('login');
       setStatus('Você saiu da conta.');
       updateAccountUi();
+      notifyAuthChanged('SIGNED_OUT', null);
     } catch (error) {
       setStatus(error.message || 'Não foi possível sair.');
     }
@@ -1486,6 +1507,7 @@
         currentSession = session || null;
         renderUser();
         updateAccountUi();
+        notifyAuthChanged(event, currentSession);
 
         if (event === 'PASSWORD_RECOVERY') {
           setTimeout(() => {
@@ -1542,6 +1564,7 @@
       if (error) throw error;
       currentSession = data.session;
       updateAccountUi();
+      notifyAuthChanged('SIGNED_IN', currentSession);
       await syncNow();
       await refreshAccountUsage().catch(() => {});
       return data;
@@ -1556,6 +1579,7 @@
       if (error) throw error;
       currentSession = data.session;
       updateAccountUi();
+      notifyAuthChanged(currentSession ? 'SIGNED_IN' : 'SIGNED_UP', currentSession);
       if (currentSession) {
         await syncNow();
         await refreshAccountUsage().catch(() => {});
