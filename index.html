@@ -22,7 +22,7 @@
   <script src="./assets/js/security.js"></script>
 
   <link rel="stylesheet" href="./assets/css/app.css?v=20260929-02">
-  <link rel="stylesheet" href="./assets/css/player-ui.css?v=20260929-01">
+  <link rel="stylesheet" href="./assets/css/player-ui.css?v=20261003-01">
 </head>
 
 <body class="auth-pending not-authenticated">
@@ -1051,19 +1051,28 @@
           </div>
         </div>
       </div>
-      <!-- Painel Expansível de Opções de Legenda -->
+      <!-- Painel Expansível de Opções do Player (Áudio, Versão & Legenda) -->
       <div id="subOptionsPanel"
         style="display: none; background: #161616; border-top: 1px solid #282828; border-bottom: 1px solid #222; padding: 12px 18px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span
-              style="font-size: 12px; font-weight: 700; color: #ffc107; text-transform: uppercase; letter-spacing: 0.5px;">💬
-              Opções de Legenda</span>
-            <span style="font-size: 11px; color: #888;">(Selecione a versão, sincronize ou busque outro título)</span>
+              style="font-size: 12px; font-weight: 700; color: #ffc107; text-transform: uppercase; letter-spacing: 0.5px;">⚙️
+              Opções do Player (Áudio, Versão & Legenda)</span>
+            <span style="font-size: 11px; color: #888;">(Selecione o áudio/qualidade, sincronize ou ajuste legendas)</span>
           </div>
           <button id="closeSubPanelBtn"
             style="background: none; border: none; color: #aaa; font-size: 18px; cursor: pointer; padding: 0 6px; line-height: 1;"
             title="Fechar painel">&times;</button>
+        </div>
+
+        <!-- Seção de Áudio / Versão dentro do painel -->
+        <div id="panelVersionSection" style="display: none; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #282828; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 11px; color: #ffc107; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">🎬 Áudio / Versão:</span>
+            <div id="panelVersionSwitcher" style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;"></div>
+          </div>
+          <span id="panelVersionHint" style="font-size: 10px; color: #888;"></span>
         </div>
 
         <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between;">
@@ -1161,8 +1170,8 @@
           </button>
           <button class="btn btn-secondary" id="toggleSubPanelBtn"
             style="padding: 7px 14px; font-size: 12px; display: flex; align-items: center; gap: 6px;"
-            title="Mostrar ou ocultar opções de legenda">
-            💬 Opções de Legenda
+            title="Mostrar ou ocultar opções do player (áudio, versão e legendas)">
+            ⚙️ Opções do Player
           </button>
           <a class="btn btn-primary" id="downloadBtn" style="padding: 7px 14px; font-size: 12px;" href="#"
             download data-adshield-allow>📥 Baixar Vídeo (MP4)</a>
@@ -1282,8 +1291,8 @@
   <script src="./assets/js/supabase-config.js?v=20260929-01"></script>
   <script src="./assets/js/tv-epg.js?v=20260929-01"></script>
   <script src="./assets/js/account.js?v=20260929-05"></script>
-  <script src="./assets/js/app.js?v=20260929-16"></script>
-  <script src="./assets/js/player-ui.js?v=20260929-01"></script>
+  <script src="./assets/js/app.js?v=20261003-01"></script>
+  <script src="./assets/js/player-ui.js?v=20261003-01"></script>
 </body>
 
 </html>

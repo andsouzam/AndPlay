@@ -39,9 +39,18 @@
 .eplay-spacer{flex:1}
 .eplay-volume{display:flex;align-items:center;width:110px}
 .eplay-volume input{width:76px}
-.eplay-menu{position:absolute;right:18px;bottom:70px;width:265px;background:rgba(22,22,22,.98);border:1px solid #3a3a3a;border-radius:12px;box-shadow:0 18px 50px #000;overflow:hidden;display:none}
+.eplay-menu{position:absolute;right:18px;bottom:70px;width:280px;max-height:calc(100% - 90px);overflow-y:auto;overflow-x:hidden;background:rgba(20,20,20,.98);border:1px solid #3a3a3a;border-radius:12px;box-shadow:0 18px 50px #000;display:none;z-index:70;scrollbar-width:thin;scrollbar-color:#444 transparent}
+.eplay-menu::-webkit-scrollbar{width:5px}
+.eplay-menu::-webkit-scrollbar-thumb{background:#444;border-radius:3px}
 .eplay-menu.open{display:block}
 .eplay-menu h4{font-size:12px;color:#ffc107;margin:0;padding:12px 14px;border-bottom:1px solid #2c2c2c}
+.eplay-version-section{border-bottom:1px solid #282828;background:rgba(0,0,0,.25)}
+.eplay-version-section .eplay-menu-row{padding:8px 14px;border-bottom:1px solid #222}
+.eplay-version-list{display:flex;flex-direction:column;gap:4px;padding:6px 10px 10px}
+.eplay-version-item{width:100%!important;box-sizing:border-box;display:flex!important;align-items:center!important;justify-content:space-between!important;padding:8px 12px!important;border-radius:8px!important;font-size:12px!important;font-weight:500!important;color:#ddd!important;background:rgba(255,255,255,.05)!important;border:1px solid transparent!important;transition:all .15s ease!important;text-align:left!important;cursor:pointer}
+.eplay-version-item:hover{background:rgba(255,255,255,.12)!important;color:#fff!important}
+.eplay-version-item.active{background:rgba(255,193,7,.15)!important;border-color:rgba(255,193,7,.45)!important;color:#ffc107!important;font-weight:700!important}
+.eplay-version-item .eplay-version-check{color:#ffc107;font-weight:800;font-size:13px;margin-left:6px}
 .eplay-menu button{width:100%;border:0;background:transparent;color:#eee;text-align:left;padding:10px 14px;font-size:12px;cursor:pointer}
 .eplay-menu button:hover{background:#292929}
 .eplay-menu button.active{color:#ffc107;background:#24200f}

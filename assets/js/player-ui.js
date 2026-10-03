@@ -250,11 +250,14 @@
       '<div class="eplay-controls"><button class="eplay-control small eplay-series-nav" id="eplayPrevEpisode" aria-label="Episódio anterior" style="display:none">‹ Ant</button><button class="eplay-control small" id="eplayBack10" aria-label="Voltar 10 segundos">−10</button><button class="eplay-control" id="eplayPlay" aria-label="Reproduzir">▶</button><button class="eplay-control small" id="eplayForward10" aria-label="Avançar 10 segundos">+10</button><button class="eplay-control small eplay-series-nav" id="eplayNextEpisode" aria-label="Próximo episódio" style="display:none">Pro ›</button>',
       '<div class="eplay-volume"><button class="eplay-control" id="eplayVolumeBtn" aria-label="Volume">🔊</button><input id="eplayVolume" class="eplay-range" type="range" min="0" max="100" value="85" aria-label="Volume"></div><div class="eplay-spacer"></div>',
       '<button class="eplay-control small" id="eplaySubtitle" aria-label="Legendas">CC</button><button class="eplay-control small" id="eplayInfo" aria-label="Ficha técnica">ⓘ</button><button class="eplay-control small" id="eplayPip" aria-label="Picture-in-Picture">▣</button><button class="eplay-control" id="eplaySettings" aria-label="Configurações" aria-expanded="false">⚙</button><button class="eplay-control" id="eplayFullscreen" aria-label="Tela cheia">⛶</button></div></div>',
-      '<div class="eplay-menu" id="eplayMenu"><h4>Configurações de reprodução</h4><div class="eplay-menu-row"><span>Velocidade</span><strong id="eplaySpeedLabel">1x</strong></div>',
+      '<div class="eplay-menu" id="eplayMenu"><h4>Configurações de reprodução</h4>',
+      '<div class="eplay-version-section" id="eplayVersionSection" style="display:none;"><div class="eplay-menu-row"><span>Áudio / Versão</span><strong id="eplayVersionBadge" style="color:#ffc107;font-size:11px;"></strong></div><div class="eplay-version-list" id="eplayVersionItems"></div></div>',
+      '<button id="eplayAudioSyncMenu" style="display:none">🔊 Sincronizar áudio híbrido</button>',
+      '<div class="eplay-menu-row"><span>Velocidade</span><strong id="eplaySpeedLabel">1x</strong></div>',
       '<div class="eplay-speed-list"><button data-speed="0.75">0.75x</button><button data-speed="1">1x</button><button data-speed="1.25">1.25x</button><button data-speed="1.5">1.5x</button><button data-speed="1.75">1.75x</button><button data-speed="2">2x</button></div>',
       '<label class="eplay-auto-skip-row" id="eplayAutoSkipRow"><input type="checkbox" id="eplayAutoSkipToggle"><span><b>Pular abertura automaticamente</b><small>Somente quando houver marcador comunitário válido</small></span></label>',
       '<button id="eplaySkipIntroNow" style="display:none">⏭ Pular abertura agora</button>',
-      '<button id="eplayDownloadMenu">⇩ Baixar vídeo</button><button id="eplayInfoMenu">ⓘ Ficha técnica</button><button id="eplaySubMenu">💬 Legendas e sincronização</button><button id="eplayPipMenu">▣ Picture-in-Picture</button><button id="eplayLiveSyncMenu" style="display:none">⚡ Sincronizar ao vivo</button><button id="eplayLatencyMenu" style="display:none">⚡ Alternar buffer</button><button id="eplayFsMenu">⛶ Tela cheia</button></div>',
+      '<button id="eplaySubMenu">💬 Legendas e sincronização</button><button id="eplayInfoMenu">ⓘ Ficha técnica</button><button id="eplayDownloadMenu">⇩ Baixar vídeo</button><button id="eplayPipMenu">▣ Picture-in-Picture</button><button id="eplayLiveSyncMenu" style="display:none">⚡ Sincronizar ao vivo</button><button id="eplayLatencyMenu" style="display:none">⚡ Alternar buffer</button><button id="eplayFsMenu">⛶ Tela cheia</button></div>',
       '<div class="eplay-toast" id="eplayPlayerToast"></div>',
       '<div class="eplay-resume" id="eplayResume"><span id="eplayResumeText">Continuar reprodução?</span><button class="continue" id="eplayResumeContinue">Continuar</button><button class="restart" id="eplayResumeRestart">Do início</button></div>',
       '</div>'
@@ -291,6 +294,18 @@
   $on('eplayVolumeBtn','click',toggleMute); $on('eplayVolume','input',e=>setVolume(Number(e.target.value)/100));
   $on('eplaySubtitle','click',openSubtitles); $on('eplayInfo','click',openInfo); $on('eplayPip','click',pip);
   $on('eplaySettings','click',toggleMenu); $on('eplayDownloadMenu','click',downloadVideo); $on('eplayInfoMenu','click',openInfo); $on('eplaySubMenu','click',openSubtitles); $on('eplayPipMenu','click',pip); $on('eplayFsMenu','click',fullscreen); $on('eplayFullscreen','click',fullscreen);
+  $on('eplayAudioSyncMenu','click',()=>{
+    closeMenu();
+    const p=$('subOptionsPanel');
+    if(p&&p.style.display==='none'){
+      const b=$('toggleSubPanelBtn');
+      if(b)b.click();else p.style.display='block';
+    }
+    const a=$('audioSyncControls');
+    if(a)a.style.display='inline-flex';
+    const input=$('audioOffsetInput');
+    if(input){input.focus();input.select();}
+  });
   const skipIntroNow=()=>{const b=$('skipIntroBtn');if(b&&(b.dataset.eplayVisible==='1'||b.style.display!=='none'))b.click();else showToast('Nenhum marcador de abertura disponível agora');};
   $on('eplaySkipIntroNow','click',skipIntroNow); $on('eplaySkipIntroOverlay','click',skipIntroNow);
   $on('eplayAutoSkipToggle','change',e=>{const b=$('skipIntroAutoToggle');if(b){b.checked=!!e.target.checked;b.dispatchEvent(new Event('change',{bubbles:true}));}syncSkipTools();});
@@ -298,7 +313,7 @@
   $on('eplayLatencyMenu','click',()=>{$('toggleLatencyModeBtn')?.click();closeMenu();});
   const closeMenuFromOutside = e => {
     if (!menu?.classList.contains('open')) return;
-    if (e.target.closest('#eplayMenu') || e.target.closest('#eplaySettings')) return;
+    if (e.target.closest('#eplayMenu') || e.target.closest('#eplaySettings') || e.target.closest('#subOptionsPanel')) return;
     closeMenu();
   };
   document.addEventListener('pointerdown', closeMenuFromOutside, true);

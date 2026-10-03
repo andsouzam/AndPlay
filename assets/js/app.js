@@ -474,6 +474,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       hybridModeBadge: document.getElementById('hybridModeBadge'),
       toggleAudioSyncBtn: document.getElementById('toggleAudioSyncBtn'),
       movieVersionSwitcher: document.getElementById('movieVersionSwitcher'),
+      panelVersionSection: document.getElementById('panelVersionSection'),
+      panelVersionSwitcher: document.getElementById('panelVersionSwitcher'),
+      panelVersionHint: document.getElementById('panelVersionHint'),
       syncLiveBtn: document.getElementById('syncLiveBtn'),
       toggleLatencyModeBtn: document.getElementById('toggleLatencyModeBtn'),
       liveSyncToast: document.getElementById('liveSyncToast'),
@@ -11057,6 +11060,11 @@ function showHome(targetScroll = 0) {
         updateLatencyButtonUI();
       }
 
+      const epSecLive = document.getElementById('eplayVersionSection');
+      if (epSecLive) epSecLive.style.display = 'none';
+      const panelSecLive = elements.panelVersionSection || document.getElementById('panelVersionSection');
+      if (panelSecLive) panelSecLive.style.display = 'none';
+
       // Configura seletor de servidores/canais (movieVersionSwitcher)
       if (elements.movieVersionSwitcher) {
         if (fallbacks.length > 1) {
@@ -11431,6 +11439,8 @@ function showHome(targetScroll = 0) {
 
       if (elements.hybridModeBadge) elements.hybridModeBadge.style.display = 'inline-flex';
       if (elements.audioSyncControls) elements.audioSyncControls.style.display = 'inline-flex';
+      const epAudioSyncStart = document.getElementById('eplayAudioSyncMenu');
+      if (epAudioSyncStart) epAudioSyncStart.style.display = 'block';
       updateAudioOffsetUI(0);
       if (window.updatePlayerVolumeUI) window.updatePlayerVolumeUI();
 
@@ -11500,6 +11510,8 @@ function showHome(targetScroll = 0) {
 
       if (elements.hybridModeBadge) elements.hybridModeBadge.style.display = 'none';
       if (elements.audioSyncControls) elements.audioSyncControls.style.display = 'none';
+      const epAudioSyncStop = document.getElementById('eplayAudioSyncMenu');
+      if (epAudioSyncStop) epAudioSyncStop.style.display = 'none';
       if (window.updatePlayerVolumeUI) window.updatePlayerVolumeUI();
     }
 
@@ -11640,42 +11652,84 @@ function showHome(targetScroll = 0) {
     }
 
     function setupPlayerVersionSwitcher(groupOrMovie, activeVersion, allVersions) {
-      if (!elements.movieVersionSwitcher) return;
-
-      const effectiveVersions = getMovieAllPlayableVersions(groupOrMovie, allVersions);
-      if (!effectiveVersions || effectiveVersions.length <= 1) {
+      if (elements.movieVersionSwitcher) {
         elements.movieVersionSwitcher.style.display = 'none';
         elements.movieVersionSwitcher.innerHTML = '';
+      }
+
+      const effectiveVersions = getMovieAllPlayableVersions(groupOrMovie, allVersions);
+      const epSec = document.getElementById('eplayVersionSection');
+      const epBadge = document.getElementById('eplayVersionBadge');
+      const epItems = document.getElementById('eplayVersionItems');
+      const panelSec = elements.panelVersionSection || document.getElementById('panelVersionSection');
+      const panelSwitcher = elements.panelVersionSwitcher || document.getElementById('panelVersionSwitcher');
+      const panelHint = elements.panelVersionHint || document.getElementById('panelVersionHint');
+
+      if (!effectiveVersions || effectiveVersions.length <= 1) {
+        if (epSec) epSec.style.display = 'none';
+        if (epItems) epItems.innerHTML = '';
+        if (panelSec) panelSec.style.display = 'none';
+        if (panelSwitcher) panelSwitcher.innerHTML = '';
         return;
       }
 
-      elements.movieVersionSwitcher.style.display = 'inline-flex';
-      elements.movieVersionSwitcher.innerHTML = '';
-
       const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4, '4k_leg_hybrid': 5, 'leg_dub_hybrid': 6 };
-      const sorted = [...effectiveVersions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
+      const sorted = [...effectiveVersions].sort((a, b) => (orderMap[a.versionInfo?.type] || 99) - (orderMap[b.versionInfo?.type] || 99));
 
-      sorted.forEach(v => {
-        const isCurrent = (v.streamId === activeVersion.streamId);
-        const btn = document.createElement('button');
-        btn.className = `btn ${isCurrent ? 'btn-primary' : 'btn-secondary'}`;
-        btn.style.padding = '7px 12px';
-        btn.style.fontSize = '12px';
-        btn.style.display = 'inline-flex';
-        btn.style.alignItems = 'center';
-        btn.style.gap = '6px';
-        btn.style.cursor = 'pointer';
-        btn.title = `Alternar para versão ${v.versionInfo.label}`;
-        btn.innerHTML = `${v.versionInfo.icon} ${v.versionInfo.label}`;
+      const activeLabel = activeVersion?.versionInfo?.label || 'Padrão';
+      if (epBadge) epBadge.textContent = activeLabel;
+      if (panelHint) panelHint.textContent = `(Atual: ${activeLabel})`;
 
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          if (isCurrent) return;
-          switchLiveMovieVersion(groupOrMovie, v, effectiveVersions);
+      if (epSec) epSec.style.display = 'block';
+      if (epItems) {
+        epItems.innerHTML = '';
+        sorted.forEach(v => {
+          const isCurrent = (v.streamId === activeVersion.streamId || (v.isHybrid && activeVersion.isHybrid && v.versionInfo?.type === activeVersion.versionInfo?.type));
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `eplay-version-item${isCurrent ? ' active' : ''}`;
+          btn.innerHTML = `
+            <span style="display:flex;align-items:center;gap:7px;pointer-events:none;">
+              <span style="font-size:14px;">${v.versionInfo?.icon || '🎬'}</span>
+              <span>${escapeHtml(v.versionInfo?.label || 'Versão')}</span>
+            </span>
+            ${isCurrent ? '<span class="eplay-version-check">✓</span>' : ''}
+          `;
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (isCurrent) return;
+            applyUserChosenVersionPreference(v);
+            switchLiveMovieVersion(groupOrMovie, v, effectiveVersions);
+            if (window.showPlayerToast) {
+              window.showPlayerToast(`Áudio / Versão alterado para ${v.versionInfo?.label}`);
+            }
+          });
+          epItems.appendChild(btn);
         });
+      }
 
-        elements.movieVersionSwitcher.appendChild(btn);
-      });
+      if (panelSec) panelSec.style.display = 'flex';
+      if (panelSwitcher) {
+        panelSwitcher.innerHTML = '';
+        sorted.forEach(v => {
+          const isCurrent = (v.streamId === activeVersion.streamId || (v.isHybrid && activeVersion.isHybrid && v.versionInfo?.type === activeVersion.versionInfo?.type));
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `btn ${isCurrent ? 'btn-primary' : 'btn-secondary'}`;
+          btn.style.cssText = 'padding: 5px 12px; font-size: 11px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; border-radius: 6px; font-weight: 600;';
+          btn.innerHTML = `${isCurrent ? '✓ ' : ''}${v.versionInfo?.icon || '🎬'} ${escapeHtml(v.versionInfo?.label || 'Versão')}`;
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (isCurrent) return;
+            applyUserChosenVersionPreference(v);
+            switchLiveMovieVersion(groupOrMovie, v, effectiveVersions);
+            if (window.showPlayerToast) {
+              window.showPlayerToast(`Áudio / Versão alterado para ${v.versionInfo?.label}`);
+            }
+          });
+          panelSwitcher.appendChild(btn);
+        });
+      }
     }
 
     function switchLiveMovieVersion(groupOrMovie, targetVersion, allVersions) {
@@ -11769,41 +11823,84 @@ function showHome(targetScroll = 0) {
     }
 
     function setupPlayerSeriesVersionSwitcher(seriesGroup, activeVersion, seasonNum, epNum) {
-      if (!elements.movieVersionSwitcher) return;
-      const versions = seriesGroup?.versions || [];
-      if (!versions || versions.length <= 1) {
+      if (elements.movieVersionSwitcher) {
         elements.movieVersionSwitcher.style.display = 'none';
         elements.movieVersionSwitcher.innerHTML = '';
+      }
+
+      const versions = seriesGroup?.versions || [];
+      const epSec = document.getElementById('eplayVersionSection');
+      const epBadge = document.getElementById('eplayVersionBadge');
+      const epItems = document.getElementById('eplayVersionItems');
+      const panelSec = elements.panelVersionSection || document.getElementById('panelVersionSection');
+      const panelSwitcher = elements.panelVersionSwitcher || document.getElementById('panelVersionSwitcher');
+      const panelHint = elements.panelVersionHint || document.getElementById('panelVersionHint');
+
+      if (!versions || versions.length <= 1) {
+        if (epSec) epSec.style.display = 'none';
+        if (epItems) epItems.innerHTML = '';
+        if (panelSec) panelSec.style.display = 'none';
+        if (panelSwitcher) panelSwitcher.innerHTML = '';
         return;
       }
 
-      elements.movieVersionSwitcher.style.display = 'inline-flex';
-      elements.movieVersionSwitcher.innerHTML = '';
-
       const orderMap = { 'dublado': 1, 'legendado': 2 };
-      const sorted = [...versions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
+      const sorted = [...versions].sort((a, b) => (orderMap[a.versionInfo?.type] || 99) - (orderMap[b.versionInfo?.type] || 99));
 
-      sorted.forEach(v => {
-        const isCurrent = activeVersion && (v.seriesId === activeVersion.seriesId);
-        const btn = document.createElement('button');
-        btn.className = `btn ${isCurrent ? 'btn-primary' : 'btn-secondary'}`;
-        btn.style.padding = '7px 12px';
-        btn.style.fontSize = '12px';
-        btn.style.display = 'inline-flex';
-        btn.style.alignItems = 'center';
-        btn.style.gap = '6px';
-        btn.style.cursor = 'pointer';
-        btn.title = `Alternar áudio para ${v.versionInfo.label}`;
-        btn.innerHTML = `${v.versionInfo.icon} ${v.versionInfo.label}`;
+      const activeLabel = activeVersion?.versionInfo?.label || 'Padrão';
+      if (epBadge) epBadge.textContent = activeLabel;
+      if (panelHint) panelHint.textContent = `(Atual: ${activeLabel})`;
 
-        btn.addEventListener('click', async () => {
-          if (isCurrent) return;
-          applyUserChosenVersionPreference(v);
-          await switchSeriesEpisodeInPlayer(v, seasonNum, epNum);
+      if (epSec) epSec.style.display = 'block';
+      if (epItems) {
+        epItems.innerHTML = '';
+        sorted.forEach(v => {
+          const isCurrent = activeVersion && (v.seriesId === activeVersion.seriesId);
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `eplay-version-item${isCurrent ? ' active' : ''}`;
+          btn.innerHTML = `
+            <span style="display:flex;align-items:center;gap:7px;pointer-events:none;">
+              <span style="font-size:14px;">${v.versionInfo?.icon || '🎬'}</span>
+              <span>${escapeHtml(v.versionInfo?.label || 'Versão')}</span>
+            </span>
+            ${isCurrent ? '<span class="eplay-version-check">✓</span>' : ''}
+          `;
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (isCurrent) return;
+            applyUserChosenVersionPreference(v);
+            if (window.showPlayerToast) {
+              window.showPlayerToast(`Alternando áudio para ${v.versionInfo?.label}...`);
+            }
+            await switchSeriesEpisodeInPlayer(v, seasonNum, epNum);
+          });
+          epItems.appendChild(btn);
         });
+      }
 
-        elements.movieVersionSwitcher.appendChild(btn);
-      });
+      if (panelSec) panelSec.style.display = 'flex';
+      if (panelSwitcher) {
+        panelSwitcher.innerHTML = '';
+        sorted.forEach(v => {
+          const isCurrent = activeVersion && (v.seriesId === activeVersion.seriesId);
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = `btn ${isCurrent ? 'btn-primary' : 'btn-secondary'}`;
+          btn.style.cssText = 'padding: 5px 12px; font-size: 11px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; border-radius: 6px; font-weight: 600;';
+          btn.innerHTML = `${isCurrent ? '✓ ' : ''}${v.versionInfo?.icon || '🎬'} ${escapeHtml(v.versionInfo?.label || 'Versão')}`;
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (isCurrent) return;
+            applyUserChosenVersionPreference(v);
+            if (window.showPlayerToast) {
+              window.showPlayerToast(`Alternando áudio para ${v.versionInfo?.label}...`);
+            }
+            await switchSeriesEpisodeInPlayer(v, seasonNum, epNum);
+          });
+          panelSwitcher.appendChild(btn);
+        });
+      }
     }
 
     async function switchSeriesEpisodeInPlayer(targetVersion, seasonNum, epNum) {
@@ -12419,6 +12516,16 @@ function showHome(targetScroll = 0) {
         elements.movieVersionSwitcher.style.display = 'none';
         elements.movieVersionSwitcher.innerHTML = '';
       }
+      const epSecClose = document.getElementById('eplayVersionSection');
+      if (epSecClose) epSecClose.style.display = 'none';
+      const epItemsClose = document.getElementById('eplayVersionItems');
+      if (epItemsClose) epItemsClose.innerHTML = '';
+      const epAudioSyncClose = document.getElementById('eplayAudioSyncMenu');
+      if (epAudioSyncClose) epAudioSyncClose.style.display = 'none';
+      const panelSecClose = elements.panelVersionSection || document.getElementById('panelVersionSection');
+      if (panelSecClose) panelSecClose.style.display = 'none';
+      const panelSwitcherClose = elements.panelVersionSwitcher || document.getElementById('panelVersionSwitcher');
+      if (panelSwitcherClose) panelSwitcherClose.innerHTML = '';
 
       // Limpar dados da barra lateral de informações
       if (elements.sidebarPoster) elements.sidebarPoster.src = '';
