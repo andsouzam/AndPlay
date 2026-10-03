@@ -145,6 +145,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let viewTransitionTimer = null;
     let homeFeaturedItems = [];
     let cachedHomeFeaturedItems = null;
+    let cachedHomeCatalogRails = { movie: null, series: null, interleaved: null };
+    let cachedHomeRecommendations = null;
     let homeFeaturedIndex = 0;
     let homeFeaturedTimer = null;
     let homeDisplayUsage = new Map();
@@ -4284,6 +4286,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       elements.userLogoutBtn?.addEventListener('click', async () => {
         if (!confirm('Deseja realmente sair da sua conta? Seus dados locais permanecerão salvos.')) return;
+        cachedHomeFeaturedItems = null;
+        cachedHomeCatalogRails = { movie: null, series: null, interleaved: null };
+        cachedHomeRecommendations = null;
         await window.AndPlayAccount?.signOutDirect?.();
         showLoginScreen('login');
       });
@@ -4313,6 +4318,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             fullMoviesCache = null;
             fullSeriesCache = null;
             cachedHomeFeaturedItems = null;
+            cachedHomeCatalogRails = { movie: null, series: null, interleaved: null };
+            cachedHomeRecommendations = null;
           } catch (e) {}
 
           alert('Todos os seus dados salvos foram apagados com sucesso do banco de dados e deste aparelho!');
@@ -4397,6 +4404,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         fullMoviesCache = null;
         fullSeriesCache = null;
         cachedHomeFeaturedItems = null;
+        cachedHomeCatalogRails = { movie: null, series: null, interleaved: null };
+        cachedHomeRecommendations = null;
         alert('Cache de catálogos limpo com sucesso! Os catálogos serão recarregados da fonte na próxima consulta.');
         renderUserPage();
       });
@@ -5251,7 +5260,31 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function getHomeRecommendationMix(items) {
-      if (!items.length) return [];
+      if (!items.length) return cachedHomeRecommendations || [];
+
+      // Se já temos recomendações selecionadas nesta sessão, preservamos os mesmos itens,
+      // atualizando apenas referências e notas in-place para estabilidade total e zero piscamento
+      if (Array.isArray(cachedHomeRecommendations) && cachedHomeRecommendations.length > 0) {
+        const itemMap = new Map();
+        items.forEach(it => {
+          const k = (it.type || '') + ':' + (it.id || '');
+          if (k) itemMap.set(k, it);
+        });
+
+        cachedHomeRecommendations.forEach(entry => {
+          const fresh = itemMap.get((entry.type || '') + ':' + (entry.id || ''));
+          if (!fresh) return;
+          entry.item = fresh.item || entry.item;
+          entry.title = cleanDisplayTitle(fresh.title || entry.title);
+          entry.year = fresh.year || entry.year;
+          entry.rating = fresh.rating || entry.rating;
+          entry.poster = fresh.poster || entry.poster;
+          entry.plot = fresh.plot || entry.plot;
+          entry.added = fresh.added || entry.added;
+        });
+        return cachedHomeRecommendations;
+      }
+
       const profile = readTasteProfile();
       const topThemes = getTasteTopThemes(4);
       const normalizedHistory = getNormalizedRemoteHistory();
@@ -5321,12 +5354,42 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           combinedMix.push(sampledDiscoveryItems[di++]);
         }
       }
-      return combinedMix.slice(0, HOME_RAIL_ITEM_LIMIT);
+      const finalRecs = combinedMix.slice(0, HOME_RAIL_ITEM_LIMIT);
+      if (finalRecs.length >= HOME_THEME_MIN_ITEMS) {
+        cachedHomeRecommendations = finalRecs;
+      }
+      return finalRecs;
     }
 
     function buildHomeCatalogRails(type) {
       const items = getHomeCatalogItems(type);
-      if (!items.length) return [];
+      if (!items.length) return cachedHomeCatalogRails[type] || [];
+
+      // Se já temos trilhos em cache para este tipo e o catálogo não estava incompleto,
+      // preservamos os mesmos trilhos e itens, atualizando apenas referências e metadados in-place
+      if (Array.isArray(cachedHomeCatalogRails[type]) && cachedHomeCatalogRails[type].length >= 2) {
+        const itemMap = new Map();
+        items.forEach(it => {
+          const k = (it.type || '') + ':' + (it.id || '');
+          if (k) itemMap.set(k, it);
+        });
+
+        cachedHomeCatalogRails[type].forEach(rail => {
+          if (!Array.isArray(rail.items)) return;
+          rail.items.forEach(it => {
+            const fresh = itemMap.get((it.type || '') + ':' + (it.id || ''));
+            if (!fresh) return;
+            it.item = fresh.item || it.item;
+            it.title = cleanDisplayTitle(fresh.title || it.title);
+            it.year = fresh.year || it.year;
+            it.rating = fresh.rating || it.rating;
+            it.poster = fresh.poster || it.poster;
+            it.plot = fresh.plot || it.plot;
+            it.added = fresh.added || it.added;
+          });
+        });
+        return cachedHomeCatalogRails[type];
+      }
 
       const typeLabel = type === 'series' ? 'Séries' : 'Filmes';
 
@@ -5473,6 +5536,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
       });
 
+      if (rails.length >= 2) {
+        cachedHomeCatalogRails[type] = rails;
+      }
       return rails;
     }
 
@@ -5480,6 +5546,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const card = document.createElement('button');
       card.type = 'button';
       card.className = 'home-title-card';
+      card.dataset.itemKey = (item.type || '') + ':' + (item.id || '');
 
       const ratingInfo = getHomeRatingInfo(item);
       const meta = [
@@ -5504,6 +5571,44 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       });
 
       return card;
+    }
+
+    function updateHomeTitleCard(card, item) {
+      if (!card || !item) return;
+      const ratingInfo = getHomeRatingInfo(item);
+      const meta = [
+        item.year,
+        ratingInfo.value > 0 ? '★ ' + ratingInfo.value.toFixed(1) + (ratingInfo.source ? ' ' + ratingInfo.source : '') : ''
+      ].filter(Boolean).join(' • ');
+
+      const posterImg = card.querySelector('.home-title-poster img');
+      if (posterImg && item.poster && posterImg.getAttribute('src') !== item.poster) {
+        posterImg.src = item.poster;
+      }
+
+      const ratingEl = card.querySelector('.home-title-rating');
+      if (ratingInfo.value > 0) {
+        const ratingHtml = '★ ' + ratingInfo.value.toFixed(1) + (ratingInfo.source ? ' <em>' + escapeHtml(ratingInfo.source) + '</em>' : '');
+        if (ratingEl) {
+          if (ratingEl.innerHTML !== ratingHtml) ratingEl.innerHTML = ratingHtml;
+        } else {
+          const posterWrap = card.querySelector('.home-title-poster');
+          if (posterWrap) {
+            const span = document.createElement('span');
+            span.className = 'home-title-rating';
+            span.innerHTML = ratingHtml;
+            posterWrap.appendChild(span);
+          }
+        }
+      } else if (ratingEl) {
+        ratingEl.remove();
+      }
+
+      const small = card.querySelector('small');
+      const expectedMeta = meta || (item.type === 'series' ? 'Série' : 'Filme');
+      if (small && small.textContent !== expectedMeta) {
+        small.textContent = expectedMeta;
+      }
     }
 
     function filterNonSequentialItems(candidates, previousRailKeys) {
@@ -5759,6 +5864,59 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return block;
     }
 
+    function renderOrUpdateHomeRailBlock(existingBlock, rail, type, savedScrolls) {
+      if (!existingBlock) return renderHomeRailBlock(rail, type, savedScrolls);
+
+      const withinLimit = getHomeItemsWithinDisplayLimit(rail.items);
+      const visibleItems = filterNonSequentialItems(withinLimit, lastRenderedRailItemKeys);
+      const minItems = rail.key === 'latest' ? 1 : HOME_THEME_MIN_ITEMS;
+      if (visibleItems.length < minItems) {
+        existingBlock.style.display = 'none';
+        return null;
+      }
+      existingBlock.style.display = '';
+
+      const scroller = existingBlock.querySelector('.home-theme-scroller');
+      if (!scroller) return renderHomeRailBlock(rail, type, savedScrolls);
+
+      const currentCards = Array.from(scroller.querySelectorAll('.home-title-card'));
+      const isSameCards = currentCards.length === visibleItems.length &&
+        currentCards.every((card, i) => card.dataset.itemKey === ((visibleItems[i].type || '') + ':' + (visibleItems[i].id || '')));
+
+      if (isSameCards) {
+        visibleItems.forEach((item, i) => updateHomeTitleCard(currentCards[i], item));
+        registerHomeDisplayItems(visibleItems);
+        lastRenderedRailItemKeys = new Set(visibleItems.map(item => getHomeDisplayKey(item)).filter(Boolean));
+
+        const countSpan = existingBlock.querySelector('.home-theme-heading > span');
+        if (countSpan && countSpan.textContent !== visibleItems.length + ' títulos') {
+          countSpan.textContent = visibleItems.length + ' títulos';
+        }
+        return existingBlock;
+      }
+
+      // Se os cards mudaram (ex: novos itens), atualiza o scroller sem destruir o container do trilho
+      scroller.innerHTML = '';
+      visibleItems.forEach(item => scroller.appendChild(renderHomeTitleCard(item)));
+      registerHomeDisplayItems(visibleItems);
+      lastRenderedRailItemKeys = new Set(visibleItems.map(item => getHomeDisplayKey(item)).filter(Boolean));
+
+      const countSpan = existingBlock.querySelector('.home-theme-heading > span');
+      if (countSpan) countSpan.textContent = visibleItems.length + ' títulos';
+
+      const uniqueKey = type + ':' + rail.key;
+      const prevScroll = savedScrolls.get(uniqueKey);
+      if (prevScroll > 0) {
+        scroller.scrollLeft = prevScroll;
+      }
+
+      const prevBtn = existingBlock.querySelector('.home-rail-prev');
+      const nextBtn = existingBlock.querySelector('.home-rail-next');
+      if (prevBtn && nextBtn) updateHomeRailControls(scroller, prevBtn, nextBtn);
+
+      return existingBlock;
+    }
+
     function renderHomeCatalogRails(type, railElement, sectionElement, savedScrolls = new Map()) {
       if (!railElement || !sectionElement) return;
 
@@ -5768,7 +5926,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           savedScrolls.set(k, s.scrollLeft);
         }
       });
-      railElement.innerHTML = '';
 
       const head = sectionElement.querySelector('.home-content-section-head');
       if (head) head.style.display = '';
@@ -5779,6 +5936,24 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         return;
       }
 
+      const existingBlocks = Array.from(railElement.querySelectorAll(':scope > .home-theme-rail'));
+      const canUpdateInPlace = existingBlocks.length === rails.length &&
+        existingBlocks.every((block, idx) => {
+          const scroller = block.querySelector('.home-theme-scroller');
+          return scroller && scroller.dataset.railKey === (type + ':' + rails[idx].key);
+        });
+
+      if (canUpdateInPlace) {
+        let renderedRails = 0;
+        rails.forEach((rail, idx) => {
+          const block = renderOrUpdateHomeRailBlock(existingBlocks[idx], rail, type, savedScrolls);
+          if (block) renderedRails++;
+        });
+        sectionElement.style.display = renderedRails ? '' : 'none';
+        return;
+      }
+
+      railElement.innerHTML = '';
       let renderedRails = 0;
       rails.forEach(rail => {
         const block = renderHomeRailBlock(rail, type, savedScrolls);
@@ -5797,7 +5972,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       container.querySelectorAll('.home-theme-scroller').forEach(s => {
         if (s.dataset.railKey) savedScrolls.set(s.dataset.railKey, s.scrollLeft);
       });
-      container.innerHTML = '';
 
       if (otherSection) {
         otherSection.style.display = 'none';
@@ -5829,6 +6003,24 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (i < secondList.length) interleaved.push(secondList[i]);
       }
 
+      const existingBlocks = Array.from(container.querySelectorAll(':scope > .home-theme-rail'));
+      const canUpdateInPlace = existingBlocks.length === interleaved.length &&
+        existingBlocks.every((block, idx) => {
+          const scroller = block.querySelector('.home-theme-scroller');
+          return scroller && scroller.dataset.railKey === (interleaved[idx]._railType + ':' + interleaved[idx].key);
+        });
+
+      if (canUpdateInPlace) {
+        let renderedRails = 0;
+        interleaved.forEach((rail, idx) => {
+          const block = renderOrUpdateHomeRailBlock(existingBlocks[idx], rail, rail._railType, savedScrolls);
+          if (block) renderedRails++;
+        });
+        activeSection.style.display = renderedRails ? '' : 'none';
+        return;
+      }
+
+      container.innerHTML = '';
       let renderedRails = 0;
       interleaved.forEach(rail => {
         const block = renderHomeRailBlock(rail, rail._railType, savedScrolls);
@@ -5929,14 +6121,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
 
       section.style.display = '';
-      rail.innerHTML = '';
-      nonSequential.forEach(item => rail.appendChild(renderHomeTitleCard(item)));
-      registerHomeDisplayItems(nonSequential);
-      lastRenderedRailItemKeys = new Set(nonSequential.map(item => getHomeDisplayKey(item)).filter(Boolean));
-
-      if (currentScroll > 0) {
-        rail.scrollLeft = currentScroll;
-      }
 
       const topThemes = getTasteTopThemes(2);
       const title = section.querySelector('h2');
@@ -5947,6 +6131,30 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           : 'Para você';
       }
       if (kicker) kicker.remove();
+
+      // Verifica se os cards já renderizados no DOM correspondem aos itens atuais
+      const currentCards = Array.from(rail.querySelectorAll('.home-title-card'));
+      const isSameItems = currentCards.length === nonSequential.length &&
+        currentCards.every((card, i) => card.dataset.itemKey === ((nonSequential[i].type || '') + ':' + (nonSequential[i].id || '')));
+
+      if (isSameItems) {
+        nonSequential.forEach((item, index) => {
+          updateHomeTitleCard(currentCards[index], item);
+        });
+        registerHomeDisplayItems(nonSequential);
+        lastRenderedRailItemKeys = new Set(nonSequential.map(item => getHomeDisplayKey(item)).filter(Boolean));
+        if (currentScroll > 0) rail.scrollLeft = currentScroll;
+        return;
+      }
+
+      rail.innerHTML = '';
+      nonSequential.forEach(item => rail.appendChild(renderHomeTitleCard(item)));
+      registerHomeDisplayItems(nonSequential);
+      lastRenderedRailItemKeys = new Set(nonSequential.map(item => getHomeDisplayKey(item)).filter(Boolean));
+
+      if (currentScroll > 0) {
+        rail.scrollLeft = currentScroll;
+      }
 
       setupSingleHomeRailArrow(rail, elements.homeRecommendationsNext, elements.homeRecommendationsPrev);
     }
@@ -6001,6 +6209,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       homeFeaturedIndex = Math.min(homeFeaturedIndex, Math.max(0, homeFeaturedItems.length - 1));
 
       if (!homeFeaturedItems.length) {
+        if (elements.homeFeaturedTrack.children.length > 0) return;
         if (elements.homeFeaturedLoading) {
           elements.homeFeaturedLoading.style.display = 'flex';
           elements.homeFeaturedLoading.textContent = 'Carregando novidades...';
@@ -6252,11 +6461,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!elements.homeWatchedRail) return;
       const currentScroll = savedScrollLeft || elements.homeWatchedRail.scrollLeft || 0;
       const items = getHomeWatchedItems();
-      elements.homeWatchedRail.innerHTML = '';
-      elements.homeWatchedPrev?.classList.add('is-hidden');
-      elements.homeWatchedPrev && (elements.homeWatchedPrev.disabled = true);
-      elements.homeWatchedNext?.classList.add('is-hidden');
-      elements.homeWatchedNext && (elements.homeWatchedNext.disabled = true);
+
       elements.homeWatchedSection?.style.setProperty('display', items.length ? '' : 'none');
 
       if (!items.length) {
@@ -6277,9 +6482,39 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       registerHomeDisplayItems(items);
       lastRenderedRailItemKeys = new Set(items.map(item => getHomeDisplayKey(item)).filter(Boolean));
 
+      const currentCards = Array.from(elements.homeWatchedRail.querySelectorAll('.home-watched-card'));
+      const isSameItems = currentCards.length === items.length &&
+        currentCards.every((card, i) => card.dataset.itemKey === ((items[i].type || '') + ':' + (items[i].id || '')));
+
+      if (isSameItems) {
+        items.forEach((item, index) => {
+          const card = currentCards[index];
+          if (!card) return;
+          const progress = item.progress && item.progress.duration > 0
+            ? Math.max(0, Math.min(100, item.progress.position / item.progress.duration * 100))
+            : 0;
+          const sub = item.type === 'series'
+            ? (item.progress?.seasonNum && item.progress?.episodeNum ? 'T' + item.progress.seasonNum + ' • E' + item.progress.episodeNum : 'Série')
+            : (progress > 0 && progress < 95 ? 'Retomar em ' + formatResumeTime(item.progress.position) : (item.year || 'Filme'));
+          const progressBar = card.querySelector('.home-watched-progress span');
+          if (progressBar) progressBar.style.width = progress + '%';
+          const subEl = card.querySelector('small');
+          if (subEl && subEl.textContent !== sub) subEl.textContent = sub;
+        });
+        if (currentScroll > 0) elements.homeWatchedRail.scrollLeft = currentScroll;
+        return;
+      }
+
+      elements.homeWatchedRail.innerHTML = '';
+      elements.homeWatchedPrev?.classList.add('is-hidden');
+      elements.homeWatchedPrev && (elements.homeWatchedPrev.disabled = true);
+      elements.homeWatchedNext?.classList.add('is-hidden');
+      elements.homeWatchedNext && (elements.homeWatchedNext.disabled = true);
+
       items.forEach(item => {
         const card = document.createElement('div');
         card.className = 'home-watched-card';
+        card.dataset.itemKey = (item.type || '') + ':' + (item.id || '');
         card.tabIndex = 0;
         card.setAttribute('role', 'button');
         const progress = item.progress && item.progress.duration > 0
@@ -6431,12 +6666,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       renderHomeCatalogSections(savedScrolls);
     }
 
-    function scheduleHomeCatalogRender() {
+    function scheduleHomeCatalogRender(delay = 40) {
       if (homeCatalogRenderTimer !== null) return;
       homeCatalogRenderTimer = window.setTimeout(() => {
         homeCatalogRenderTimer = null;
         if (currentMode === 'home') renderHomeDashboard();
-      }, 0);
+      }, delay);
     }
 
     function startViewTransition() {
@@ -8006,7 +8241,9 @@ function showHome(targetScroll = 0) {
         if (currentMode !== 'home') return;
         renderHomeFeatured();
         renderHomeWatched();
-        scheduleHomeCatalogRender();
+        if (fullMoviesCache?.length || fullSeriesCache?.length || cachedHomeCatalogRails.movie || cachedHomeCatalogRails.series) {
+          scheduleHomeCatalogRender();
+        }
       }, 0);
       startHomeFeaturedTimer();
       loadHomeDashboardData().catch(error => console.warn('[EPlay Home] Catálogo:', error));
