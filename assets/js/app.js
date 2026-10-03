@@ -1399,12 +1399,17 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
           } else if (active === elements.tabFavoritesBtn) {
             if (key === 'ArrowLeft') { e.preventDefault(); elements.tabWatchedBtn?.focus(); return; }
-            if (key === 'ArrowRight' && elements.tabUserBtn) { e.preventDefault(); elements.tabUserBtn.focus(); return; }
+            if (key === 'ArrowRight' && elements.searchInput) { e.preventDefault(); elements.searchInput.focus(); return; }
             if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
-          } else if (active === elements.tabUserBtn) {
+          } else if (active === elements.searchInput) {
             if (key === 'ArrowLeft') { e.preventDefault(); elements.tabFavoritesBtn?.focus(); return; }
-            if (key === 'ArrowRight' && elements.accountBtn) { e.preventDefault(); elements.accountBtn.focus(); return; }
-            if (key === 'ArrowDown') { e.preventDefault(); elements.userHeroSyncBtn?.focus(); return; }
+            if (key === 'ArrowRight') {
+              e.preventDefault();
+              if (elements.categorySelect && elements.categorySelect.style.display !== 'none') elements.categorySelect.focus();
+              else if (elements.accountBtn) elements.accountBtn.focus();
+              return;
+            }
+            if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
           } else if (active === elements.categorySelect) {
             if (key === 'ArrowUp') {
               e.preventDefault();
@@ -1413,11 +1418,22 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
               else elements.tabMoviesBtn.focus();
               return;
             }
-            if (key === 'ArrowRight') { e.preventDefault(); elements.searchInput.focus(); return; }
+            if (key === 'ArrowLeft') { e.preventDefault(); elements.searchInput?.focus(); return; }
+            if (key === 'ArrowRight') { e.preventDefault(); elements.accountBtn?.focus(); return; }
             if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
-          } else if (active === elements.searchInput) {
-            if (key === 'ArrowLeft') { e.preventDefault(); elements.categorySelect.focus(); return; }
-            if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
+          } else if (active === elements.accountBtn) {
+            if (key === 'ArrowLeft') {
+              e.preventDefault();
+              if (elements.categorySelect && elements.categorySelect.style.display !== 'none') elements.categorySelect.focus();
+              else if (elements.searchInput) elements.searchInput.focus();
+              return;
+            }
+            if (key === 'ArrowDown') {
+              e.preventDefault();
+              if (elements.userHeroSyncBtn && elements.userDashboard?.style.display !== 'none') elements.userHeroSyncBtn.focus();
+              else if (cards.length > 0) cards[0].focus();
+              return;
+            }
           }
 
           if (curIndex !== -1) {
@@ -3578,6 +3594,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       isWatchedView = false;
       currentMode = 'favorites';
 
+      hideLoading();
       if (elements.moviesHub) elements.moviesHub.style.display = 'none';
       if (elements.seriesHub) elements.seriesHub.style.display = 'none';
       if (elements.liveHub) elements.liveHub.style.display = 'none';
@@ -3947,6 +3964,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       isFavoritesView = false;
       currentMode = 'watched';
 
+      hideLoading();
       if (elements.moviesHub) elements.moviesHub.style.display = 'none';
       if (elements.seriesHub) elements.seriesHub.style.display = 'none';
       if (elements.liveHub) elements.liveHub.style.display = 'none';
@@ -4726,6 +4744,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       clearInterval(homeFeaturedTimer); homeFeaturedTimer = null;
       window.EPlayTvEpg?.deactivate();
 
+      hideLoading();
       if (elements.moviesHub) elements.moviesHub.style.display = 'none';
       if (elements.seriesHub) elements.seriesHub.style.display = 'none';
       if (elements.liveHub) elements.liveHub.style.display = 'none';
@@ -6901,6 +6920,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         currentMovieGenreFilter = 'ALL';
         elements.moviesViewCuratedBtn.classList.add('active');
         elements.moviesViewGridBtn.classList.remove('active');
+        if (elements.searchInput) elements.searchInput.value = '';
+        if (elements.moviesHero) elements.moviesHero.style.removeProperty('display');
+        if (elements.moviesGenrePills) elements.moviesGenrePills.style.removeProperty('display');
         renderMoviesGenrePills();
         renderMoviesHub();
       });
@@ -7414,6 +7436,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function applyMoviesFiltersAndSort() {
+      hideLoading();
       let list = (fullMoviesCache || []).slice();
 
       if (currentMovieGenreFilter !== 'ALL') {
@@ -7518,6 +7541,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       renderMoviesHero();
       renderMoviesGenrePills();
+
+      if (elements.searchInput?.value?.trim()) {
+        if (elements.moviesHero) elements.moviesHero.style.display = 'none';
+        if (elements.moviesGenrePills) elements.moviesGenrePills.style.display = 'none';
+      } else {
+        if (elements.moviesHero) elements.moviesHero.style.removeProperty('display');
+        if (elements.moviesGenrePills) elements.moviesGenrePills.style.removeProperty('display');
+      }
 
       const inCurated = isMoviesCuratedMode && currentMovieGenreFilter === 'ALL' && !elements.searchInput.value && !moviesFilter4K && !moviesFilterDub && !moviesFilterLeg && moviesSortBy === 'featured';
 
@@ -7639,6 +7670,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         currentSeriesGenreFilter = 'ALL';
         elements.seriesViewCuratedBtn.classList.add('active');
         elements.seriesViewGridBtn.classList.remove('active');
+        if (elements.searchInput) elements.searchInput.value = '';
+        if (elements.seriesHero) elements.seriesHero.style.removeProperty('display');
+        if (elements.seriesGenrePills) elements.seriesGenrePills.style.removeProperty('display');
         renderSeriesGenrePills();
         renderSeriesHub();
       });
@@ -8157,6 +8191,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function applySeriesFiltersAndSort() {
+      hideLoading();
       let list = (fullSeriesCache || []).slice();
 
       if (currentSeriesGenreFilter !== 'ALL') {
@@ -8265,6 +8300,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       renderSeriesHero();
       renderSeriesGenrePills();
 
+      if (elements.searchInput?.value?.trim()) {
+        if (elements.seriesHero) elements.seriesHero.style.display = 'none';
+        if (elements.seriesGenrePills) elements.seriesGenrePills.style.display = 'none';
+      } else {
+        if (elements.seriesHero) elements.seriesHero.style.removeProperty('display');
+        if (elements.seriesGenrePills) elements.seriesGenrePills.style.removeProperty('display');
+      }
+
       const inCurated = isSeriesCuratedMode && currentSeriesGenreFilter === 'ALL' && !elements.searchInput.value && !seriesFilterDub && !seriesFilterLeg && seriesSortBy === 'featured';
 
       if (inCurated) {
@@ -8286,6 +8329,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
 function showHome(targetScroll = 0) {
+      hideLoading();
       if (!window.AndPlayAccount?.isSignedIn?.()) {
         showLoginScreen();
         return;
@@ -8376,6 +8420,7 @@ function showHome(targetScroll = 0) {
     // CONTROLE DE ABAS (FILMES / SÉRIES / AO VIVO)
     // ==========================================
     async function switchMode(mode, forceReload = false) {
+      hideLoading();
       if (!window.AndPlayAccount?.isSignedIn?.()) {
         showLoginScreen();
         return;
@@ -9843,7 +9888,10 @@ function showHome(targetScroll = 0) {
           loadFullMovies(),
           loadFullSeries()
         ]);
-        if (requestId !== globalSearchRequestId || normalizeSearch(elements.searchInput?.value || '') !== q) return;
+        if (requestId !== globalSearchRequestId || normalizeSearch(elements.searchInput?.value || '') !== q) {
+          hideLoading();
+          return;
+        }
 
         if (!globalSearchCatalogCache) {
           globalSearchCatalogCache = [
@@ -9854,14 +9902,20 @@ function showHome(targetScroll = 0) {
         currentMediaList = globalSearchCatalogCache;
         elements.categorySelect.value = 'ALL';
         if (elements.categoryLabel) elements.categoryLabel.textContent = 'Busca: ' + term;
+        hideLoading();
         applyFilterAndRender(term);
         void resolveOnlineContextualSearch(term, requestId);
       } catch (error) {
         if (requestId !== globalSearchRequestId) return;
+        hideLoading();
         elements.mediaGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#888;padding:60px 20px;">Não foi possível realizar a busca agora.</div>';
         elements.loadMoreContainer.style.display = 'none';
         elements.mediaCount.textContent = 'Busca indisponível';
         console.warn('[EPlay Search] Falha na busca global:', error);
+      } finally {
+        if (requestId === globalSearchRequestId) {
+          hideLoading();
+        }
       }
     }
 
@@ -9927,6 +9981,9 @@ function showHome(targetScroll = 0) {
         return;
       }
       const q = normalizeSearch(term);
+      if (!q) {
+        hideLoading();
+      }
       if (isWatchedView || isFavoritesView) {
         applyFilterAndRender(term);
         return;
@@ -9940,21 +9997,44 @@ function showHome(targetScroll = 0) {
         return;
       }
       if (currentMode === 'movies') {
-        if (!q && isMoviesCuratedMode && currentMovieGenreFilter === 'ALL' && !moviesFilter4K && !moviesFilterDub && !moviesFilterLeg && moviesSortBy === 'featured') {
-          renderMoviesHub();
+        if (!q) {
+          if (elements.moviesHero) elements.moviesHero.style.removeProperty('display');
+          if (elements.moviesGenrePills) elements.moviesGenrePills.style.removeProperty('display');
+          if (isMoviesCuratedMode && currentMovieGenreFilter === 'ALL' && !moviesFilter4K && !moviesFilterDub && !moviesFilterLeg && moviesSortBy === 'featured') {
+            renderMoviesHub();
+            return;
+          }
+          applyMoviesFiltersAndSort();
           return;
         }
+        // Ao buscar em Filmes, sai imediatamente dos trilhos e exibe a grade de resultados (como na Home)
+        if (elements.moviesCuratedRails) elements.moviesCuratedRails.style.display = 'none';
+        if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
+        document.querySelector('.status-bar')?.style.removeProperty('display');
+        if (elements.moviesHero) elements.moviesHero.style.display = 'none';
+        if (elements.moviesGenrePills) elements.moviesGenrePills.style.display = 'none';
+        elements.moviesViewCuratedBtn?.classList.remove('active');
+        elements.moviesViewGridBtn?.classList.add('active');
         applyMoviesFiltersAndSort();
         return;
       }
       if (currentMode === 'series') {
-        if (!q && isSeriesCuratedMode && currentSeriesGenreFilter === 'ALL' && !seriesFilterDub && !seriesFilterLeg && seriesSortBy === 'featured') {
-          renderSeriesHub();
+        if (!q) {
+          if (elements.seriesHero) elements.seriesHero.style.removeProperty('display');
+          if (elements.seriesGenrePills) elements.seriesGenrePills.style.removeProperty('display');
+          if (isSeriesCuratedMode && currentSeriesGenreFilter === 'ALL' && !seriesFilterDub && !seriesFilterLeg && seriesSortBy === 'featured') {
+            renderSeriesHub();
+            return;
+          }
+          applySeriesFiltersAndSort();
           return;
         }
+        // Ao buscar em Séries, sai imediatamente dos trilhos e exibe a grade de resultados (como na Home)
         if (elements.seriesCuratedRails) elements.seriesCuratedRails.style.display = 'none';
         if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
         document.querySelector('.status-bar')?.style.removeProperty('display');
+        if (elements.seriesHero) elements.seriesHero.style.display = 'none';
+        if (elements.seriesGenrePills) elements.seriesGenrePills.style.display = 'none';
         elements.seriesViewCuratedBtn?.classList.remove('active');
         elements.seriesViewGridBtn?.classList.add('active');
         applySeriesFiltersAndSort();
@@ -9970,6 +10050,7 @@ function showHome(targetScroll = 0) {
     }
 
     function applyFilterAndRender(term) {
+      hideLoading();
       const q = normalizeSearch(term);
       if (!q) {
         currentFilteredList = currentMediaList;
