@@ -737,6 +737,79 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return baseVersions;
     }
 
+    // Seleciona automaticamente a melhor versão de filme conforme as preferências salvas na conta do usuário
+    // (com prioridade padrão para Legendado e 4K)
+    function pickPreferredMovieVersion(versions) {
+      if (!Array.isArray(versions) || versions.length === 0) return null;
+      if (versions.length === 1) return versions[0];
+
+      const prefAudio = (typeof getPreferredAudioPreference === 'function') ? getPreferredAudioPreference() : 'leg';
+      const prefQuality = (typeof getPreferredQualityPreference === 'function') ? getPreferredQualityPreference() : '4k';
+
+      const fourKLegNative = versions.find(v => v.versionInfo?.type === '4k_leg');
+      const fourKLegHybrid = versions.find(v => v.versionInfo?.type === '4k_leg_hybrid');
+      const fhdLeg = versions.find(v => v.versionInfo?.type === 'legendado');
+      const fourKDub = versions.find(v => v.versionInfo?.type === '4k_dub');
+      const fhdDub = versions.find(v => v.versionInfo?.type === 'dublado');
+      const legDubHybrid = versions.find(v => v.versionInfo?.type === 'leg_dub_hybrid');
+
+      if (prefAudio === 'leg') {
+        if (prefQuality === '4k') {
+          if (fourKLegNative) return fourKLegNative;
+          if (fourKLegHybrid) return fourKLegHybrid;
+          if (fhdLeg) return fhdLeg;
+          if (fourKDub) return fourKDub;
+          if (fhdDub) return fhdDub;
+          if (legDubHybrid) return legDubHybrid;
+        } else {
+          if (fhdLeg) return fhdLeg;
+          if (fourKLegNative) return fourKLegNative;
+          if (fourKLegHybrid) return fourKLegHybrid;
+          if (fhdDub) return fhdDub;
+          if (fourKDub) return fourKDub;
+          if (legDubHybrid) return legDubHybrid;
+        }
+      } else {
+        if (prefQuality === '4k') {
+          if (fourKDub) return fourKDub;
+          if (fhdDub) return fhdDub;
+          if (legDubHybrid) return legDubHybrid;
+          if (fourKLegNative) return fourKLegNative;
+          if (fourKLegHybrid) return fourKLegHybrid;
+          if (fhdLeg) return fhdLeg;
+        } else {
+          if (fhdDub) return fhdDub;
+          if (fourKDub) return fourKDub;
+          if (legDubHybrid) return legDubHybrid;
+          if (fhdLeg) return fhdLeg;
+          if (fourKLegNative) return fourKLegNative;
+          if (fourKLegHybrid) return fourKLegHybrid;
+        }
+      }
+
+      return versions[0];
+    }
+
+    // Seleciona automaticamente a melhor versão de série conforme a preferência de áudio salva na conta
+    function pickPreferredSeriesVersion(versions) {
+      if (!Array.isArray(versions) || versions.length === 0) return null;
+      if (versions.length === 1) return versions[0];
+
+      const prefAudio = (typeof getPreferredAudioPreference === 'function') ? getPreferredAudioPreference() : 'leg';
+      if (prefAudio === 'leg') {
+        const leg = versions.find(v => v.versionInfo?.type === 'legendado');
+        if (leg) return leg;
+        const dub = versions.find(v => v.versionInfo?.type === 'dublado');
+        if (dub) return dub;
+      } else {
+        const dub = versions.find(v => v.versionInfo?.type === 'dublado');
+        if (dub) return dub;
+        const leg = versions.find(v => v.versionInfo?.type === 'legendado');
+        if (leg) return leg;
+      }
+      return versions[0];
+    }
+
     // Identifica se uma mídia/versão é legendada (com legenda impressa/embutida no frame)
     function isLegendadoMedia(itemOrMeta) {
       if (!itemOrMeta) return false;
@@ -1706,6 +1779,46 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           detail: { kind: 'preference', key, value }
         }));
       } catch (e) {}
+    }
+
+    function getPreferredAudioPreference() {
+      const local = localStorage.getItem('andplay_preferred_audio');
+      if (local) return local;
+      try {
+        const prefs = JSON.parse(localStorage.getItem(USER_PREFERENCES_LOCAL_KEY) || '{}');
+        if (prefs.preferred_audio) return prefs.preferred_audio;
+      } catch (_) {}
+      return 'leg'; // Padrão: Legendado com prioridade máxima conforme solicitado
+    }
+
+    function getPreferredQualityPreference() {
+      const local = localStorage.getItem('andplay_preferred_quality');
+      if (local) return local;
+      try {
+        const prefs = JSON.parse(localStorage.getItem(USER_PREFERENCES_LOCAL_KEY) || '{}');
+        if (prefs.preferred_quality) return prefs.preferred_quality;
+      } catch (_) {}
+      return '4k'; // Padrão: 4K Ultra HD quando disponível
+    }
+
+    function setPreferredAudioPreference(val, sync = true) {
+      if (!val) return;
+      localStorage.setItem('andplay_preferred_audio', val);
+      if (elements.userPrefAudioSelect) elements.userPrefAudioSelect.value = val;
+      if (sync) {
+        saveLocalPreference('preferred_audio', val);
+        window.AndPlayAccount?.queueSyncPreference?.();
+      }
+    }
+
+    function setPreferredQualityPreference(val, sync = true) {
+      if (!val) return;
+      localStorage.setItem('andplay_preferred_quality', val);
+      if (elements.userPrefQualitySelect) elements.userPrefQualitySelect.value = val;
+      if (sync) {
+        saveLocalPreference('preferred_quality', val);
+        window.AndPlayAccount?.queueSyncPreference?.();
+      }
     }
 
     const USER_TASTE_KEY = 'andplay_web_taste_v1';
@@ -4425,10 +4538,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         elements.userPrefAdultContent.checked = isAdultContentEnabled();
       }
       if (elements.userPrefQualitySelect) {
-        elements.userPrefQualitySelect.value = localStorage.getItem('andplay_preferred_quality') || 'auto';
+        elements.userPrefQualitySelect.value = getPreferredQualityPreference();
       }
       if (elements.userPrefAudioSelect) {
-        elements.userPrefAudioSelect.value = localStorage.getItem('andplay_preferred_audio') || 'dub';
+        elements.userPrefAudioSelect.value = getPreferredAudioPreference();
       }
 
       // 5. Uso do Armazenamento
@@ -4709,13 +4822,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       });
 
       elements.userPrefQualitySelect?.addEventListener('change', (e) => {
-        localStorage.setItem('andplay_preferred_quality', e.target.value);
-        window.AndPlayAccount?.queueSyncPreference?.();
+        setPreferredQualityPreference(e.target.value);
       });
 
       elements.userPrefAudioSelect?.addEventListener('change', (e) => {
-        localStorage.setItem('andplay_preferred_audio', e.target.value);
-        window.AndPlayAccount?.queueSyncPreference?.();
+        setPreferredAudioPreference(e.target.value);
       });
 
       // 7. Atalhos
@@ -11383,6 +11494,16 @@ function showHome(targetScroll = 0) {
     window.setAudioOffset = setAudioOffset;
 
     function openMovieVersionModal(groupOrMovie, versions) {
+      const playableVersions = getMovieAllPlayableVersions(groupOrMovie, versions);
+      if (playableVersions && playableVersions.length) {
+        const preferred = pickPreferredMovieVersion(playableVersions);
+        if (preferred) {
+          closeMovieVersionModal();
+          playMovieVersion(groupOrMovie, preferred, playableVersions);
+          return;
+        }
+      }
+
       const title = groupOrMovie.name || groupOrMovie.title || 'Filme';
       const poster = groupOrMovie.poster || getBestPosterUrl(groupOrMovie.primaryItem || groupOrMovie);
       const year = groupOrMovie.year || '';
@@ -11393,7 +11514,6 @@ function showHome(targetScroll = 0) {
       elements.versionModalMeta.textContent = [year, rating].filter(Boolean).join(' • ');
       elements.versionOptionsList.innerHTML = '';
 
-      const playableVersions = getMovieAllPlayableVersions(groupOrMovie, versions);
       const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4, '4k_leg_hybrid': 5, 'leg_dub_hybrid': 6 };
       const sortedVersions = [...playableVersions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
 
@@ -11560,6 +11680,22 @@ function showHome(targetScroll = 0) {
       }
 
       setupPlayerVersionSwitcher(groupOrMovie, targetVersion, effectiveVersions);
+
+      // Salva a escolha do usuário na conta para ser usada sempre como padrão futuro
+      if (targetVersion && targetVersion.versionInfo) {
+        const t = targetVersion.versionInfo.type;
+        if (t === '4k_leg' || t === '4k_leg_hybrid') {
+          setPreferredAudioPreference('leg');
+          setPreferredQualityPreference('4k');
+        } else if (t === '4k_dub') {
+          setPreferredAudioPreference('dub');
+          setPreferredQualityPreference('4k');
+        } else if (t === 'legendado') {
+          setPreferredAudioPreference('leg');
+        } else if (t === 'dublado') {
+          setPreferredAudioPreference('dub');
+        }
+      }
 
       if (isHybrid) {
         startHybridMoviePlayback(groupOrMovie, targetVersion, effectiveVersions, currentPos);
@@ -14185,39 +14321,60 @@ function showHome(targetScroll = 0) {
         ext: groupOrMovie?.container_extension || 'mp4'
       }];
       const versions = getMovieAllPlayableVersions(groupOrMovie, rawVersions);
-
-      const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4, '4k_leg_hybrid': 5, 'leg_dub_hybrid': 6 };
-      const sortedVersions = [...versions].sort((a, b) =>
-        (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99)
-      );
+      const preferredVer = pickPreferredMovieVersion(versions);
 
       const primaryStreamId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || versions[0]?.streamId;
       void enrichMoviePageMetadata(groupOrMovie, primaryStreamId);
 
-      sortedVersions.forEach(v => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'eplay-version-card';
-        const progressStreamId = v.isHybrid ? v.videoVersion.streamId : v.streamId;
-        const progress = getVodProgress('movie', progressStreamId);
-        const canResume = progress && progress.position > VOD_PROGRESS_MIN_SECONDS && progress.duration > 0 && progress.position < progress.duration * VOD_PROGRESS_COMPLETE_PERCENT;
-        const actionText = canResume
-          ? '↻ Retomar • ' + formatResumeTime(progress.position)
-          : '▶ Assistir';
-        const progressText = canResume
-          ? 'Você parou em ' + formatResumeTime(progress.position) + ' • restam ' + formatResumeTime(Math.max(0, progress.duration - progress.position))
-          : (v.versionInfo.desc || 'Assistir nesta versão');
+      // Botão Principal de Reprodução Direta na versão preferida da conta
+      const primaryBtn = document.createElement('button');
+      primaryBtn.type = 'button';
+      primaryBtn.className = 'eplay-version-card is-primary';
+      primaryBtn.style.cssText = 'background: linear-gradient(135deg, rgba(79, 195, 247, 0.22), rgba(33, 150, 243, 0.12)); border: 2px solid #4fc3f7; transform: scale(1.005);';
+      const progressStreamId = preferredVer.isHybrid ? preferredVer.videoVersion.streamId : preferredVer.streamId;
+      const progress = getVodProgress('movie', progressStreamId);
+      const canResume = progress && progress.position > VOD_PROGRESS_MIN_SECONDS && progress.duration > 0 && progress.position < progress.duration * VOD_PROGRESS_COMPLETE_PERCENT;
+      const actionText = canResume
+        ? '↻ Retomar • ' + formatResumeTime(progress.position)
+        : '▶ Assistir Filme';
+      const progressText = canResume
+        ? 'Você parou em ' + formatResumeTime(progress.position) + ' • restam ' + formatResumeTime(Math.max(0, progress.duration - progress.position))
+        : (preferredVer.versionInfo.desc || 'Reprodução automática na versão padrão da sua conta');
 
-        btn.innerHTML =
-          '<span class="eplay-version-icon">' + escapeHtml(v.versionInfo.icon || '▶') + '</span>' +
-          '<span class="eplay-version-copy">' +
-            '<strong>' + escapeHtml(v.versionInfo.label || 'Versão') + '</strong>' +
-            '<small>' + escapeHtml(progressText) + '</small>' +
-          '</span>' +
-          '<span class="eplay-version-action">' + escapeHtml(actionText) + '</span>';
-        btn.addEventListener('click', () => playMovieVersion(groupOrMovie, v, versions));
-        elements.contentMovieVersions.appendChild(btn);
-      });
+      primaryBtn.innerHTML =
+        '<span class="eplay-version-icon" style="font-size: 26px;">' + escapeHtml(preferredVer.versionInfo.icon || '▶') + '</span>' +
+        '<span class="eplay-version-copy">' +
+          '<strong style="color: #4fc3f7; font-size: 15px;">' + escapeHtml(preferredVer.versionInfo.label || 'Versão') + ' <span style="font-size: 10px; background: rgba(79,195,247,0.25); color: #4fc3f7; padding: 2px 7px; border-radius: 4px; font-weight: 700; margin-left: 6px;">PADRÃO</span></strong>' +
+          '<small>' + escapeHtml(progressText) + '</small>' +
+        '</span>' +
+        '<span class="eplay-version-action" style="font-weight: 800; font-size: 14px; color: #4fc3f7;">' + escapeHtml(actionText) + '</span>';
+      primaryBtn.addEventListener('click', () => playMovieVersion(groupOrMovie, preferredVer, versions));
+      elements.contentMovieVersions.appendChild(primaryBtn);
+
+      // Opções alternativas disponíveis (também alternáveis no player)
+      const otherVersions = versions.filter(v => v.streamId !== preferredVer.streamId);
+      if (otherVersions.length > 0) {
+        const altNotice = document.createElement('div');
+        altNotice.style.cssText = 'width: 100%; font-size: 12px; color: #8faec9; margin-top: 14px; margin-bottom: 2px; font-weight: 600;';
+        altNotice.textContent = 'Outras opções disponíveis (também alternáveis no player):';
+        elements.contentMovieVersions.appendChild(altNotice);
+
+        otherVersions.forEach(v => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'eplay-version-card';
+          btn.style.opacity = '0.85';
+          btn.innerHTML =
+            '<span class="eplay-version-icon">' + escapeHtml(v.versionInfo.icon || '▶') + '</span>' +
+            '<span class="eplay-version-copy">' +
+              '<strong>' + escapeHtml(v.versionInfo.label || 'Versão') + '</strong>' +
+              '<small>' + escapeHtml(v.versionInfo.desc || 'Assistir nesta versão') + '</small>' +
+            '</span>' +
+            '<span class="eplay-version-action">▶ Assistir</span>';
+          btn.addEventListener('click', () => playMovieVersion(groupOrMovie, v, versions));
+          elements.contentMovieVersions.appendChild(btn);
+        });
+      }
     }
 
     async function openSeriesPage(seriesGroupOrItem) {
@@ -14250,7 +14407,7 @@ function showHome(targetScroll = 0) {
         seriesId: seriesGroupOrItem?.series_id
       }];
       setupSeriesVersionSwitcher(versions);
-      const defaultVer = versions.find(v => v.versionInfo.type === 'dublado') || versions[0];
+      const defaultVer = pickPreferredSeriesVersion(versions);
       await loadSeriesVersion(defaultVer);
     }
 
@@ -14273,8 +14430,7 @@ function showHome(targetScroll = 0) {
 
       setupSeriesVersionSwitcher(versions);
 
-      // Preferência: Dublado (ou primeira versão da lista)
-      const defaultVer = versions.find(v => v.versionInfo.type === 'dublado') || versions[0];
+      const defaultVer = pickPreferredSeriesVersion(versions);
       elements.seriesModal.style.display = 'flex';
       await loadSeriesVersion(defaultVer);
     }
@@ -14340,6 +14496,14 @@ function showHome(targetScroll = 0) {
       // a resposta mais antiga é ignorada para não sobrescrever a tela com a versão errada
       const myVersionToken = ++_seriesVersionLoadToken;
       currentActiveSeriesVersion = versionObj;
+
+      // Salva preferência de áudio na conta do usuário
+      if (versionObj?.versionInfo?.type === 'legendado') {
+        setPreferredAudioPreference('leg');
+      } else if (versionObj?.versionInfo?.type === 'dublado') {
+        setPreferredAudioPreference('dub');
+      }
+
       const versions = currentSeriesGroup?.versions || [versionObj];
       renderSeriesVersionButtons(versions, currentActiveSeriesVersion);
 
@@ -15281,18 +15445,28 @@ function showHome(targetScroll = 0) {
       function tvPlayMovie(movie) {
         if (!movie) return;
         const watchedId = movie.stream_id || movie.primaryItem?.stream_id || movie.versions?.[0]?.streamId;
-        const versions = movie.versions || [{
+        const rawVersions = movie.versions || [{
           item: movie,
           versionInfo: (typeof detectMovieVersion === 'function') ? detectMovieVersion(movie) : { label: 'Principal' },
           streamId: movie.stream_id,
           ext: movie.container_extension || 'mp4'
         }];
-        const selectedVersion = (versions.find(v => v.versionInfo && v.versionInfo.type === 'dublado')) || versions[0];
-        const streamId = selectedVersion.streamId || movie.stream_id;
+        const playableVersions = (typeof getMovieAllPlayableVersions === 'function')
+          ? getMovieAllPlayableVersions(movie, rawVersions)
+          : rawVersions;
+        const selectedVersion = (typeof pickPreferredMovieVersion === 'function')
+          ? (pickPreferredMovieVersion(playableVersions) || playableVersions[0])
+          : (playableVersions.find(v => v.versionInfo && v.versionInfo.type === 'dublado') || playableVersions[0]);
+        if (!selectedVersion) return;
+        const isHybrid = !!selectedVersion.isHybrid;
+        const streamId = isHybrid ? selectedVersion.videoVersion.streamId : (selectedVersion.streamId || movie.stream_id);
         if (!streamId) return;
-        const ext = selectedVersion.ext || movie.container_extension || 'mp4';
+        const ext = (isHybrid ? selectedVersion.videoVersion.ext : selectedVersion.ext) || movie.container_extension || 'mp4';
         const videoUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${streamId}.${ext}`;
-        const title = movie.name || movie.title || 'Filme';
+        const baseTitle = movie.name || movie.title || 'Filme';
+        const title = (selectedVersion.versionInfo?.label && playableVersions.length > 1)
+          ? `${baseTitle} (${selectedVersion.versionInfo.label})`
+          : baseTitle;
 
         const pseudoCh = {
           id: `movie_${streamId}`,

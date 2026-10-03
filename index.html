@@ -617,24 +617,25 @@
 
           <div class="user-pref-item">
             <div class="user-pref-info">
-              <strong class="user-pref-title">Qualidade Preferida do Player</strong>
-              <span class="user-pref-sub">Resolução prioritária ao abrir transmissões e filmes.</span>
+              <strong class="user-pref-title">Qualidade Preferida de Vídeo</strong>
+              <span class="user-pref-sub">Resolução prioritária ao abrir filmes (4K quando disponível).</span>
             </div>
             <select id="userPrefQualitySelect" class="user-select">
-              <option value="auto">Automático (Mais Rápido)</option>
+              <option value="4k">4K Ultra HD (Prioritário)</option>
               <option value="1080p">Full HD (1080p)</option>
               <option value="720p">HD (720p)</option>
+              <option value="auto">Automático</option>
             </select>
           </div>
 
           <div class="user-pref-item">
             <div class="user-pref-info">
               <strong class="user-pref-title">Preferência de Áudio</strong>
-              <span class="user-pref-sub">Priorizar versão dublada ou legendada ao selecionar um título.</span>
+              <span class="user-pref-sub">Prioridade de áudio padrão ao abrir filmes e séries.</span>
             </div>
             <select id="userPrefAudioSelect" class="user-select">
+              <option value="leg">Legendado (Áudio Original - Padrão)</option>
               <option value="dub">Dublado (Português)</option>
-              <option value="leg">Legendado</option>
             </select>
           </div>
         </div>
@@ -722,7 +723,7 @@
       <div class="eplay-content-panel-head">
         <div>
           <span class="eplay-page-kicker">FILME</span>
-          <h2>Escolha como assistir</h2>
+          <h2>Assistir Agora</h2>
         </div>
       </div>
       <div id="contentMovieVersions" class="eplay-version-grid"></div>
