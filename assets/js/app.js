@@ -14,6 +14,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let isFavoritesView = false;
     let favoriteReturnMode = 'home';
     let isHandlingPopstate = false;
+    let pendingRoute = null;
+    let isRouterNavigating = false;
+    let routerInitialized = false;
     const WATCHED_LIMIT = 500;
     const WATCHED_MOVIES_STORAGE_KEY = 'andplay_web_watched_movies_v1';
     const WATCHED_SERIES_STORAGE_KEY = 'andplay_web_watched_series_v1';
@@ -1507,14 +1510,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       await window.AndPlayAccount?.ready?.();
 
       if (!window.AndPlayAccount?.isSignedIn?.()) {
+        pendingRoute = getRouteFromLocation();
         showLoginScreen();
         return;
       }
 
       hideLoginScreen();
-
-      // Modo TV acessado unicamente via sublink /tvmode (sem botão e sem redirecionamento automático)
-      const isTvMode = window.location.pathname.endsWith('/tvmode') || window.location.pathname.endsWith('/tvmode/') || window.location.pathname.includes('/tvmode') || window.location.hash.includes('tvmode') || window.location.search.includes('tvmode');
 
       // Wiring do botão "💻 Modo Web" no header da TV
       const btnExitTv = document.getElementById('btnExitTvMode');
@@ -1524,13 +1525,292 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         });
       }
 
-      if (isTvMode && window.initTvCableBox) {
-        // VOD em segundo plano desativado no boot para fluidez máxima no projetor
-        window.initTvCableBox();
+      initRouter();
+      const initialRoute = pendingRoute || getRouteFromLocation();
+      pendingRoute = null;
+      if (initialRoute && initialRoute !== '#/inicio' && initialRoute !== '#/' && initialRoute !== '') {
+        await navigateRoute(initialRoute, false);
+      } else {
+        const isTvMode = window.location.pathname.endsWith('/tvmode') || window.location.pathname.endsWith('/tvmode/') || window.location.pathname.includes('/tvmode') || window.location.hash.includes('tvmode') || window.location.search.includes('tvmode');
+        if (isTvMode && window.initTvCableBox) {
+          window.initTvCableBox();
+          return;
+        }
+        showHome();
+      }
+    }
+
+    // ==========================================
+    // ROTEAMENTO SPA (DEEP LINKING COM PROTEÇÃO DE LOGIN)
+    // ==========================================
+    function getRouteFromLocation() {
+      const hash = window.location.hash || '';
+      if (hash && hash.startsWith('#/')) {
+        return hash;
+      }
+      if (hash && hash.startsWith('#')) {
+        return '#/' + hash.replace(/^#\/?/, '');
+      }
+      const pathname = window.location.pathname.replace(/\\/g, '/');
+      const parts = pathname.split('/').filter(Boolean);
+      let routeParts = parts;
+      if (parts.length > 0 && parts[0].toLowerCase() === 'andplay') {
+        routeParts = parts.slice(1);
+      }
+      if (routeParts.length > 0) {
+        return '#/' + routeParts.join('/');
+      }
+      return '#/inicio';
+    }
+
+    function setRouteHash(hash, push = true) {
+      if (!hash) hash = '#/inicio';
+      if (!hash.startsWith('#/')) {
+        hash = '#/' + hash.replace(/^#?\/?/, '');
+      }
+      if (window.location.hash === hash) return;
+      isRouterNavigating = true;
+      try {
+        if (push) {
+          window.history.pushState(null, '', hash);
+        } else {
+          window.history.replaceState(null, '', hash);
+        }
+      } catch (_) {
+        window.location.hash = hash;
+      }
+      setTimeout(() => { isRouterNavigating = false; }, 100);
+    }
+
+    function parseRoute(routeStr) {
+      if (!routeStr) return { type: 'home' };
+      const clean = routeStr.replace(/^#\/?/, '').replace(/^\/+/, '').replace(/\/+$/, '');
+      const parts = clean.split('/').map(decodeURIComponent).filter(Boolean);
+      if (parts.length === 0) return { type: 'home' };
+
+      const first = parts[0].toLowerCase();
+
+      if (first === 'inicio' || first === 'home') {
+        return { type: 'home' };
+      }
+      if (first === 'filmes' || first === 'movies') {
+        return { type: 'movies' };
+      }
+      if (first === 'series' && parts.length === 1) {
+        return { type: 'series' };
+      }
+      if (first === 'tv' || first === 'canais' || first === 'live') {
+        return { type: 'live' };
+      }
+      if (first === 'esportes' || first === 'sports') {
+        return { type: 'sports' };
+      }
+      if (first === 'favoritos' || first === 'favorites') {
+        return { type: 'favorites' };
+      }
+      if (first === 'assistidos' || first === 'watched') {
+        return { type: 'watched' };
+      }
+      if (first === 'conta' || first === 'usuario' || first === 'user') {
+        return { type: 'user' };
+      }
+      if (first === 'tvmode') {
+        return { type: 'tvmode' };
+      }
+      // Filme: #/filme/:id ou #/movie/:id ou #/filmes/:id
+      if ((first === 'filme' || first === 'movie' || (first === 'filmes' && parts.length >= 2)) && parts.length >= 2) {
+        return { type: 'movie', id: parts[1] };
+      }
+      // Série com episódio: #/series/:id/temporada/:season/episodio/:ep
+      if (first === 'series' && parts.length >= 4) {
+        const seriesId = parts[1];
+        let season = 1;
+        let ep = 1;
+        for (let i = 2; i < parts.length; i += 2) {
+          const key = (parts[i] || '').toLowerCase();
+          const val = parts[i + 1];
+          if ((key === 'temporada' || key === 'season' || key === 'temp' || key === 's') && val) {
+            season = parseInt(val, 10) || 1;
+          }
+          if ((key === 'episodio' || key === 'episode' || key === 'ep' || key === 'e') && val) {
+            ep = parseInt(val, 10) || 1;
+          }
+        }
+        return { type: 'series-episode', seriesId, season, episode: ep };
+      }
+      // Série individual: #/series/:id
+      if (first === 'series' && parts.length >= 2) {
+        return { type: 'series-detail', id: parts[1] };
+      }
+
+      return { type: 'home' };
+    }
+
+    async function navigateRoute(routeStr, pushHistory = true) {
+      if (!window.AndPlayAccount?.isSignedIn?.()) {
+        pendingRoute = routeStr || getRouteFromLocation();
+        showLoginScreen('login');
         return;
       }
 
-      showHome();
+      const route = parseRoute(routeStr);
+      if (route.type === 'home') {
+        if (elements.videoModal && elements.videoModal.style.display === 'flex') closePlayer();
+        if (contentPageOpen) restoreFromContentPage();
+        showHome();
+        setRouteHash('#/inicio', pushHistory);
+      } else if (route.type === 'movies') {
+        if (elements.videoModal && elements.videoModal.style.display === 'flex') closePlayer();
+        if (contentPageOpen) restoreFromContentPage();
+        await switchMode('movies');
+        setRouteHash('#/filmes', pushHistory);
+      } else if (route.type === 'series') {
+        if (elements.videoModal && elements.videoModal.style.display === 'flex') closePlayer();
+        if (contentPageOpen) restoreFromContentPage();
+        await switchMode('series');
+        setRouteHash('#/series', pushHistory);
+      } else if (route.type === 'live') {
+        if (elements.videoModal && elements.videoModal.style.display === 'flex') closePlayer();
+        if (contentPageOpen) restoreFromContentPage();
+        await switchMode('live');
+        setRouteHash('#/tv', pushHistory);
+      } else if (route.type === 'sports') {
+        if (elements.videoModal && elements.videoModal.style.display === 'flex') closePlayer();
+        if (contentPageOpen) restoreFromContentPage();
+        showHome();
+        const sportsSection = document.getElementById('homeSportsSection') || document.querySelector('.sports-rail-container');
+        if (sportsSection) sportsSection.scrollIntoView({ behavior: 'smooth' });
+        setRouteHash('#/esportes', pushHistory);
+        document.title = 'Esportes - EPlay';
+      } else if (route.type === 'favorites') {
+        if (elements.videoModal && elements.videoModal.style.display === 'flex') closePlayer();
+        if (contentPageOpen) restoreFromContentPage();
+        await showFavoritesContent();
+        setRouteHash('#/favoritos', pushHistory);
+      } else if (route.type === 'watched') {
+        if (elements.videoModal && elements.videoModal.style.display === 'flex') closePlayer();
+        if (contentPageOpen) restoreFromContentPage();
+        await showWatchedContent();
+        setRouteHash('#/assistidos', pushHistory);
+      } else if (route.type === 'user') {
+        if (elements.videoModal && elements.videoModal.style.display === 'flex') closePlayer();
+        if (contentPageOpen) restoreFromContentPage();
+        showUserPage();
+        setRouteHash('#/conta', pushHistory);
+      } else if (route.type === 'tvmode') {
+        if (window.enterTvMode) window.enterTvMode();
+        setRouteHash('#/tvmode', pushHistory);
+      } else if (route.type === 'movie') {
+        if (elements.videoModal && elements.videoModal.style.display === 'flex') closePlayer();
+        showLoading('Carregando filme...');
+        try {
+          let movies = fullMoviesCache;
+          if (!Array.isArray(movies) || movies.length === 0) {
+            movies = await loadFullMovies();
+          }
+          const targetId = String(route.id);
+          const found = (movies || []).find(m =>
+            String(m.stream_id) === targetId ||
+            String(m.primaryItem?.stream_id) === targetId ||
+            (m.versions && m.versions.some(v => String(v.streamId) === targetId))
+          );
+          hideLoading();
+          if (found) {
+            await openMoviePage(found);
+            setRouteHash('#/filme/' + targetId, pushHistory);
+          } else {
+            await switchMode('movies');
+            if (window.showPlayerToast) window.showPlayerToast('Filme não encontrado no catálogo');
+          }
+        } catch (err) {
+          hideLoading();
+          await switchMode('movies');
+        }
+      } else if (route.type === 'series-detail') {
+        if (elements.videoModal && elements.videoModal.style.display === 'flex') closePlayer();
+        showLoading('Carregando série...');
+        try {
+          let seriesList = fullSeriesCache;
+          if (!Array.isArray(seriesList) || seriesList.length === 0) {
+            seriesList = await loadFullSeries();
+          }
+          const targetId = String(route.id);
+          const found = (seriesList || []).find(s =>
+            String(s.series_id) === targetId ||
+            (s.versions && s.versions.some(v => String(v.seriesId) === targetId))
+          );
+          hideLoading();
+          if (found) {
+            await openSeriesPage(found);
+            setRouteHash('#/series/' + targetId, pushHistory);
+          } else {
+            await switchMode('series');
+            if (window.showPlayerToast) window.showPlayerToast('Série não encontrada no catálogo');
+          }
+        } catch (err) {
+          hideLoading();
+          await switchMode('series');
+        }
+      } else if (route.type === 'series-episode') {
+        showLoading('Carregando episódio...');
+        try {
+          let seriesList = fullSeriesCache;
+          if (!Array.isArray(seriesList) || seriesList.length === 0) {
+            seriesList = await loadFullSeries();
+          }
+          const targetId = String(route.seriesId);
+          const found = (seriesList || []).find(s =>
+            String(s.series_id) === targetId ||
+            (s.versions && s.versions.some(v => String(v.seriesId) === targetId))
+          );
+          if (found) {
+            await openSeriesPage(found);
+            const targetVer = found.versions?.[0] || found;
+            const realSeriesId = targetVer.seriesId || targetVer.series_id || targetId;
+            const data = await getOrFetchSeriesInfo(realSeriesId);
+            hideLoading();
+            const seasonEps = (data?.episodes && data.episodes[route.season]) || [];
+            const matchedEp = seasonEps.find(e => Number(e.episode_num) === Number(route.episode));
+            if (matchedEp) {
+              await playSeriesEpisode(matchedEp, route.season);
+              setRouteHash(`#/series/${targetId}/temporada/${route.season}/episodio/${route.episode}`, pushHistory);
+            } else {
+              setRouteHash('#/series/' + targetId, pushHistory);
+            }
+          } else {
+            hideLoading();
+            await switchMode('series');
+          }
+        } catch (err) {
+          hideLoading();
+          await switchMode('series');
+        }
+      }
+    }
+
+    function initRouter() {
+      if (routerInitialized) return;
+      routerInitialized = true;
+
+      window.addEventListener('hashchange', () => {
+        if (isRouterNavigating) return;
+        if (!window.AndPlayAccount?.isSignedIn?.()) {
+          pendingRoute = window.location.hash;
+          showLoginScreen();
+          return;
+        }
+        navigateRoute(window.location.hash, false);
+      });
+
+      window.handleAppRouteFromHistory = function () {
+        if (isRouterNavigating) return;
+        if (!window.AndPlayAccount?.isSignedIn?.()) {
+          pendingRoute = window.location.hash;
+          showLoginScreen();
+          return;
+        }
+        navigateRoute(window.location.hash, false);
+      };
     }
 
     // ==========================================
@@ -3938,6 +4218,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       isFavoritesView = true;
       isWatchedView = false;
       currentMode = 'favorites';
+      setRouteHash('#/favoritos');
+      document.title = 'Favoritos - EPlay';
 
       hideLoading();
       if (elements.moviesHub) elements.moviesHub.style.display = 'none';
@@ -4308,6 +4590,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       isWatchedView = true;
       isFavoritesView = false;
       currentMode = 'watched';
+      setRouteHash('#/assistidos');
+      document.title = 'Histórico - EPlay';
 
       hideLoading();
       if (elements.moviesHub) elements.moviesHub.style.display = 'none';
@@ -5042,18 +5326,28 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
     }
 
-    function onUserAuthenticated() {
+    async function onUserAuthenticated() {
       hideLoginScreen();
       renderUserPage();
-      const isTvMode = window.location.pathname.endsWith('/tvmode') || window.location.pathname.endsWith('/tvmode/') || window.location.pathname.includes('/tvmode') || window.location.hash.includes('tvmode') || window.location.search.includes('tvmode');
-      if (isTvMode && window.initTvCableBox) {
-        window.initTvCableBox();
+      const targetRoute = pendingRoute || getRouteFromLocation();
+      pendingRoute = null;
+      if (!routerInitialized) {
+        initRouter();
+      }
+      if (targetRoute && targetRoute !== '#/inicio' && targetRoute !== '#/' && targetRoute !== '') {
+        await navigateRoute(targetRoute, false);
       } else {
-        showHome();
+        const isTvMode = window.location.pathname.endsWith('/tvmode') || window.location.pathname.endsWith('/tvmode/') || window.location.pathname.includes('/tvmode') || window.location.hash.includes('tvmode') || window.location.search.includes('tvmode');
+        if (isTvMode && window.initTvCableBox) {
+          window.initTvCableBox();
+        } else {
+          showHome();
+        }
       }
     }
 
     function onUserLoggedOut() {
+      pendingRoute = null;
       showLoginScreen('login');
     }
 
@@ -5123,6 +5417,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       currentMode = 'user';
       isFavoritesView = false;
       isWatchedView = false;
+      setRouteHash('#/conta');
+      document.title = 'Minha Conta - EPlay';
 
       if (moviesHeroTimer) { clearInterval(moviesHeroTimer); moviesHeroTimer = null; }
       if (seriesHeroTimer) { clearInterval(seriesHeroTimer); seriesHeroTimer = null; }
@@ -8798,6 +9094,8 @@ function showHome(targetScroll = 0) {
       elements.contentPage?.classList.remove('is-active');
       if (elements.contentPage) elements.contentPage.hidden = true;
       currentMode = 'home';
+      setRouteHash('#/inicio');
+      document.title = 'EPlay - Filmes, Séries & TV Ao Vivo';
       document.querySelectorAll('.nav-tabs .nav-tab').forEach(button => button.classList.remove('active'));
       elements.tabHomeBtn?.classList.add('active');
       elements.tabFavoritesBtn?.classList.remove('active');
@@ -8924,6 +9222,16 @@ function showHome(targetScroll = 0) {
         if (elements.liveHub) elements.liveHub.style.display = 'none';
       }
       currentMode = mode;
+      if (mode === 'movies') {
+        setRouteHash('#/filmes');
+        document.title = 'Filmes - EPlay';
+      } else if (mode === 'series') {
+        setRouteHash('#/series');
+        document.title = 'Séries - EPlay';
+      } else if (mode === 'live') {
+        setRouteHash('#/tv');
+        document.title = 'TV Ao Vivo - EPlay';
+      }
 
       elements.tabMoviesBtn.classList.toggle('active', mode === 'movies');
       elements.tabSeriesBtn.classList.toggle('active', mode === 'series');
@@ -11638,6 +11946,11 @@ function showHome(targetScroll = 0) {
           streamId: effectiveVideoStreamId
         }, startPosition);
 
+        setupPlayerVersionSwitcher(groupOrMovie, selectedVersion, effectivePlayableVersions);
+        const mId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || effectiveVideoStreamId;
+        if (mId) setRouteHash('#/filme/' + mId);
+        document.title = `${displayTitle} - EPlay`;
+
         if (isHybrid) {
           startHybridMoviePlayback(groupOrMovie, selectedVersion, effectivePlayableVersions, startPosition);
         } else {
@@ -11665,12 +11978,20 @@ function showHome(targetScroll = 0) {
       const panelSwitcher = elements.panelVersionSwitcher || document.getElementById('panelVersionSwitcher');
       const panelHint = elements.panelVersionHint || document.getElementById('panelVersionHint');
 
+      const epAudioBtn = document.getElementById('eplayAudioBtn');
       if (!effectiveVersions || effectiveVersions.length <= 1) {
         if (epSec) epSec.style.display = 'none';
         if (epItems) epItems.innerHTML = '';
         if (panelSec) panelSec.style.display = 'none';
         if (panelSwitcher) panelSwitcher.innerHTML = '';
+        if (epAudioBtn) epAudioBtn.style.display = 'none';
         return;
+      }
+
+      if (epAudioBtn) {
+        epAudioBtn.style.display = 'inline-flex';
+        epAudioBtn.title = `Áudio / Versão: ${activeVersion?.versionInfo?.label || 'Padrão'}`;
+        epAudioBtn.setAttribute('aria-label', `Áudio e Versão (${activeVersion?.versionInfo?.label || 'Padrão'})`);
       }
 
       const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4, '4k_leg_hybrid': 5, 'leg_dub_hybrid': 6 };
@@ -11836,12 +12157,20 @@ function showHome(targetScroll = 0) {
       const panelSwitcher = elements.panelVersionSwitcher || document.getElementById('panelVersionSwitcher');
       const panelHint = elements.panelVersionHint || document.getElementById('panelVersionHint');
 
+      const epAudioBtn = document.getElementById('eplayAudioBtn');
       if (!versions || versions.length <= 1) {
         if (epSec) epSec.style.display = 'none';
         if (epItems) epItems.innerHTML = '';
         if (panelSec) panelSec.style.display = 'none';
         if (panelSwitcher) panelSwitcher.innerHTML = '';
+        if (epAudioBtn) epAudioBtn.style.display = 'none';
         return;
+      }
+
+      if (epAudioBtn) {
+        epAudioBtn.style.display = 'inline-flex';
+        epAudioBtn.title = `Áudio / Versão: ${activeVersion?.versionInfo?.label || 'Padrão'}`;
+        epAudioBtn.setAttribute('aria-label', `Áudio e Versão (${activeVersion?.versionInfo?.label || 'Padrão'})`);
       }
 
       const orderMap = { 'dublado': 1, 'legendado': 2 };
@@ -12378,6 +12707,15 @@ function showHome(targetScroll = 0) {
       } catch (_) {}
       elements.modalFormat.textContent = 'Carregando vídeo...';
 
+      if (mediaType === 'movie' && mediaMeta?.groupOrMovie) {
+        setupPlayerVersionSwitcher(mediaMeta.groupOrMovie, mediaMeta.selectedVersion || mediaMeta, mediaMeta.allVersions);
+      } else if (mediaType === 'series' && currentSeriesGroup) {
+        setupPlayerSeriesVersionSwitcher(currentSeriesGroup, currentActiveSeriesVersion, mediaMeta?.seasonNum || mediaMeta?.season, mediaMeta?.episodeNum);
+      } else {
+        const epAudioBtn = document.getElementById('eplayAudioBtn');
+        if (epAudioBtn) epAudioBtn.style.display = 'none';
+      }
+
       startVideoLoadTimeout();
 
       // Reset de legendas e do painel
@@ -12522,10 +12860,31 @@ function showHome(targetScroll = 0) {
       if (epItemsClose) epItemsClose.innerHTML = '';
       const epAudioSyncClose = document.getElementById('eplayAudioSyncMenu');
       if (epAudioSyncClose) epAudioSyncClose.style.display = 'none';
+      const epAudioBtnClose = document.getElementById('eplayAudioBtn');
+      if (epAudioBtnClose) epAudioBtnClose.style.display = 'none';
       const panelSecClose = elements.panelVersionSection || document.getElementById('panelVersionSection');
       if (panelSecClose) panelSecClose.style.display = 'none';
       const panelSwitcherClose = elements.panelVersionSwitcher || document.getElementById('panelVersionSwitcher');
       if (panelSwitcherClose) panelSwitcherClose.innerHTML = '';
+
+      if (contentPageOpen) {
+        if (currentContentPageType === 'movie' && currentContentPageItem) {
+          const mId = currentContentPageItem.stream_id || currentContentPageItem.primaryItem?.stream_id || (currentContentPageItem.versions && currentContentPageItem.versions[0]?.streamId);
+          if (mId) setRouteHash('#/filme/' + mId);
+          document.title = (currentContentPageItem.name || currentContentPageItem.title || 'Filme') + ' - EPlay';
+        } else if (currentContentPageType === 'series' && currentSeriesGroup) {
+          const sId = currentSeriesGroup.series_id || (currentSeriesGroup.versions && currentSeriesGroup.versions[0]?.seriesId);
+          if (sId) setRouteHash('#/series/' + sId);
+          document.title = (currentSeriesGroup.name || currentSeriesGroup.title || 'Série') + ' - EPlay';
+        }
+      } else {
+        if (isWatchedView) setRouteHash('#/assistidos');
+        else if (isFavoritesView) setRouteHash('#/favoritos');
+        else if (currentMode === 'movies') setRouteHash('#/filmes');
+        else if (currentMode === 'series') setRouteHash('#/series');
+        else if (currentMode === 'live') setRouteHash('#/tv');
+        else setRouteHash('#/inicio');
+      }
 
       // Limpar dados da barra lateral de informações
       if (elements.sidebarPoster) elements.sidebarPoster.src = '';
@@ -14537,6 +14896,8 @@ function showHome(targetScroll = 0) {
       const displayVer = (hasDublado && dubVer) ? dubVer : (versions[0] || preferredVer);
 
       const primaryStreamId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || versions[0]?.streamId;
+      if (primaryStreamId) setRouteHash('#/filme/' + primaryStreamId);
+      document.title = (groupOrMovie?.name || groupOrMovie?.title || 'Filme') + ' - EPlay';
       void enrichMoviePageMetadata(groupOrMovie, primaryStreamId);
 
       // Botão Principal Único de Reprodução Direta (apenas a opção dublada exibida quando disponível,
@@ -14584,6 +14945,9 @@ function showHome(targetScroll = 0) {
       };
       currentContentPageType = 'series';
       currentSeriesGroup = seriesGroupOrItem;
+      const primarySeriesId = seriesGroupOrItem?.series_id || (seriesGroupOrItem?.versions && seriesGroupOrItem.versions[0]?.seriesId);
+      if (primarySeriesId) setRouteHash('#/series/' + primarySeriesId);
+      document.title = (seriesGroupOrItem?.name || seriesGroupOrItem?.title || 'Série') + ' - EPlay';
       showContentPageShell('series', seriesGroupOrItem);
       void enrichSeriesPageMetadata(seriesGroupOrItem);
 
@@ -14921,6 +15285,11 @@ function showHome(targetScroll = 0) {
         }, startPosition);
 
         setupPlayerSeriesVersionSwitcher(currentSeriesGroup, activeVer, seasonNum, ep.episode_num);
+        const sId = currentSeriesGroup?.series_id || (currentSeriesGroup?.versions && currentSeriesGroup.versions[0]?.seriesId) || activeVer?.seriesId;
+        if (sId && ep?.episode_num) {
+          setRouteHash(`#/series/${sId}/temporada/${seasonNum}/episodio/${ep.episode_num}`);
+        }
+        document.title = `${sName} - T${seasonNum} E${ep.episode_num} - EPlay`;
       };
 
       startVodWithResume('series', ep.id, `${sName} - ${epTitle}${versionLabel}`, startPlayback);
@@ -16420,10 +16789,35 @@ function showHome(targetScroll = 0) {
       };
 
       // Suporte a popstate do Android WebView (webView.goBack()) e Navegadores Mobile
-      window.addEventListener('popstate', function () {
+      window.addEventListener('popstate', function (event) {
         isHandlingPopstate = true;
         try {
-          window.handleAndroidBack();
+          if (elements.videoModal && elements.videoModal.style.display === 'flex') {
+            closePlayer();
+            return;
+          }
+          if (elements.seriesModal && elements.seriesModal.style.display === 'flex') {
+            closeSeriesModal();
+            return;
+          }
+          if (elements.movieVersionModal && elements.movieVersionModal.style.display === 'flex') {
+            closeMovieVersionModal();
+            return;
+          }
+          if (elements.imdbSearchModal && elements.imdbSearchModal.style.display === 'flex') {
+            closeImdbSearchModal();
+            return;
+          }
+          if (event?.state && event.state.page === 'content' && elements.contentPage && !elements.contentPage.hidden) {
+            return;
+          }
+          if (elements.contentPage && !elements.contentPage.hidden) {
+            restoreFromContentPage();
+            return;
+          }
+          if (window.handleAppRouteFromHistory) {
+            window.handleAppRouteFromHistory();
+          }
         } finally {
           isHandlingPopstate = false;
         }

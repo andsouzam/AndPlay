@@ -4,20 +4,39 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="no-referrer">
-  <title>EPlay</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>EPlay - Redirecionando...</title>
 </head>
-<body>
+<body style="background:#111;color:#aaa;font-family:sans-serif;text-align:center;padding-top:20vh;">
   <p>Redirecionando para o EPlay...</p>
   <script>
     (() => {
-      const path = window.location.pathname.replace(/\/+$/, '');
-      if (path.endsWith('/tvmode')) {
-        const base = path.slice(0, -'/tvmode'.length) || '/';
-        window.location.replace(base + '/#tvmode');
+      const path = window.location.pathname.replace(/\\/g, '/');
+      const search = window.location.search || '';
+      const rawHash = window.location.hash || '';
+
+      const parts = path.split('/').filter(Boolean);
+      let base = '/';
+      let routePath = path;
+
+      // Se executando em subpasta no GitHub Pages (ex: /AndPlay/...)
+      if (parts.length > 0 && parts[0].toLowerCase() === 'andplay') {
+        base = '/' + parts[0] + '/';
+        routePath = '/' + parts.slice(1).join('/');
+      }
+
+      const cleanRoute = routePath.replace(/^\/+/, '').replace(/\/+$/, '');
+
+      if (cleanRoute === 'tvmode') {
+        window.location.replace(base + '#/tvmode');
         return;
       }
 
-      document.body.innerHTML = '<h1>Página não encontrada</h1><p><a href="../">Voltar ao EPlay</a></p>';
+      const targetHash = cleanRoute ? '#/' + cleanRoute : '#/';
+      const extraSearch = search ? search : '';
+      window.location.replace(base + extraSearch + targetHash + (rawHash && rawHash !== targetHash ? '&' + rawHash.replace(/^#/, '') : ''));
     })();
   </script>
 </body>

@@ -249,7 +249,7 @@
       '<div class="eplay-player-bottom"><div class="eplay-seek-wrap"><span class="eplay-time" id="eplayCurrentTime">00:00</span><input id="eplaySeek" class="eplay-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="Posição da reprodução"><span class="eplay-time" id="eplayDuration">00:00</span></div>',
       '<div class="eplay-controls"><button class="eplay-control small eplay-series-nav" id="eplayPrevEpisode" aria-label="Episódio anterior" style="display:none">‹ Ant</button><button class="eplay-control small" id="eplayBack10" aria-label="Voltar 10 segundos">−10</button><button class="eplay-control" id="eplayPlay" aria-label="Reproduzir">▶</button><button class="eplay-control small" id="eplayForward10" aria-label="Avançar 10 segundos">+10</button><button class="eplay-control small eplay-series-nav" id="eplayNextEpisode" aria-label="Próximo episódio" style="display:none">Pro ›</button>',
       '<div class="eplay-volume"><button class="eplay-control" id="eplayVolumeBtn" aria-label="Volume">🔊</button><input id="eplayVolume" class="eplay-range" type="range" min="0" max="100" value="85" aria-label="Volume"></div><div class="eplay-spacer"></div>',
-      '<button class="eplay-control small" id="eplaySubtitle" aria-label="Legendas">CC</button><button class="eplay-control small" id="eplayInfo" aria-label="Ficha técnica">ⓘ</button><button class="eplay-control small" id="eplayPip" aria-label="Picture-in-Picture">▣</button><button class="eplay-control" id="eplaySettings" aria-label="Configurações" aria-expanded="false">⚙</button><button class="eplay-control" id="eplayFullscreen" aria-label="Tela cheia">⛶</button></div></div>',
+      '<button class="eplay-control small" id="eplayAudioBtn" aria-label="Áudio e Versão" title="Áudio / Versão">🔊</button><button class="eplay-control small" id="eplaySubtitle" aria-label="Legendas">CC</button><button class="eplay-control small" id="eplayInfo" aria-label="Ficha técnica">ⓘ</button><button class="eplay-control small" id="eplayPip" aria-label="Picture-in-Picture">▣</button><button class="eplay-control" id="eplaySettings" aria-label="Configurações" aria-expanded="false">⚙</button><button class="eplay-control" id="eplayFullscreen" aria-label="Tela cheia">⛶</button></div></div>',
       '<div class="eplay-menu" id="eplayMenu"><h4>Configurações de reprodução</h4>',
       '<div class="eplay-version-section" id="eplayVersionSection" style="display:none;"><div class="eplay-menu-row"><span>Áudio / Versão</span><strong id="eplayVersionBadge" style="color:#ffc107;font-size:11px;"></strong></div><div class="eplay-version-list" id="eplayVersionItems"></div></div>',
       '<button id="eplayAudioSyncMenu" style="display:none">🔊 Sincronizar áudio híbrido</button>',
@@ -267,8 +267,9 @@
   }
   build();
   function syncPlaybackSurface() {
-    const embedVisible = !!(window.getComputedStyle($('embedPlayer')).display !== 'none');
-    const videoVisible = !!(window.getComputedStyle(video).display !== 'none');
+    const embedEl = $('embedPlayer');
+    const embedVisible = !!(embedEl && embedEl.style.display !== 'none');
+    const videoVisible = !!(video && video.style.display !== 'none');
     if (embedVisible || !videoVisible) {
       ui.classList.add('embed-active');
       video.controls = false;
@@ -279,13 +280,33 @@
   }
   const sourceObserver = new MutationObserver(syncPlaybackSurface);
   sourceObserver.observe(video, { attributes: true, attributeFilter: ['style', 'src'] });
-  sourceObserver.observe($('embedPlayer'), { attributes: true, attributeFilter: ['style', 'src'] });
+  const embedElInit = $('embedPlayer');
+  if (embedElInit) sourceObserver.observe(embedElInit, { attributes: true, attributeFilter: ['style', 'src'] });
   syncPlaybackSurface();
   const $on=(id,ev,fn)=>$(id)?.addEventListener(ev,fn);
   $on('eplayPlayerClose','click',()=>{$('closeVideoModal')?.click();});
   $on('eplayPlay','click',playPause); $on('eplayCenterPlay','click',playPause);
   $on('eplayBack10','click',()=>seekBy(-10)); $on('eplayForward10','click',()=>seekBy(10));
   $on('eplayPrevEpisode','click',()=>{ closeMenu(); window.EPlaySeriesNavigation?.previous?.(); }); $on('eplayNextEpisode','click',()=>{ closeMenu(); window.EPlaySeriesNavigation?.next?.(); });
+  function openAudioVersionMenu() {
+    if (!menu.classList.contains('open')) {
+      menu.classList.add('open');
+      const settings = $('eplaySettings');
+      if (settings) settings.setAttribute('aria-expanded', 'true');
+    }
+    const versionSection = $('eplayVersionSection');
+    if (versionSection && versionSection.style.display !== 'none') {
+      versionSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    reveal();
+  }
+  $on('eplayAudioBtn', 'click', () => {
+    if (menu.classList.contains('open') && $('eplayVersionSection')?.style.display !== 'none') {
+      closeMenu();
+    } else {
+      openAudioVersionMenu();
+    }
+  });
   function syncSkipTools(event){const n=window.EPlaySeriesNavigation;const source=$('skipIntroBtn');const visibleFromEvt=event?.detail&&typeof event.detail.visible==='boolean'?event.detail.visible:null;const available=!!(n && (visibleFromEvt!==null?visibleFromEvt:(source && (source.dataset.eplayVisible==='1'||source.style.display!=='none'))));const autoRow=$('eplayAutoSkipRow'),autoToggle=$('eplayAutoSkipToggle');if(autoRow)autoRow.style.display=n?'flex':'none';if(autoToggle)autoToggle.checked=$('skipIntroAutoToggle')?.checked || localStorage.getItem('andplay_web_skip_intro_auto')==='1';const now=$('eplaySkipIntroNow');if(now)now.style.display=available?'block':'none';const overlay=$('eplaySkipIntroOverlay');if(overlay){overlay.style.display=available?'inline-flex':'none';overlay.disabled=!available;}const liveSync=$('eplayLiveSyncMenu'),lat=$('eplayLatencyMenu');if(liveSync)liveSync.style.display=$('syncLiveBtn')?.style.display!=='none'?'block':'none';if(lat)lat.style.display=$('toggleLatencyModeBtn')?.style.display!=='none'?'block':'none';}
   function syncSeriesNav(){const n=window.EPlaySeriesNavigation;const p=$('eplayPrevEpisode'),x=$('eplayNextEpisode');if(!n){if(p)p.style.display='none';if(x)x.style.display='none';}else{const hasPrev=n.hasPrevious !== undefined ? !!n.hasPrevious : Number(n.episodeNum||0)>1;const hasNext=n.hasNext !== undefined ? !!n.hasNext : true;if(p)p.style.display=hasPrev?'inline-flex':'none';if(x)x.style.display=hasNext?'inline-flex':'none';}syncSkipTools();}
   window.addEventListener('eplay:skip-auto-changed',syncSkipTools);
@@ -321,7 +342,15 @@
   document.addEventListener('touchstart', closeMenuFromOutside, true);
   seek.addEventListener('input',()=>{if(Number.isFinite(video.duration))video.currentTime=Number(seek.value);setRange();reveal();});
   document.querySelectorAll('[data-speed]').forEach(b=>b.addEventListener('click',()=>applySpeed(b.dataset.speed)));
-  container.addEventListener('mousemove',reveal); container.addEventListener('touchstart',reveal,{passive:true});
+  let lastMoveTime = 0;
+  function throttledReveal() {
+    const now = Date.now();
+    if (now - lastMoveTime < 100) return;
+    lastMoveTime = now;
+    reveal();
+  }
+  container.addEventListener('mousemove', throttledReveal);
+  container.addEventListener('touchstart', reveal, { passive: true });
   video.addEventListener('play',()=>{setPlayIcon();reveal()}); video.addEventListener('pause',()=>{setPlayIcon();reveal()}); video.addEventListener('ended',()=>{setPlayIcon();reveal()});
   video.addEventListener('timeupdate',setRange); video.addEventListener('durationchange',setRange); video.addEventListener('loadedmetadata',()=>{setRange();updateTitle()});
   video.addEventListener('volumechange',updateVolume); video.addEventListener('ratechange',()=>applySpeed(video.playbackRate));
@@ -390,5 +419,5 @@
   video.volume=state.volume;applySpeed(state.speed);updateVolume();setPlayIcon();setRange();
   function updateTitle(){const title=$('modalTitle')?.textContent||'EPlay';const n=window.EPlaySeriesNavigation;const meta=n?'Temporada '+n.seasonNum+' • Episódio '+n.episodeNum:'';$('eplayPlayerTitle').textContent=title;$('eplayPlayerMeta').textContent=meta;$('eplayPlayerMeta').style.display=meta?'block':'none';$('eplayLiveBadge').style.display=/ao vivo|live|canal/i.test(title)?'inline-block':'none';syncSkipTools();}
   const observer=new MutationObserver(updateTitle);observer.observe($('modalTitle'),{childList:true,characterData:true,subtree:true});window.addEventListener('eplay:series-context',updateTitle);updateTitle();
-  window.EPlayPlayerUI={showToast,reveal,seekBy,playPause,fullscreen,pip};
+  window.EPlayPlayerUI={showToast,reveal,seekBy,playPause,fullscreen,pip,openAudioVersionMenu,closeMenu};
 })();
