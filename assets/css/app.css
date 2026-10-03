@@ -5249,7 +5249,7 @@ header {
 }
 
 .home-dashboard.is-active {
-  display: block;
+  display: block !important;
 }
 
 main {

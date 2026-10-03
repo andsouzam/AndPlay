@@ -1561,18 +1561,23 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return '#/inicio';
     }
 
-    function setRouteHash(hash, push = true) {
+    function setRouteHash(hash, push = true, state = null) {
       if (!hash) hash = '#/inicio';
       if (!hash.startsWith('#/')) {
         hash = '#/' + hash.replace(/^#?\/?/, '');
       }
-      if (window.location.hash === hash) return;
+      if (window.location.hash === hash) {
+        if (state !== null) {
+          try { window.history.replaceState(state, '', hash); } catch (_) {}
+        }
+        return;
+      }
       isRouterNavigating = true;
       try {
         if (push) {
-          window.history.pushState(null, '', hash);
+          window.history.pushState(state, '', hash);
         } else {
-          window.history.replaceState(null, '', hash);
+          window.history.replaceState(state, '', hash);
         }
       } catch (_) {
         window.location.hash = hash;
@@ -9117,7 +9122,11 @@ function showHome(targetScroll = 0) {
 
       globalSearchRequestId++;
       if (elements.searchInput) elements.searchInput.value = '';
-      if (elements.homeDashboard) elements.homeDashboard.classList.add('is-active');
+      if (elements.homeDashboard) {
+        elements.homeDashboard.style.removeProperty('display');
+        elements.homeDashboard.style.display = 'block';
+        elements.homeDashboard.classList.add('is-active');
+      }
       document.querySelector('.status-bar')?.style.setProperty('display', 'none');
       document.querySelector('main')?.style.setProperty('display', 'none');
       if (elements.categorySelect) {
@@ -9135,8 +9144,25 @@ function showHome(targetScroll = 0) {
 
       if (hasData && isAlreadyRendered) {
         showHomeGridLoading(false);
+        if (elements.homeWatchedSection && (getWatchedIds('movies').length || getWatchedIds('series').length)) {
+          elements.homeWatchedSection.style.removeProperty('display');
+        }
+        if (elements.homeRecommendationsSection) elements.homeRecommendationsSection.style.removeProperty('display');
+        if (elements.homeSeriesSection) elements.homeSeriesSection.style.removeProperty('display');
+        if (elements.homeMoviesSection) elements.homeMoviesSection.style.removeProperty('display');
         renderHomeWatched();
         startHomeFeaturedTimer();
+        loadHomeDashboardData().catch(error => console.warn('[EPlay Home] Catálogo:', error));
+        return;
+      }
+
+      if (hasData && !isAlreadyRendered) {
+        showHomeGridLoading(false);
+        renderHomeDashboard();
+        startHomeFeaturedTimer();
+        if (typeof targetScroll === 'number' && targetScroll > 0) {
+          window.scrollTo({ top: targetScroll, behavior: 'instant' });
+        }
         loadHomeDashboardData().catch(error => console.warn('[EPlay Home] Catálogo:', error));
         return;
       }
@@ -9192,7 +9218,7 @@ function showHome(targetScroll = 0) {
       }
       clearInterval(homeFeaturedTimer);
       homeFeaturedTimer = null;
-      if (currentMode === mode && !forceReload && !isWatchedView && !isFavoritesView) return;
+      if (currentMode === mode && !forceReload && !isWatchedView && !isFavoritesView && !contentPageOpen) return;
       isWatchedView = false;
       isFavoritesView = false;
       elements.tabWatchedBtn?.classList.remove('active');
@@ -14537,11 +14563,6 @@ function showHome(targetScroll = 0) {
       currentContentPageType = type;
       currentContentPageItem = item;
       contentPageOpen = true;
-      try {
-        if (!window.history.state || window.history.state.page !== 'content') {
-          window.history.pushState({ page: 'content', title: item?.name || item?.title || '' }, '');
-        }
-      } catch (_) {}
 
       // Cancela loadings anteriores
       hideLoading();
@@ -14885,8 +14906,11 @@ function showHome(targetScroll = 0) {
         if (elements.contentEpisodesList) elements.contentEpisodesList.innerHTML = '';
       }
 
-      if (!isHandlingPopstate && window.history.state && window.history.state.page === 'content') {
-        try { window.history.back(); } catch (_) {}
+      if (!isHandlingPopstate) {
+        const returnHash = (state.mode === 'home')
+          ? (state.favorites ? '#/favoritos' : '#/inicio')
+          : (state.watched ? '#/assistidos' : (state.favorites ? '#/favoritos' : (state.mode === 'movies' ? '#/filmes' : '#/series')));
+        setRouteHash(returnHash, false);
       }
 
       if (state.mode === 'home' && state.favorites) {
@@ -14923,6 +14947,8 @@ function showHome(targetScroll = 0) {
 
       document.querySelector('.status-bar')?.style.removeProperty('display');
       document.querySelector('main')?.style.removeProperty('display');
+      if (mode === 'movies' && elements.moviesHub) elements.moviesHub.style.removeProperty('display');
+      if (mode === 'series' && elements.seriesHub) elements.seriesHub.style.removeProperty('display');
       elements.categorySelect.disabled = false;
       elements.categorySelect.style.removeProperty('display');
       elements.searchInput.value = String(state.search || '');
@@ -14949,6 +14975,8 @@ function showHome(targetScroll = 0) {
         : 'Pesquisar séries por título, gênero ou elenco...';
       if (mode === 'movies' && !state.search && (!state.category || state.category === 'ALL')) {
         renderMoviesHub();
+      } else if (mode === 'series' && !state.search && (!state.category || state.category === 'ALL')) {
+        renderSeriesHub();
       } else {
         applyFilterAndRender(elements.searchInput.value);
       }
@@ -14992,7 +15020,7 @@ function showHome(targetScroll = 0) {
       const displayVer = (hasDublado && dubVer) ? dubVer : (versions[0] || preferredVer);
 
       const primaryStreamId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || versions[0]?.streamId;
-      if (primaryStreamId) setRouteHash('#/filme/' + primaryStreamId);
+      if (primaryStreamId) setRouteHash('#/filme/' + primaryStreamId, true, { page: 'content', type: 'movie', id: primaryStreamId });
       document.title = (groupOrMovie?.name || groupOrMovie?.title || 'Filme') + ' - EPlay';
       void enrichMoviePageMetadata(groupOrMovie, primaryStreamId);
 
@@ -15042,7 +15070,7 @@ function showHome(targetScroll = 0) {
       currentContentPageType = 'series';
       currentSeriesGroup = seriesGroupOrItem;
       const primarySeriesId = seriesGroupOrItem?.series_id || (seriesGroupOrItem?.versions && seriesGroupOrItem.versions[0]?.seriesId);
-      if (primarySeriesId) setRouteHash('#/series/' + primarySeriesId);
+      if (primarySeriesId) setRouteHash('#/series/' + primarySeriesId, true, { page: 'content', type: 'series', id: primarySeriesId });
       document.title = (seriesGroupOrItem?.name || seriesGroupOrItem?.title || 'Série') + ' - EPlay';
       showContentPageShell('series', seriesGroupOrItem);
       void enrichSeriesPageMetadata(seriesGroupOrItem);
