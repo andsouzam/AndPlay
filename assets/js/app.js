@@ -4244,7 +4244,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
       if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
-      elements.homeDashboard?.classList.remove('is-active');
+      setHomeDashboardVisible(false);
       elements.contentPage?.classList.remove('is-active');
       if (elements.contentPage) elements.contentPage.hidden = true;
       document.querySelector('.status-bar')?.style.removeProperty('display');
@@ -4616,7 +4616,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
       if (elements.loadMoreContainer) elements.loadMoreContainer.style.removeProperty('display');
-      elements.homeDashboard?.classList.remove('is-active');
+      setHomeDashboardVisible(false);
       elements.contentPage?.classList.remove('is-active');
       if (elements.contentPage) elements.contentPage.hidden = true;
       document.querySelector('.status-bar')?.style.removeProperty('display');
@@ -5441,7 +5441,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (elements.liveHub) elements.liveHub.style.display = 'none';
       if (elements.favoritesHub) elements.favoritesHub.style.display = 'none';
       if (elements.watchedHub) elements.watchedHub.style.display = 'none';
-      elements.homeDashboard?.classList.remove('is-active');
+      setHomeDashboardVisible(false);
       elements.contentPage?.classList.remove('is-active');
       if (elements.contentPage) elements.contentPage.hidden = true;
       if (elements.mediaGrid) elements.mediaGrid.style.display = 'none';
@@ -7348,6 +7348,18 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       setupSingleHomeRailArrow(elements.homeWatchedRail, elements.homeWatchedNext, elements.homeWatchedPrev);
     }
 
+    function setHomeDashboardVisible(visible) {
+      if (!elements.homeDashboard) return;
+      if (visible) {
+        elements.homeDashboard.style.removeProperty('display');
+        elements.homeDashboard.style.display = 'block';
+        elements.homeDashboard.classList.add('is-active');
+      } else {
+        elements.homeDashboard.style.display = 'none';
+        elements.homeDashboard.classList.remove('is-active');
+      }
+    }
+
     function showHomeGridLoading(isLoading) {
       let loader = elements.homeRailsLoading || document.getElementById('homeRailsLoading');
       if (!loader && elements.homeDashboard) {
@@ -7374,6 +7386,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           elements.homeFeaturedLoading.style.display = 'flex';
           elements.homeFeaturedLoading.textContent = 'Carregando novidades...';
         }
+      } else {
+        if (elements.homeWatchedSection && (getWatchedIds('movies').length || getWatchedIds('series').length)) {
+          elements.homeWatchedSection.style.removeProperty('display');
+        }
+        if (elements.homeRecommendationsSection) elements.homeRecommendationsSection.style.removeProperty('display');
+        if (elements.homeSeriesSection) elements.homeSeriesSection.style.removeProperty('display');
+        if (elements.homeMoviesSection) elements.homeMoviesSection.style.removeProperty('display');
+        if (elements.homeFeaturedLoading) elements.homeFeaturedLoading.style.display = 'none';
       }
     }
 
@@ -9122,11 +9142,7 @@ function showHome(targetScroll = 0) {
 
       globalSearchRequestId++;
       if (elements.searchInput) elements.searchInput.value = '';
-      if (elements.homeDashboard) {
-        elements.homeDashboard.style.removeProperty('display');
-        elements.homeDashboard.style.display = 'block';
-        elements.homeDashboard.classList.add('is-active');
-      }
+      setHomeDashboardVisible(true);
       document.querySelector('.status-bar')?.style.setProperty('display', 'none');
       document.querySelector('main')?.style.setProperty('display', 'none');
       if (elements.categorySelect) {
@@ -9231,7 +9247,7 @@ function showHome(targetScroll = 0) {
       if (elements.watchedHub) elements.watchedHub.style.display = 'none';
       elements.categorySelect.disabled = false;
       elements.categorySelect.style.removeProperty('display');
-      elements.homeDashboard?.classList.remove('is-active');
+      setHomeDashboardVisible(false);
       elements.contentPage?.classList.remove('is-active');
       if (elements.contentPage) {
         elements.contentPage.hidden = true;
@@ -10713,7 +10729,7 @@ function showHome(targetScroll = 0) {
         clearInterval(seriesHeroTimer);
         seriesHeroTimer = null;
       }
-      elements.homeDashboard?.classList.remove('is-active');
+      setHomeDashboardVisible(false);
       elements.contentPage?.classList.remove('is-active');
       if (elements.contentPage) elements.contentPage.hidden = true;
       document.querySelector('.status-bar')?.style.removeProperty('display');
@@ -14580,8 +14596,7 @@ function showHome(targetScroll = 0) {
       if (seriesHeroTimer) { clearInterval(seriesHeroTimer); seriesHeroTimer = null; }
       if (homeFeaturedTimer) { clearInterval(homeFeaturedTimer); homeFeaturedTimer = null; }
 
-      elements.homeDashboard?.classList.remove('is-active');
-      if (elements.homeDashboard) elements.homeDashboard.style.display = 'none';
+      setHomeDashboardVisible(false);
       document.querySelector('.status-bar')?.style.setProperty('display', 'none');
       document.querySelector('main')?.style.setProperty('display', 'none');
       if (elements.categorySelect) elements.categorySelect.disabled = true;
@@ -14945,6 +14960,7 @@ function showHome(targetScroll = 0) {
       if (mode === 'movies') elements.mobileMoviesBtn?.classList.add('active');
       else elements.mobileSeriesBtn?.classList.add('active');
 
+      setHomeDashboardVisible(false);
       document.querySelector('.status-bar')?.style.removeProperty('display');
       document.querySelector('main')?.style.removeProperty('display');
       if (mode === 'movies' && elements.moviesHub) elements.moviesHub.style.removeProperty('display');
