@@ -1496,11 +1496,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
       });
 
-      // Atualiza o feed da Home se o perfil de gosto ou preferências forem sincronizados remotamente via Supabase
+      // Sincronização remota de preferências via Supabase: silenciosa para não perturbar a tela ativa
       window.addEventListener('andplay:remote-preferences-synced', () => {
-        if (currentMode === 'home') {
-          scheduleHomeCatalogRender();
-        }
+        // Silencioso: não recriar a tela da Home enquanto o usuário está nela
       });
 
       initSidebarState();
@@ -2780,7 +2778,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (window.AndPlayAccount?.removeWatched) {
         await window.AndPlayAccount.removeWatched(normalizedType, normalizedId);
       }
-      if (currentMode === 'home') renderHomeDashboard();
       if (isWatchedView) showWatchedContent();
     }
 
@@ -2802,13 +2799,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
         recordTasteFromPlayback(type, normalizedId);
 
-        window.AndPlayAccount?.recordWatched?.(type, normalizedId).then(success => {
-          if (success && currentMode === 'home') renderHomeDashboard();
-        }).catch(() => {});
+        window.AndPlayAccount?.recordWatched?.(type, normalizedId).catch(() => {});
         window.dispatchEvent(new CustomEvent('andplay:local-change', {
           detail: { kind: 'watched', mediaType: type, id: normalizedId }
         }));
-        if (currentMode === 'home') renderHomeDashboard();
       } catch (e) {}
     }
 
@@ -3167,7 +3161,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         window.dispatchEvent(new CustomEvent('andplay:local-change', {
           detail: { kind: 'progress-cleared', mediaType: type, id: String(id) }
         }));
-        if (currentMode === 'home') renderHomeDashboard();
       } catch (e) {}
     }
 
@@ -3200,7 +3193,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         window.dispatchEvent(new CustomEvent('andplay:local-change', {
           detail: { kind: 'progress', mediaType: type, id: String(id), record }
         }));
-        if (currentMode === 'home') renderHomeDashboard();
       } catch (e) {}
     }
 
@@ -7173,12 +7165,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function startHomeFeaturedTimer() {
-      clearInterval(homeFeaturedTimer);
-      homeFeaturedTimer = null;
-      if (homeFeaturedItems.length < 2) return;
-      homeFeaturedTimer = setInterval(() => {
-        if (currentMode === 'home' && !document.hidden) moveHomeFeatured(1);
-      }, 7000);
+      // Carrosséis nunca devem avançar sozinhos sem interação do usuário
+      if (homeFeaturedTimer) {
+        clearInterval(homeFeaturedTimer);
+        homeFeaturedTimer = null;
+      }
     }
 
     function getHomeDisplayKey(item) {
@@ -7383,7 +7374,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function updateHomeRatingBadges() {
       try {
-        renderHomeFeatured();
         const cards = elements.homeDashboard?.querySelectorAll('.home-title-card');
         if (cards && cards.length) {
           cards.forEach(card => {
@@ -7942,14 +7932,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function startMoviesHeroTimer() {
-      clearInterval(moviesHeroTimer);
-      moviesHeroTimer = null;
-      if (moviesHeroItems.length < 2) return;
-      moviesHeroTimer = setInterval(() => {
-        if (currentMode === 'movies' && elements.moviesHub && elements.moviesHub.style.display !== 'none' && !document.hidden) {
-          moveMoviesHero(1);
-        }
-      }, 7000);
+      // Carrosséis nunca devem avançar sozinhos sem interação do usuário
+      if (moviesHeroTimer) {
+        clearInterval(moviesHeroTimer);
+        moviesHeroTimer = null;
+      }
     }
 
     function renderMoviesGenrePills() {
@@ -8707,14 +8694,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function startSeriesHeroTimer() {
-      if (seriesHeroTimer) clearInterval(seriesHeroTimer);
-      seriesHeroTimer = null;
-      if (seriesHeroItems.length < 2) return;
-      seriesHeroTimer = setInterval(() => {
-        if (currentMode === 'series' && elements.seriesHub && elements.seriesHub.style.display !== 'none' && !document.hidden) {
-          moveSeriesHero(1);
-        }
-      }, 7000);
+      // Carrosséis nunca devem avançar sozinhos sem interação do usuário
+      if (seriesHeroTimer) {
+        clearInterval(seriesHeroTimer);
+        seriesHeroTimer = null;
+      }
     }
 
     const SERIES_HUB_PILLS = [
@@ -10480,7 +10464,10 @@ function showHome(targetScroll = 0) {
           if (elements.categorySelect) elements.categorySelect.value = 'ALL';
           if (elements.resetCategoryBtn) elements.resetCategoryBtn.style.display = 'none';
           if (elements.categoryLabel) elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
-          if (currentMode === 'movies' && !document.body.classList.contains('tv-mode')) renderMoviesHub();
+          const hadPriorData = hasPersistentCache || hasStaleCache || hasMemoryCache;
+          if (!hadPriorData && currentMode === 'movies' && !document.body.classList.contains('tv-mode')) {
+            renderMoviesHub();
+          }
           return fullMoviesCache;
         } catch (err) {
           if ((hasPersistentCache || hasStaleCache) && fullMoviesCache?.length) {
@@ -10568,7 +10555,10 @@ function showHome(targetScroll = 0) {
           if (elements.categorySelect) elements.categorySelect.value = 'ALL';
           if (elements.resetCategoryBtn) elements.resetCategoryBtn.style.display = 'none';
           if (elements.categoryLabel) elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
-          if (currentMode === 'series' && !document.body.classList.contains('tv-mode')) renderSeriesHub();
+          const hadPriorData = hasPersistentCache || hasStaleCache || hasMemoryCache;
+          if (!hadPriorData && currentMode === 'series' && !document.body.classList.contains('tv-mode')) {
+            renderSeriesHub();
+          }
           return fullSeriesCache;
         } catch (err) {
           if ((hasPersistentCache || hasStaleCache) && fullSeriesCache?.length) {
@@ -18707,19 +18697,8 @@ function showHome(targetScroll = 0) {
 
       window.AndPlayApp = {
         refreshAfterAccountSync() {
-          try {
-            if (isWatchedView) {
-              showWatchedContent();
-            } else if (isFavoritesView) {
-              showFavoritesContent();
-            } else if (currentMode === 'home') {
-              renderHomeDashboard();
-            } else if (currentMode === 'movies') {
-              renderMoviesHub();
-            }
-          } catch (err) {
-            console.error('[EPlay App] Erro ao atualizar após sincronização da conta:', err);
-          }
+          // Sincronização de conta em segundo plano: silenciosa.
+          // NUNCA recriar ou atualizar a tela enquanto o usuário estiver navegando nela.
         },
         getAccountUsageSnapshot,
         async loadAccountUsage() {
