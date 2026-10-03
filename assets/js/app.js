@@ -738,12 +738,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     // Seleciona automaticamente a melhor versão de filme conforme as preferências salvas na conta do usuário
-    // (com prioridade padrão para Legendado e 4K)
+    // (quando o usuário escolhe Legendado, Legendado vira o padrão da conta)
     function pickPreferredMovieVersion(versions) {
       if (!Array.isArray(versions) || versions.length === 0) return null;
       if (versions.length === 1) return versions[0];
 
-      const prefAudio = (typeof getPreferredAudioPreference === 'function') ? getPreferredAudioPreference() : 'leg';
+      const prefAudio = (typeof getPreferredAudioPreference === 'function') ? getPreferredAudioPreference() : 'dub';
       const prefQuality = (typeof getPreferredQualityPreference === 'function') ? getPreferredQualityPreference() : '4k';
 
       const fourKLegNative = versions.find(v => v.versionInfo?.type === '4k_leg');
@@ -795,7 +795,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!Array.isArray(versions) || versions.length === 0) return null;
       if (versions.length === 1) return versions[0];
 
-      const prefAudio = (typeof getPreferredAudioPreference === 'function') ? getPreferredAudioPreference() : 'leg';
+      const prefAudio = (typeof getPreferredAudioPreference === 'function') ? getPreferredAudioPreference() : 'dub';
       if (prefAudio === 'leg') {
         const leg = versions.find(v => v.versionInfo?.type === 'legendado');
         if (leg) return leg;
@@ -1788,7 +1788,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const prefs = JSON.parse(localStorage.getItem(USER_PREFERENCES_LOCAL_KEY) || '{}');
         if (prefs.preferred_audio) return prefs.preferred_audio;
       } catch (_) {}
-      return 'leg'; // Padrão: Legendado com prioridade máxima conforme solicitado
+      return 'dub'; // Padrão inicial: Dublado. Quando o usuário escolhe Legendado, Legendado vira o padrão.
     }
 
     function getPreferredQualityPreference() {
@@ -1818,6 +1818,23 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (sync) {
         saveLocalPreference('preferred_quality', val);
         window.AndPlayAccount?.queueSyncPreference?.();
+      }
+    }
+
+    // Salva a versão explicitamente escolhida pelo usuário como o novo padrão da conta
+    function applyUserChosenVersionPreference(versionObj) {
+      if (!versionObj || !versionObj.versionInfo) return;
+      const t = versionObj.versionInfo.type;
+      if (t === '4k_leg' || t === '4k_leg_hybrid') {
+        setPreferredAudioPreference('leg');
+        setPreferredQualityPreference('4k');
+      } else if (t === '4k_dub') {
+        setPreferredAudioPreference('dub');
+        setPreferredQualityPreference('4k');
+      } else if (t === 'legendado') {
+        setPreferredAudioPreference('leg');
+      } else if (t === 'dublado') {
+        setPreferredAudioPreference('dub');
       }
     }
 
@@ -11532,6 +11549,7 @@ function showHome(targetScroll = 0) {
         `;
         btn.addEventListener('click', () => {
           closeMovieVersionModal();
+          applyUserChosenVersionPreference(v);
           playMovieVersion(groupOrMovie, v, playableVersions);
         });
         elements.versionOptionsList.appendChild(btn);
@@ -11682,20 +11700,7 @@ function showHome(targetScroll = 0) {
       setupPlayerVersionSwitcher(groupOrMovie, targetVersion, effectiveVersions);
 
       // Salva a escolha do usuário na conta para ser usada sempre como padrão futuro
-      if (targetVersion && targetVersion.versionInfo) {
-        const t = targetVersion.versionInfo.type;
-        if (t === '4k_leg' || t === '4k_leg_hybrid') {
-          setPreferredAudioPreference('leg');
-          setPreferredQualityPreference('4k');
-        } else if (t === '4k_dub') {
-          setPreferredAudioPreference('dub');
-          setPreferredQualityPreference('4k');
-        } else if (t === 'legendado') {
-          setPreferredAudioPreference('leg');
-        } else if (t === 'dublado') {
-          setPreferredAudioPreference('dub');
-        }
-      }
+      applyUserChosenVersionPreference(targetVersion);
 
       if (isHybrid) {
         startHybridMoviePlayback(groupOrMovie, targetVersion, effectiveVersions, currentPos);
@@ -14371,7 +14376,10 @@ function showHome(targetScroll = 0) {
               '<small>' + escapeHtml(v.versionInfo.desc || 'Assistir nesta versão') + '</small>' +
             '</span>' +
             '<span class="eplay-version-action">▶ Assistir</span>';
-          btn.addEventListener('click', () => playMovieVersion(groupOrMovie, v, versions));
+          btn.addEventListener('click', () => {
+            applyUserChosenVersionPreference(v);
+            playMovieVersion(groupOrMovie, v, versions);
+          });
           elements.contentMovieVersions.appendChild(btn);
         });
       }
@@ -14483,6 +14491,11 @@ function showHome(targetScroll = 0) {
         btn.addEventListener('click', () => {
           if (isCurrent) return;
           const selectedSeason = getSeriesSeasonSelectElement()?.value || null;
+          if (v?.versionInfo?.type === 'legendado') {
+            setPreferredAudioPreference('leg');
+          } else if (v?.versionInfo?.type === 'dublado') {
+            setPreferredAudioPreference('dub');
+          }
           loadSeriesVersion(v, selectedSeason);
         });
 
@@ -14496,13 +14509,6 @@ function showHome(targetScroll = 0) {
       // a resposta mais antiga é ignorada para não sobrescrever a tela com a versão errada
       const myVersionToken = ++_seriesVersionLoadToken;
       currentActiveSeriesVersion = versionObj;
-
-      // Salva preferência de áudio na conta do usuário
-      if (versionObj?.versionInfo?.type === 'legendado') {
-        setPreferredAudioPreference('leg');
-      } else if (versionObj?.versionInfo?.type === 'dublado') {
-        setPreferredAudioPreference('dub');
-      }
 
       const versions = currentSeriesGroup?.versions || [versionObj];
       renderSeriesVersionButtons(versions, currentActiveSeriesVersion);
