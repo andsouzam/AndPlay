@@ -1016,6 +1016,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             matchedGroup.originalName = raw;
             matchedGroup.name = cleanDisplayTitle(raw);
             matchedGroup.primaryItem = item;
+          } else if (versionInfo.type === 'dublado' || versionInfo.type === '4k_dub') {
+            matchedGroup.originalName = raw;
+            matchedGroup.name = cleanDisplayTitle(raw);
+            matchedGroup.primaryItem = item;
+            matchedGroup.stream_id = item.stream_id;
           }
         } else {
           const catIds = [Number(item.category_id)].filter(Boolean);
@@ -1170,6 +1175,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             matchedGroup.originalName = raw;
             matchedGroup.name = cleanDisplayTitle(raw);
             matchedGroup.primaryItem = item;
+          } else if (versionInfo.type === 'dublado') {
+            matchedGroup.originalName = raw;
+            matchedGroup.name = cleanDisplayTitle(raw);
+            matchedGroup.primaryItem = item;
+            matchedGroup.series_id = item.series_id;
           }
         } else {
           const catIds = [Number(item.category_id)].filter(Boolean);
@@ -11742,6 +11752,125 @@ function showHome(targetScroll = 0) {
       elements.modalFormat.textContent = `Versão alterada para ${targetVersion.versionInfo.label}`;
     }
 
+    // Cache de temporadas/episódios de séries para alternância rápida sem recarregar tela
+    const seriesDataCache = new Map();
+
+    async function getOrFetchSeriesInfo(seriesId) {
+      if (!seriesId) return null;
+      const key = String(seriesId);
+      if (seriesDataCache.has(key)) {
+        return seriesDataCache.get(key);
+      }
+      const data = await xtreamApi('get_series_info', `&series_id=${encodeURIComponent(seriesId)}`);
+      if (data && data.episodes) {
+        seriesDataCache.set(key, data);
+      }
+      return data;
+    }
+
+    function setupPlayerSeriesVersionSwitcher(seriesGroup, activeVersion, seasonNum, epNum) {
+      if (!elements.movieVersionSwitcher) return;
+      const versions = seriesGroup?.versions || [];
+      if (!versions || versions.length <= 1) {
+        elements.movieVersionSwitcher.style.display = 'none';
+        elements.movieVersionSwitcher.innerHTML = '';
+        return;
+      }
+
+      elements.movieVersionSwitcher.style.display = 'inline-flex';
+      elements.movieVersionSwitcher.innerHTML = '';
+
+      const orderMap = { 'dublado': 1, 'legendado': 2 };
+      const sorted = [...versions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
+
+      sorted.forEach(v => {
+        const isCurrent = activeVersion && (v.seriesId === activeVersion.seriesId);
+        const btn = document.createElement('button');
+        btn.className = `btn ${isCurrent ? 'btn-primary' : 'btn-secondary'}`;
+        btn.style.padding = '7px 12px';
+        btn.style.fontSize = '12px';
+        btn.style.display = 'inline-flex';
+        btn.style.alignItems = 'center';
+        btn.style.gap = '6px';
+        btn.style.cursor = 'pointer';
+        btn.title = `Alternar áudio para ${v.versionInfo.label}`;
+        btn.innerHTML = `${v.versionInfo.icon} ${v.versionInfo.label}`;
+
+        btn.addEventListener('click', async () => {
+          if (isCurrent) return;
+          applyUserChosenVersionPreference(v);
+          await switchSeriesEpisodeInPlayer(v, seasonNum, epNum);
+        });
+
+        elements.movieVersionSwitcher.appendChild(btn);
+      });
+    }
+
+    async function switchSeriesEpisodeInPlayer(targetVersion, seasonNum, epNum) {
+      if (!targetVersion || !currentSeriesGroup) return;
+      const currentPos = elements.videoPlayer ? elements.videoPlayer.currentTime : 0;
+      const wasPaused = elements.videoPlayer ? elements.videoPlayer.paused : false;
+      saveCurrentVodProgress();
+      stopVodProgressTracking(false);
+
+      try {
+        const data = await getOrFetchSeriesInfo(targetVersion.seriesId);
+        const seasonEps = (data?.episodes && data.episodes[seasonNum]) || [];
+        const matchedEp = seasonEps.find(e => Number(e.episode_num) === Number(epNum)) || seasonEps[0];
+        if (!matchedEp) {
+          if (window.showPlayerToast) {
+            window.showPlayerToast(`⚠️ Episódio não encontrado em ${targetVersion.versionInfo.label}`, 3000);
+          }
+          return;
+        }
+
+        currentActiveSeriesVersion = targetVersion;
+        const ext = matchedEp.container_extension || 'mp4';
+        const newUrl = `${CONFIG.server}/series/${CONFIG.user}/${CONFIG.pass}/${matchedEp.id}.${ext}`;
+        const sName = currentSeriesGroup.name || data.info?.name || 'Série';
+        const epTitle = matchedEp.title || `Episódio ${matchedEp.episode_num}`;
+        const newTitle = `${sName} - ${epTitle} (${targetVersion.versionInfo.label})`;
+
+        activeVideoUrl = newUrl;
+        elements.modalTitle.textContent = newTitle;
+        elements.downloadBtn.href = newUrl;
+        elements.videoPlayer.src = newUrl;
+
+        if (currentPlaybackMeta) {
+          currentPlaybackMeta.streamId = matchedEp.id;
+          currentPlaybackMeta.url = newUrl;
+          currentPlaybackMeta.title = newTitle;
+          currentPlaybackMeta.selectedVersion = targetVersion;
+          currentPlaybackMeta.versionInfo = targetVersion.versionInfo;
+          currentPlaybackMeta.ep = matchedEp;
+        }
+
+        setupPlayerSeriesVersionSwitcher(currentSeriesGroup, currentActiveSeriesVersion, seasonNum, epNum);
+
+        function onLoaded() {
+          elements.videoPlayer.removeEventListener('loadedmetadata', onLoaded);
+          if (currentPos > 0) {
+            try { elements.videoPlayer.currentTime = currentPos; } catch (_) {}
+          }
+          if (!wasPaused) {
+            elements.videoPlayer.play().catch(() => {});
+          }
+          startVodProgressTracking('series', matchedEp.id, newTitle);
+        }
+        elements.videoPlayer.addEventListener('loadedmetadata', onLoaded, { once: true });
+        elements.videoPlayer.load();
+
+        if (window.showPlayerToast) {
+          window.showPlayerToast(`✨ Áudio alterado para: ${targetVersion.versionInfo.label}`, 2500);
+        }
+      } catch (err) {
+        console.error('[EPlay Series] Erro ao alternar versão do episódio no player:', err);
+        if (window.showPlayerToast) {
+          window.showPlayerToast(`❌ Erro ao alternar versão: ${err.message}`, 3000);
+        }
+      }
+    }
+
     // ==========================================
     // REPRODUÇÃO DE VÍDEO (FILMES E EPISÓDIOS)
     // ==========================================
@@ -12115,41 +12244,9 @@ function showHome(targetScroll = 0) {
     }
 
     async function switchSeriesEpisodeToVersion(targetVersion, seasonNum, epNum) {
-      if (!elements.videoErrorOverlay) return;
-      elements.videoErrorTitle.textContent = 'Carregando Versão Alternativa...';
-      elements.videoErrorMessage.innerHTML = `<div class="spinner" style="margin: 15px auto;"></div>Buscando episódio correspondente na versão <strong>${escapeHtml(targetVersion.versionInfo.label)}</strong>...`;
-      elements.videoErrorActions.innerHTML = '';
-
-      try {
-        const data = await xtreamApi('get_series_info', `&series_id=${targetVersion.seriesId}`);
-
-        currentSeriesData = data;
-        currentActiveSeriesVersion = targetVersion;
-
-        if (currentSeriesGroup && currentSeriesGroup.versions) {
-          renderSeriesVersionButtons(currentSeriesGroup.versions, currentActiveSeriesVersion);
-        }
-
-        const seasonEps = (data.episodes && data.episodes[seasonNum]) || [];
-        const matchedEp = seasonEps.find(e => Number(e.episode_num) === Number(epNum)) || seasonEps[0];
-
-        if (matchedEp) {
-          hideVideoErrorOverlay();
-          playSeriesEpisode(matchedEp, seasonNum);
-        } else {
-          elements.videoErrorTitle.textContent = 'Episódio Não Encontrado';
-          elements.videoErrorMessage.textContent = `A temporada ${seasonNum} ou o episódio ${epNum} não constam na versão ${targetVersion.versionInfo.label}.`;
-          elements.videoErrorActions.innerHTML = `
-            <button class="btn btn-secondary" data-close-player>📋 Voltar aos Episódios</button>
-          `;
-        }
-      } catch (err) {
-        elements.videoErrorTitle.textContent = 'Erro ao Alternar Versão';
-        elements.videoErrorMessage.textContent = `Não foi possível carregar a versão ${targetVersion.versionInfo.label}: ${err.message}`;
-        elements.videoErrorActions.innerHTML = `
-          <button class="btn btn-secondary" data-close-player>📋 Voltar aos Episódios</button>
-        `;
-      }
+      hideVideoErrorOverlay();
+      applyUserChosenVersionPreference(targetVersion);
+      await switchSeriesEpisodeInPlayer(targetVersion, seasonNum, epNum);
     }
 
     function openPlayer(title, url, mediaType = 'movie', mediaMeta = null, startPosition = 0) {
@@ -14328,14 +14425,19 @@ function showHome(targetScroll = 0) {
       const versions = getMovieAllPlayableVersions(groupOrMovie, rawVersions);
       const preferredVer = pickPreferredMovieVersion(versions);
 
+      const hasDublado = versions.some(v => v.versionInfo?.type === 'dublado' || v.versionInfo?.type === '4k_dub');
+      const dubVer = versions.find(v => v.versionInfo?.type === '4k_dub') || versions.find(v => v.versionInfo?.type === 'dublado');
+      const displayVer = (hasDublado && dubVer) ? dubVer : (versions[0] || preferredVer);
+
       const primaryStreamId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || versions[0]?.streamId;
       void enrichMoviePageMetadata(groupOrMovie, primaryStreamId);
 
-      // Botão Principal de Reprodução Direta na versão preferida da conta
+      // Botão Principal Único de Reprodução Direta (apenas a opção dublada exibida quando disponível,
+      // evitando ambiguidade de seleções na página enquanto o player gerencia a versão preferida)
       const primaryBtn = document.createElement('button');
       primaryBtn.type = 'button';
       primaryBtn.className = 'eplay-version-card is-primary';
-      primaryBtn.style.cssText = 'background: linear-gradient(135deg, rgba(79, 195, 247, 0.22), rgba(33, 150, 243, 0.12)); border: 2px solid #4fc3f7; transform: scale(1.005);';
+      primaryBtn.style.cssText = 'background: linear-gradient(135deg, rgba(79, 195, 247, 0.22), rgba(33, 150, 243, 0.12)); border: 2px solid #4fc3f7; transform: scale(1.005); width: 100%;';
       const progressStreamId = preferredVer.isHybrid ? preferredVer.videoVersion.streamId : preferredVer.streamId;
       const progress = getVodProgress('movie', progressStreamId);
       const canResume = progress && progress.position > VOD_PROGRESS_MIN_SECONDS && progress.duration > 0 && progress.position < progress.duration * VOD_PROGRESS_COMPLETE_PERCENT;
@@ -14344,45 +14446,19 @@ function showHome(targetScroll = 0) {
         : '▶ Assistir Filme';
       const progressText = canResume
         ? 'Você parou em ' + formatResumeTime(progress.position) + ' • restam ' + formatResumeTime(Math.max(0, progress.duration - progress.position))
-        : (preferredVer.versionInfo.desc || 'Reprodução automática na versão padrão da sua conta');
+        : (hasDublado ? 'Versão Dublada • Alterne para legendado ou 4K no player' : (displayVer.versionInfo?.desc || 'Clique para assistir'));
+
+      const badgeText = hasDublado ? 'DUBLADO' : (displayVer.versionInfo?.badge || 'PADRÃO');
 
       primaryBtn.innerHTML =
-        '<span class="eplay-version-icon" style="font-size: 26px;">' + escapeHtml(preferredVer.versionInfo.icon || '▶') + '</span>' +
+        '<span class="eplay-version-icon" style="font-size: 26px;">' + escapeHtml(displayVer.versionInfo?.icon || '▶') + '</span>' +
         '<span class="eplay-version-copy">' +
-          '<strong style="color: #4fc3f7; font-size: 15px;">' + escapeHtml(preferredVer.versionInfo.label || 'Versão') + ' <span style="font-size: 10px; background: rgba(79,195,247,0.25); color: #4fc3f7; padding: 2px 7px; border-radius: 4px; font-weight: 700; margin-left: 6px;">PADRÃO</span></strong>' +
+          '<strong style="color: #4fc3f7; font-size: 15px;">' + escapeHtml(displayVer.versionInfo?.label || 'Assistir Filme') + ' <span style="font-size: 10px; background: rgba(79,195,247,0.25); color: #4fc3f7; padding: 2px 7px; border-radius: 4px; font-weight: 700; margin-left: 6px;">' + escapeHtml(badgeText) + '</span></strong>' +
           '<small>' + escapeHtml(progressText) + '</small>' +
         '</span>' +
         '<span class="eplay-version-action" style="font-weight: 800; font-size: 14px; color: #4fc3f7;">' + escapeHtml(actionText) + '</span>';
       primaryBtn.addEventListener('click', () => playMovieVersion(groupOrMovie, preferredVer, versions));
       elements.contentMovieVersions.appendChild(primaryBtn);
-
-      // Opções alternativas disponíveis (também alternáveis no player)
-      const otherVersions = versions.filter(v => v.streamId !== preferredVer.streamId);
-      if (otherVersions.length > 0) {
-        const altNotice = document.createElement('div');
-        altNotice.style.cssText = 'width: 100%; font-size: 12px; color: #8faec9; margin-top: 14px; margin-bottom: 2px; font-weight: 600;';
-        altNotice.textContent = 'Outras opções disponíveis (também alternáveis no player):';
-        elements.contentMovieVersions.appendChild(altNotice);
-
-        otherVersions.forEach(v => {
-          const btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'eplay-version-card';
-          btn.style.opacity = '0.85';
-          btn.innerHTML =
-            '<span class="eplay-version-icon">' + escapeHtml(v.versionInfo.icon || '▶') + '</span>' +
-            '<span class="eplay-version-copy">' +
-              '<strong>' + escapeHtml(v.versionInfo.label || 'Versão') + '</strong>' +
-              '<small>' + escapeHtml(v.versionInfo.desc || 'Assistir nesta versão') + '</small>' +
-            '</span>' +
-            '<span class="eplay-version-action">▶ Assistir</span>';
-          btn.addEventListener('click', () => {
-            applyUserChosenVersionPreference(v);
-            playMovieVersion(groupOrMovie, v, versions);
-          });
-          elements.contentMovieVersions.appendChild(btn);
-        });
-      }
     }
 
     async function openSeriesPage(seriesGroupOrItem) {
@@ -14414,9 +14490,10 @@ function showHome(targetScroll = 0) {
         versionInfo: detectSeriesVersion(seriesGroupOrItem),
         seriesId: seriesGroupOrItem?.series_id
       }];
+      const hasDublado = versions.some(v => v.versionInfo?.type === 'dublado');
+      const pageVersion = hasDublado ? (versions.find(v => v.versionInfo?.type === 'dublado') || versions[0]) : versions[0];
       setupSeriesVersionSwitcher(versions);
-      const defaultVer = pickPreferredSeriesVersion(versions);
-      await loadSeriesVersion(defaultVer);
+      await loadSeriesVersion(pageVersion);
     }
 
     async function openSeriesModal(seriesGroupOrItem) {
@@ -14436,11 +14513,12 @@ function showHome(targetScroll = 0) {
         seriesId: seriesGroupOrItem.series_id
       }];
 
+      const hasDublado = versions.some(v => v.versionInfo?.type === 'dublado');
+      const pageVersion = hasDublado ? (versions.find(v => v.versionInfo?.type === 'dublado') || versions[0]) : versions[0];
       setupSeriesVersionSwitcher(versions);
 
-      const defaultVer = pickPreferredSeriesVersion(versions);
       elements.seriesModal.style.display = 'flex';
-      await loadSeriesVersion(defaultVer);
+      await loadSeriesVersion(pageVersion);
     }
 
     function getSeriesVersionSwitcherElement() {
@@ -14458,49 +14536,17 @@ function showHome(targetScroll = 0) {
     function setupSeriesVersionSwitcher(versions) {
       const switcher = getSeriesVersionSwitcherElement();
       if (!switcher) return;
-
-      if (!versions || versions.length <= 1) {
-        switcher.style.display = 'none';
-        switcher.innerHTML = '';
-        return;
-      }
-
-      switcher.style.display = 'inline-flex';
-      renderSeriesVersionButtons(versions, currentActiveSeriesVersion);
+      // Todas as versões são unificadas e a alternância entre Dublado e Legendado
+      // é feita diretamente dentro do player, mantendo a página de séries limpa e leve.
+      switcher.style.display = 'none';
+      switcher.innerHTML = '';
     }
 
     function renderSeriesVersionButtons(versions, activeVersion) {
       const switcher = getSeriesVersionSwitcherElement();
       if (!switcher) return;
+      switcher.style.display = 'none';
       switcher.innerHTML = '';
-      const orderMap = { 'dublado': 1, 'legendado': 2 };
-      const sorted = [...versions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
-
-      sorted.forEach(v => {
-        const isCurrent = activeVersion && (v.seriesId === activeVersion.seriesId);
-        const btn = document.createElement('button');
-        btn.className = `btn ${isCurrent ? 'btn-primary' : 'btn-secondary'}`;
-        btn.style.padding = '6px 12px';
-        btn.style.fontSize = '12px';
-        btn.style.display = 'inline-flex';
-        btn.style.alignItems = 'center';
-        btn.style.gap = '6px';
-        btn.style.cursor = 'pointer';
-        btn.innerHTML = `${v.versionInfo.icon} ${v.versionInfo.label}`;
-
-        btn.addEventListener('click', () => {
-          if (isCurrent) return;
-          const selectedSeason = getSeriesSeasonSelectElement()?.value || null;
-          if (v?.versionInfo?.type === 'legendado') {
-            setPreferredAudioPreference('leg');
-          } else if (v?.versionInfo?.type === 'dublado') {
-            setPreferredAudioPreference('dub');
-          }
-          loadSeriesVersion(v, selectedSeason);
-        });
-
-        switcher.appendChild(btn);
-      });
     }
 
     let _seriesVersionLoadToken = 0;
@@ -14510,16 +14556,13 @@ function showHome(targetScroll = 0) {
       const myVersionToken = ++_seriesVersionLoadToken;
       currentActiveSeriesVersion = versionObj;
 
-      const versions = currentSeriesGroup?.versions || [versionObj];
-      renderSeriesVersionButtons(versions, currentActiveSeriesVersion);
-
       const seriesEpisodesList = getSeriesEpisodesElement();
       const seriesSeasonSelect = getSeriesSeasonSelectElement();
       seriesEpisodesList.innerHTML = `<div class="eplay-page-loading"><div class="spinner"></div>Carregando episódios (${escapeHtml(versionObj.versionInfo.label)})...</div>`;
       seriesSeasonSelect.innerHTML = '<option>Carregando...</option>';
 
       try {
-        const data = await xtreamApi('get_series_info', `&series_id=${versionObj.seriesId}`);
+        const data = await getOrFetchSeriesInfo(versionObj.seriesId);
         if (myVersionToken !== _seriesVersionLoadToken) return;
         currentSeriesData = data;
         if (currentSeriesGroup && data?.info) {
@@ -14654,7 +14697,7 @@ function showHome(targetScroll = 0) {
       });
     }
 
-    function playSeriesEpisode(ep, seasonNum) {
+    async function playSeriesEpisode(ep, seasonNum) {
       if (!window.AndPlayAccount?.isSignedIn?.()) {
         showLoginScreen();
         return;
@@ -14663,20 +14706,49 @@ function showHome(targetScroll = 0) {
       const watchedId = getSeriesWatchedId(currentSeriesGroup);
       if (watchedId) saveWatchedId('series', watchedId);
 
+      const prefAudio = (typeof getPreferredAudioPreference === 'function') ? getPreferredAudioPreference() : 'dub';
+      const legVer = (currentSeriesGroup?.versions || []).find(v => v.versionInfo?.type === 'legendado');
+      const dubVer = (currentSeriesGroup?.versions || []).find(v => v.versionInfo?.type === 'dublado');
+
+      // Se o usuário prefere Legendado e existe versão legendada para a série, busca o episódio correspondente
+      if (prefAudio === 'leg' && legVer && currentActiveSeriesVersion?.versionInfo?.type !== 'legendado') {
+        try {
+          const legData = await getOrFetchSeriesInfo(legVer.seriesId);
+          const seasonEps = (legData?.episodes && legData.episodes[seasonNum]) || [];
+          const matchedEp = seasonEps.find(e => Number(e.episode_num) === Number(ep.episode_num));
+          if (matchedEp) {
+            currentActiveSeriesVersion = legVer;
+            ep = matchedEp;
+          }
+        } catch (_) {}
+      } else if (prefAudio === 'dub' && dubVer && currentActiveSeriesVersion?.versionInfo?.type !== 'dublado') {
+        try {
+          const dubData = await getOrFetchSeriesInfo(dubVer.seriesId);
+          const seasonEps = (dubData?.episodes && dubData.episodes[seasonNum]) || [];
+          const matchedEp = seasonEps.find(e => Number(e.episode_num) === Number(ep.episode_num));
+          if (matchedEp) {
+            currentActiveSeriesVersion = dubVer;
+            ep = matchedEp;
+          }
+        } catch (_) {}
+      }
+
+      const activeVer = currentActiveSeriesVersion || (dubVer || legVer || currentSeriesGroup?.versions?.[0]);
       const ext = ep.container_extension || 'mp4';
       const epUrl = `${CONFIG.server}/series/${CONFIG.user}/${CONFIG.pass}/${ep.id}.${ext}`;
       const epTitle = ep.title || `Episódio ${ep.episode_num}`;
       const sInfo = currentSeriesData?.info || {};
       const sName = currentSeriesGroup?.name || sInfo.name || 'Série';
-      const versionLabel = (currentSeriesGroup?.versions && currentSeriesGroup.versions.length > 1 && currentActiveSeriesVersion)
-        ? ` (${currentActiveSeriesVersion.versionInfo.label})`
+      const versionLabel = (currentSeriesGroup?.versions && currentSeriesGroup.versions.length > 1 && activeVer)
+        ? ` (${activeVer.versionInfo.label})`
         : '';
 
       const epPlot = ep.info?.plot || sInfo.plot || '';
       const epDuration = ep.info?.duration || ep.info?.duration_secs || sInfo.episode_run_time || '';
       const sPoster = ep.info?.movie_image || currentSeriesGroup?.poster || sInfo.cover || '';
 
-      const seasonEpisodes = currentSeriesData?.episodes?.[seasonNum] || [];
+      const currentActiveData = seriesDataCache.get(String(activeVer?.seriesId)) || currentSeriesData;
+      const seasonEpisodes = (currentActiveData?.episodes && currentActiveData.episodes[seasonNum]) || (currentSeriesData?.episodes?.[seasonNum] || []);
       const currentEpIdx = seasonEpisodes.findIndex(e => String(e.id) === String(ep.id));
       const hasPrevious = seasonEpisodes.some(e => Number(e.episode_num) === Number(ep.episode_num) - 1) || currentEpIdx > 0;
       const hasNext = seasonEpisodes.some(e => Number(e.episode_num) === Number(ep.episode_num) + 1) || (currentEpIdx >= 0 && currentEpIdx < seasonEpisodes.length - 1);
@@ -14687,7 +14759,8 @@ function showHome(targetScroll = 0) {
         hasPrevious,
         hasNext,
         next: () => {
-          const list = currentSeriesData?.episodes?.[seasonNum] || [];
+          const activeD = seriesDataCache.get(String(currentActiveSeriesVersion?.seriesId)) || currentSeriesData;
+          const list = activeD?.episodes?.[seasonNum] || [];
           let nextEp = list.find(e => Number(e.episode_num) === Number(ep.episode_num) + 1);
           if (!nextEp) {
             const idx = list.findIndex(e => String(e.id) === String(ep.id));
@@ -14697,7 +14770,8 @@ function showHome(targetScroll = 0) {
           return !!nextEp;
         },
         previous: () => {
-          const list = currentSeriesData?.episodes?.[seasonNum] || [];
+          const activeD = seriesDataCache.get(String(currentActiveSeriesVersion?.seriesId)) || currentSeriesData;
+          const list = activeD?.episodes?.[seasonNum] || [];
           let previousEp = list.find(e => Number(e.episode_num) === Number(ep.episode_num) - 1);
           if (!previousEp) {
             const idx = list.findIndex(e => String(e.id) === String(ep.id));
@@ -14726,18 +14800,20 @@ function showHome(targetScroll = 0) {
           genre: sInfo.genre || '',
           rating: sInfo.rating || sInfo.rating_5based || '',
           duration: epDuration,
-          seriesId: currentActiveSeriesVersion?.seriesId || currentSeriesGroup?.series_id || sInfo.series_id || '',
+          seriesId: activeVer?.seriesId || currentSeriesGroup?.series_id || sInfo.series_id || '',
           imdbId: sInfo.imdb_id || sInfo.imdbId || currentSeriesGroup?.imdbId || currentSeriesGroup?.imdb_id || readSeriesImdbCache()[cleanTitleKey(sName)] || '',
           imdb_id: sInfo.imdb_id || sInfo.imdbId || currentSeriesGroup?.imdb_id || currentSeriesGroup?.imdbId || readSeriesImdbCache()[cleanTitleKey(sName)] || '',
           malId: sInfo.mal_id || sInfo.malId || currentSeriesGroup?.malId || currentSeriesGroup?.mal_id || '',
           mal_id: sInfo.mal_id || sInfo.malId || currentSeriesGroup?.mal_id || currentSeriesGroup?.malId || '',
-          selectedVersion: currentActiveSeriesVersion,
-          versionInfo: currentActiveSeriesVersion ? currentActiveSeriesVersion.versionInfo : null,
+          selectedVersion: activeVer,
+          versionInfo: activeVer ? activeVer.versionInfo : null,
           fromContentPage: openedFromContentPage,
           streamId: ep.id,
           stream_id: ep.id,
           ep
         }, startPosition);
+
+        setupPlayerSeriesVersionSwitcher(currentSeriesGroup, activeVer, seasonNum, ep.episode_num);
       };
 
       startVodWithResume('series', ep.id, `${sName} - ${epTitle}${versionLabel}`, startPlayback);
