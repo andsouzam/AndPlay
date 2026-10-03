@@ -1402,14 +1402,18 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             if (key === 'ArrowRight' && elements.searchInput) { e.preventDefault(); elements.searchInput.focus(); return; }
             if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
           } else if (active === elements.searchInput) {
-            if (key === 'ArrowLeft') { e.preventDefault(); elements.tabFavoritesBtn?.focus(); return; }
-            if (key === 'ArrowRight') {
-              e.preventDefault();
-              if (elements.categorySelect && elements.categorySelect.style.display !== 'none') elements.categorySelect.focus();
-              else if (elements.accountBtn) elements.accountBtn.focus();
-              return;
+            const hasText = Boolean(active.value && active.value.length > 0);
+            if (!hasText) {
+              if (key === 'ArrowLeft') { e.preventDefault(); elements.tabFavoritesBtn?.focus(); return; }
+              if (key === 'ArrowRight') {
+                e.preventDefault();
+                if (elements.categorySelect && elements.categorySelect.style.display !== 'none') elements.categorySelect.focus();
+                else if (elements.accountBtn) elements.accountBtn.focus();
+                return;
+              }
             }
             if (key === 'ArrowDown') { e.preventDefault(); if (cards.length > 0) cards[0].focus(); return; }
+            if (key === 'ArrowUp') { e.preventDefault(); elements.tabFavoritesBtn?.focus(); return; }
           } else if (active === elements.categorySelect) {
             if (key === 'ArrowUp') {
               e.preventDefault();
