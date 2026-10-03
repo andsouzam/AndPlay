@@ -1667,10 +1667,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       const allWatched = [...movies, ...series].map(entry => ({
         ...entry,
-        title: entry.item?.name || entry.item?.title || (entry.type === 'series' ? 'Série ' + entry.id : 'Filme ' + entry.id),
+        title: cleanDisplayTitle(entry.item?.name || entry.item?.title || remoteHistoryMetadata[entry.type === 'series' ? 'series' : 'movies'].get(String(entry.id))?.title || (entry.type === 'series' ? 'Série ' + entry.id : 'Filme ' + entry.id)),
         poster: entry.type === 'series'
-          ? (entry.item?.cover || entry.item?.stream_icon || '')
-          : getBestPosterUrl(entry.item?.primaryItem || entry.item || {}),
+          ? (entry.item?.cover || entry.item?.stream_icon || remoteHistoryMetadata.series.get(String(entry.id))?.poster || '')
+          : (getBestPosterUrl(entry.item?.primaryItem || entry.item || {}) || entry.item?.poster || entry.item?.stream_icon || remoteHistoryMetadata.movies.get(String(entry.id))?.poster || ''),
         genres: getHomeThemesForItem(entry.item || {})
       }));
 
@@ -2208,11 +2208,18 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const target = String(seriesId || '');
       if (!target) return null;
       try {
+        const direct = getVodProgress('series', target);
+        if (direct && direct.title) {
+          latest = direct;
+        }
+
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
           if (!key || !key.startsWith(VOD_PROGRESS_PREFIX + 'series_')) continue;
           const entry = readJson(key, null);
-          if (!entry || String(entry.seriesId || '') !== target) continue;
+          if (!entry) continue;
+          const isMatch = String(entry.seriesId || '') === target || key === (VOD_PROGRESS_PREFIX + 'series_' + target);
+          if (!isMatch) continue;
           if (!latest || Number(entry.updatedAt || 0) > Number(latest.updatedAt || 0)) {
             latest = {
               position: Math.max(0, Number(entry.position) || 0),
@@ -2220,7 +2227,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
               updatedAt: Number(entry.updatedAt) || 0,
               title: String(entry.title || ''),
               poster: String(entry.poster || ''),
-              seriesId: target,
+              seriesId: String(entry.seriesId || target),
               seasonNum: Number(entry.seasonNum) || 0,
               episodeNum: Number(entry.episodeNum) || 0
             };
@@ -2231,13 +2238,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       // Fallback para históricos em outro navegador ou em um cache local que
       // ainda não recebeu o watch_progress remoto. O progresso remoto continua
       // usando episode_id como content_id e series_id como vínculo da série.
-      if (!latest) {
+      if (!latest || !latest.title) {
         try {
           const remoteProgress = window.AndPlayAccount?.getRemoteWatchProgress?.() || [];
           remoteProgress
             .filter(item =>
               item?.content_type === 'series' &&
-              String(item?.series_id || '') === target &&
+              (String(item?.series_id || '') === target || String(item?.content_id || '') === target) &&
               Number.isFinite(Date.parse(item?.updated_at || ''))
             )
             .sort((a, b) => Date.parse(b.updated_at || '') - Date.parse(a.updated_at || ''))
@@ -2248,7 +2255,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
                 updatedAt: Date.parse(item.updated_at || '') || 0,
                 title: String(item.title || ''),
                 poster: String(item.poster || ''),
-                seriesId: target,
+                seriesId: String(item.series_id || target),
                 seasonNum: Number(item.season_num) || 0,
                 episodeNum: Number(item.episode_num) || 0
               };
@@ -2261,9 +2268,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function getHistoryProgressFallback(type, id) {
-      return type === 'series'
-        ? getLatestSeriesProgress(id)
-        : getVodProgress('movie', id);
+      if (type === 'series') {
+        const direct = getVodProgress('series', id);
+        const latest = getLatestSeriesProgress(id);
+        if (direct && latest) {
+          return (Number(direct.updatedAt || 0) >= Number(latest.updatedAt || 0)) ? direct : latest;
+        }
+        return direct || latest || null;
+      }
+      return getVodProgress('movie', id);
     }
 
     function getSeriesHistoryTitle(progress) {
@@ -2296,36 +2309,53 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const progressTitle = type === 'series'
         ? getSeriesHistoryTitle(progress)
         : String(progress?.title || '').trim();
-      const title = String(metadata.title || progressTitle || '').trim();
-      const poster = String(metadata.poster || progress?.poster || '').trim();
+      let title = String(metadata.title || progressTitle || '').trim();
+      let poster = String(metadata.poster || progress?.poster || '').trim();
+
+      // Se for série e ainda não tiver título/pôster, tenta buscar pelo seriesId vinculado
+      if (type === 'series') {
+        const linkedSeriesId = String(progress?.seriesId || metadata.series_id || metadata.seriesId || '').trim();
+        if (linkedSeriesId && linkedSeriesId !== key) {
+          const linkedMeta = remoteHistoryMetadata.series.get(linkedSeriesId) || {};
+          if (!title && linkedMeta.title) title = linkedMeta.title;
+          if (!poster && linkedMeta.poster) poster = linkedMeta.poster;
+        }
+        if (!title) {
+          const epState = getSeriesEpisodeState({ id: key });
+          if (epState?.title) {
+            title = getSeriesHistoryTitle(epState);
+          }
+        }
+      }
 
       if (type === 'series') {
-        const seriesId = String(metadata.series_id || metadata.seriesId || key);
+        const seriesId = String(metadata.series_id || metadata.seriesId || progress?.seriesId || key);
+        const displayTitle = title || 'Série ' + key;
         const item = {
           isGroup: true,
           series_id: seriesId,
-          name: title || 'Série ' + key,
-          title: title || 'Série ' + key,
+          name: displayTitle,
+          title: displayTitle,
           cover: poster,
           stream_icon: poster,
           plot: metadata.plot || '',
           genre: metadata.genre || '',
-          year: metadata.year || '',
+          year: metadata.year || progress?.year || '',
           rating: metadata.rating || '',
           primaryItem: {
             series_id: seriesId,
-            name: title || 'Série ' + key,
+            name: displayTitle,
             cover: poster,
             stream_icon: poster
           },
           versions: [{
             item: {
               series_id: seriesId,
-              name: title || 'Série ' + key,
+              name: displayTitle,
               cover: poster,
               stream_icon: poster
             },
-            versionInfo: detectSeriesVersion({ name: title || '', category_id: metadata.category_id || '' }),
+            versionInfo: detectSeriesVersion({ name: displayTitle, category_id: metadata.category_id || '' }),
             seriesId
           }]
         };
@@ -2379,7 +2409,24 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         ...(Array.isArray(fullSeriesCache) ? fullSeriesCache : []),
         ...(Array.isArray(homeWatchedCatalogFallback.series) ? homeWatchedCatalogFallback.series : [])
       ];
-      return catalogs.find(item => seriesGroupMatchesWatchedId(item, key)) || null;
+      let found = catalogs.find(item => seriesGroupMatchesWatchedId(item, key)) || null;
+      if (found) return found;
+
+      // Se id for um episódio ou versão, tenta resolver o seriesId pelo progresso ou histórico
+      const progress = getVodProgress('series', key);
+      if (progress?.seriesId && String(progress.seriesId) !== key) {
+        found = catalogs.find(item => seriesGroupMatchesWatchedId(item, String(progress.seriesId))) || null;
+        if (found) return found;
+      }
+
+      const rp = window.AndPlayAccount?.getRemoteWatchProgress?.() || [];
+      const remoteProg = rp.find(p => String(p.content_id) === key && p.series_id && String(p.series_id) !== key);
+      if (remoteProg?.series_id) {
+        found = catalogs.find(item => seriesGroupMatchesWatchedId(item, String(remoteProg.series_id))) || null;
+        if (found) return found;
+      }
+
+      return null;
     }
 
     async function hydrateRemoteHistoryMetadata(limit = 12) {
@@ -2403,11 +2450,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const targets = history.filter(entry => {
         const type = entry.type === 'series' ? 'series' : 'movie';
         const id = String(entry.id || '');
-        if (type === 'series') return false;
-        if (!id || findHistoryCatalogItem(type, id)) return false;
-        if (remoteHistoryMetadata[type === 'series' ? 'series' : 'movies'].has(id)) return false;
+        if (!id) return false;
+        if (findHistoryCatalogItem(type, id)) return false;
+        const bucket = remoteHistoryMetadata[type === 'series' ? 'series' : 'movies'];
+        if (bucket.has(id)) return false;
         const progress = getHistoryProgressFallback(type, id);
-        return !progress?.title;
+        return !progress?.title || !progress?.poster;
       }).slice(0, Math.max(0, Number(limit) || 0));
 
       let cursor = 0;
@@ -2416,24 +2464,40 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           const entry = targets[cursor++];
           const type = entry.type === 'series' ? 'series' : 'movie';
           const id = String(entry.id || '');
+          let targetId = id;
+          if (type === 'series') {
+            const progress = getVodProgress('series', id);
+            if (progress?.seriesId) targetId = String(progress.seriesId).trim();
+            else {
+              const rp = window.AndPlayAccount?.getRemoteWatchProgress?.() || [];
+              const found = rp.find(p => String(p.content_id) === id && p.series_id);
+              if (found?.series_id) targetId = String(found.series_id).trim();
+            }
+          }
           try {
             const data = type === 'movie'
               ? await xtreamApi('get_vod_info', '&vod_id=' + encodeURIComponent(id))
-              : await xtreamApi('get_series_info', '&series_id=' + encodeURIComponent(id));
+              : await xtreamApi('get_series_info', '&series_id=' + encodeURIComponent(targetId));
             const info = data?.info || data || {};
-            const bucket = remoteHistoryMetadata[type === 'series' ? 'series' : 'movies'];
-            bucket.set(id, {
-              title: String(info.name || info.title || '').trim(),
-              poster: String(
-                info.movie_image || info.cover_big || info.cover || info.stream_icon || info.poster || ''
-              ).trim(),
-              plot: String(info.plot || '').trim(),
-              genre: String(info.genre || '').trim(),
-              year: String(info.year || info.releaseDate || '').slice(0, 4),
-              rating: String(info.rating || info.rating_5based || '').trim(),
-              series_id: type === 'series' ? String(info.series_id || id) : '',
-              ext: String(info.container_extension || 'mp4')
-            });
+            const title = String(info.name || info.title || '').trim();
+            const poster = String(
+              info.movie_image || info.cover_big || info.cover || info.stream_icon || info.poster || ''
+            ).trim();
+            if (title || poster) {
+              const metaObj = {
+                title,
+                poster,
+                plot: String(info.plot || '').trim(),
+                genre: String(info.genre || '').trim(),
+                year: String(info.year || info.releaseDate || '').slice(0, 4),
+                rating: String(info.rating || info.rating_5based || '').trim(),
+                series_id: type === 'series' ? String(info.series_id || targetId || id) : '',
+                ext: String(info.container_extension || 'mp4')
+              };
+              const bucket = remoteHistoryMetadata[type === 'series' ? 'series' : 'movies'];
+              bucket.set(id, metaObj);
+              if (targetId && targetId !== id) bucket.set(targetId, metaObj);
+            }
           } catch (e) {}
         }
       });
@@ -3309,11 +3373,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const wanted = String(id);
       if (!group) return false;
       if (group.series_id != null && String(group.series_id) === wanted) return true;
+      if (group.id != null && String(group.id) === wanted) return true;
       if (group.primaryItem?.series_id != null && String(group.primaryItem.series_id) === wanted) return true;
+      if (group.primaryItem?.id != null && String(group.primaryItem.id) === wanted) return true;
       return Array.isArray(group.versions)
         && group.versions.some(v =>
           (v?.seriesId != null && String(v.seriesId) === wanted) ||
-          (v?.item?.series_id != null && String(v.item.series_id) === wanted)
+          (v?.item?.series_id != null && String(v.item.series_id) === wanted) ||
+          (v?.item?.id != null && String(v.item.id) === wanted)
         );
     }
 
@@ -4836,16 +4903,26 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!group) return null;
 
       const progress = getHistoryProgressFallback(type, id);
+      const meta = remoteHistoryMetadata[type === 'series' ? 'series' : 'movies'].get(String(id)) || {};
+      const fallbackTitle = meta.title || getSeriesHistoryTitle(progress);
+      let rawTitle = group.name || group.title || '';
+      if (!rawTitle || rawTitle === 'Série ' + id || rawTitle === 'Filme ' + id) {
+        if (fallbackTitle) rawTitle = fallbackTitle;
+      }
+      const title = cleanDisplayTitle(rawTitle || (type === 'series' ? 'Série ' + id : 'Filme ' + id));
+
+      const poster = type === 'series'
+        ? (group.cover || group.stream_icon || meta.poster || progress?.poster || '')
+        : (getBestPosterUrl(group.primaryItem || group) || group.poster || group.stream_icon || group.cover || meta.poster || progress?.poster || '');
+
       return {
         type,
         id: String(id),
         item: group,
-        title: cleanDisplayTitle(group.name || group.title || (type === 'series' ? 'Série ' + id : 'Filme ' + id)),
-        year: group.year || '',
-        rating: group.rating || '',
-        poster: type === 'series'
-          ? (group.cover || group.stream_icon || '')
-          : (getBestPosterUrl(group.primaryItem || group) || group.poster || group.stream_icon || group.cover || ''),
+        title,
+        year: group.year || meta.year || progress?.year || '',
+        rating: group.rating || meta.rating || '',
+        poster,
         progress
       };
     }
@@ -6447,6 +6524,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           if (progressBar) progressBar.style.width = progress + '%';
           const subEl = card.querySelector('small');
           if (subEl && subEl.textContent !== sub) subEl.textContent = sub;
+
+          const titleEl = card.querySelector('strong');
+          if (titleEl && item.title && titleEl.textContent !== item.title) {
+            titleEl.textContent = item.title;
+            titleEl.title = item.title;
+          }
 
           const posterWrap = card.querySelector('.home-watched-poster');
           if (posterWrap && item.poster) {
