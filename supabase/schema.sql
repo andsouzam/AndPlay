@@ -156,3 +156,16 @@ drop trigger if exists user_favorites_touch_updated_at on public.user_favorites;
 create trigger user_favorites_touch_updated_at
 before update on public.user_favorites
 for each row execute function public.touch_updated_at();
+
+-- Função RPC para exclusão completa da conta pelo próprio usuário autenticado
+create or replace function public.delete_user()
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  delete from auth.users where id = auth.uid();
+$$;
+
+grant execute on function public.delete_user to authenticated;
+

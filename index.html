@@ -495,7 +495,7 @@
     <div id="userPanelAccount" class="user-tab-panel active">
       <!-- Bloco se logado -->
       <div id="userAccountConnectedBlock" class="user-panel-card" style="display: block;">
-        <h3 class="user-panel-title">Sessão Supabase Ativa</h3>
+        <h3 class="user-panel-title">Sessão Ativa</h3>
         <div class="user-info-rows">
           <div class="user-info-row">
             <span class="user-info-label">E-mail:</span>
@@ -512,7 +512,18 @@
         </div>
         <div class="user-form-actions" style="margin-top: 20px;">
           <button id="userChangePassBtn" type="button" class="user-btn user-btn-secondary">Alterar Senha</button>
-          <button id="userLogoutBtn" type="button" class="user-btn user-btn-danger">Sair da Conta</button>
+          <button id="userLogoutBtn" type="button" class="user-btn user-btn-secondary">Sair da Conta</button>
+        </div>
+
+        <div class="user-danger-zone" style="margin-top: 28px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+          <h4 style="font-size: 14px; font-weight: 700; color: #f87171; margin-bottom: 8px;">Privacidade & Gerenciamento de Dados</h4>
+          <p style="font-size: 12.5px; color: #94a3b8; line-height: 1.5; margin-bottom: 16px;">
+            Você tem total controle sobre seus dados. É possível apagar todo o histórico e favoritos salvos ou excluir definitivamente a sua conta do sistema.
+          </p>
+          <div class="user-form-actions" style="display: flex; gap: 12px; flex-wrap: wrap;">
+            <button id="userDeleteDataBtn" type="button" class="user-btn user-btn-warning" title="Apagar histórico, favoritos e progresso de reprodução">🗑️ Deletar Dados Salvos</button>
+            <button id="userDeleteAccountBtn" type="button" class="user-btn user-btn-danger" title="Excluir permanentemente sua conta e todos os dados associados">⚠️ Deletar Conta</button>
+          </div>
         </div>
       </div>
 

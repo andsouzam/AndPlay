@@ -332,6 +332,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       userConnectedSyncStatus: document.getElementById('userConnectedSyncStatus'),
       userChangePassBtn: document.getElementById('userChangePassBtn'),
       userLogoutBtn: document.getElementById('userLogoutBtn'),
+      userDeleteDataBtn: document.getElementById('userDeleteDataBtn'),
+      userDeleteAccountBtn: document.getElementById('userDeleteAccountBtn'),
       userAccountAuthBlock: document.getElementById('userAccountAuthBlock'),
       userAuthTabLogin: document.getElementById('userAuthTabLogin'),
       userAuthTabRegister: document.getElementById('userAuthTabRegister'),
@@ -4292,6 +4294,63 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           window.AndPlayAccount?.requestPasswordResetDirect?.(email)
             .then(() => alert(`Enviamos um link de redefinição de senha para ${email}.`))
             .catch(err => alert(err.message || 'Não foi possível solicitar redefinição.'));
+        }
+      });
+
+      elements.userDeleteDataBtn?.addEventListener('click', async () => {
+        if (!confirm('Deseja realmente apagar TODOS os seus dados salvos?\n\nIsso removerá todo o histórico de filmes e séries assistidos, favoritos salvos e progresso de reprodução, tanto deste dispositivo quanto da nuvem.\n\nSua conta continuará ativa.')) return;
+
+        const btn = elements.userDeleteDataBtn;
+        const originalText = btn.textContent;
+        btn.textContent = '⏳ Deletando dados...';
+        btn.disabled = true;
+
+        try {
+          await window.AndPlayAccount?.deleteUserData?.();
+
+          // Resetar caches e estados do app.js
+          try {
+            fullMoviesCache = null;
+            fullSeriesCache = null;
+            cachedHomeFeaturedItems = null;
+          } catch (e) {}
+
+          alert('Todos os seus dados salvos foram apagados com sucesso do banco de dados e deste aparelho!');
+          renderUserPage();
+          if (currentMode === 'home') {
+            showHome();
+          }
+        } catch (err) {
+          alert('Erro ao deletar dados: ' + (err.message || 'Falha na conexão.'));
+        } finally {
+          btn.textContent = originalText;
+          btn.disabled = false;
+        }
+      });
+
+      elements.userDeleteAccountBtn?.addEventListener('click', async () => {
+        const confirm1 = confirm('ATENÇÃO: Deseja realmente EXCLUIR SUA CONTA permanentemente?\n\nEsta ação é irreversível. Todos os seus dados, histórico, favoritos, preferências e seu acesso serão apagados para sempre.');
+        if (!confirm1) return;
+
+        const confirm2 = prompt('Para confirmar a exclusão definitiva, digite "DELETAR" abaixo:');
+        if (confirm2 !== 'DELETAR') {
+          alert('Exclusão cancelada. O texto digitado não confere.');
+          return;
+        }
+
+        const btn = elements.userDeleteAccountBtn;
+        const originalText = btn.textContent;
+        btn.textContent = '⏳ Excluindo conta...';
+        btn.disabled = true;
+
+        try {
+          await window.AndPlayAccount?.deleteUserAccount?.();
+          alert('Sua conta e todos os dados associados foram completamente excluídos.');
+          showLoginScreen('login');
+        } catch (err) {
+          alert('Erro ao excluir conta: ' + (err.message || 'Falha na requisição.'));
+          btn.textContent = originalText;
+          btn.disabled = false;
         }
       });
 

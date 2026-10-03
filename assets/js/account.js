@@ -1533,11 +1533,109 @@
     accountReadyResolve = resolve;
   });
 
+  async function deleteUserData() {
+    const user = getCurrentUser();
+    if (!user) throw new Error('Nenhum usuário conectado.');
+
+    const client = await getClient();
+    const userId = user.id;
+
+    // 1. Deletar registros do banco de dados Supabase
+    await Promise.allSettled([
+      client.from('user_favorites').delete().eq('user_id', userId),
+      client.from('watch_history').delete().eq('user_id', userId),
+      client.from('watch_progress').delete().eq('user_id', userId),
+      client.from('user_preferences').delete().eq('user_id', userId)
+    ]);
+
+    // 2. Limpar estado em memória do account.js
+    remoteFavorites = [];
+    remoteFavoritesLoaded = true;
+    remoteWatchHistory = { movies: [], series: [] };
+    remoteWatchHistoryLoaded = true;
+    remoteWatchProgress = [];
+    syncPending = false;
+
+    // 3. Limpar localStorage de dados do usuário
+    localStorage.removeItem(FAVORITES_STORAGE_KEY);
+    localStorage.removeItem(FAVORITES_PENDING_KEY);
+    localStorage.removeItem(FAVORITES_MIGRATED_KEY);
+    localStorage.removeItem(WATCH_HISTORY_PENDING_KEY);
+    localStorage.removeItem(PREFERENCES_KEY);
+    localStorage.removeItem(WATCH_STATS_KEY);
+    localStorage.removeItem(LIVE_HISTORY_KEY);
+    localStorage.removeItem('andplay_web_watched_movies_v1');
+    localStorage.removeItem('andplay_web_watched_series_v1');
+    localStorage.removeItem('andplay_web_watched_activity_v1');
+
+    // Limpar todas as chaves de progresso de vídeo salvas localmente
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith(PROGRESS_PREFIX) || key.startsWith('andplay_vod_progress_'))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+
+    updateAccountUi();
+    return true;
+  }
+
+  async function deleteUserAccount() {
+    const user = getCurrentUser();
+    if (!user) throw new Error('Nenhum usuário conectado.');
+
+    const client = await getClient();
+    const userId = user.id;
+
+    // 1. Deletar todos os dados associados das tabelas Supabase
+    await Promise.allSettled([
+      client.from('user_favorites').delete().eq('user_id', userId),
+      client.from('watch_history').delete().eq('user_id', userId),
+      client.from('watch_progress').delete().eq('user_id', userId),
+      client.from('user_preferences').delete().eq('user_id', userId)
+    ]);
+
+    // 2. Chamar RPC delete_user para remover o usuário do auth.users se configurado
+    try {
+      await client.rpc('delete_user');
+    } catch (e) {
+      console.warn('[EPlay Account] RPC delete_user:', e);
+    }
+
+    // 3. Desconectar a sessão
+    try {
+      await client.auth.signOut();
+    } catch (e) {}
+
+    // 4. Limpar completamente o localStorage de dados do usuário e tokens
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('andplay_') || k.startsWith('sb-') || k.includes('supabase'))) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+
+    currentSession = null;
+    remoteFavorites = [];
+    remoteWatchHistory = { movies: [], series: [] };
+    remoteWatchProgress = [];
+
+    updateAccountUi();
+    notifyAuthChanged('SIGNED_OUT', null);
+    return true;
+  }
+
   window.AndPlayAccount = {
     isConfigured,
     isSignedIn: () => Boolean(currentSession),
     open: openModal,
     syncNow,
+    deleteUserData,
+    deleteUserAccount,
     queueSync,
     queueSyncWatched: queueSync,
     queueSyncProgress: queueSync,
