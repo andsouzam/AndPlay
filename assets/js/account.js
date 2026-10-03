@@ -632,6 +632,9 @@
     if (Object.prototype.hasOwnProperty.call(merged, 'skip_intro_auto')) {
       try { localStorage.setItem('andplay_web_skip_intro_auto', merged.skip_intro_auto ? '1' : '0'); } catch (e) {}
     }
+    if (Object.prototype.hasOwnProperty.call(merged, 'adult_content')) {
+      try { localStorage.setItem('andplay_pref_adult_content', merged.adult_content ? '1' : '0'); } catch (e) {}
+    }
     if (Object.prototype.hasOwnProperty.call(merged, 'sidebar_open')) {
       try { localStorage.setItem('andplay_sidebar_open', merged.sidebar_open ? '1' : '0'); } catch (e) {}
     }

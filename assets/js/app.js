@@ -34,6 +34,70 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let _loadingMoviesPromise = null;
     let _loadingSeriesPromise = null;
 
+    // Gerenciamento e filtragem de Conteúdo Adulto (+18)
+    const adultCategoryIds = new Set();
+
+    function isAdultContentEnabled() {
+      return localStorage.getItem('andplay_pref_adult_content') === '1';
+    }
+
+    function isAdultCategoryName(rawName) {
+      if (!rawName || typeof rawName !== 'string') return false;
+      const s = rawName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return s.includes('adult') ||
+        s.includes('+18') ||
+        s.includes('18+') ||
+        s.includes('privacy') ||
+        s.includes('onlyfans') ||
+        s.includes('only fans') ||
+        s.includes('xxx') ||
+        s.includes('hentai') ||
+        s.includes('erotic') ||
+        s.includes('porn') ||
+        s.includes('playboy') ||
+        s.includes('sexy');
+    }
+
+    function updateAdultCategoryIds() {
+      adultCategoryIds.clear();
+      const allCats = [
+        ...(Array.isArray(movieCategories) ? movieCategories : []),
+        ...(Array.isArray(seriesCategories) ? seriesCategories : [])
+      ];
+      allCats.forEach(cat => {
+        if (cat && cat.category_id && isAdultCategoryName(cat.category_name)) {
+          adultCategoryIds.add(String(cat.category_id));
+        }
+      });
+    }
+
+    function isAdultCategoryId(catId) {
+      if (!catId) return false;
+      if (catId === 'other' || catId === 'adult') return true;
+      return adultCategoryIds.has(String(catId));
+    }
+
+    function isAdultItem(item) {
+      if (!item) return false;
+      const source = item.primaryItem || item.item || item;
+
+      const cId = String(item.category_id || source.category_id || '');
+      if (cId && adultCategoryIds.has(cId)) return true;
+
+      const cIds = item.category_ids || source.category_ids;
+      if (Array.isArray(cIds) && cIds.some(id => adultCategoryIds.has(String(id)))) return true;
+
+      const catName = item.category_name || source.category_name || item.categoryLabel || source.categoryLabel || item.subCategory || source.subCategory || '';
+      if (catName && isAdultCategoryName(catName)) return true;
+
+      if ((item.categoryKey === 'other' || source.categoryKey === 'other') && (item.subCategory === 'Adulto' || isAdultCategoryName(item.name || source.name))) return true;
+
+      const genre = item.genre || source.genre || item.genre_name || source.genre_name || '';
+      if (genre && isAdultCategoryName(genre)) return true;
+
+      return false;
+    }
+
     // Cache persistente do catálogo: mantém a última versão disponível entre sessões.
     const CATALOG_DB_NAME = 'andplay_web_cache_v1';
     const CATALOG_DB_VERSION = 1;
@@ -365,6 +429,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       userPrefSkipIntro: document.getElementById('userPrefSkipIntro'),
       userPrefAutoNext: document.getElementById('userPrefAutoNext'),
       userPrefTvMode: document.getElementById('userPrefTvMode'),
+      userPrefAdultContent: document.getElementById('userPrefAdultContent'),
       userPrefQualitySelect: document.getElementById('userPrefQualitySelect'),
       userPrefAudioSelect: document.getElementById('userPrefAudioSelect'),
       userShortcutWatchedCard: document.getElementById('userShortcutWatchedCard'),
@@ -4223,6 +4288,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (elements.userPrefTvMode) {
         elements.userPrefTvMode.checked = document.body.classList.contains('tv-mode');
       }
+      if (elements.userPrefAdultContent) {
+        elements.userPrefAdultContent.checked = isAdultContentEnabled();
+      }
       if (elements.userPrefQualitySelect) {
         elements.userPrefQualitySelect.value = localStorage.getItem('andplay_preferred_quality') || 'auto';
       }
@@ -4466,6 +4534,45 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const isTv = e.target.checked;
         document.body.classList.toggle('tv-mode', isTv);
         localStorage.setItem('andplay_tv_mode', isTv ? '1' : '0');
+      });
+
+      elements.userPrefAdultContent?.addEventListener('change', (e) => {
+        const enabled = e.target.checked;
+        localStorage.setItem('andplay_pref_adult_content', enabled ? '1' : '0');
+        try {
+          const prefs = JSON.parse(localStorage.getItem('andplay_web_preferences_v1') || '{}');
+          prefs.adult_content = enabled;
+          localStorage.setItem('andplay_web_preferences_v1', JSON.stringify(prefs));
+        } catch (_) {}
+        window.AndPlayAccount?.queueSyncPreference?.();
+
+        globalSearchCatalogCache = null;
+
+        const currentCat = elements.categorySelect?.value;
+        if (!enabled && isAdultCategoryId(currentCat)) {
+          elements.categorySelect.value = 'ALL';
+          if (elements.resetCategoryBtn) elements.resetCategoryBtn.style.display = 'none';
+        }
+
+        if (currentMode === 'movies') {
+          populateCategoriesSelect(movieCategories, 'Filmes');
+          if (elements.categorySelect.value === 'ALL' && isMoviesCuratedMode) {
+            renderMoviesHub();
+          } else {
+            applyMoviesFiltersAndSort();
+          }
+        } else if (currentMode === 'series') {
+          populateCategoriesSelect(seriesCategories, 'Séries');
+          if (elements.categorySelect.value === 'ALL' && isSeriesCuratedMode) {
+            renderSeriesHub();
+          } else {
+            applySeriesFiltersAndSort();
+          }
+        } else if (currentMode === 'live') {
+          populateLiveCategoriesSelect();
+          renderLiveCategoryPills();
+          applyLiveFiltersAndSort();
+        }
       });
 
       elements.userPrefQualitySelect?.addEventListener('change', (e) => {
@@ -4858,7 +4965,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
       }
 
-      const movies = (Array.isArray(fullMoviesCache) ? fullMoviesCache : []).map(item => ({
+      const movies = (Array.isArray(fullMoviesCache) ? fullMoviesCache : [])
+        .filter(item => !isAdultItem(item))
+        .map(item => ({
         type: 'movie',
         id: String(item.stream_id || item.primaryItem?.stream_id || ''),
         item,
@@ -4870,7 +4979,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         added: getHomeItemTime(item)
       })).filter(item => item.id && item.poster);
 
-      const series = (Array.isArray(fullSeriesCache) ? fullSeriesCache : []).map(item => ({
+      const series = (Array.isArray(fullSeriesCache) ? fullSeriesCache : [])
+        .filter(item => !isAdultItem(item))
+        .map(item => ({
         type: 'series',
         id: String(item.series_id || ''),
         item,
@@ -5023,6 +5134,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     function getHomeCatalogItems(type) {
       if (type === 'series') {
         return (Array.isArray(fullSeriesCache) ? fullSeriesCache : [])
+          .filter(item => !isAdultItem(item))
           .map(item => ({
             type: 'series',
             id: String(item.series_id || ''),
@@ -5040,6 +5152,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
 
       return (Array.isArray(fullMoviesCache) ? fullMoviesCache : [])
+        .filter(item => !isAdultItem(item))
         .map(item => ({
           type: 'movie',
           id: String(item.stream_id || item.primaryItem?.stream_id || ''),
@@ -6714,10 +6827,19 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (homeCatalogPromise) return homeCatalogPromise;
       homeCatalogPromise = (async () => {
         try {
-          const [staleMovies, staleSeries] = await Promise.all([
+          const [staleMovies, staleSeries, staleMovieCats, staleSeriesCats] = await Promise.all([
             readCatalogCacheStale('movies'),
-            readCatalogCacheStale('series')
+            readCatalogCacheStale('series'),
+            readCatalogCacheStale('movie_categories'),
+            readCatalogCacheStale('series_categories')
           ]);
+          if (Array.isArray(staleMovieCats) && staleMovieCats.length && !movieCategories.length) {
+            movieCategories = staleMovieCats;
+          }
+          if (Array.isArray(staleSeriesCats) && staleSeriesCats.length && !seriesCategories.length) {
+            seriesCategories = staleSeriesCats;
+          }
+          updateAdultCategoryIds();
           if (Array.isArray(staleMovies) && staleMovies.length) {
             fullMoviesCache = staleMovies;
             homeWatchedCatalogFallback.movies = staleMovies;
@@ -6996,7 +7118,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function getMoviesHeroItems() {
-      const movies = (Array.isArray(fullMoviesCache) ? fullMoviesCache : []).map(item => ({
+      const movies = (Array.isArray(fullMoviesCache) ? fullMoviesCache : [])
+        .filter(item => !isAdultItem(item))
+        .map(item => ({
         type: 'movie',
         id: String(item.stream_id || item.primaryItem?.stream_id || ''),
         item,
@@ -7430,10 +7554,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function pickSurpriseMovie() {
       const candidates = (fullMoviesCache || []).filter(item => {
+        if (isAdultItem(item)) return false;
         const rating = Number(item.rating || 0);
         return rating >= 6.8 || (item.year && Number(item.year) >= 2024);
       });
-      const pool = candidates.length > 0 ? candidates : (fullMoviesCache || []);
+      const pool = candidates.length > 0 ? candidates : (fullMoviesCache || []).filter(item => !isAdultItem(item));
       if (!pool.length) return;
       const chosen = pool[Math.floor(Math.random() * pool.length)];
       openMoviePage(chosen);
@@ -7442,6 +7567,23 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     function applyMoviesFiltersAndSort() {
       hideLoading();
       let list = (fullMoviesCache || []).slice();
+
+      const selectedCat = elements.categorySelect?.value;
+      const isExplicitAdultCategory = selectedCat && selectedCat !== 'ALL' && isAdultCategoryId(selectedCat);
+
+      if (selectedCat && selectedCat !== 'ALL') {
+        list = list.filter(item => {
+          if (String(item.category_id) === String(selectedCat)) return true;
+          if (Array.isArray(item.category_ids) && item.category_ids.some(c => String(c) === String(selectedCat))) return true;
+          return false;
+        });
+      } else {
+        list = list.filter(item => !isAdultItem(item));
+      }
+
+      if (!isExplicitAdultCategory) {
+        list = list.filter(item => !isAdultItem(item));
+      }
 
       if (currentMovieGenreFilter !== 'ALL') {
         if (currentMovieGenreFilter === 'TOP_RATED') {
@@ -7554,7 +7696,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (elements.moviesGenrePills) elements.moviesGenrePills.style.removeProperty('display');
       }
 
-      const inCurated = isMoviesCuratedMode && currentMovieGenreFilter === 'ALL' && !elements.searchInput.value && !moviesFilter4K && !moviesFilterDub && !moviesFilterLeg && moviesSortBy === 'featured';
+      const inCurated = isMoviesCuratedMode && (!elements.categorySelect || elements.categorySelect.value === 'ALL') && currentMovieGenreFilter === 'ALL' && !elements.searchInput.value && !moviesFilter4K && !moviesFilterDub && !moviesFilterLeg && moviesSortBy === 'featured';
 
       if (inCurated) {
         elements.moviesCuratedRails.style.display = 'flex';
@@ -7735,7 +7877,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function getSeriesHeroItems() {
-      const series = (Array.isArray(fullSeriesCache) ? fullSeriesCache : []).map(item => ({
+      const series = (Array.isArray(fullSeriesCache) ? fullSeriesCache : [])
+        .filter(item => !isAdultItem(item))
+        .map(item => ({
         type: 'series',
         id: String(item.series_id || item.primaryItem?.series_id || ''),
         item,
@@ -8185,10 +8329,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function pickSurpriseSeries() {
       const candidates = (fullSeriesCache || []).filter(item => {
+        if (isAdultItem(item)) return false;
         const rating = Number(item.rating || 0);
         return rating >= 7.8 || (item.year && Number(item.year) >= 2024);
       });
-      const pool = candidates.length > 0 ? candidates : (fullSeriesCache || []);
+      const pool = candidates.length > 0 ? candidates : (fullSeriesCache || []).filter(item => !isAdultItem(item));
       if (!pool.length) return;
       const chosen = pool[Math.floor(Math.random() * pool.length)];
       openSeriesPage(chosen);
@@ -8197,6 +8342,23 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     function applySeriesFiltersAndSort() {
       hideLoading();
       let list = (fullSeriesCache || []).slice();
+
+      const selectedCat = elements.categorySelect?.value;
+      const isExplicitAdultCategory = selectedCat && selectedCat !== 'ALL' && isAdultCategoryId(selectedCat);
+
+      if (selectedCat && selectedCat !== 'ALL') {
+        list = list.filter(item => {
+          if (String(item.category_id) === String(selectedCat)) return true;
+          if (Array.isArray(item.category_ids) && item.category_ids.some(c => String(c) === String(selectedCat))) return true;
+          return false;
+        });
+      } else {
+        list = list.filter(item => !isAdultItem(item));
+      }
+
+      if (!isExplicitAdultCategory) {
+        list = list.filter(item => !isAdultItem(item));
+      }
 
       if (currentSeriesGenreFilter !== 'ALL') {
         if (currentSeriesGenreFilter === 'TOP_RATED') {
@@ -8312,7 +8474,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (elements.seriesGenrePills) elements.seriesGenrePills.style.removeProperty('display');
       }
 
-      const inCurated = isSeriesCuratedMode && currentSeriesGenreFilter === 'ALL' && !elements.searchInput.value && !seriesFilterDub && !seriesFilterLeg && seriesSortBy === 'featured';
+      const inCurated = isSeriesCuratedMode && (!elements.categorySelect || elements.categorySelect.value === 'ALL') && currentSeriesGenreFilter === 'ALL' && !elements.searchInput.value && !seriesFilterDub && !seriesFilterLeg && seriesSortBy === 'featured';
 
       if (inCurated) {
         elements.seriesCuratedRails.style.display = 'flex';
@@ -8523,7 +8685,7 @@ function showHome(targetScroll = 0) {
           populateCategoriesSelect(movieCategories, 'Filmes');
         }
         if (fullMoviesCache) {
-          currentMediaList = fullMoviesCache;
+          currentMediaList = (fullMoviesCache || []).filter(item => !isAdultItem(item));
           elements.categorySelect.value = 'ALL';
           elements.resetCategoryBtn.style.display = 'none';
           elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
@@ -8542,7 +8704,7 @@ function showHome(targetScroll = 0) {
           populateCategoriesSelect(seriesCategories, 'Séries');
         }
         if (fullSeriesCache) {
-          currentMediaList = fullSeriesCache;
+          currentMediaList = (fullSeriesCache || []).filter(item => !isAdultItem(item));
           elements.categorySelect.value = 'ALL';
           elements.resetCategoryBtn.style.display = 'none';
           elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
@@ -8551,7 +8713,7 @@ function showHome(targetScroll = 0) {
           await loadFullSeries();
           if (currentMode !== mode || isWatchedView || isFavoritesView) return;
           if (fullSeriesCache && fullSeriesCache.length > 0) {
-            currentMediaList = fullSeriesCache;
+            currentMediaList = (fullSeriesCache || []).filter(item => !isAdultItem(item));
             elements.categorySelect.value = 'ALL';
             elements.resetCategoryBtn.style.display = 'none';
             elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
@@ -8562,7 +8724,7 @@ function showHome(targetScroll = 0) {
         elements.searchInput.placeholder = 'Pesquisar canais, jogos, times, ligas ou programas no ar...';
         populateLiveCategoriesSelect();
         if (fullLiveCache) {
-          currentMediaList = fullLiveCache;
+          currentMediaList = (fullLiveCache || []).filter(item => !isAdultItem(item) && getChannelGroupRank(item) !== 6);
           elements.categorySelect.value = 'ALL';
           elements.resetCategoryBtn.style.display = 'none';
           elements.categoryLabel.textContent = 'TV & Jogos Ao Vivo: Todos os Canais e Partidas';
@@ -8572,7 +8734,7 @@ function showHome(targetScroll = 0) {
           await loadFullLive();
           if (currentMode !== mode || isWatchedView || isFavoritesView) return;
           if (fullLiveCache && fullLiveCache.length > 0) {
-            currentMediaList = fullLiveCache;
+            currentMediaList = (fullLiveCache || []).filter(item => !isAdultItem(item) && getChannelGroupRank(item) !== 6);
             elements.categorySelect.value = 'ALL';
             elements.resetCategoryBtn.style.display = 'none';
             elements.categoryLabel.textContent = 'TV & Jogos Ao Vivo: Todos os Canais e Partidas';
@@ -8613,6 +8775,7 @@ function showHome(targetScroll = 0) {
     // ==========================================
     async function loadMovieCategories() {
       if (movieCategories.length > 0) {
+        updateAdultCategoryIds();
         populateCategoriesSelect(movieCategories, 'Filmes');
         return movieCategories;
       }
@@ -8623,10 +8786,12 @@ function showHome(targetScroll = 0) {
           const cached = await readCatalogCache('movie_categories');
           if (Array.isArray(cached) && cached.length > 0) {
             movieCategories = cached;
+            updateAdultCategoryIds();
             populateCategoriesSelect(movieCategories, 'Filmes');
           }
           const fresh = await xtreamApi('get_vod_categories');
           movieCategories = Array.isArray(fresh) ? fresh : [];
+          updateAdultCategoryIds();
           await writeCatalogCache('movie_categories', movieCategories);
           populateCategoriesSelect(movieCategories, 'Filmes');
           return movieCategories;
@@ -8643,6 +8808,7 @@ function showHome(targetScroll = 0) {
 
     async function loadSeriesCategories() {
       if (seriesCategories.length > 0) {
+        updateAdultCategoryIds();
         populateCategoriesSelect(seriesCategories, 'Séries');
         return seriesCategories;
       }
@@ -8653,10 +8819,12 @@ function showHome(targetScroll = 0) {
           const cached = await readCatalogCache('series_categories');
           if (Array.isArray(cached) && cached.length > 0) {
             seriesCategories = cached;
+            updateAdultCategoryIds();
             populateCategoriesSelect(seriesCategories, 'Séries');
           }
           const fresh = await xtreamApi('get_series_categories');
           seriesCategories = Array.isArray(fresh) ? fresh : [];
+          updateAdultCategoryIds();
           await writeCatalogCache('series_categories', seriesCategories);
           populateCategoriesSelect(seriesCategories, 'Séries');
           return seriesCategories;
@@ -8679,11 +8847,14 @@ function showHome(targetScroll = 0) {
       optAll.textContent = `🌟 Todas as ${typeLabel} (Catálogo Completo)`;
       elements.categorySelect.appendChild(optAll);
 
-      // Oculta categorias DEMO / testes e tolera respostas incompletas da API.
+      // Oculta categorias DEMO / testes e categorias adultas quando desativadas nas preferências
       const sourceCategories = Array.isArray(categories) ? categories : [];
+      const adultEnabled = isAdultContentEnabled();
       const filteredCategories = sourceCategories.filter(cat => {
         const name = cat && typeof cat.category_name === 'string' ? cat.category_name : '';
-        return name && !name.toLowerCase().includes('demo');
+        if (!name || name.toLowerCase().includes('demo')) return false;
+        if (!adultEnabled && isAdultCategoryName(name)) return false;
+        return true;
       });
 
       filteredCategories.forEach(cat => {
@@ -8927,6 +9098,7 @@ function showHome(targetScroll = 0) {
     function populateLiveCategoriesSelect() {
       elements.categorySelect.innerHTML = '';
 
+      const adultEnabled = isAdultContentEnabled();
       const liveCategories = [
         { id: 'ALL', name: '📺 Todos os Canais e Jogos (328)' },
         { id: 'JOGOS', name: '⚽ Jogos de Hoje & Transmissões' },
@@ -8934,9 +9106,11 @@ function showHome(targetScroll = 0) {
         { id: 'sports', name: '🏆 Esportes (114)' },
         { id: 'variety', name: '🎭 Variedades (130)' },
         { id: 'kids', name: '🧸 Infantil (18)' },
-        { id: 'channels_24h', name: '⭐ 24 Horas (10)' },
-        { id: 'other', name: '🔞 Outros & Adulto (11)' }
+        { id: 'channels_24h', name: '⭐ 24 Horas (10)' }
       ];
+      if (adultEnabled) {
+        liveCategories.push({ id: 'other', name: '🔞 Outros & Adulto (11)' });
+      }
 
       liveCategories.forEach(cat => {
         const opt = document.createElement('option');
@@ -8944,6 +9118,9 @@ function showHome(targetScroll = 0) {
         opt.textContent = cat.name;
         elements.categorySelect.appendChild(opt);
       });
+      if (!adultEnabled && (currentLiveCategoryFilter === 'other' || currentLiveCategoryFilter === 'adult')) {
+        currentLiveCategoryFilter = 'ALL';
+      }
       elements.categorySelect.value = currentLiveCategoryFilter || 'ALL';
     }
 
@@ -8998,7 +9175,10 @@ function showHome(targetScroll = 0) {
       if (!elements.liveCategoryPills) return;
       elements.liveCategoryPills.innerHTML = '';
 
-      LIVE_PILL_CATEGORIES.forEach(cat => {
+      const adultEnabled = isAdultContentEnabled();
+      const pills = LIVE_PILL_CATEGORIES.filter(cat => adultEnabled || (cat.id !== 'other' && cat.id !== 'adult'));
+
+      pills.forEach(cat => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = `live-pill ${currentLiveCategoryFilter === cat.id ? 'active' : ''}`;
@@ -9108,9 +9288,14 @@ function showHome(targetScroll = 0) {
       } else if (currentLiveCategoryFilter === 'channels_24h') {
         list = list.filter(item => getChannelGroupRank(item) === 5);
       } else if (currentLiveCategoryFilter === 'other' || currentLiveCategoryFilter === 'adult') {
-        list = list.filter(item => getChannelGroupRank(item) === 6);
+        list = list.filter(item => getChannelGroupRank(item) === 6 || isAdultItem(item));
       } else if (currentLiveCategoryFilter !== 'ALL') {
         list = list.filter(item => item.categoryKey === currentLiveCategoryFilter || String(item.category_id) === String(currentLiveCategoryFilter));
+      }
+
+      // Se não estiver explicitamente na categoria adulta ('other' ou 'adult'), nunca exibe canais adultos no geral ou na busca
+      if (currentLiveCategoryFilter !== 'other' && currentLiveCategoryFilter !== 'adult') {
+        list = list.filter(item => getChannelGroupRank(item) !== 6 && !isAdultItem(item));
       }
 
       // 2. Filtro rápido de exibição
@@ -9799,10 +9984,22 @@ function showHome(targetScroll = 0) {
       elements.searchInput.value = '';
       if (currentMode === 'movies') {
         elements.categoryLabel.textContent = 'Catálogo Geral: Todos os Filmes';
-        currentMediaList = fullMoviesCache || [];
+        currentMediaList = (fullMoviesCache || []).filter(item => !isAdultItem(item));
+        if (elements.moviesHero) elements.moviesHero.style.removeProperty('display');
+        if (elements.moviesGenrePills) elements.moviesGenrePills.style.removeProperty('display');
+        if (isMoviesCuratedMode) {
+          renderMoviesHub();
+          return;
+        }
       } else if (currentMode === 'series') {
         elements.categoryLabel.textContent = 'Catálogo Geral: Todas as Séries';
-        currentMediaList = fullSeriesCache || [];
+        currentMediaList = (fullSeriesCache || []).filter(item => !isAdultItem(item));
+        if (elements.seriesHero) elements.seriesHero.style.removeProperty('display');
+        if (elements.seriesGenrePills) elements.seriesGenrePills.style.removeProperty('display');
+        if (isSeriesCuratedMode) {
+          renderSeriesHub();
+          return;
+        }
       } else if (currentMode === 'live') {
         elements.categoryLabel.textContent = 'TV & Jogos Ao Vivo: Todos os Canais e Partidas';
         currentLiveCategoryFilter = 'ALL';
@@ -9836,6 +10033,19 @@ function showHome(targetScroll = 0) {
         applyLiveFiltersAndSort();
         return;
       }
+
+      if (elements.moviesCuratedRails) elements.moviesCuratedRails.style.display = 'none';
+      if (elements.seriesCuratedRails) elements.seriesCuratedRails.style.display = 'none';
+      if (elements.moviesHero) elements.moviesHero.style.display = 'none';
+      if (elements.seriesHero) elements.seriesHero.style.display = 'none';
+      if (elements.moviesGenrePills) elements.moviesGenrePills.style.display = 'none';
+      if (elements.seriesGenrePills) elements.seriesGenrePills.style.display = 'none';
+      if (elements.mediaGrid) elements.mediaGrid.style.removeProperty('display');
+      document.querySelector('.status-bar')?.style.removeProperty('display');
+      elements.moviesViewCuratedBtn?.classList.remove('active');
+      elements.moviesViewGridBtn?.classList.add('active');
+      elements.seriesViewCuratedBtn?.classList.remove('active');
+      elements.seriesViewGridBtn?.classList.add('active');
 
       const sourceList = (currentMode === 'movies') ? fullMoviesCache : fullSeriesCache;
       if (sourceList) {
@@ -9890,7 +10100,9 @@ function showHome(targetScroll = 0) {
       try {
         const [movies, series] = await Promise.all([
           loadFullMovies(),
-          loadFullSeries()
+          loadFullSeries(),
+          loadMovieCategories().catch(() => []),
+          loadSeriesCategories().catch(() => [])
         ]);
         if (requestId !== globalSearchRequestId || normalizeSearch(elements.searchInput?.value || '') !== q) {
           hideLoading();
@@ -9901,9 +10113,9 @@ function showHome(targetScroll = 0) {
           globalSearchCatalogCache = [
             ...(Array.isArray(movies) ? movies : []).map(item => ({ ...item, _searchType: 'movie' })),
             ...(Array.isArray(series) ? series : []).map(item => ({ ...item, _searchType: 'series' }))
-          ];
+          ].filter(item => !isAdultItem(item));
         }
-        currentMediaList = globalSearchCatalogCache;
+        currentMediaList = globalSearchCatalogCache.filter(item => !isAdultItem(item));
         elements.categorySelect.value = 'ALL';
         if (elements.categoryLabel) elements.categoryLabel.textContent = 'Busca: ' + term;
         hideLoading();
