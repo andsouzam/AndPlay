@@ -257,3 +257,5 @@ body.eplay-fullscreen-active #videoModal #subOptionsPanel {
 #videoModal .eplay-player-ui.idle~.eplay-subtitle-overlay,.eplay-subtitle-overlay.ui-idle{bottom:26px}
 .eplay-subtitle-cue{font-size:clamp(14px,3.8vw,20px);padding:4px 10px}
 }
+.eplay-audio-track-btn{width:auto!important;min-width:68px;padding:0 10px!important;font-size:11px!important;font-weight:700!important;border-radius:6px!important;background:rgba(255,255,255,.1)!important;border:1px solid rgba(255,255,255,.18)!important;color:#fff!important;display:inline-flex!important;align-items:center;justify-content:center;gap:4px}
+.eplay-audio-track-btn:hover{background:rgba(255,255,255,.22)!important;border-color:#ffc107!important;color:#ffc107!important}

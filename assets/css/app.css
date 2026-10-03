@@ -5839,6 +5839,21 @@ body:not(.tv-mode).eplay-view-changing #homeDashboard,body:not(.tv-mode).eplay-v
 
 /* EPLAY_PLAYER_PAGE_V1 */
 body.eplay-player-open { overflow: hidden; }
+body.eplay-player-open .app-header,
+body.eplay-player-open .status-bar,
+body.eplay-player-open #homeDashboard,
+body.eplay-player-open #userDashboard,
+body.eplay-player-open #contentPage,
+body.eplay-player-open main,
+body.eplay-player-open .mobile-bottom-nav,
+body.eplay-player-open #loading,
+body.eplay-player-open #authLoadingOverlay,
+body.eplay-player-open #movieVersionModal,
+body.eplay-player-open #seriesModal,
+body.eplay-player-open #imdbSearchModal,
+body.eplay-player-open .andplay-resume-overlay {
+  display: none !important;
+}
 #videoModal.eplay-player-page {
   position: fixed;
   inset: 0;
