@@ -464,6 +464,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       subDelayMinusBtn: document.getElementById('subDelayMinusBtn'),
       subDelayPlusBtn: document.getElementById('subDelayPlusBtn'),
       subFileInput: document.getElementById('subFileInput'),
+      audioSyncControls: document.getElementById('audioSyncControls'),
+      audioOffsetInput: document.getElementById('audioOffsetInput'),
+      audioDelayMinusLargeBtn: document.getElementById('audioDelayMinusLargeBtn'),
+      audioDelayMinusBtn: document.getElementById('audioDelayMinusBtn'),
+      audioDelayPlusBtn: document.getElementById('audioDelayPlusBtn'),
+      audioDelayPlusLargeBtn: document.getElementById('audioDelayPlusLargeBtn'),
+      audioSyncResetBtn: document.getElementById('audioSyncResetBtn'),
+      hybridModeBadge: document.getElementById('hybridModeBadge'),
+      toggleAudioSyncBtn: document.getElementById('toggleAudioSyncBtn'),
       movieVersionSwitcher: document.getElementById('movieVersionSwitcher'),
       syncLiveBtn: document.getElementById('syncLiveBtn'),
       toggleLatencyModeBtn: document.getElementById('toggleLatencyModeBtn'),
@@ -658,9 +667,87 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return { type: 'dublado', label: 'Dublado', badge: 'DUB', icon: '🔊', desc: 'Áudio Dublado em Português' };
     }
 
+    // Gera todas as versões reproduzíveis de um filme, sintetizando opções híbridas quando aplicável
+    function getMovieAllPlayableVersions(groupOrMovie, rawVersions) {
+      const baseVersions = (rawVersions && rawVersions.length > 0)
+        ? [...rawVersions]
+        : (groupOrMovie?.versions && groupOrMovie.versions.length > 0)
+          ? [...groupOrMovie.versions]
+          : [{
+              item: groupOrMovie,
+              versionInfo: (typeof detectMovieVersion === 'function') ? detectMovieVersion(groupOrMovie) : { type: 'dublado', label: 'Dublado', badge: 'DUB', icon: '🔊', desc: 'Áudio Dublado em Português' },
+              streamId: groupOrMovie?.stream_id || groupOrMovie?.streamId,
+              ext: groupOrMovie?.container_extension || 'mp4'
+            }];
+
+      const fourKLegVer = baseVersions.find(v => v.versionInfo && v.versionInfo.type === '4k_leg');
+      const fourKDubVer = baseVersions.find(v => v.versionInfo && v.versionInfo.type === '4k_dub');
+      const legVer = baseVersions.find(v => v.versionInfo && v.versionInfo.type === 'legendado');
+      const dubVer = baseVersions.find(v => v.versionInfo && v.versionInfo.type === 'dublado');
+
+      // Se NÃO houver 4K Legendado nativo, mas existirem 4K Dublado e Legendado:
+      // sintetiza a versão Híbrida 4K Legendado (Vídeo 4K + Áudio Legendado)
+      if (!fourKLegVer && fourKDubVer && legVer) {
+        const alreadyHasHybrid = baseVersions.some(v => v.isHybrid && v.hybridType === '4k_leg_hybrid');
+        if (!alreadyHasHybrid) {
+          baseVersions.push({
+            isHybrid: true,
+            hybridType: '4k_leg_hybrid',
+            isHybrid4kLeg: true,
+            videoVersion: fourKDubVer,
+            audioVersion: legVer,
+            streamId: `hybrid_4k_leg_${fourKDubVer.streamId}_${legVer.streamId}`,
+            ext: fourKDubVer.ext || 'mp4',
+            item: fourKDubVer.item,
+            versionInfo: {
+              type: '4k_leg_hybrid',
+              label: '4K Legendado (Híbrido)',
+              badge: '4K HÍBRIDO',
+              icon: '✨',
+              desc: 'Vídeo 4K Ultra HD + Áudio Legendado Sincronizado'
+            }
+          });
+        }
+      }
+
+      // Se existirem Legendado e Dublado: sintetiza a opção de Vídeo Legendado (com legenda fixa) + Áudio Dublado
+      if (legVer && dubVer) {
+        const alreadyHasLegDub = baseVersions.some(v => v.isHybrid && v.hybridType === 'leg_dub_hybrid');
+        if (!alreadyHasLegDub) {
+          baseVersions.push({
+            isHybrid: true,
+            hybridType: 'leg_dub_hybrid',
+            isHybridLegDub: true,
+            videoVersion: legVer,
+            audioVersion: dubVer,
+            streamId: `hybrid_leg_dub_${legVer.streamId}_${dubVer.streamId}`,
+            ext: legVer.ext || 'mp4',
+            item: legVer.item,
+            versionInfo: {
+              type: 'leg_dub_hybrid',
+              label: 'Legenda Fixa + Dublado (Híbrido)',
+              badge: 'LEG+DUB',
+              icon: '✨',
+              desc: 'Vídeo Legendado com Legenda no Frame + Áudio Dublado'
+            }
+          });
+        }
+      }
+
+      return baseVersions;
+    }
+
     // Identifica se uma mídia/versão é legendada (com legenda impressa/embutida no frame)
     function isLegendadoMedia(itemOrMeta) {
       if (!itemOrMeta) return false;
+      // 4K Legendado Híbrido utiliza imagem 4K limpa sem legenda impressa -> requer legenda externa
+      if (itemOrMeta.isHybrid4kLeg || itemOrMeta.selectedVersion?.isHybrid4kLeg || itemOrMeta.versionInfo?.type === '4k_leg_hybrid' || itemOrMeta.selectedVersion?.versionInfo?.type === '4k_leg_hybrid') {
+        return false;
+      }
+      // Legenda Fixa + Dublado Híbrido utiliza frame legendado -> dispensa legenda externa
+      if (itemOrMeta.isHybridLegDub || itemOrMeta.selectedVersion?.isHybridLegDub || itemOrMeta.versionInfo?.type === 'leg_dub_hybrid' || itemOrMeta.selectedVersion?.versionInfo?.type === 'leg_dub_hybrid') {
+        return true;
+      }
       if (itemOrMeta.selectedVersion && itemOrMeta.selectedVersion.versionInfo) {
         const t = itemOrMeta.selectedVersion.versionInfo.type;
         if (t === 'legendado' || t === '4k_leg') return true;
@@ -1215,6 +1302,44 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.subDelayMinusBtn.addEventListener('click', () => changeSubtitleOffset(-0.5));
       elements.subDelayPlusBtn.addEventListener('click', () => changeSubtitleOffset(0.5));
 
+      // Sincronia de Áudio no Modo Híbrido
+      if (elements.audioDelayMinusLargeBtn) {
+        elements.audioDelayMinusLargeBtn.addEventListener('click', () => adjustAudioOffset(-500));
+      }
+      if (elements.audioDelayMinusBtn) {
+        elements.audioDelayMinusBtn.addEventListener('click', () => adjustAudioOffset(-50));
+      }
+      if (elements.audioDelayPlusBtn) {
+        elements.audioDelayPlusBtn.addEventListener('click', () => adjustAudioOffset(50));
+      }
+      if (elements.audioDelayPlusLargeBtn) {
+        elements.audioDelayPlusLargeBtn.addEventListener('click', () => adjustAudioOffset(500));
+      }
+      if (elements.audioSyncResetBtn) {
+        elements.audioSyncResetBtn.addEventListener('click', () => setAudioOffset(0));
+      }
+      if (elements.audioOffsetInput) {
+        elements.audioOffsetInput.addEventListener('change', (e) => {
+          const raw = e.target.value.replace(/ms/ig, '').trim();
+          const parsed = parseInt(raw, 10);
+          setAudioOffset(Number.isFinite(parsed) ? parsed : 0);
+        });
+        elements.audioOffsetInput.addEventListener('keydown', (e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') {
+            e.target.blur();
+          }
+        });
+      }
+      if (elements.toggleAudioSyncBtn) {
+        elements.toggleAudioSyncBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (!elements.audioSyncControls) return;
+          const isHidden = (elements.audioSyncControls.style.display === 'none');
+          elements.audioSyncControls.style.display = isHidden ? 'inline-flex' : 'none';
+        });
+      }
+
       // IMDb Visual Search Modal
       elements.closeImdbSearchModal.addEventListener('click', closeImdbSearchModal);
       elements.imdbSearchModal.addEventListener('click', (e) => {
@@ -1381,12 +1506,20 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
           if (key === 'ArrowLeft' && !isButtonOrInput) {
             e.preventDefault();
+            if (e.shiftKey && currentHybridState && currentHybridState.active) {
+              adjustAudioOffset(e.ctrlKey ? -500 : -50);
+              return;
+            }
             elements.videoPlayer.currentTime = Math.max(0, elements.videoPlayer.currentTime - 10);
             return;
           }
 
           if (key === 'ArrowRight' && !isButtonOrInput) {
             e.preventDefault();
+            if (e.shiftKey && currentHybridState && currentHybridState.active) {
+              adjustAudioOffset(e.ctrlKey ? 500 : 50);
+              return;
+            }
             elements.videoPlayer.currentTime = Math.min(elements.videoPlayer.duration || 999999, elements.videoPlayer.currentTime + 10);
             return;
           }
@@ -10997,6 +11130,258 @@ function showHome(targetScroll = 0) {
       });
     }
 
+    // ==========================================
+    // MODO HÍBRIDO (VÍDEO 4K + ÁUDIO LEGENDADO COM SINCRONIA)
+    // ==========================================
+    let currentHybridState = {
+      active: false,
+      hybridType: null,
+      selectedVersion: null,
+      groupOrMovie: null,
+      allVersions: null,
+      videoVersion: null,
+      audioVersion: null,
+      audioUrl: null,
+      audioOffsetMs: 0,
+      audioEl: null,
+      durationChecked: false,
+      durationMatched: true,
+      syncInterval: null
+    };
+
+    function getOrCreateHybridAudioPlayer() {
+      let audioEl = document.getElementById('hybridAudioPlayer');
+      if (!audioEl) {
+        audioEl = document.createElement('audio');
+        audioEl.id = 'hybridAudioPlayer';
+        audioEl.preload = 'auto';
+        audioEl.style.display = 'none';
+        document.body.appendChild(audioEl);
+      }
+      return audioEl;
+    }
+
+    function setAudioOffset(ms) {
+      if (!currentHybridState.active) return;
+      const num = parseInt(ms, 10);
+      currentHybridState.audioOffsetMs = Number.isFinite(num) ? num : 0;
+      updateAudioOffsetUI(currentHybridState.audioOffsetMs);
+      syncHybridAudioTime(true);
+      const sign = currentHybridState.audioOffsetMs > 0 ? '+' : '';
+      if (window.showPlayerToast) {
+        window.showPlayerToast(`🔊 Sincronia de Áudio: ${sign}${currentHybridState.audioOffsetMs}ms`, 1800);
+      }
+    }
+
+    function adjustAudioOffset(deltaMs) {
+      if (!currentHybridState.active) return;
+      setAudioOffset((currentHybridState.audioOffsetMs || 0) + deltaMs);
+    }
+
+    function updateAudioOffsetUI(ms) {
+      if (!elements.audioOffsetInput) return;
+      const sign = ms > 0 ? '+' : '';
+      elements.audioOffsetInput.value = `${sign}${ms}ms`;
+    }
+
+    function syncHybridAudioTime(forceSnap = false) {
+      if (!currentHybridState.active || !currentHybridState.audioEl) return;
+      const audio = currentHybridState.audioEl;
+      const video = elements.videoPlayer;
+      if (!video || !audio) return;
+
+      const targetTime = Math.max(0, video.currentTime + (currentHybridState.audioOffsetMs / 1000));
+      const diff = audio.currentTime - targetTime;
+      const absDiff = Math.abs(diff);
+
+      if (forceSnap || absDiff > 0.15) {
+        audio.currentTime = targetTime;
+        audio.playbackRate = video.playbackRate;
+      } else if (absDiff > 0.02) {
+        if (diff > 0) {
+          audio.playbackRate = Math.max(0.5, video.playbackRate * 0.98);
+        } else {
+          audio.playbackRate = Math.min(2.0, video.playbackRate * 1.02);
+        }
+      } else {
+        if (audio.playbackRate !== video.playbackRate) {
+          audio.playbackRate = video.playbackRate;
+        }
+      }
+    }
+
+    function checkHybridDurationsMatch() {
+      if (!currentHybridState.active || currentHybridState.durationChecked) return;
+      const audio = currentHybridState.audioEl;
+      const video = elements.videoPlayer;
+      if (!audio || !video) return;
+
+      const vDur = video.duration;
+      const aDur = audio.duration;
+      if (!Number.isFinite(vDur) || !Number.isFinite(aDur) || vDur <= 0 || aDur <= 0) {
+        return;
+      }
+
+      currentHybridState.durationChecked = true;
+      const diffSec = Math.abs(vDur - aDur);
+      const formatSec = (s) => {
+        const m = Math.floor(s / 60);
+        const sec = Math.floor(s % 60);
+        return `${m}m${sec < 10 ? '0' : ''}${sec}s`;
+      };
+
+      if (diffSec <= 3.0) {
+        currentHybridState.durationMatched = true;
+        if (window.showPlayerToast) {
+          window.showPlayerToast(`✨ Streams compatíveis! Duração: ${formatSec(vDur)} (Diferença: ${diffSec.toFixed(1)}s)`, 3000);
+        }
+      } else {
+        currentHybridState.durationMatched = false;
+        const msg = `⚠️ Streams com cortes/durações diferentes (${formatSec(vDur)} vs ${formatSec(aDur)}, dif: ${diffSec.toFixed(1)}s). Para evitar perda de sincronia, alternando para faixa nativa...`;
+        console.warn('[EPlay Hybrid]', msg);
+        if (window.showPlayerToast) {
+          window.showPlayerToast(msg, 5000);
+        }
+        setTimeout(() => {
+          if (!currentHybridState.active) return;
+          const fallbackVer = currentHybridState.audioVersion || currentHybridState.videoVersion;
+          if (fallbackVer && currentHybridState.groupOrMovie) {
+            switchLiveMovieVersion(currentHybridState.groupOrMovie, fallbackVer, currentHybridState.allVersions);
+          }
+        }, 1200);
+      }
+    }
+
+    function startHybridMoviePlayback(groupOrMovie, selectedVersion, allVersions, startPosition = 0) {
+      stopHybridAudio();
+
+      const videoVer = selectedVersion.videoVersion;
+      const audioVer = selectedVersion.audioVersion;
+      if (!videoVer || !audioVer) return;
+
+      const audioExt = audioVer.ext || 'mp4';
+      const audioUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${audioVer.streamId}.${audioExt}`;
+
+      const audioEl = getOrCreateHybridAudioPlayer();
+      audioEl.src = audioUrl;
+      audioEl.preload = 'auto';
+
+      const masterVol = (elements.videoPlayer && Number.isFinite(elements.videoPlayer.volume)) ? elements.videoPlayer.volume : 0.85;
+      audioEl.volume = masterVol;
+      audioEl.muted = false;
+
+      // Silencia a imagem de vídeo para reproduzir apenas a faixa de áudio selecionada
+      if (elements.videoPlayer) {
+        elements.videoPlayer.muted = true;
+      }
+
+      currentHybridState = {
+        active: true,
+        hybridType: selectedVersion.hybridType,
+        selectedVersion,
+        groupOrMovie,
+        allVersions,
+        videoVersion: videoVer,
+        audioVersion: audioVer,
+        audioUrl,
+        audioOffsetMs: 0,
+        audioEl,
+        durationChecked: false,
+        durationMatched: true,
+        syncInterval: null
+      };
+
+      if (elements.hybridModeBadge) elements.hybridModeBadge.style.display = 'inline-flex';
+      if (elements.audioSyncControls) elements.audioSyncControls.style.display = 'inline-flex';
+      updateAudioOffsetUI(0);
+      if (window.updatePlayerVolumeUI) window.updatePlayerVolumeUI();
+
+      const onAudioLoaded = () => {
+        audioEl.removeEventListener('loadedmetadata', onAudioLoaded);
+        checkHybridDurationsMatch();
+        const curPos = (elements.videoPlayer ? elements.videoPlayer.currentTime : 0) || startPosition || 0;
+        if (curPos > 0) audioEl.currentTime = curPos;
+        if (elements.videoPlayer && !elements.videoPlayer.paused) {
+          audioEl.play().catch(() => {});
+        }
+      };
+      audioEl.addEventListener('loadedmetadata', onAudioLoaded);
+
+      if (elements.videoPlayer) {
+        const onVideoLoaded = () => {
+          elements.videoPlayer.removeEventListener('loadedmetadata', onVideoLoaded);
+          checkHybridDurationsMatch();
+        };
+        elements.videoPlayer.addEventListener('loadedmetadata', onVideoLoaded);
+      }
+
+      if (currentHybridState.syncInterval) clearInterval(currentHybridState.syncInterval);
+      currentHybridState.syncInterval = setInterval(() => {
+        if (currentHybridState.active && elements.videoPlayer && !elements.videoPlayer.paused) {
+          syncHybridAudioTime(false);
+        }
+      }, 350);
+
+      if (window.showPlayerToast) {
+        const is4kLeg = (selectedVersion.hybridType === '4k_leg_hybrid');
+        const desc = is4kLeg ? 'Vídeo 4K Ultra HD + Áudio Legendado' : 'Vídeo Legendado + Áudio Dublado';
+        window.showPlayerToast(`✨ Modo Híbrido Ativado: ${desc}`, 3500);
+      }
+    }
+
+    function stopHybridAudio() {
+      if (currentHybridState.syncInterval) {
+        clearInterval(currentHybridState.syncInterval);
+        currentHybridState.syncInterval = null;
+      }
+      if (currentHybridState.audioEl) {
+        try {
+          currentHybridState.audioEl.pause();
+          currentHybridState.audioEl.src = '';
+        } catch (_) {}
+      }
+      currentHybridState = {
+        active: false,
+        hybridType: null,
+        selectedVersion: null,
+        groupOrMovie: null,
+        allVersions: null,
+        videoVersion: null,
+        audioVersion: null,
+        audioUrl: null,
+        audioOffsetMs: 0,
+        audioEl: null,
+        durationChecked: false,
+        durationMatched: true,
+        syncInterval: null
+      };
+
+      if (elements.videoPlayer) {
+        elements.videoPlayer.muted = false;
+      }
+
+      if (elements.hybridModeBadge) elements.hybridModeBadge.style.display = 'none';
+      if (elements.audioSyncControls) elements.audioSyncControls.style.display = 'none';
+      if (window.updatePlayerVolumeUI) window.updatePlayerVolumeUI();
+    }
+
+    window.isHybridAudioActive = () => currentHybridState.active;
+    window.getHybridVolume = () => (currentHybridState.audioEl ? currentHybridState.audioEl.volume : (elements.videoPlayer ? elements.videoPlayer.volume : 0.85));
+    window.isHybridMuted = () => (currentHybridState.audioEl ? currentHybridState.audioEl.muted : false);
+    window.setHybridVolume = (v) => {
+      if (currentHybridState.audioEl) {
+        currentHybridState.audioEl.volume = v;
+        currentHybridState.audioEl.muted = (v === 0);
+      }
+    };
+    window.toggleHybridMute = () => {
+      if (currentHybridState.audioEl) {
+        currentHybridState.audioEl.muted = !currentHybridState.audioEl.muted;
+      }
+    };
+    window.adjustAudioOffset = adjustAudioOffset;
+    window.setAudioOffset = setAudioOffset;
+
     function openMovieVersionModal(groupOrMovie, versions) {
       const title = groupOrMovie.name || groupOrMovie.title || 'Filme';
       const poster = groupOrMovie.poster || getBestPosterUrl(groupOrMovie.primaryItem || groupOrMovie);
@@ -11008,8 +11393,9 @@ function showHome(targetScroll = 0) {
       elements.versionModalMeta.textContent = [year, rating].filter(Boolean).join(' • ');
       elements.versionOptionsList.innerHTML = '';
 
-      const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4 };
-      const sortedVersions = [...versions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
+      const playableVersions = getMovieAllPlayableVersions(groupOrMovie, versions);
+      const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4, '4k_leg_hybrid': 5, 'leg_dub_hybrid': 6 };
+      const sortedVersions = [...playableVersions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
 
       sortedVersions.forEach(v => {
         const btn = document.createElement('button');
@@ -11026,7 +11412,7 @@ function showHome(targetScroll = 0) {
         `;
         btn.addEventListener('click', () => {
           closeMovieVersionModal();
-          playMovieVersion(groupOrMovie, v, versions);
+          playMovieVersion(groupOrMovie, v, playableVersions);
         });
         elements.versionOptionsList.appendChild(btn);
       });
@@ -11046,17 +11432,20 @@ function showHome(targetScroll = 0) {
         return;
       }
       const openedFromContentPage = contentPageOpen && currentContentPageType === 'movie';
-      const watchedId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || selectedVersion?.streamId;
+      const effectivePlayableVersions = getMovieAllPlayableVersions(groupOrMovie, allVersions);
+      const isHybrid = !!selectedVersion.isHybrid;
+      const effectiveVideoStreamId = isHybrid ? selectedVersion.videoVersion.streamId : selectedVersion.streamId;
+      const watchedId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || effectiveVideoStreamId;
       if (watchedId != null) saveWatchedId('movies', watchedId);
 
-      const ext = selectedVersion.ext || 'mp4';
-      const videoUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${selectedVersion.streamId}.${ext}`;
+      const ext = (isHybrid ? selectedVersion.videoVersion.ext : selectedVersion.ext) || 'mp4';
+      const videoUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${effectiveVideoStreamId}.${ext}`;
       const baseTitle = groupOrMovie.name || groupOrMovie.title || 'Filme';
-      const displayTitle = (allVersions && allVersions.length > 1)
+      const displayTitle = (effectivePlayableVersions && effectivePlayableVersions.length > 1)
         ? `${baseTitle} (${selectedVersion.versionInfo.label})`
         : baseTitle;
 
-      setupPlayerVersionSwitcher(groupOrMovie, selectedVersion, allVersions);
+      setupPlayerVersionSwitcher(groupOrMovie, selectedVersion, effectivePlayableVersions);
 
       const item = selectedVersion.item || selectedVersion || {};
       const poster = groupOrMovie.poster || item.stream_icon || item.poster || '';
@@ -11076,7 +11465,7 @@ function showHome(targetScroll = 0) {
           title: baseTitle,
           groupOrMovie,
           selectedVersion,
-          allVersions,
+          allVersions: effectivePlayableVersions,
           fromContentPage: openedFromContentPage,
           poster,
           year,
@@ -11086,21 +11475,27 @@ function showHome(targetScroll = 0) {
           genre,
           rating,
           duration,
-          streamId: selectedVersion.streamId
+          streamId: effectiveVideoStreamId
         }, startPosition);
 
-        if (isLegendadoMedia(selectedVersion)) {
-          disableActiveSubtitle('Formato: MP4 • Legenda impressa no frame');
+        if (isHybrid) {
+          startHybridMoviePlayback(groupOrMovie, selectedVersion, effectivePlayableVersions, startPosition);
+        } else {
+          stopHybridAudio();
+          if (isLegendadoMedia(selectedVersion)) {
+            disableActiveSubtitle('Formato: MP4 • Legenda impressa no frame');
+          }
         }
       };
 
-      startVodWithResume('movie', selectedVersion.streamId, displayTitle, startPlayback);
+      startVodWithResume('movie', effectiveVideoStreamId, displayTitle, startPlayback);
     }
 
     function setupPlayerVersionSwitcher(groupOrMovie, activeVersion, allVersions) {
       if (!elements.movieVersionSwitcher) return;
 
-      if (!allVersions || allVersions.length <= 1) {
+      const effectiveVersions = getMovieAllPlayableVersions(groupOrMovie, allVersions);
+      if (!effectiveVersions || effectiveVersions.length <= 1) {
         elements.movieVersionSwitcher.style.display = 'none';
         elements.movieVersionSwitcher.innerHTML = '';
         return;
@@ -11109,8 +11504,8 @@ function showHome(targetScroll = 0) {
       elements.movieVersionSwitcher.style.display = 'inline-flex';
       elements.movieVersionSwitcher.innerHTML = '';
 
-      const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4 };
-      const sorted = [...allVersions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
+      const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4, '4k_leg_hybrid': 5, 'leg_dub_hybrid': 6 };
+      const sorted = [...effectiveVersions].sort((a, b) => (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99));
 
       sorted.forEach(v => {
         const isCurrent = (v.streamId === activeVersion.streamId);
@@ -11128,7 +11523,7 @@ function showHome(targetScroll = 0) {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           if (isCurrent) return;
-          switchLiveMovieVersion(groupOrMovie, v, allVersions);
+          switchLiveMovieVersion(groupOrMovie, v, effectiveVersions);
         });
 
         elements.movieVersionSwitcher.appendChild(btn);
@@ -11141,8 +11536,11 @@ function showHome(targetScroll = 0) {
       saveCurrentVodProgress();
       stopVodProgressTracking(false);
 
-      const ext = targetVersion.ext || 'mp4';
-      const newUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${targetVersion.streamId}.${ext}`;
+      const effectiveVersions = getMovieAllPlayableVersions(groupOrMovie, allVersions);
+      const isHybrid = !!targetVersion.isHybrid;
+      const effectiveVideoStreamId = isHybrid ? targetVersion.videoVersion.streamId : targetVersion.streamId;
+      const ext = (isHybrid ? targetVersion.videoVersion.ext : targetVersion.ext) || 'mp4';
+      const newUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${effectiveVideoStreamId}.${ext}`;
       const baseTitle = groupOrMovie.name || groupOrMovie.title || 'Filme';
       const newTitle = `${baseTitle} (${targetVersion.versionInfo.label})`;
 
@@ -11155,23 +11553,31 @@ function showHome(targetScroll = 0) {
         currentSubContext.mediaMeta.selectedVersion = targetVersion;
       }
       if (currentPlaybackMeta) {
-        currentPlaybackMeta.streamId = targetVersion.streamId;
+        currentPlaybackMeta.streamId = effectiveVideoStreamId;
         currentPlaybackMeta.url = newUrl;
         currentPlaybackMeta.title = newTitle;
         if (currentPlaybackMeta.mediaMeta) currentPlaybackMeta.mediaMeta.selectedVersion = targetVersion;
       }
 
-      setupPlayerVersionSwitcher(groupOrMovie, targetVersion, allVersions);
+      setupPlayerVersionSwitcher(groupOrMovie, targetVersion, effectiveVersions);
 
-      const isLeg = isLegendadoMedia(targetVersion);
-      if (isLeg) {
-        // Ao selecionar a opção "Legendado", retirar/ocultar a legenda ativada
-        // já que o vídeo já vem com a legenda impressa no frame
-        disableActiveSubtitle('Legenda externa desativada (Vídeo já possui legenda impressa no frame)');
-        closeSubOptionsPanel();
+      if (isHybrid) {
+        startHybridMoviePlayback(groupOrMovie, targetVersion, effectiveVersions, currentPos);
+        if (targetVersion.isHybrid4kLeg) {
+          autoFetchSubtitle(baseTitle, 'movie', currentPlaybackMeta ? currentPlaybackMeta.mediaMeta : { title: baseTitle, selectedVersion: targetVersion });
+        } else if (targetVersion.isHybridLegDub) {
+          disableActiveSubtitle('Formato: MP4 • Legenda impressa no frame');
+        }
       } else {
-        if (elements.subSelect && elements.subSelect.options[0] && elements.subSelect.options[0].value === 'none') {
-          elements.subSelect.options[0].textContent = 'Desativada';
+        stopHybridAudio();
+        const isLeg = isLegendadoMedia(targetVersion);
+        if (isLeg) {
+          disableActiveSubtitle('Legenda externa desativada (Vídeo já possui legenda impressa no frame)');
+          closeSubOptionsPanel();
+        } else {
+          if (elements.subSelect && elements.subSelect.options[0] && elements.subSelect.options[0].value === 'none') {
+            elements.subSelect.options[0].textContent = 'Desativada';
+          }
         }
       }
 
@@ -11187,16 +11593,12 @@ function showHome(targetScroll = 0) {
       }
 
       elements.videoPlayer.addEventListener('loadedmetadata', onLoaded);
-      // Algumas origens não iniciam sozinhas no primeiro carregamento; tenta novamente
-      // assim que houver dados prontos, sem criar múltiplos listeners permanentes.
       const retryTvLikeAutoplay = () => {
         elements.videoPlayer.play().catch(() => { });
         elements.videoPlayer.removeEventListener('canplay', retryTvLikeAutoplay);
       };
       elements.videoPlayer.addEventListener('canplay', retryTvLikeAutoplay, { once: true });
-      if (!isLeg) {
-        elements.modalFormat.textContent = `Versão alterada para ${targetVersion.versionInfo.label}`;
-      }
+      elements.modalFormat.textContent = `Versão alterada para ${targetVersion.versionInfo.label}`;
     }
 
     // ==========================================
@@ -11762,6 +12164,8 @@ function showHome(targetScroll = 0) {
       window.dispatchEvent(new CustomEvent('eplay:series-context'));
       currentPlaybackMeta = null;
 
+      stopHybridAudio();
+
       elements.videoModal.style.display = 'none';
       elements.videoModal.classList.remove('eplay-player-page');
       document.body.classList.remove('eplay-player-open');
@@ -11877,6 +12281,30 @@ function showHome(targetScroll = 0) {
       elements.modalFormat.textContent = 'Formato: MP4 • Link Direto';
     });
 
+    elements.videoPlayer.addEventListener('play', () => {
+      if (currentHybridState.active && currentHybridState.audioEl && currentHybridState.audioEl.paused) {
+        currentHybridState.audioEl.play().catch(() => {});
+      }
+    });
+
+    elements.videoPlayer.addEventListener('pause', () => {
+      if (currentHybridState.active && currentHybridState.audioEl && !currentHybridState.audioEl.paused) {
+        currentHybridState.audioEl.pause();
+      }
+    });
+
+    elements.videoPlayer.addEventListener('waiting', () => {
+      if (currentHybridState.active && currentHybridState.audioEl) {
+        currentHybridState.audioEl.pause();
+      }
+    });
+
+    elements.videoPlayer.addEventListener('ratechange', () => {
+      if (currentHybridState.active && currentHybridState.audioEl) {
+        currentHybridState.audioEl.playbackRate = elements.videoPlayer.playbackRate;
+      }
+    });
+
     elements.videoPlayer.addEventListener('playing', () => {
       if (videoLoadTimeout) {
         clearTimeout(videoLoadTimeout);
@@ -11890,16 +12318,26 @@ function showHome(targetScroll = 0) {
         updateSkipIntroButton();
         if (!skipIntroState.segment) scheduleSkipIntroLookup(0);
       }
+      if (currentHybridState.active && currentHybridState.audioEl) {
+        syncHybridAudioTime(true);
+        currentHybridState.audioEl.play().catch(() => {});
+      }
     });
 
     elements.videoPlayer.addEventListener('timeupdate', () => {
       maybeAutoSkipIntro();
       updateSkipIntroButton();
       updateSubtitleOverlay();
+      if (currentHybridState.active) {
+        syncHybridAudioTime(false);
+      }
     });
     elements.videoPlayer.addEventListener('seeking', () => {
       updateSkipIntroButton();
       updateSubtitleOverlay();
+      if (currentHybridState.active) {
+        syncHybridAudioTime(true);
+      }
     });
     elements.videoPlayer.addEventListener('seeked', () => {
       if (skipIntroState.segment && elements.videoPlayer.currentTime < skipIntroState.segment.start) {
@@ -11908,6 +12346,9 @@ function showHome(targetScroll = 0) {
       maybeAutoSkipIntro();
       updateSkipIntroButton();
       updateSubtitleOverlay();
+      if (currentHybridState.active) {
+        syncHybridAudioTime(true);
+      }
     });
 
     elements.videoPlayer.addEventListener('ended', () => {
@@ -11917,6 +12358,9 @@ function showHome(targetScroll = 0) {
       }
       if (meta) clearVodProgress(meta.type, meta.id);
       stopVodProgressTracking(false);
+      if (currentHybridState.active && currentHybridState.audioEl) {
+        currentHybridState.audioEl.pause();
+      }
     });
 
     window.addEventListener('pagehide', () => {
@@ -13734,14 +14178,15 @@ function showHome(targetScroll = 0) {
       elements.contentMoviePanel.hidden = false;
       elements.contentMovieVersions.innerHTML = '';
 
-      const versions = groupOrMovie?.versions || [{
+      const rawVersions = groupOrMovie?.versions || [{
         item: groupOrMovie,
         versionInfo: detectMovieVersion(groupOrMovie),
         streamId: groupOrMovie?.stream_id,
         ext: groupOrMovie?.container_extension || 'mp4'
       }];
+      const versions = getMovieAllPlayableVersions(groupOrMovie, rawVersions);
 
-      const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4 };
+      const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4, '4k_leg_hybrid': 5, 'leg_dub_hybrid': 6 };
       const sortedVersions = [...versions].sort((a, b) =>
         (orderMap[a.versionInfo.type] || 99) - (orderMap[b.versionInfo.type] || 99)
       );
@@ -13753,7 +14198,8 @@ function showHome(targetScroll = 0) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'eplay-version-card';
-        const progress = getVodProgress('movie', v.streamId);
+        const progressStreamId = v.isHybrid ? v.videoVersion.streamId : v.streamId;
+        const progress = getVodProgress('movie', progressStreamId);
         const canResume = progress && progress.position > VOD_PROGRESS_MIN_SECONDS && progress.duration > 0 && progress.position < progress.duration * VOD_PROGRESS_COMPLETE_PERCENT;
         const actionText = canResume
           ? '↻ Retomar • ' + formatResumeTime(progress.position)

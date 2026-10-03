@@ -20,6 +20,7 @@
     el.textContent = msg; el.classList.add('show'); clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.remove('show'), ms);
   }
+  window.showPlayerToast = showToast;
   function setRange() {
     if (!seek) return;
     const d = video.duration || 0, t = video.currentTime || 0;
@@ -79,15 +80,33 @@
     }
   }
   function setVolume(v) {
-    state.volume = Math.max(0, Math.min(1, v)); video.volume = state.volume; video.muted = state.volume === 0;
+    state.volume = Math.max(0, Math.min(1, v));
+    if (window.isHybridAudioActive && window.isHybridAudioActive()) {
+      if (window.setHybridVolume) window.setHybridVolume(state.volume);
+      localStorage.setItem('andplay_player_volume', String(state.volume));
+      updateVolume();
+      return;
+    }
+    video.volume = state.volume; video.muted = state.volume === 0;
     localStorage.setItem('andplay_player_volume', String(state.volume)); updateVolume();
   }
   function updateVolume() {
     const b = $('eplayVolumeBtn'), range = $('eplayVolume');
-    if (range) range.value = Math.round(video.muted ? 0 : video.volume * 100);
-    if (b) b.textContent = video.muted || video.volume === 0 ? '🔇' : video.volume < .5 ? '🔉' : '🔊';
+    const isHybrid = !!(window.isHybridAudioActive && window.isHybridAudioActive());
+    const isMuted = isHybrid ? (window.isHybridMuted ? window.isHybridMuted() : false) : video.muted;
+    const vol = isHybrid ? (window.getHybridVolume ? window.getHybridVolume() : state.volume) : video.volume;
+    if (range) range.value = Math.round(isMuted ? 0 : vol * 100);
+    if (b) b.textContent = isMuted || vol === 0 ? '🔇' : vol < .5 ? '🔉' : '🔊';
   }
-  function toggleMute() { video.muted = !video.muted; if (!video.muted && video.volume === 0) video.volume = state.volume || .85; updateVolume(); }
+  window.updatePlayerVolumeUI = updateVolume;
+  function toggleMute() {
+    if (window.isHybridAudioActive && window.isHybridAudioActive()) {
+      if (window.toggleHybridMute) window.toggleHybridMute();
+      updateVolume();
+      return;
+    }
+    video.muted = !video.muted; if (!video.muted && video.volume === 0) video.volume = state.volume || .85; updateVolume();
+  }
   function getFullscreenElement() {
     return (
       document.fullscreenElement ||
@@ -315,7 +334,21 @@
     if(modal.style.display==='none')return;
     const tag=(e.target.tagName||'').toLowerCase();if(['input','select','textarea'].includes(tag))return;
     if(e.code==='Space'||e.key===' '){e.preventDefault();e.stopImmediatePropagation();playPause();return}
-    if(e.key.toLowerCase()==='k'){e.preventDefault();playPause()} else if(e.key==='ArrowLeft'){e.preventDefault();seekBy(-10)} else if(e.key==='ArrowRight'){e.preventDefault();seekBy(10)} else if(e.key==='ArrowUp'){e.preventDefault();setVolume(video.volume+.05)} else if(e.key==='ArrowDown'){e.preventDefault();setVolume(video.volume-.05)} else if(e.key.toLowerCase()==='m'){e.preventDefault();toggleMute()} else if(e.key.toLowerCase()==='f'){e.preventDefault();fullscreen()} else if(e.key.toLowerCase()==='p'){e.preventDefault();pip()} else if(e.key.toLowerCase()==='c'){e.preventDefault();openSubtitles()} else if(e.key.toLowerCase()==='s'){e.preventDefault();skipIntroNow()} else if(e.key==='Escape'){closeMenu();reveal()} else reveal();
+    if(e.key.toLowerCase()==='k'){e.preventDefault();playPause()} else if(e.key==='ArrowLeft'){
+      if(e.shiftKey && window.isHybridAudioActive && window.isHybridAudioActive()){
+        e.preventDefault();
+        if(window.adjustAudioOffset) window.adjustAudioOffset(e.ctrlKey ? -500 : -50);
+        return;
+      }
+      e.preventDefault();seekBy(-10);
+    } else if(e.key==='ArrowRight'){
+      if(e.shiftKey && window.isHybridAudioActive && window.isHybridAudioActive()){
+        e.preventDefault();
+        if(window.adjustAudioOffset) window.adjustAudioOffset(e.ctrlKey ? 500 : 50);
+        return;
+      }
+      e.preventDefault();seekBy(10);
+    } else if(e.key==='ArrowUp'){e.preventDefault();setVolume(video.volume+.05)} else if(e.key==='ArrowDown'){e.preventDefault();setVolume(video.volume-.05)} else if(e.key.toLowerCase()==='m'){e.preventDefault();toggleMute()} else if(e.key.toLowerCase()==='f'){e.preventDefault();fullscreen()} else if(e.key.toLowerCase()==='p'){e.preventDefault();pip()} else if(e.key.toLowerCase()==='c'){e.preventDefault();openSubtitles()} else if(e.key.toLowerCase()==='s'){e.preventDefault();skipIntroNow()} else if(e.key==='Escape'){closeMenu();reveal()} else reveal();
   }, true);
   let sx=0,sy=0,st=0,lastTapTime=0,lastTapX=0,lastTapY=0;
   container.addEventListener('touchstart',e=>{
