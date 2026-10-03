@@ -4447,6 +4447,29 @@ header {
   font-size: 13px;
 }
 
+.home-rails-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 60px 16px;
+  color: #8c95a5;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.home-rails-loading .spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--andplay-accent, #4fc3f7);
+  border-radius: 50%;
+  animation: authSpin 0.8s linear infinite;
+}
+
 .home-section {
   margin-top: 30px;
 }

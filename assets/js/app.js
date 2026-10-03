@@ -181,6 +181,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       homeFeaturedNext: document.getElementById('homeFeaturedNext'),
       homeFeaturedDots: document.getElementById('homeFeaturedDots'),
       homeFeaturedLoading: document.getElementById('homeFeaturedLoading'),
+      homeRailsLoading: document.getElementById('homeRailsLoading'),
       homeWatchedSection: document.getElementById('homeWatchedSection'),
       homeWatchedRail: document.getElementById('homeWatchedRail'),
       homeWatchedPrev: document.getElementById('homeWatchedPrev'),
@@ -4844,7 +4845,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         rating: group.rating || '',
         poster: type === 'series'
           ? (group.cover || group.stream_icon || '')
-          : getBestPosterUrl(group.primaryItem || group),
+          : (getBestPosterUrl(group.primaryItem || group) || group.poster || group.stream_icon || group.cover || ''),
         progress
       };
     }
@@ -5260,30 +5261,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     function getHomeRecommendationMix(items) {
-      if (!items.length) return cachedHomeRecommendations || [];
-
-      // Se já temos recomendações selecionadas nesta sessão, preservamos os mesmos itens,
-      // atualizando apenas referências e notas in-place para estabilidade total e zero piscamento
-      if (Array.isArray(cachedHomeRecommendations) && cachedHomeRecommendations.length > 0) {
-        const itemMap = new Map();
-        items.forEach(it => {
-          const k = (it.type || '') + ':' + (it.id || '');
-          if (k) itemMap.set(k, it);
-        });
-
-        cachedHomeRecommendations.forEach(entry => {
-          const fresh = itemMap.get((entry.type || '') + ':' + (entry.id || ''));
-          if (!fresh) return;
-          entry.item = fresh.item || entry.item;
-          entry.title = cleanDisplayTitle(fresh.title || entry.title);
-          entry.year = fresh.year || entry.year;
-          entry.rating = fresh.rating || entry.rating;
-          entry.poster = fresh.poster || entry.poster;
-          entry.plot = fresh.plot || entry.plot;
-          entry.added = fresh.added || entry.added;
-        });
-        return cachedHomeRecommendations;
-      }
+      if (!items.length) return [];
 
       const profile = readTasteProfile();
       const topThemes = getTasteTopThemes(4);
@@ -5354,42 +5332,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           combinedMix.push(sampledDiscoveryItems[di++]);
         }
       }
-      const finalRecs = combinedMix.slice(0, HOME_RAIL_ITEM_LIMIT);
-      if (finalRecs.length >= HOME_THEME_MIN_ITEMS) {
-        cachedHomeRecommendations = finalRecs;
-      }
-      return finalRecs;
+      return combinedMix.slice(0, HOME_RAIL_ITEM_LIMIT);
     }
 
     function buildHomeCatalogRails(type) {
       const items = getHomeCatalogItems(type);
-      if (!items.length) return cachedHomeCatalogRails[type] || [];
-
-      // Se já temos trilhos em cache para este tipo e o catálogo não estava incompleto,
-      // preservamos os mesmos trilhos e itens, atualizando apenas referências e metadados in-place
-      if (Array.isArray(cachedHomeCatalogRails[type]) && cachedHomeCatalogRails[type].length >= 2) {
-        const itemMap = new Map();
-        items.forEach(it => {
-          const k = (it.type || '') + ':' + (it.id || '');
-          if (k) itemMap.set(k, it);
-        });
-
-        cachedHomeCatalogRails[type].forEach(rail => {
-          if (!Array.isArray(rail.items)) return;
-          rail.items.forEach(it => {
-            const fresh = itemMap.get((it.type || '') + ':' + (it.id || ''));
-            if (!fresh) return;
-            it.item = fresh.item || it.item;
-            it.title = cleanDisplayTitle(fresh.title || it.title);
-            it.year = fresh.year || it.year;
-            it.rating = fresh.rating || it.rating;
-            it.poster = fresh.poster || it.poster;
-            it.plot = fresh.plot || it.plot;
-            it.added = fresh.added || it.added;
-          });
-        });
-        return cachedHomeCatalogRails[type];
-      }
+      if (!items.length) return [];
 
       const typeLabel = type === 'series' ? 'Séries' : 'Filmes';
 
@@ -5536,9 +5484,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         }
       });
 
-      if (rails.length >= 2) {
-        cachedHomeCatalogRails[type] = rails;
-      }
       return rails;
     }
 
@@ -5547,6 +5492,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       card.type = 'button';
       card.className = 'home-title-card';
       card.dataset.itemKey = (item.type || '') + ':' + (item.id || '');
+      card._homeItem = item;
 
       const ratingInfo = getHomeRatingInfo(item);
       const meta = [
@@ -5575,6 +5521,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function updateHomeTitleCard(card, item) {
       if (!card || !item) return;
+      card._homeItem = item;
       const ratingInfo = getHomeRatingInfo(item);
       const meta = [
         item.year,
@@ -6500,6 +6447,25 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           if (progressBar) progressBar.style.width = progress + '%';
           const subEl = card.querySelector('small');
           if (subEl && subEl.textContent !== sub) subEl.textContent = sub;
+
+          const posterWrap = card.querySelector('.home-watched-poster');
+          if (posterWrap && item.poster) {
+            const img = posterWrap.querySelector('img');
+            if (img) {
+              if (img.getAttribute('src') !== item.poster) img.src = item.poster;
+            } else {
+              const icon = posterWrap.querySelector('span:not(.home-watched-type):not(.home-watched-menu-wrap)');
+              if (icon) icon.remove();
+              const newImg = document.createElement('img');
+              newImg.src = item.poster;
+              newImg.alt = '';
+              newImg.loading = 'lazy';
+              newImg.decoding = 'async';
+              newImg.setAttribute('data-hide-on-error', '');
+              newImg.draggable = false;
+              posterWrap.prepend(newImg);
+            }
+          }
         });
         if (currentScroll > 0) elements.homeWatchedRail.scrollLeft = currentScroll;
         return;
@@ -6584,6 +6550,60 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       setupSingleHomeRailArrow(elements.homeWatchedRail, elements.homeWatchedNext, elements.homeWatchedPrev);
     }
 
+    function showHomeGridLoading(isLoading) {
+      let loader = elements.homeRailsLoading || document.getElementById('homeRailsLoading');
+      if (!loader && elements.homeDashboard) {
+        loader = document.createElement('div');
+        loader.id = 'homeRailsLoading';
+        loader.className = 'home-rails-loading';
+        loader.innerHTML = '<div class="spinner"></div><span>Carregando catálogo e recomendações...</span>';
+        if (elements.homeWatchedSection) {
+          elements.homeDashboard.insertBefore(loader, elements.homeWatchedSection);
+        } else {
+          elements.homeDashboard.appendChild(loader);
+        }
+        elements.homeRailsLoading = loader;
+      }
+      if (loader) {
+        loader.style.display = isLoading ? 'flex' : 'none';
+      }
+      if (isLoading) {
+        if (elements.homeWatchedSection) elements.homeWatchedSection.style.display = 'none';
+        if (elements.homeRecommendationsSection) elements.homeRecommendationsSection.style.display = 'none';
+        if (elements.homeSeriesSection) elements.homeSeriesSection.style.display = 'none';
+        if (elements.homeMoviesSection) elements.homeMoviesSection.style.display = 'none';
+        if (elements.homeFeaturedLoading && (!homeFeaturedItems || !homeFeaturedItems.length)) {
+          elements.homeFeaturedLoading.style.display = 'flex';
+          elements.homeFeaturedLoading.textContent = 'Carregando novidades...';
+        }
+      }
+    }
+
+    function updateHomeRatingBadges() {
+      try {
+        renderHomeFeatured();
+        const cards = elements.homeDashboard?.querySelectorAll('.home-title-card');
+        if (cards && cards.length) {
+          cards.forEach(card => {
+            let item = card._homeItem;
+            if (!item && card.dataset.itemKey) {
+              const [type, id] = card.dataset.itemKey.split(':');
+              if (type && id) {
+                const catalog = getHomeCatalogItems(type);
+                item = catalog.find(x => String(x.id) === String(id));
+                if (item) card._homeItem = item;
+              }
+            }
+            if (item) {
+              updateHomeTitleCard(card, item);
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('[EPlay Home] Erro ao atualizar avaliações:', err);
+      }
+    }
+
     async function loadHomeDashboardData() {
       if (homeCatalogPromise) return homeCatalogPromise;
       homeCatalogPromise = (async () => {
@@ -6592,20 +6612,16 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             readCatalogCacheStale('movies'),
             readCatalogCacheStale('series')
           ]);
-          let hasStaleCatalog = false;
           if (Array.isArray(staleMovies) && staleMovies.length) {
             fullMoviesCache = staleMovies;
             homeWatchedCatalogFallback.movies = staleMovies;
-            hasStaleCatalog = true;
           }
           if (Array.isArray(staleSeries) && staleSeries.length) {
             fullSeriesCache = staleSeries;
             homeWatchedCatalogFallback.series = staleSeries;
-            hasStaleCatalog = true;
           }
           if (!homeWatchedCatalogFallback.movies.length && Array.isArray(fullMoviesCache)) homeWatchedCatalogFallback.movies = fullMoviesCache.slice();
           if (!homeWatchedCatalogFallback.series.length && Array.isArray(fullSeriesCache)) homeWatchedCatalogFallback.series = fullSeriesCache.slice();
-          if (hasStaleCatalog) scheduleHomeCatalogRender();
 
           const shouldRevalidate =
             !homeLastRevalidationAt ||
@@ -6628,16 +6644,17 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
           await hydrateRemoteHistoryMetadata(HOME_WATCHED_LIMIT);
           enrichHomeRatings()
-            .then(() => scheduleHomeCatalogRender())
+            .then(() => updateHomeRatingBadges())
             .catch(() => {});
-        } finally {
-          scheduleHomeCatalogRender();
+        } catch (err) {
+          console.warn('[EPlay Home] Falha ao carregar catálogo da Home:', err);
         }
       })().finally(() => { homeCatalogPromise = null; });
       return homeCatalogPromise;
     }
 
     function renderHomeDashboard() {
+      showHomeGridLoading(false);
       const savedScrolls = new Map();
       if (elements.homeWatchedRail) {
         savedScrolls.set('watched', elements.homeWatchedRail.scrollLeft);
@@ -8237,16 +8254,39 @@ function showHome(targetScroll = 0) {
       }
       startViewTransition();
       window.scrollTo({ top: typeof targetScroll === 'number' ? targetScroll : 0, behavior: 'instant' });
-      window.setTimeout(() => {
-        if (currentMode !== 'home') return;
-        renderHomeFeatured();
+      const hasData = Array.isArray(fullMoviesCache) && fullMoviesCache.length > 0 &&
+                      Array.isArray(fullSeriesCache) && fullSeriesCache.length > 0;
+      const isAlreadyRendered = Boolean(
+        (elements.homeSeriesRails && elements.homeSeriesRails.children.length > 0) ||
+        (elements.homeMoviesRails && elements.homeMoviesRails.children.length > 0)
+      );
+
+      if (hasData && isAlreadyRendered) {
+        showHomeGridLoading(false);
         renderHomeWatched();
-        if (fullMoviesCache?.length || fullSeriesCache?.length || cachedHomeCatalogRails.movie || cachedHomeCatalogRails.series) {
-          scheduleHomeCatalogRender();
-        }
-      }, 0);
-      startHomeFeaturedTimer();
-      loadHomeDashboardData().catch(error => console.warn('[EPlay Home] Catálogo:', error));
+        startHomeFeaturedTimer();
+        loadHomeDashboardData().catch(error => console.warn('[EPlay Home] Catálogo:', error));
+        return;
+      }
+
+      showHomeGridLoading(true);
+      loadHomeDashboardData()
+        .then(() => {
+          if (currentMode !== 'home') return;
+          showHomeGridLoading(false);
+          renderHomeDashboard();
+          startHomeFeaturedTimer();
+          if (typeof targetScroll === 'number' && targetScroll > 0) {
+            window.scrollTo({ top: targetScroll, behavior: 'instant' });
+          }
+        })
+        .catch(error => {
+          console.warn('[EPlay Home] Catálogo:', error);
+          if (currentMode !== 'home') return;
+          showHomeGridLoading(false);
+          renderHomeDashboard();
+          startHomeFeaturedTimer();
+        });
     }
 
     // ==========================================
