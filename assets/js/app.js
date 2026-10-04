@@ -622,6 +622,27 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         originalName: 'About Time',
         poster: 'https://image.tmdb.org/t/p/w600_and_h900_bestv2/uqEzxvGDYNzoQE7rayv7gRXBomt.jpg',
         imdbId: 'tt2194499'
+      },
+      // 5. A Morte de Robin Hood (2026) - Ação/Aventura com Hugh Jackman e Jodie Comer (The Death of Robin Hood)
+      5976936: {
+        name: 'A Morte de Robin Hood [L] (2026)',
+        year: '2026',
+        imdbId: 'tt32273171'
+      },
+      6078673: {
+        name: 'A Morte de Robin Hood [Lançamento] (2026)',
+        year: '2026',
+        imdbId: 'tt32273171'
+      },
+      6078678: {
+        name: 'A Morte de Robin Hood (2026)',
+        year: '2026',
+        imdbId: 'tt32273171'
+      },
+      6246677: {
+        name: 'A Morte de Robin Hood 4K (2026)',
+        year: '2026',
+        imdbId: 'tt32273171'
       }
     };
 
@@ -654,6 +675,26 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         return moviePosterMap.get(clean);
       }
       return '';
+    }
+
+    // Detecta se o navegador/dispositivo suporta nativamente decodificação de HEVC / H.265 em MP4
+    let _hevcSupportCached = null;
+    function isHevcSupported() {
+      if (_hevcSupportCached !== null) return _hevcSupportCached;
+      try {
+        const video = document.createElement('video');
+        if (!video || typeof video.canPlayType !== 'function') {
+          _hevcSupportCached = false;
+          return false;
+        }
+        const hvc1 = video.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"');
+        const hev1 = video.canPlayType('video/mp4; codecs="hev1.1.6.L93.B0"');
+        _hevcSupportCached = Boolean((hvc1 && hvc1 !== '') || (hev1 && hev1 !== ''));
+        return _hevcSupportCached;
+      } catch (_) {
+        _hevcSupportCached = false;
+        return false;
+      }
     }
 
     // Detecta se uma versão é Dublada, Legendada, 4K Dublada ou 4K Legendada
@@ -749,8 +790,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (!Array.isArray(versions) || versions.length === 0) return null;
       if (versions.length === 1) return versions[0];
 
+      const canHevc = isHevcSupported();
       const prefAudio = (typeof getPreferredAudioPreference === 'function') ? getPreferredAudioPreference() : 'dub';
-      const prefQuality = (typeof getPreferredQualityPreference === 'function') ? getPreferredQualityPreference() : '4k';
+      let prefQuality = (typeof getPreferredQualityPreference === 'function') ? getPreferredQualityPreference() : (canHevc ? '4k' : 'fhd');
 
       const fourKLegNative = versions.find(v => v.versionInfo?.type === '4k_leg');
       const fourKLegHybrid = versions.find(v => v.versionInfo?.type === '4k_leg_hybrid');
@@ -759,8 +801,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const fhdDub = versions.find(v => v.versionInfo?.type === 'dublado');
       const legDubHybrid = versions.find(v => v.versionInfo?.type === 'leg_dub_hybrid');
 
+      // Se o dispositivo não suporta HEVC (H.265) e existem versões Full HD (H.264),
+      // prioriza Full HD para garantir reprodução imediata e evitar erro de mídia incompatível
+      if (prefQuality === '4k' && !canHevc && (fhdDub || fhdLeg || legDubHybrid)) {
+        prefQuality = 'fhd';
+      }
+
       if (prefAudio === 'leg') {
-        if (prefQuality === '4k') {
+        if (prefQuality === '4k' && canHevc) {
           if (fourKLegNative) return fourKLegNative;
           if (fourKLegHybrid) return fourKLegHybrid;
           if (fhdLeg) return fhdLeg;
@@ -769,14 +817,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           if (legDubHybrid) return legDubHybrid;
         } else {
           if (fhdLeg) return fhdLeg;
-          if (fourKLegNative) return fourKLegNative;
-          if (fourKLegHybrid) return fourKLegHybrid;
+          if (fourKLegNative && canHevc) return fourKLegNative;
+          if (fourKLegHybrid && canHevc) return fourKLegHybrid;
           if (fhdDub) return fhdDub;
-          if (fourKDub) return fourKDub;
+          if (fourKDub && canHevc) return fourKDub;
           if (legDubHybrid) return legDubHybrid;
         }
       } else {
-        if (prefQuality === '4k') {
+        if (prefQuality === '4k' && canHevc) {
           if (fourKDub) return fourKDub;
           if (fhdDub) return fhdDub;
           if (legDubHybrid) return legDubHybrid;
@@ -785,11 +833,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           if (fhdLeg) return fhdLeg;
         } else {
           if (fhdDub) return fhdDub;
-          if (fourKDub) return fourKDub;
+          if (fourKDub && canHevc) return fourKDub;
           if (legDubHybrid) return legDubHybrid;
           if (fhdLeg) return fhdLeg;
-          if (fourKLegNative) return fourKLegNative;
-          if (fourKLegHybrid) return fourKLegHybrid;
+          if (fourKLegNative && canHevc) return fourKLegNative;
+          if (fourKLegHybrid && canHevc) return fourKLegHybrid;
         }
       }
 
@@ -2107,7 +2155,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         const prefs = JSON.parse(localStorage.getItem(USER_PREFERENCES_LOCAL_KEY) || '{}');
         if (prefs.preferred_quality) return prefs.preferred_quality;
       } catch (_) {}
-      return '4k'; // Padrão: 4K Ultra HD quando disponível
+      return isHevcSupported() ? '4k' : 'fhd'; // Padrão: 4K se o hardware suportar HEVC, senão Full HD (H.264)
     }
 
     function setPreferredAudioPreference(val, sync = true) {
@@ -12637,6 +12685,25 @@ function showHome(targetScroll = 0) {
       videoLoadTimeout = setTimeout(() => {
         if (currentPlaybackMeta?.mediaType === 'live') return;
         if (elements.videoPlayer && elements.videoPlayer.readyState === 0 && elements.videoModal.style.display === 'flex') {
+          // Se for 4K e travou no carregamento, tenta fallback automático para Full HD antes de exibir erro
+          const currentMeta = currentPlaybackMeta;
+          const mediaMeta = currentMeta?.mediaMeta;
+          const allVers = mediaMeta?.allVersions || [];
+          const currentV = mediaMeta?.selectedVersion;
+          if (currentV && (currentV.versionInfo?.type?.includes('4k') || currentV.isHybrid)) {
+            const isLeg = isLegendadoMedia(currentV);
+            const fhdFallback = allVers.find(v => v.versionInfo?.type === (isLeg ? 'legendado' : 'dublado'))
+                             || allVers.find(v => v.versionInfo?.type === 'dublado')
+                             || allVers.find(v => v.versionInfo?.type === 'legendado');
+            if (fhdFallback && fhdFallback.streamId !== currentV.streamId) {
+              console.warn('[EPlay Player] Timeout na versão 4K. Alternando automaticamente para Full HD:', fhdFallback);
+              if (window.showPlayerToast) {
+                window.showPlayerToast('Alternando para versão Full HD...');
+              }
+              switchLiveMovieVersion(mediaMeta.groupOrMovie || currentMeta, fhdFallback, allVers);
+              return;
+            }
+          }
           if (retryCurrentVideoSource(true)) return;
           showVideoErrorOverlay('timeout', 'O servidor de transmissão demorou muito para responder (tempo limite esgotado). O link pode estar inacessível ou fora do ar.');
         }
@@ -13070,7 +13137,25 @@ function showHome(targetScroll = 0) {
         clearTimeout(videoLoadTimeout);
         videoLoadTimeout = null;
       }
-      const mediaError = elements.videoPlayer.error;
+      // Fallback automático inteligente para filmes quando versão 4K/HEVC falha no player (incompatibilidade de codec ou servidor)
+      const currentMeta = currentPlaybackMeta;
+      const mediaMeta = currentMeta?.mediaMeta;
+      const allVers = mediaMeta?.allVersions || [];
+      const currentV = mediaMeta?.selectedVersion;
+      if (currentV && (currentV.versionInfo?.type?.includes('4k') || currentV.isHybrid)) {
+        const isLeg = isLegendadoMedia(currentV);
+        const fhdFallback = allVers.find(v => v.versionInfo?.type === (isLeg ? 'legendado' : 'dublado'))
+                         || allVers.find(v => v.versionInfo?.type === 'dublado')
+                         || allVers.find(v => v.versionInfo?.type === 'legendado');
+        if (fhdFallback && fhdFallback.streamId !== currentV.streamId) {
+          console.warn('[EPlay Player] Versão 4K/HEVC incompatível com este dispositivo. Fazendo fallback automático para Full HD (H.264):', fhdFallback);
+          if (window.showPlayerToast) {
+            window.showPlayerToast('Formato 4K incompatível. Alternando para Full HD...');
+          }
+          switchLiveMovieVersion(mediaMeta.groupOrMovie || currentMeta, fhdFallback, allVers);
+          return;
+        }
+      }
 
       // Primeira falha transitória: refaz a requisição uma vez antes de expor
       // o erro. Isso elimina a necessidade de clicar manualmente em "Tentar Novamente".
@@ -15031,17 +15116,19 @@ function showHome(targetScroll = 0) {
       const versions = getMovieAllPlayableVersions(groupOrMovie, rawVersions);
       const preferredVer = pickPreferredMovieVersion(versions);
 
-      const hasDublado = versions.some(v => v.versionInfo?.type === 'dublado' || v.versionInfo?.type === '4k_dub');
-      const dubVer = versions.find(v => v.versionInfo?.type === '4k_dub') || versions.find(v => v.versionInfo?.type === 'dublado');
-      const displayVer = (hasDublado && dubVer) ? dubVer : (versions[0] || preferredVer);
+      const canHevc = isHevcSupported();
+      const hasDublado = versions.some(v => v.versionInfo?.type === 'dublado' || (canHevc && v.versionInfo?.type === '4k_dub'));
+      const dubVer = canHevc
+        ? (versions.find(v => v.versionInfo?.type === '4k_dub') || versions.find(v => v.versionInfo?.type === 'dublado'))
+        : (versions.find(v => v.versionInfo?.type === 'dublado') || versions.find(v => v.versionInfo?.type === '4k_dub'));
+      const displayVer = preferredVer || (hasDublado && dubVer ? dubVer : versions[0]);
 
       const primaryStreamId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || versions[0]?.streamId;
       if (primaryStreamId) setRouteHash('#/filme/' + primaryStreamId, true, { page: 'content', type: 'movie', id: primaryStreamId });
       document.title = (groupOrMovie?.name || groupOrMovie?.title || 'Filme') + ' - EPlay';
       void enrichMoviePageMetadata(groupOrMovie, primaryStreamId);
 
-      // Botão Principal Único de Reprodução Direta (apenas a opção dublada exibida quando disponível,
-      // evitando ambiguidade de seleções na página enquanto o player gerencia a versão preferida)
+      // Botão Principal de Reprodução Direta
       const primaryBtn = document.createElement('button');
       primaryBtn.type = 'button';
       primaryBtn.className = 'eplay-version-card is-primary';
@@ -15054,9 +15141,9 @@ function showHome(targetScroll = 0) {
         : '▶ Assistir Filme';
       const progressText = canResume
         ? 'Você parou em ' + formatResumeTime(progress.position) + ' • restam ' + formatResumeTime(Math.max(0, progress.duration - progress.position))
-        : (hasDublado ? 'Versão Dublada • Alterne para legendado ou 4K no player' : (displayVer.versionInfo?.desc || 'Clique para assistir'));
+        : (displayVer.versionInfo?.desc || 'Clique para assistir');
 
-      const badgeText = hasDublado ? 'DUBLADO' : (displayVer.versionInfo?.badge || 'PADRÃO');
+      const badgeText = displayVer.versionInfo?.badge || (hasDublado ? 'DUBLADO' : 'PADRÃO');
 
       primaryBtn.innerHTML =
         '<span class="eplay-version-icon" style="font-size: 26px;">' + escapeHtml(displayVer.versionInfo?.icon || '▶') + '</span>' +
@@ -15067,6 +15154,30 @@ function showHome(targetScroll = 0) {
         '<span class="eplay-version-action" style="font-weight: 800; font-size: 14px; color: #4fc3f7;">' + escapeHtml(actionText) + '</span>';
       primaryBtn.addEventListener('click', () => playMovieVersion(groupOrMovie, preferredVer, versions));
       elements.contentMovieVersions.appendChild(primaryBtn);
+
+      // Se houver múltiplas versões disponíveis (ex: Dublado, Legendado, 4K),
+      // renderiza cartões das versões alternativas para que o usuário possa escolher qualquer uma
+      if (versions.length > 1) {
+        const altVersions = versions.filter(v => v !== preferredVer && v.streamId !== preferredVer.streamId);
+        altVersions.forEach(v => {
+          const vBtn = document.createElement('button');
+          vBtn.type = 'button';
+          vBtn.className = 'eplay-version-card';
+          vBtn.style.cssText = 'width: 100%; margin-top: 8px;';
+          vBtn.innerHTML =
+            '<span class="eplay-version-icon" style="font-size: 22px;">' + escapeHtml(v.versionInfo?.icon || '▶') + '</span>' +
+            '<span class="eplay-version-copy">' +
+              '<strong style="color: #fff; font-size: 14px;">' + escapeHtml(v.versionInfo?.label || 'Versão Alternativa') + ' <span style="font-size: 10px; background: rgba(255,255,255,0.12); color: #fff; padding: 2px 7px; border-radius: 4px; font-weight: 700; margin-left: 6px;">' + escapeHtml(v.versionInfo?.badge || '') + '</span></strong>' +
+              '<small>' + escapeHtml(v.versionInfo?.desc || 'Clique para assistir nesta versão') + '</small>' +
+            '</span>' +
+            '<span class="eplay-version-action" style="font-weight: 800; font-size: 13px; color: #ffc107;">Assistir ▶</span>';
+          vBtn.addEventListener('click', () => {
+            applyUserChosenVersionPreference(v);
+            playMovieVersion(groupOrMovie, v, versions);
+          });
+          elements.contentMovieVersions.appendChild(vBtn);
+        });
+      }
     }
 
     async function openSeriesPage(seriesGroupOrItem) {
