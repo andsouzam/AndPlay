@@ -4,21 +4,33 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.InputType;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.app.Activity;
 import androidx.annotation.Nullable;
-import android.graphics.Color;
-import android.net.Uri;
 import com.andplay.app.account.AccountManager;
 import com.bumptech.glide.Glide;
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInClient;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.tasks.Task;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -27,6 +39,11 @@ import java.util.Locale;
 public class UserActivity extends Activity {
 
     public static final String EXTRA_MODE_CHANGED = "mode_changed";
+
+    private static final int RC_GOOGLE_SIGN_IN = 9001;
+    private static final String GOOGLE_WEB_CLIENT_ID = "949615938522-judfcp611kbuvvat8jkl95lhog9docom.apps.googleusercontent.com";
+
+    private GoogleSignInClient googleSignInClient;
 
     private TextView userAvatarDisplay;
     private TextView userProfileName;
@@ -37,6 +54,7 @@ public class UserActivity extends Activity {
     private View userGuestActions;
     private View userLoggedInActions;
     private View btnUserGoogle;
+    private View btnUserQrCode;
     private View btnUserLogin;
     private View btnUserRegister;
     private View btnUserSyncNow;
@@ -62,6 +80,7 @@ public class UserActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_user);
 
+        initGoogleSignIn();
         initViews();
         setupListeners();
         handleAuthRedirect(getIntent());
@@ -85,6 +104,7 @@ public class UserActivity extends Activity {
         userGuestActions = findViewById(R.id.userGuestActions);
         userLoggedInActions = findViewById(R.id.userLoggedInActions);
         btnUserGoogle = findViewById(R.id.btnUserGoogle);
+        btnUserQrCode = findViewById(R.id.btnUserQrCode);
         btnUserLogin = findViewById(R.id.btnUserLogin);
         btnUserRegister = findViewById(R.id.btnUserRegister);
         btnUserSyncNow = findViewById(R.id.btnUserSyncNow);
@@ -152,6 +172,7 @@ public class UserActivity extends Activity {
         setupFocusAnimation(cardModeTv);
         setupFocusAnimation(cardModeCinema);
         setupFocusAnimation(btnUserGoogle);
+        setupFocusAnimation(btnUserQrCode);
         setupFocusAnimation(btnUserLogin);
         setupFocusAnimation(btnUserRegister);
         setupFocusAnimation(btnUserSyncNow);
@@ -160,7 +181,10 @@ public class UserActivity extends Activity {
 
         // Ações de Conta
         if (btnUserGoogle != null) {
-            btnUserGoogle.setOnClickListener(v -> startGoogleOAuth());
+            btnUserGoogle.setOnClickListener(v -> startGoogleSignIn());
+        }
+        if (btnUserQrCode != null) {
+            btnUserQrCode.setOnClickListener(v -> showQrCodeLoginDialog());
         }
         btnUserLogin.setOnClickListener(v -> showAuthDialog(false));
         btnUserRegister.setOnClickListener(v -> showAuthDialog(true));
@@ -368,7 +392,7 @@ public class UserActivity extends Activity {
         }
 
         TextView tvGoogle = new TextView(this);
-        tvGoogle.setText("🌐 Ou clique aqui para entrar com Google");
+        tvGoogle.setText("🌐 Ou clique aqui para entrar com Google (Nativo)");
         tvGoogle.setTextColor(Color.parseColor("#38BDF8"));
         tvGoogle.setTextSize(13f);
         tvGoogle.setPadding(0, 24, 0, 10);
@@ -380,12 +404,145 @@ public class UserActivity extends Activity {
         AlertDialog dialog = builder.create();
         tvGoogle.setOnClickListener(v -> {
             dialog.dismiss();
-            startGoogleOAuth();
+            startGoogleSignIn();
         });
         dialog.show();
     }
 
-    private void startGoogleOAuth() {
+    private void initGoogleSignIn() {
+        try {
+            GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                    .requestIdToken(GOOGLE_WEB_CLIENT_ID)
+                    .requestEmail()
+                    .build();
+            googleSignInClient = GoogleSignIn.getClient(this, gso);
+        } catch (Exception e) {
+            Log.w("UserActivity", "Não foi possível inicializar GoogleSignInClient: " + e.getMessage());
+        }
+    }
+
+    private void startGoogleSignIn() {
+        if (googleSignInClient == null) {
+            initGoogleSignIn();
+        }
+
+        try {
+            if (googleSignInClient != null) {
+                googleSignInClient.signOut();
+                Intent signInIntent = googleSignInClient.getSignInIntent();
+                startActivityForResult(signInIntent, RC_GOOGLE_SIGN_IN);
+                return;
+            }
+        } catch (Exception e) {
+            Log.w("UserActivity", "Falha ao iniciar Google Sign-In nativo: " + e.getMessage());
+        }
+
+        fallbackGoogleOAuthBrowser();
+    }
+
+    private void handleGoogleSignInResult(Intent data) {
+        if (data == null) return;
+        Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
+        try {
+            GoogleSignInAccount account = task.getResult(ApiException.class);
+            if (account != null && account.getIdToken() != null) {
+                String idToken = account.getIdToken();
+                String displayName = account.getDisplayName();
+                Toast.makeText(this, "Conectando ao EPlay com conta Google...", Toast.LENGTH_SHORT).show();
+
+                AccountManager.getInstance(this).signInWithGoogleIdToken(idToken, new AccountManager.AuthCallback() {
+                    @Override
+                    public void onSuccess(String uEmail, String uName) {
+                        Toast.makeText(UserActivity.this, "Conectado como " + uName + "!", Toast.LENGTH_LONG).show();
+                        modeChanged = true;
+                        updateUi();
+                        if (!AccountManager.getInstance(UserActivity.this).hasChosenInitialMode()) {
+                            openModeSelectionModal();
+                        }
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        Toast.makeText(UserActivity.this, "Erro ao autenticar: " + message, Toast.LENGTH_LONG).show();
+                    }
+                });
+            } else {
+                Toast.makeText(this, "Não foi possível obter o token do Google.", Toast.LENGTH_SHORT).show();
+            }
+        } catch (ApiException e) {
+            int code = e.getStatusCode();
+            if (code == 12501 || code == 12502) {
+                return;
+            }
+            Log.e("UserActivity", "Erro no Google Sign-In: " + code, e);
+            Toast.makeText(this, "Serviços Google retornaram código " + code + ". Tentando navegador...", Toast.LENGTH_SHORT).show();
+            fallbackGoogleOAuthBrowser();
+        }
+    }
+
+    private void showQrCodeLoginDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
+        builder.setTitle("📱 Conectar pelo Celular (QR Code)");
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(40, 20, 40, 20);
+        layout.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+
+        TextView tvDesc = new TextView(this);
+        tvDesc.setText("Aponte a câmera do seu celular para o QR Code abaixo para acessar sua conta EPlay:");
+        tvDesc.setTextColor(Color.parseColor("#E2E8F0"));
+        tvDesc.setTextSize(14f);
+        tvDesc.setPadding(0, 0, 0, 16);
+        tvDesc.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        layout.addView(tvDesc);
+
+        ImageView ivQr = new ImageView(this);
+        int qrSizePx = (int) (220 * getResources().getDisplayMetrics().density);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(qrSizePx, qrSizePx);
+        lp.gravity = android.view.Gravity.CENTER_HORIZONTAL;
+        ivQr.setLayoutParams(lp);
+
+        String webUrl = "https://andsouzam.github.io/AndPlay/";
+        Bitmap qrBitmap = generateQrCodeBitmap(webUrl, 512, 512);
+        if (qrBitmap != null) {
+            ivQr.setImageBitmap(qrBitmap);
+            ivQr.setBackgroundColor(Color.WHITE);
+            int pad = (int) (8 * getResources().getDisplayMetrics().density);
+            ivQr.setPadding(pad, pad, pad, pad);
+        }
+        layout.addView(ivQr);
+
+        TextView tvUrl = new TextView(this);
+        tvUrl.setText("\nOu acesse no navegador do celular:\n" + webUrl);
+        tvUrl.setTextColor(Color.parseColor("#38BDF8"));
+        tvUrl.setTextSize(13f);
+        tvUrl.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        layout.addView(tvUrl);
+
+        builder.setView(layout);
+        builder.setPositiveButton("Fechar", null);
+        builder.show();
+    }
+
+    private Bitmap generateQrCodeBitmap(String content, int width, int height) {
+        try {
+            QRCodeWriter writer = new QRCodeWriter();
+            BitMatrix matrix = writer.encode(content, BarcodeFormat.QR_CODE, width, height);
+            Bitmap bmp = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
+            for (int x = 0; x < width; x++) {
+                for (int y = 0; y < height; y++) {
+                    bmp.setPixel(x, y, matrix.get(x, y) ? Color.BLACK : Color.WHITE);
+                }
+            }
+            return bmp;
+        } catch (Exception e) {
+            Log.e("UserActivity", "Erro ao gerar QR Code", e);
+            return null;
+        }
+    }
+
+    private void fallbackGoogleOAuthBrowser() {
         try {
             String redirectUrl = "andplay://auth-callback";
             String authUrl = "https://zfawwhqogtynuygniskz.supabase.co/auth/v1/authorize?provider=google&redirect_to="
@@ -463,6 +620,10 @@ public class UserActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == RC_GOOGLE_SIGN_IN) {
+            handleGoogleSignInResult(data);
+            return;
+        }
         if (requestCode == REQ_MODE_SELECTION && resultCode == RESULT_OK && data != null) {
             String chosenMode = data.getStringExtra(ModeSelectionActivity.EXTRA_SELECTED_MODE);
             if (chosenMode != null) {

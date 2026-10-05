@@ -268,6 +268,62 @@ public class AccountManager {
         });
     }
 
+    public void signInWithGoogleIdToken(String idToken, AuthCallback callback) {
+        if (idToken == null || idToken.trim().isEmpty()) {
+            if (callback != null) callback.onError("Token do Google inválido.");
+            return;
+        }
+
+        executor.execute(() -> {
+            try {
+                JsonObject json = new JsonObject();
+                json.addProperty("provider", "google");
+                json.addProperty("id_token", idToken.trim());
+
+                RequestBody body = RequestBody.create(
+                        json.toString(),
+                        MediaType.parse("application/json; charset=utf-8")
+                );
+
+                Request req = new Request.Builder()
+                        .url(SUPABASE_URL + "/auth/v1/token?grant_type=id_token")
+                        .header("apikey", SUPABASE_ANON_KEY)
+                        .header("Content-Type", "application/json")
+                        .post(body)
+                        .build();
+
+                try (Response resp = httpClient.newCall(req).execute()) {
+                    String respBody = resp.body() != null ? resp.body().string() : "";
+                    if (!resp.isSuccessful()) {
+                        String errMsg = "Erro na autenticação do Google (" + resp.code() + ")";
+                        try {
+                            JsonObject errObj = JsonParser.parseString(respBody).getAsJsonObject();
+                            if (errObj.has("error_description")) errMsg = errObj.get("error_description").getAsString();
+                            else if (errObj.has("msg")) errMsg = errObj.get("msg").getAsString();
+                            else if (errObj.has("message")) errMsg = errObj.get("message").getAsString();
+                        } catch (Exception ignored) {}
+                        final String fErr = errMsg;
+                        mainHandler.post(() -> {
+                            if (callback != null) callback.onError(fErr);
+                        });
+                        return;
+                    }
+
+                    JsonObject tokenObj = JsonParser.parseString(respBody).getAsJsonObject();
+                    String accessToken = tokenObj.has("access_token") ? tokenObj.get("access_token").getAsString() : "";
+                    String refreshToken = tokenObj.has("refresh_token") ? tokenObj.get("refresh_token").getAsString() : "";
+
+                    saveSessionFromTokens(accessToken, refreshToken, callback);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Erro no signInWithGoogleIdToken", e);
+                mainHandler.post(() -> {
+                    if (callback != null) callback.onError("Erro de conexão: " + e.getMessage());
+                });
+            }
+        });
+    }
+
     public void saveSessionFromTokens(String accessToken, String refreshToken, AuthCallback callback) {
         if (accessToken == null || accessToken.trim().isEmpty()) {
             if (callback != null) callback.onError("Token de acesso inválido.");

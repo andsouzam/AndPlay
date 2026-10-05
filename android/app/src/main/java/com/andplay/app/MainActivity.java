@@ -2131,8 +2131,8 @@ public class MainActivity extends Activity {
                 .followRedirects(true)
                 .followSslRedirects(true)
                 .dns(new StreamDns())
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(20, TimeUnit.SECONDS)
+                .connectTimeout(5, TimeUnit.SECONDS)
+                .readTimeout(8, TimeUnit.SECONDS)
                 .build();
 
         Map<String, String> defaultHeaders = new HashMap<>();
@@ -8745,10 +8745,9 @@ public class MainActivity extends Activity {
         List<String> currentPriority = ProviderManager.getPriorityList(this);
 
         String[] options = new String[] {
-                "⭐ 1º StreamVerde | 2º RDCanais | 3º RDEmbed (Padrão)",
-                "⚡ 1º RDCanais | 2º RDEmbed | 3º StreamVerde",
-                "🚀 1º RDEmbed | 2º StreamVerde | 3º RDCanais",
-                "🟢 1º StreamVerde | 2º RDEmbed | 3º RDCanais",
+                "⭐ 1º RDCanais | 2º RDEmbed | 3º StreamVerde (Padrão & Estável)",
+                "⚡ 1º RDEmbed | 2º RDCanais | 3º StreamVerde",
+                "🟢 1º StreamVerde | 2º RDCanais | 3º RDEmbed (Instável)",
                 "🛠️ Escolher Provedor Primário (1º Lugar)...",
                 "👤 Perfil e Conta do Usuário..."
         };
@@ -8757,14 +8756,12 @@ public class MainActivity extends Activity {
         if (currentPriority.size() >= 2) {
             String p0 = currentPriority.get(0);
             String p1 = currentPriority.get(1);
-            if (ProviderManager.PROVIDER_STREAMVERDE.equals(p0) && ProviderManager.PROVIDER_RDCANAIS.equals(p1)) {
+            if (ProviderManager.PROVIDER_RDCANAIS.equals(p0) && ProviderManager.PROVIDER_RDEMBED.equals(p1)) {
                 selectedIndex = 0;
-            } else if (ProviderManager.PROVIDER_RDCANAIS.equals(p0) && ProviderManager.PROVIDER_RDEMBED.equals(p1)) {
-                selectedIndex = 1;
             } else if (ProviderManager.PROVIDER_RDEMBED.equals(p0)) {
+                selectedIndex = 1;
+            } else if (ProviderManager.PROVIDER_STREAMVERDE.equals(p0)) {
                 selectedIndex = 2;
-            } else if (ProviderManager.PROVIDER_STREAMVERDE.equals(p0) && ProviderManager.PROVIDER_RDEMBED.equals(p1)) {
-                selectedIndex = 3;
             }
         }
 
@@ -8774,35 +8771,28 @@ public class MainActivity extends Activity {
                     dialog.dismiss();
                     if (which == 0) {
                         ProviderManager.setPriorityList(MainActivity.this, Arrays.asList(
-                                ProviderManager.PROVIDER_STREAMVERDE,
-                                ProviderManager.PROVIDER_RDCANAIS,
-                                ProviderManager.PROVIDER_RDEMBED
-                        ));
-                        applyProviderChange("StreamVerde (streamverde.net)");
-                    } else if (which == 1) {
-                        ProviderManager.setPriorityList(MainActivity.this, Arrays.asList(
                                 ProviderManager.PROVIDER_RDCANAIS,
                                 ProviderManager.PROVIDER_RDEMBED,
                                 ProviderManager.PROVIDER_STREAMVERDE
                         ));
                         applyProviderChange("RDCanais (rdcanais.net)");
-                    } else if (which == 2) {
+                    } else if (which == 1) {
                         ProviderManager.setPriorityList(MainActivity.this, Arrays.asList(
                                 ProviderManager.PROVIDER_RDEMBED,
-                                ProviderManager.PROVIDER_STREAMVERDE,
-                                ProviderManager.PROVIDER_RDCANAIS
+                                ProviderManager.PROVIDER_RDCANAIS,
+                                ProviderManager.PROVIDER_STREAMVERDE
                         ));
                         applyProviderChange("RDEmbed (v2.rdembed.sbs)");
-                    } else if (which == 3) {
+                    } else if (which == 2) {
                         ProviderManager.setPriorityList(MainActivity.this, Arrays.asList(
                                 ProviderManager.PROVIDER_STREAMVERDE,
-                                ProviderManager.PROVIDER_RDEMBED,
-                                ProviderManager.PROVIDER_RDCANAIS
+                                ProviderManager.PROVIDER_RDCANAIS,
+                                ProviderManager.PROVIDER_RDEMBED
                         ));
                         applyProviderChange("StreamVerde (streamverde.net)");
-                    } else if (which == 4) {
+                    } else if (which == 3) {
                         showCustomProviderOrderDialog();
-                    } else if (which == 5) {
+                    } else if (which == 4) {
                         openUserActivity();
                     }
                 })

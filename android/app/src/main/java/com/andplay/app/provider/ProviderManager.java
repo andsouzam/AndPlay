@@ -18,20 +18,27 @@ public class ProviderManager {
 
     public static String getProviderDisplayName(String id) {
         if (PROVIDER_STREAMVERDE.equals(id)) {
-            return "StreamVerde (streamverde.net)";
+            return "StreamVerde (Indisponível no momento)";
         } else if (PROVIDER_RDEMBED.equals(id)) {
             return "RDEmbed (v2.rdembed.sbs)";
         } else {
-            return "RDCanais (rdcanais.net)";
+            return "RDCanais (rdcanais.net - Mais Estável)";
         }
     }
 
     public static List<String> getPriorityList(Context context) {
         if (context == null) {
-            return new ArrayList<>(Arrays.asList(PROVIDER_STREAMVERDE, PROVIDER_RDCANAIS, PROVIDER_RDEMBED));
+            return new ArrayList<>(Arrays.asList(PROVIDER_RDCANAIS, PROVIDER_RDEMBED, PROVIDER_STREAMVERDE));
         }
         SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        String saved = prefs.getString(KEY_PRIORITY, "streamverde,rdcanais,rdembed");
+        String saved = prefs.getString(KEY_PRIORITY, "rdcanais,rdembed,streamverde");
+
+        // Migração automática se a configuração antiga tiver StreamVerde em 1º lugar (servidor offline)
+        if (saved != null && saved.startsWith("streamverde")) {
+            saved = "rdcanais,rdembed,streamverde";
+            prefs.edit().putString(KEY_PRIORITY, saved).apply();
+        }
+
         String[] parts = saved.split(",");
         List<String> list = new ArrayList<>();
         for (String p : parts) {
@@ -40,9 +47,9 @@ public class ProviderManager {
                 list.add(clean);
             }
         }
-        if (!list.contains(PROVIDER_STREAMVERDE)) list.add(PROVIDER_STREAMVERDE);
         if (!list.contains(PROVIDER_RDCANAIS)) list.add(PROVIDER_RDCANAIS);
         if (!list.contains(PROVIDER_RDEMBED)) list.add(PROVIDER_RDEMBED);
+        if (!list.contains(PROVIDER_STREAMVERDE)) list.add(PROVIDER_STREAMVERDE);
         return list;
     }
 
@@ -60,9 +67,9 @@ public class ProviderManager {
     public static void setPrimaryProvider(Context context, String primaryProvider) {
         List<String> list = new ArrayList<>();
         list.add(primaryProvider);
-        if (!PROVIDER_STREAMVERDE.equals(primaryProvider)) list.add(PROVIDER_STREAMVERDE);
         if (!PROVIDER_RDCANAIS.equals(primaryProvider)) list.add(PROVIDER_RDCANAIS);
         if (!PROVIDER_RDEMBED.equals(primaryProvider)) list.add(PROVIDER_RDEMBED);
+        if (!PROVIDER_STREAMVERDE.equals(primaryProvider)) list.add(PROVIDER_STREAMVERDE);
         setPriorityList(context, list);
     }
 }
