@@ -1023,13 +1023,13 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
               item,
               versionInfo,
               streamId: item.stream_id,
-              ext: item.container_extension || 'mp4',
+              ext: item.container_extension || null,
               isLanc
             });
           } else if (existingVer.isLanc && !isLanc) {
             existingVer.item = item;
             existingVer.streamId = item.stream_id;
-            existingVer.ext = item.container_extension || 'mp4';
+            existingVer.ext = item.container_extension || null;
             existingVer.versionInfo = versionInfo;
             existingVer.isLanc = false;
           }
@@ -1098,7 +1098,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             added: item.added,
             last_modified: item.last_modified,
             stream_id: item.stream_id,
-            container_extension: item.container_extension || 'mp4',
+            container_extension: item.container_extension || null,
             plot: item.plot,
             cast: item.cast || item.actors,
             director: item.director,
@@ -1114,7 +1114,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
               item,
               versionInfo,
               streamId: item.stream_id,
-              ext: item.container_extension || 'mp4',
+              ext: item.container_extension || null,
               isLanc
             }]
           };
@@ -12019,7 +12019,10 @@ function showHome(targetScroll = 0) {
       const watchedId = groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id || effectiveVideoStreamId;
       if (watchedId != null) saveWatchedId('movies', watchedId);
 
-      const ext = (isHybrid ? selectedVersion.videoVersion.ext : selectedVersion.ext) || 'mp4';
+      // Se container_extension for null/ausente, o servidor redireciona .mp4 para HTTP (Mixed Content).
+      // Nesses casos, usar .ts que é servido diretamente pelo servidor IPTV sem redirect.
+      const rawExt = isHybrid ? selectedVersion.videoVersion.ext : selectedVersion.ext;
+      const ext = rawExt || 'ts';
       const videoUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${effectiveVideoStreamId}.${ext}`;
       const baseTitle = groupOrMovie.name || groupOrMovie.title || 'Filme';
       const displayTitle = (effectivePlayableVersions && effectivePlayableVersions.length > 1)
@@ -12663,8 +12666,26 @@ function showHome(targetScroll = 0) {
     function retryCurrentVideoSource(automatic = false) {
       if (!currentPlaybackMeta || !activeVideoUrl || !elements.videoPlayer) return false;
       if (automatic) {
-        if (Number(currentPlaybackMeta.autoRetryCount || 0) >= 1) return false;
-        currentPlaybackMeta.autoRetryCount = 1;
+        if (Number(currentPlaybackMeta.autoRetryCount || 0) >= 2) return false;
+        currentPlaybackMeta.autoRetryCount = (currentPlaybackMeta.autoRetryCount || 0) + 1;
+
+        // 1ª tentativa automática: trocar .mp4 por .ts para evitar Mixed Content e problemas
+        //   de redirect HTTP. O servidor IPTV serve .ts diretamente sem redirect.
+        if (currentPlaybackMeta.autoRetryCount === 1) {
+          const baseUrl = String(activeVideoUrl).split('?')[0];
+          if (baseUrl.endsWith('.mp4')) {
+            const tsUrl = baseUrl.replace(/\.mp4$/, '.ts');
+            activeVideoUrl = tsUrl;
+            currentPlaybackMeta.url = tsUrl;
+            hideVideoErrorOverlay();
+            elements.videoPlayer.src = tsUrl;
+            try { elements.videoPlayer.load(); } catch (e) {}
+            elements.videoPlayer.play().catch(() => {});
+            startVideoLoadTimeout();
+            return true;
+          }
+        }
+        // 2ª tentativa: recarregar a URL original com cache-buster
       }
 
       hideVideoErrorOverlay();
