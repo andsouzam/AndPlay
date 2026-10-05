@@ -9651,7 +9651,7 @@ function showHome(targetScroll = 0) {
 
       const optAll = document.createElement('option');
       optAll.value = 'ALL';
-      optAll.textContent = `🌟 Todas as ${typeLabel} (Catálogo Completo)`;
+      optAll.textContent = `🌟 Todas as ${typeLabel}`;
       elements.categorySelect.appendChild(optAll);
 
       // Oculta categorias DEMO / testes e categorias adultas quando desativadas nas preferências

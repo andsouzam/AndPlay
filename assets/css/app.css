@@ -6604,12 +6604,13 @@ body.eplay-player-open .andplay-resume-overlay {
 
 .series-hero-dots {
   position: absolute;
-  right: clamp(24px, 5vw, 78px);
-  bottom: 24px;
+  left: 50%;
+  bottom: 18px;
   z-index: 4;
   display: flex;
   align-items: center;
   gap: 8px;
+  transform: translateX(-50%);
 }
 
 .series-hero-dot {
