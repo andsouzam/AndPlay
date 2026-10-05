@@ -11804,18 +11804,64 @@ function showHome(targetScroll = 0) {
         }
       } else {
         currentHybridState.durationMatched = false;
-        const msg = `⚠️ Streams com cortes/durações diferentes (${formatSec(vDur)} vs ${formatSec(aDur)}, dif: ${diffSec.toFixed(1)}s). Para evitar perda de sincronia, alternando para faixa nativa...`;
-        console.warn('[EPlay Hybrid]', msg);
-        if (window.showPlayerToast) {
-          window.showPlayerToast(msg, 5000);
-        }
-        setTimeout(() => {
-          if (!currentHybridState.active) return;
-          const fallbackVer = currentHybridState.audioVersion || currentHybridState.videoVersion;
-          if (fallbackVer && currentHybridState.groupOrMovie) {
-            switchLiveMovieVersion(currentHybridState.groupOrMovie, fallbackVer, currentHybridState.allVersions);
+        const diffStr = diffSec.toFixed(1);
+        const vStr = formatSec(vDur);
+        const aStr = formatSec(aDur);
+        console.warn('[EPlay Hybrid] Diferença de duração:', diffStr + 's', vStr, 'vs', aStr);
+
+        // Mostrar diálogo de escolha ao usuário
+        const oldDlg = document.querySelector('.andplay-hybrid-warning-overlay');
+        if (oldDlg) oldDlg.remove();
+
+        const overlay = document.createElement('div');
+        overlay.className = 'andplay-hybrid-warning-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,0.85);backdrop-filter:blur(4px)';
+        overlay.innerHTML = `
+          <div style="background:#161d2e;border:1px solid rgba(255,193,7,0.4);border-radius:16px;padding:28px 24px;max-width:440px;width:100%;color:#fff;font-family:inherit">
+            <div style="font-size:22px;margin-bottom:10px">⚠️ Streams com durações diferentes</div>
+            <div style="color:#aab;font-size:13px;line-height:1.6;margin-bottom:18px">
+              A versão de <strong style="color:#ffc107">vídeo</strong> tem <strong style="color:#fff">${vStr}</strong>
+              e a de <strong style="color:#ffc107">áudio</strong> tem <strong style="color:#fff">${aStr}</strong>
+              (diferença de <strong style="color:#ff6b6b">${diffStr}s</strong>).<br><br>
+              Streams com cortes diferentes podem ficar <strong style="color:#ff6b6b">fora de sincronia</strong> com o tempo.
+              Você pode continuar assim e ajustar manualmente o atraso do áudio, ou usar a faixa nativa.
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <button type="button" id="hybridWarnContinue" style="padding:12px 16px;background:linear-gradient(135deg,rgba(79,195,247,.2),rgba(33,150,243,.1));border:1.5px solid #4fc3f7;border-radius:10px;color:#4fc3f7;font-weight:700;font-size:13px;cursor:pointer;text-align:left">
+                ▶ Continuar assim mesmo &nbsp;<small style="font-weight:400;color:#8f99aa">• Ajuste o atraso do áudio nas opções do player</small>
+              </button>
+              <button type="button" id="hybridWarnFallback" style="padding:12px 16px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);border-radius:10px;color:#ccc;font-weight:600;font-size:13px;cursor:pointer;text-align:left">
+                🔄 Usar faixa nativa &nbsp;<small style="font-weight:400;color:#8f99aa">• Sem modo híbrido</small>
+              </button>
+            </div>
+          </div>
+        `;
+
+        const close = () => overlay.remove();
+
+        overlay.querySelector('#hybridWarnContinue').addEventListener('click', () => {
+          close();
+          currentHybridState.durationMatched = true; // permitir continuar
+          if (window.showPlayerToast) {
+            window.showPlayerToast(`⚠️ Diferença de ${diffStr}s — ajuste o atraso do áudio se necessário`, 4000);
           }
-        }, 1200);
+        });
+
+        overlay.querySelector('#hybridWarnFallback').addEventListener('click', () => {
+          close();
+          if (window.showPlayerToast) {
+            window.showPlayerToast('Alternando para faixa nativa...', 2500);
+          }
+          setTimeout(() => {
+            if (!currentHybridState.active) return;
+            const fallbackVer = currentHybridState.audioVersion || currentHybridState.videoVersion;
+            if (fallbackVer && currentHybridState.groupOrMovie) {
+              switchLiveMovieVersion(currentHybridState.groupOrMovie, fallbackVer, currentHybridState.allVersions);
+            }
+          }, 400);
+        });
+
+        document.body.appendChild(overlay);
       }
     }
 
@@ -11933,6 +11979,8 @@ function showHome(targetScroll = 0) {
       if (elements.audioSyncControls) elements.audioSyncControls.style.display = 'none';
       const epAudioSyncStop = document.getElementById('eplayAudioSyncMenu');
       if (epAudioSyncStop) epAudioSyncStop.style.display = 'none';
+      // Fechar diálogo de aviso de diferença de duração se ainda estiver aberto
+      document.querySelector('.andplay-hybrid-warning-overlay')?.remove();
       if (window.updatePlayerVolumeUI) window.updatePlayerVolumeUI();
     }
 
