@@ -577,6 +577,22 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         .trim();
     }
 
+    // Normalizador de desduplicação semântica: unifica 'v'/'vs'/'versus', ignora pontuação, ano, tags [4K], [Dublado], etc.
+    function relatedDedupeTitleKey(title) {
+      if (!title) return '';
+      return String(title)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\[.*?\]/g, ' ')
+        .replace(/\(.*?\)/g, ' ')
+        .replace(/\b(4k|uhd|fhd|hd|hdr|hevc|x265|1080p|720p|dublado|legendado|dub|leg)\b/gi, ' ')
+        .replace(/[^a-z0-9 ]/g, ' ')
+        .replace(/\b(versus|vs|v)\b/gi, 'vs')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
     // Correções de metadados para itens mal etiquetados no servidor IPTV
     const KNOWN_STREAM_CORRECTIONS = {
       // 1. A Bela e a Fera (1991) - Animação Clássica Disney (Cat 621 Animação - estava incorretamente como 2017)
@@ -5578,6 +5594,18 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return copy;
     }
 
+    // Chave semântica única para desduplicação na Home (garante que versões FHD/4K/Dub/Leg da mesma mídia não dupliquem)
+    function getHomeDisplayKey(item) {
+      if (!item) return '';
+      const type = item.type || (item.series_id ? 'series' : 'movie');
+      const imdbId = String(item.imdbId || item.imdb_id || item.item?.imdbId || item.item?.imdb_id || item.primaryItem?.imdbId || item.primaryItem?.imdb_id || '').trim();
+      if (imdbId) return type + ':imdb:' + imdbId;
+      const title = cleanDisplayTitle(item.title || item.name || item.item?.name || item.item?.title || '');
+      const titleKey = relatedDedupeTitleKey(title);
+      if (titleKey) return type + ':title:' + titleKey;
+      return type + ':id:' + String(item.id || item.stream_id || item.series_id || '');
+    }
+
     function getHomeFeaturedItems() {
       // Se já temos destaques selecionados e o catálogo não cresceu significativamente,
       // preservamos os mesmos itens para evitar reembaralhamento e piscamento no boot
@@ -5650,14 +5678,21 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         return cachedHomeFeaturedItems;
       }
 
-      // 1. Reservar exatamente 5 vagas no banner para os últimos 5 itens adicionados ao catálogo
+      // 1. Reservar exatamente 5 vagas no banner para os últimos 5 itens adicionados ao catálogo (desduplicados)
       const sortedByAdded = allCatalog.slice().sort((a, b) => (b.added || 0) - (a.added || 0));
-      const latestAdded5 = sortedByAdded.slice(0, 5);
-      const addedKeys = new Set(latestAdded5.map(x => x.type + ':' + x.id));
+      const seenFeatured = new Set();
+      const latestAdded5 = [];
+      for (const item of sortedByAdded) {
+        const k = getHomeDisplayKey(item);
+        if (k && seenFeatured.has(k)) continue;
+        if (k) seenFeatured.add(k);
+        latestAdded5.push(item);
+        if (latestAdded5.length >= 5) break;
+      }
 
       // 2. Selecionar 5 outros destaques (alta nota, aclamados ou populares) entre o restante
       const remainingPool = allCatalog
-        .filter(x => !addedKeys.has(x.type + ':' + x.id))
+        .filter(x => !seenFeatured.has(getHomeDisplayKey(x)))
         .sort((a, b) => {
           const rA = Number(a.rating || a.item?.rating || 0);
           const rB = Number(b.rating || b.item?.rating || 0);
@@ -5665,8 +5700,14 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           return compareByReleaseYear(a, b);
         });
 
-      // Amostragem dinâmica entre os top 40 destaques para rotatividade a cada recarregamento
-      const highlightCandidates = remainingPool.slice(0, Math.min(40, remainingPool.length));
+      const highlightCandidates = [];
+      for (const item of remainingPool) {
+        const k = getHomeDisplayKey(item);
+        if (k && seenFeatured.has(k)) continue;
+        if (k) seenFeatured.add(k);
+        highlightCandidates.push(item);
+        if (highlightCandidates.length >= 40) break;
+      }
       const highlights5 = pickRandomSample(highlightCandidates, 5);
 
       // 3. Intercalar no banner: Novidade do Catálogo ⇄ Destaque Aclamado
@@ -5711,10 +5752,18 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     function getHomeWatchedItems() {
       const history = getNormalizedRemoteHistory();
-      return history
-        .slice(0, HOME_WATCHED_LIMIT)
-        .map(entry => resolveHomeWatchedItem(entry.type, entry.id))
-        .filter(Boolean);
+      const seen = new Set();
+      const unique = [];
+      for (const entry of history) {
+        const item = resolveHomeWatchedItem(entry.type, entry.id);
+        if (!item) continue;
+        const k = getHomeDisplayKey(item);
+        if (k && seen.has(k)) continue;
+        if (k) seen.add(k);
+        unique.push(item);
+        if (unique.length >= HOME_WATCHED_LIMIT) break;
+      }
+      return unique;
     }
 
     const HOME_RAIL_ITEM_LIMIT = 24;
@@ -6064,17 +6113,28 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     // Amostrador caótico estratificado: extrai uma amostra viva, orgânica e variada do catálogo de 30 mil títulos,
-    // sem monopolizar o trilho apenas com anos recentes (2026/2025) e valorizando novidades do acervo e clássicos.
+    // sem monopolizar o trilho apenas com anos recentes (2026/2025), eliminando duplicados e valorizando novidades e clássicos.
     function sampleChaoticRailItems(candidates, limit = HOME_RAIL_ITEM_LIMIT, options = {}) {
       if (!Array.isArray(candidates) || !candidates.length) return [];
-      if (candidates.length <= limit) {
-        return shuffleArray(candidates);
+
+      // Pré-filtro para desduplicar títulos com pequenas variações de grafia ou mesmo IMDb
+      const seenDedupe = new Set();
+      const uniqueCandidates = [];
+      for (const item of candidates) {
+        const k = getHomeDisplayKey(item);
+        if (k && seenDedupe.has(k)) continue;
+        if (k) seenDedupe.add(k);
+        uniqueCandidates.push(item);
+      }
+
+      if (uniqueCandidates.length <= limit) {
+        return shuffleArray(uniqueCandidates);
       }
 
       // 1. Identificar novidades adicionadas recentemente ao catálogo (pela data de adição, independente do ano de produção)
-      const sortedByTime = candidates.slice().sort((a, b) => (b.added || 0) - (a.added || 0));
-      const topAddedCount = Math.max(2, Math.floor(candidates.length * 0.20));
-      const addedKeys = new Set(sortedByTime.slice(0, topAddedCount).map(x => (x.type || '') + ':' + (x.id || '')));
+      const sortedByTime = uniqueCandidates.slice().sort((a, b) => (b.added || 0) - (a.added || 0));
+      const topAddedCount = Math.max(2, Math.floor(uniqueCandidates.length * 0.20));
+      const addedKeys = new Set(sortedByTime.slice(0, topAddedCount).map(x => getHomeDisplayKey(x)));
 
       // 2. Classificar candidatos em 4 faixas equilibradas:
       const poolAdded = [];
@@ -6082,8 +6142,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const poolModern = [];
       const poolClassic = [];
 
-      candidates.forEach(item => {
-        const key = (item.type || '') + ':' + (item.id || '');
+      uniqueCandidates.forEach(item => {
+        const key = getHomeDisplayKey(item);
         const y = getItemYear(item);
         if (addedKeys.has(key)) {
           poolAdded.push(item);
@@ -6108,10 +6168,10 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const pickedClassic = pickRandomSample(poolClassic, quotaClassic);
 
       let combined = [...pickedAdded, ...pickedRecent, ...pickedModern, ...pickedClassic];
-      const usedKeys = new Set(combined.map(x => (x.type || '') + ':' + (x.id || '')));
+      const usedKeys = new Set(combined.map(x => getHomeDisplayKey(x)));
 
       if (combined.length < limit) {
-        const leftover = candidates.filter(x => !usedKeys.has((x.type || '') + ':' + (x.id || '')));
+        const leftover = uniqueCandidates.filter(x => !usedKeys.has(getHomeDisplayKey(x)));
         const extra = pickRandomSample(leftover, limit - combined.length);
         combined.push(...extra);
       }
@@ -6137,6 +6197,22 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         ...getWatchedIds('series').map(id => 'series:' + id)
       ]);
 
+      const watchedDisplayKeys = new Set();
+      watchedKeys.forEach(k => watchedDisplayKeys.add(k));
+      [...getWatchedIds('movies').map(id => resolveHomeWatchedItem('movie', id)),
+       ...getWatchedIds('series').map(id => resolveHomeWatchedItem('series', id))]
+        .filter(Boolean)
+        .forEach(w => {
+          const dk = getHomeDisplayKey(w);
+          if (dk) watchedDisplayKeys.add(dk);
+        });
+
+      const isWatchedItem = item => {
+        if (watchedKeys.has(item.type + ':' + item.id)) return true;
+        const dk = getHomeDisplayKey(item);
+        return dk ? watchedDisplayKeys.has(dk) : false;
+      };
+
       const ranked = items
         .map(item => {
           const themes = getHomeThemesForItem(item);
@@ -6149,7 +6225,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             matchesTop
           };
         })
-        .filter(entry => entry.taste > 0 && !watchedKeys.has(entry.item.type + ':' + entry.item.id))
+        .filter(entry => entry.taste > 0 && !isWatchedItem(entry.item))
         .sort((a, b) => b.taste - a.taste || compareByReleaseYear(b.item, a.item));
 
       // Aloca ~75% do trilho para títulos que combinam com os top gêneros do usuário com rotação viva
@@ -6157,16 +6233,27 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       const matchingEntries = ranked.filter(entry => entry.matchesTop);
       const fallbackEntries = ranked.filter(entry => !entry.matchesTop);
       const combinedTastePool = [...matchingEntries, ...fallbackEntries].slice(0, 80).map(e => e.item);
-      const sampledTasteItems = sampleChaoticRailItems(combinedTastePool, tasteQuota);
 
-      const used = new Set(sampledTasteItems.map(item => (item.type || '') + ':' + (item.id || '')));
+      const seenRecKeys = new Set();
+      const uniqueTastePool = [];
+      for (const item of combinedTastePool) {
+        const k = getHomeDisplayKey(item);
+        if (k && seenRecKeys.has(k)) continue;
+        if (k) seenRecKeys.add(k);
+        uniqueTastePool.push(item);
+      }
+      const sampledTasteItems = sampleChaoticRailItems(uniqueTastePool, tasteQuota);
+      sampledTasteItems.forEach(item => {
+        const k = getHomeDisplayKey(item);
+        if (k) seenRecKeys.add(k);
+      });
 
       // Mantém descoberta (15% a 25% do trilho): títulos aclamados fora da zona de conforto com rotação viva
       const discoveryQuota = Math.max(3, Math.min(6, HOME_RAIL_ITEM_LIMIT - sampledTasteItems.length));
       const discoveryCandidates = items
         .filter(item =>
-          !used.has((item.type || '') + ':' + (item.id || '')) &&
-          !watchedKeys.has((item.type || '') + ':' + (item.id || ''))
+          !isWatchedItem(item) &&
+          !seenRecKeys.has(getHomeDisplayKey(item))
         )
         .sort((a, b) => {
           const rA = getHomeRatingInfo(a).value;
@@ -6176,8 +6263,15 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         })
         .filter(item => !getHomeThemesForItem(item).some(theme => topThemes.includes(theme)));
 
-      const discoveryPool = discoveryCandidates.slice(0, Math.min(60, discoveryCandidates.length));
-      const sampledDiscoveryItems = sampleChaoticRailItems(discoveryPool, discoveryQuota);
+      const uniqueDiscoveryPool = [];
+      for (const item of discoveryCandidates) {
+        const k = getHomeDisplayKey(item);
+        if (k && seenRecKeys.has(k)) continue;
+        if (k) seenRecKeys.add(k);
+        uniqueDiscoveryPool.push(item);
+        if (uniqueDiscoveryPool.length >= 60) break;
+      }
+      const sampledDiscoveryItems = sampleChaoticRailItems(uniqueDiscoveryPool, discoveryQuota);
 
       // Intercalar suavemente as descobertas ao longo do trilho para criar uma experiência equilibrada e orgânica
       const combinedMix = [];
@@ -6210,13 +6304,20 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
       // A. Novidades do catálogo: ordenadas por data de adição/modificação no catálogo
       const sortedByAdded = items.slice().sort((a, b) => (b.added || 0) - (a.added || 0));
-      // Amostragem entre os top 45 itens mais recentemente adicionados para rotação constante
-      const topAddedPool = sortedByAdded.slice(0, Math.min(45, sortedByAdded.length));
-      const catalogNewsItems = pickRandomSample(topAddedPool, catalogNewsQuota);
-      const usedInNews = new Set(catalogNewsItems.map(x => (x.type || '') + ':' + (x.id || '')));
+      const seenNews = new Set();
+      const uniqueTopAdded = [];
+      for (const item of sortedByAdded) {
+        const k = getHomeDisplayKey(item);
+        if (k && seenNews.has(k)) continue;
+        if (k) seenNews.add(k);
+        uniqueTopAdded.push(item);
+        if (uniqueTopAdded.length >= 45) break;
+      }
+      const catalogNewsItems = pickRandomSample(uniqueTopAdded, catalogNewsQuota);
+      const usedInNews = new Set(catalogNewsItems.map(x => getHomeDisplayKey(x)));
 
       // B. Itens gerais (65%): lançamentos recentes e destaques de diversas épocas
-      const remainingPool = items.filter(x => !usedInNews.has((x.type || '') + ':' + (x.id || '')));
+      const remainingPool = items.filter(x => !usedInNews.has(getHomeDisplayKey(x)));
       const generalItems = sampleChaoticRailItems(remainingPool, generalQuota);
 
       // C. Distribuir os 35% de novidades do catálogo ao longo do trilho de 24 itens
@@ -7245,9 +7346,6 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
     }
 
-    function getHomeDisplayKey(item) {
-      return item ? item.type + ':' + String(item.id) : '';
-    }
 
     function getHomeItemsWithinDisplayLimit(items) {
       return (Array.isArray(items) ? items : []).filter(item => {
@@ -14876,21 +14974,6 @@ function showHome(targetScroll = 0) {
       return String(name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
     }
 
-    // Normalizador de desduplicação: unifica 'v'/'vs'/'versus', ignora pontuação, ano, tags [4K], [Dublado], etc.
-    function relatedDedupeTitleKey(title) {
-      if (!title) return '';
-      return String(title)
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/\[.*?\]/g, ' ')
-        .replace(/\(.*?\)/g, ' ')
-        .replace(/\b(4k|uhd|fhd|hd|hdr|hevc|x265|1080p|720p|dublado|legendado|dub|leg)\b/gi, ' ')
-        .replace(/[^a-z0-9 ]/g, ' ')
-        .replace(/\b(versus|vs|v)\b/gi, 'vs')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
 
     function getRelatedProfile(entry, ratingCache) {
       const src = entry?.item || entry;
