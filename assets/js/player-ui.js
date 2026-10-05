@@ -351,6 +351,25 @@
   }
   container.addEventListener('mousemove', throttledReveal);
   container.addEventListener('touchstart', reveal, { passive: true });
+
+  // Clique na área de reprodução pausa/despausa — comportamento padrão de players
+  let clickPlayPauseTimer = null;
+  container.addEventListener('click', e => {
+    // Ignora cliques originados nos controles, menus ou no elemento embed
+    if (e.target.closest('#eplayPlayerUi') || e.target.closest('#embedPlayer')) return;
+    // Double-click = tela cheia (cancela o play/pause pendente)
+    if (e.detail === 2) {
+      clearTimeout(clickPlayPauseTimer);
+      fullscreen();
+      return;
+    }
+    // Single click com delay para não conflitar com double-click
+    clearTimeout(clickPlayPauseTimer);
+    clickPlayPauseTimer = setTimeout(() => {
+      playPause();
+      reveal();
+    }, 220);
+  });
   video.addEventListener('play',()=>{setPlayIcon();reveal()}); video.addEventListener('pause',()=>{setPlayIcon();reveal()}); video.addEventListener('ended',()=>{setPlayIcon();reveal()});
   video.addEventListener('timeupdate',setRange); video.addEventListener('durationchange',setRange); video.addEventListener('loadedmetadata',()=>{setRange();updateTitle()});
   video.addEventListener('volumechange',updateVolume); video.addEventListener('ratechange',()=>applySpeed(video.playbackRate));
