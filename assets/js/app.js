@@ -15,6 +15,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     let favoriteReturnMode = 'home';
     let isHandlingPopstate = false;
     let pendingRoute = null;
+    let userSessionActive = false;
+    let authenticatedUserId = null;
     let isRouterNavigating = false;
     let routerInitialized = false;
     const WATCHED_LIMIT = 500;
@@ -1565,6 +1567,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
 
       hideLoginScreen();
+      userSessionActive = true;
 
       // Wiring do botão "💻 Modo Web" no header da TV
       const btnExitTv = document.getElementById('btnExitTvMode');
@@ -5388,6 +5391,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
     }
 
     async function onUserAuthenticated() {
+      userSessionActive = true;
       hideLoginScreen();
       renderUserPage();
       const targetRoute = pendingRoute || getRouteFromLocation();
@@ -5459,8 +5463,19 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       window.addEventListener('andplay:auth-changed', (event) => {
         const isSignedIn = event.detail?.isSignedIn ?? Boolean(window.AndPlayAccount?.isSignedIn?.());
         if (isSignedIn) {
+          // O Supabase reemite SIGNED_IN/TOKEN_REFRESHED ao voltar para a aba: não recarregar a view atual.
+          const userId = event.detail?.session?.user?.id || null;
+          const sameUser = !userId || !authenticatedUserId || userId === authenticatedUserId;
+          if (userSessionActive && sameUser) {
+            if (userId) authenticatedUserId = userId;
+            return;
+          }
+          if (userId) authenticatedUserId = userId;
+          userSessionActive = true;
           onUserAuthenticated();
         } else {
+          userSessionActive = false;
+          authenticatedUserId = null;
           onUserLoggedOut();
         }
       });
