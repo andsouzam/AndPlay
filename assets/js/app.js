@@ -12126,6 +12126,8 @@ function showHome(targetScroll = 0) {
       }
 
       if (epSec) epSec.style.display = 'block';
+      const orderMap = { 'dublado': 1, 'legendado': 2, '4k_dub': 3, '4k_leg': 4, '4k_leg_hybrid': 5, 'leg_dub_hybrid': 6 };
+      const sorted = [...effectiveVersions].sort((a, b) => (orderMap[a.versionInfo?.type] || 99) - (orderMap[b.versionInfo?.type] || 99));
       if (epItems) {
         epItems.innerHTML = '';
         sorted.forEach(v => {
