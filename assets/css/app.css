@@ -63,6 +63,19 @@
       letter-spacing: 1px;
       cursor: pointer;
       user-select: none;
+      border: 0;
+      background: transparent;
+      padding: 4px 8px;
+      border-radius: 8px;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .logo:hover {
+      opacity: 0.92;
+    }
+
+    .logo:active {
+      transform: scale(0.97);
     }
 
     .logo-icon {

@@ -235,7 +235,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
 
     const elements = {
       logoBtn: document.getElementById('logoBtn'),
-      tabHomeBtn: document.getElementById('tabHomeBtn'),
+      tabHomeBtn: document.getElementById('tabHomeBtn') || document.getElementById('logoBtn'),
       tabMoviesBtn: document.getElementById('tabMoviesBtn'),
       mobileHomeBtn: document.getElementById('mobileHomeBtn'),
       mobileMoviesBtn: document.getElementById('mobileMoviesBtn'),
@@ -1345,7 +1345,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }, true);
 
       // Navegação principal
-      elements.tabHomeBtn?.addEventListener('click', () => showHome());
+      if (elements.tabHomeBtn && elements.tabHomeBtn !== elements.logoBtn) {
+        elements.tabHomeBtn.addEventListener('click', () => showHome());
+      }
       elements.tabMoviesBtn.addEventListener('click', () => switchMode('movies', true));
       elements.tabSeriesBtn.addEventListener('click', () => switchMode('series', true));
       if (elements.tabWatchedBtn) {
@@ -2029,12 +2031,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           const cards = Array.from(elements.mediaGrid.querySelectorAll('.media-card'));
           const curIndex = cards.indexOf(active);
 
-          // Navegação no cabeçalho (Abas e Seletor)
-          if (active === elements.tabHomeBtn) {
-            if (key === 'ArrowRight') { e.preventDefault(); elements.tabMoviesBtn.focus(); return; }
-            if (key === 'ArrowDown') { e.preventDefault(); elements.categorySelect.focus(); return; }
+          // Navegação no cabeçalho (Logo, Abas e Seletor)
+          if (active === elements.logoBtn || active === elements.tabHomeBtn) {
+            if (key === 'ArrowRight') { e.preventDefault(); elements.tabMoviesBtn?.focus(); return; }
+            if (key === 'ArrowDown') { e.preventDefault(); elements.categorySelect?.focus(); return; }
           } else if (active === elements.tabMoviesBtn) {
-            if (key === 'ArrowLeft') { e.preventDefault(); elements.tabHomeBtn?.focus(); return; }
+            if (key === 'ArrowLeft') { e.preventDefault(); (elements.logoBtn || elements.tabHomeBtn)?.focus(); return; }
             if (key === 'ArrowRight') { e.preventDefault(); elements.tabSeriesBtn.focus(); return; }
             if (key === 'ArrowDown') { e.preventDefault(); elements.categorySelect.focus(); return; }
           } else if (active === elements.tabSeriesBtn) {
@@ -4406,6 +4408,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (returnMode === 'live') { switchMode('live', true); return; }
       currentMode = returnMode === 'series' ? 'series' : 'movies';
       elements.tabHomeBtn?.classList.remove('active');
+      elements.logoBtn?.classList.remove('active');
       elements.tabMoviesBtn.classList.toggle('active', currentMode === 'movies');
       elements.tabSeriesBtn.classList.toggle('active', currentMode === 'series');
       elements.tabLiveBtn?.classList.remove('active');
@@ -9296,6 +9299,7 @@ function showHome(targetScroll = 0) {
       document.title = 'EPlay - Filmes, Séries & TV Ao Vivo';
       document.querySelectorAll('.nav-tabs .nav-tab').forEach(button => button.classList.remove('active'));
       elements.tabHomeBtn?.classList.add('active');
+      elements.logoBtn?.classList.add('active');
       elements.tabFavoritesBtn?.classList.remove('active');
       elements.tabUserBtn?.classList.remove('active');
       elements.accountBtn?.classList.remove('active');
@@ -9406,6 +9410,7 @@ function showHome(targetScroll = 0) {
       elements.tabWatchedBtn?.classList.remove('active');
       elements.tabFavoritesBtn?.classList.remove('active');
       elements.tabHomeBtn?.classList.remove('active');
+      elements.logoBtn?.classList.remove('active');
       elements.tabUserBtn?.classList.remove('active');
       elements.accountBtn?.classList.remove('active');
       if (elements.userDashboard) elements.userDashboard.style.display = 'none';
@@ -15404,6 +15409,7 @@ function showHome(targetScroll = 0) {
       isFavoritesView = false;
       currentMode = mode;
       elements.tabHomeBtn?.classList.remove('active');
+      elements.logoBtn?.classList.remove('active');
       elements.tabMoviesBtn.classList.toggle('active', mode === 'movies');
       elements.tabSeriesBtn.classList.toggle('active', mode === 'series');
       elements.tabLiveBtn?.classList.remove('active');
