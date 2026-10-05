@@ -15141,9 +15141,9 @@ function showHome(targetScroll = 0) {
         : '▶ Assistir Filme';
       const progressText = canResume
         ? 'Você parou em ' + formatResumeTime(progress.position) + ' • restam ' + formatResumeTime(Math.max(0, progress.duration - progress.position))
-        : (displayVer.versionInfo?.desc || 'Clique para assistir');
+        : (hasDublado ? 'Versão Dublada • Alterne para legendado ou 4K no player' : (displayVer.versionInfo?.desc || 'Clique para assistir'));
 
-      const badgeText = displayVer.versionInfo?.badge || (hasDublado ? 'DUBLADO' : 'PADRÃO');
+      const badgeText = hasDublado ? 'DUBLADO' : (displayVer.versionInfo?.badge || 'PADRÃO');
 
       primaryBtn.innerHTML =
         '<span class="eplay-version-icon" style="font-size: 26px;">' + escapeHtml(displayVer.versionInfo?.icon || '▶') + '</span>' +
@@ -15154,30 +15154,6 @@ function showHome(targetScroll = 0) {
         '<span class="eplay-version-action" style="font-weight: 800; font-size: 14px; color: #4fc3f7;">' + escapeHtml(actionText) + '</span>';
       primaryBtn.addEventListener('click', () => playMovieVersion(groupOrMovie, preferredVer, versions));
       elements.contentMovieVersions.appendChild(primaryBtn);
-
-      // Se houver múltiplas versões disponíveis (ex: Dublado, Legendado, 4K),
-      // renderiza cartões das versões alternativas para que o usuário possa escolher qualquer uma
-      if (versions.length > 1) {
-        const altVersions = versions.filter(v => v !== preferredVer && v.streamId !== preferredVer.streamId);
-        altVersions.forEach(v => {
-          const vBtn = document.createElement('button');
-          vBtn.type = 'button';
-          vBtn.className = 'eplay-version-card';
-          vBtn.style.cssText = 'width: 100%; margin-top: 8px;';
-          vBtn.innerHTML =
-            '<span class="eplay-version-icon" style="font-size: 22px;">' + escapeHtml(v.versionInfo?.icon || '▶') + '</span>' +
-            '<span class="eplay-version-copy">' +
-              '<strong style="color: #fff; font-size: 14px;">' + escapeHtml(v.versionInfo?.label || 'Versão Alternativa') + ' <span style="font-size: 10px; background: rgba(255,255,255,0.12); color: #fff; padding: 2px 7px; border-radius: 4px; font-weight: 700; margin-left: 6px;">' + escapeHtml(v.versionInfo?.badge || '') + '</span></strong>' +
-              '<small>' + escapeHtml(v.versionInfo?.desc || 'Clique para assistir nesta versão') + '</small>' +
-            '</span>' +
-            '<span class="eplay-version-action" style="font-weight: 800; font-size: 13px; color: #ffc107;">Assistir ▶</span>';
-          vBtn.addEventListener('click', () => {
-            applyUserChosenVersionPreference(v);
-            playMovieVersion(groupOrMovie, v, versions);
-          });
-          elements.contentMovieVersions.appendChild(vBtn);
-        });
-      }
     }
 
     async function openSeriesPage(seriesGroupOrItem) {
