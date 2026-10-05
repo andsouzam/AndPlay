@@ -270,10 +270,25 @@ body.eplay-fullscreen-active #videoModal #subOptionsPanel {
 .eplay-zoom-list button.active{border-color:#ffc107!important;color:#ffc107!important;background:#2b2614!important}
 .eplay-zoom-adjust{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #252525;gap:8px}
 
-/* Grid de recomendados no fim da pagina de filme/serie */
-.eplay-related-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:18px 14px}
-.eplay-related-grid .home-title-card{flex:none;width:100%}
-.eplay-related-grid .home-title-poster{height:auto;aspect-ratio:2/3}
-.eplay-related-grid .home-title-card strong{display:block;margin-top:8px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.eplay-related-grid .home-title-card small{display:block;margin-top:2px;font-size:10px;color:#8f99aa}
-.eplay-related-reason{display:block;margin-top:2px;font-size:10px;color:#ffc107;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Recomendados no fim da pagina: carrossel aberto igual ao resto do app, sem caixa */
+.eplay-related-rail-wrap {
+  margin-top: 36px;
+  position: relative;
+  width: 100%;
+}
+.eplay-related-rail-wrap[hidden] {
+  display: none !important;
+}
+.eplay-related-rail-wrap .home-theme-rail {
+  margin: 0;
+  position: relative;
+}
+.eplay-related-reason {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: #ffc107;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

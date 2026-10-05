@@ -285,7 +285,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       contentEpisodesList: document.getElementById('contentEpisodesList'),
       contentRelatedPanel: document.getElementById('contentRelatedPanel'),
       contentRelatedHeading: document.getElementById('contentRelatedHeading'),
-      contentRelatedGrid: document.getElementById('contentRelatedGrid'),
+      contentRelatedRail: document.getElementById('contentRelatedRail'),
+      contentRelatedScroller: document.getElementById('contentRelatedScroller'),
+      contentRelatedCount: document.getElementById('contentRelatedCount'),
       tabSeriesBtn: document.getElementById('tabSeriesBtn'),
       tabLiveBtn: document.getElementById('tabLiveBtn'),
       tabWatchedBtn: document.getElementById('tabWatchedBtn'),
@@ -14874,6 +14876,22 @@ function showHome(targetScroll = 0) {
       return String(name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
     }
 
+    // Normalizador de desduplicação: unifica 'v'/'vs'/'versus', ignora pontuação, ano, tags [4K], [Dublado], etc.
+    function relatedDedupeTitleKey(title) {
+      if (!title) return '';
+      return String(title)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\[.*?\]/g, ' ')
+        .replace(/\(.*?\)/g, ' ')
+        .replace(/\b(4k|uhd|fhd|hd|hdr|hevc|x265|1080p|720p|dublado|legendado|dub|leg)\b/gi, ' ')
+        .replace(/[^a-z0-9 ]/g, ' ')
+        .replace(/\b(versus|vs|v)\b/gi, 'vs')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
     function getRelatedProfile(entry, ratingCache) {
       const src = entry?.item || entry;
       const imdbId = entry?.imdbId || entry?.imdb_id || src?.imdbId || src?.imdb_id || src?.primaryItem?.imdbId || src?.primaryItem?.imdb_id || '';
@@ -14905,13 +14923,19 @@ function showHome(targetScroll = 0) {
           ? (currentItem?.series_id || currentItem?.versions?.[0]?.seriesId || baseSrc?.series_id || '')
           : (currentItem?.stream_id || baseSrc?.stream_id || '')
       );
-      const currentTitleKey = normalizeSearch(cleanDisplayTitle(currentItem?.name || currentItem?.title || ''));
+      const currentTitleKey = relatedDedupeTitleKey(cleanDisplayTitle(currentItem?.name || currentItem?.title || ''));
+      const currentImdbId = String(currentItem?.imdbId || currentItem?.imdb_id || baseSrc?.imdbId || baseSrc?.imdb_id || '').trim();
       const baseThemes = new Set(base.themes);
 
       const scored = [];
       [...getHomeCatalogItems('movie'), ...getHomeCatalogItems('series')].forEach(entry => {
         if (entry.type === currentType && entry.id === currentId) return;
-        if (currentTitleKey && normalizeSearch(entry.title) === currentTitleKey) return;
+
+        const entryTitleKey = relatedDedupeTitleKey(entry.title);
+        if (currentTitleKey && entryTitleKey === currentTitleKey) return;
+
+        const entryImdbId = String(entry.imdbId || entry.item?.imdbId || entry.item?.imdb_id || entry.item?.primaryItem?.imdbId || entry.item?.primaryItem?.imdb_id || '').trim();
+        if (currentImdbId && entryImdbId && entryImdbId === currentImdbId) return;
 
         const prof = getRelatedProfile(entry, ratingCache);
         const sharedGenres = prof.themes.filter(t => baseThemes.has(t));
@@ -14930,31 +14954,67 @@ function showHome(targetScroll = 0) {
         else if (sharedCast.length) reason = 'Elenco: ' + sharedCast.slice(0, 2).join(', ');
         else reason = sharedGenres.slice(0, 2).join(' • ');
 
-        scored.push({ entry, score, reason, rating: parseFloat(entry.rating) || 0 });
+        scored.push({
+          entry,
+          score,
+          reason,
+          titleKey: entryTitleKey,
+          imdbId: entryImdbId,
+          rating: parseFloat(entry.rating) || 0
+        });
       });
 
       scored.sort((a, b) => (b.score - a.score) || (b.rating - a.rating) || ((b.entry.added || 0) - (a.entry.added || 0)));
-      return scored.slice(0, RELATED_TITLES_LIMIT);
+
+      // Desduplicação: garante que títulos com nomes repetidos ("Ford vs Ferrari", "John Wick", etc.) ou mesmo IMDb só apareçam 1 vez
+      const seenTitleKeys = new Set();
+      const seenImdbIds = new Set();
+      const unique = [];
+
+      for (const item of scored) {
+        if (item.titleKey && seenTitleKeys.has(item.titleKey)) continue;
+        if (item.imdbId && seenImdbIds.has(item.imdbId)) continue;
+
+        if (item.titleKey) seenTitleKeys.add(item.titleKey);
+        if (item.imdbId) seenImdbIds.add(item.imdbId);
+
+        unique.push(item);
+        if (unique.length >= RELATED_TITLES_LIMIT) break;
+      }
+
+      return unique;
     }
 
     function renderRelatedTitles(item) {
       const panel = elements.contentRelatedPanel;
-      const grid = elements.contentRelatedGrid;
-      if (!panel || !grid) return;
+      const rail = elements.contentRelatedRail || document.getElementById('contentRelatedRail');
+      const scroller = elements.contentRelatedScroller || document.getElementById('contentRelatedScroller');
+      const heading = elements.contentRelatedHeading || document.getElementById('contentRelatedHeading');
+      const countEl = elements.contentRelatedCount || document.getElementById('contentRelatedCount');
+      if (!panel || !scroller) return;
       if (!contentPageOpen || currentContentPageItem !== item) return;
 
       const results = computeRelatedTitles(item, currentContentPageType === 'series' ? 'series' : 'movie');
-      grid.innerHTML = '';
+      scroller.innerHTML = '';
+      if (rail) {
+        const existingNav = rail.querySelector('.home-rail-nav');
+        if (existingNav) existingNav.remove();
+      }
+
       if (!results.length) {
         panel.hidden = true;
+        panel.style.display = 'none';
         return;
       }
 
       const shownTitle = cleanDisplayTitle(item?.name || item?.title || '');
-      if (elements.contentRelatedHeading) {
-        elements.contentRelatedHeading.textContent = shownTitle
+      if (heading) {
+        heading.textContent = shownTitle
           ? 'Já que gostou de "' + shownTitle + '", veja estes'
           : 'Já que gostou, veja estes';
+      }
+      if (countEl) {
+        countEl.textContent = results.length + ' títulos';
       }
 
       const fragment = document.createDocumentFragment();
@@ -14969,8 +15029,14 @@ function showHome(targetScroll = 0) {
         }
         fragment.appendChild(card);
       });
-      grid.appendChild(fragment);
+      scroller.appendChild(fragment);
+
+      if (rail && typeof setupHomeRailControls === 'function') {
+        rail.appendChild(setupHomeRailControls(scroller));
+      }
+
       panel.hidden = false;
+      panel.style.display = 'block';
     }
 
     function scheduleRelatedTitles(item) {
@@ -14978,7 +15044,9 @@ function showHome(targetScroll = 0) {
       if (relatedLastItem !== item) {
         relatedLastItem = item;
         elements.contentRelatedPanel.hidden = true;
-        if (elements.contentRelatedGrid) elements.contentRelatedGrid.innerHTML = '';
+        elements.contentRelatedPanel.style.display = 'none';
+        const scroller = elements.contentRelatedScroller || document.getElementById('contentRelatedScroller');
+        if (scroller) scroller.innerHTML = '';
       }
       clearTimeout(relatedTitlesTimer);
       // Debounce: metadados (elenco/direção) chegam em etapas e disparam novos renders
