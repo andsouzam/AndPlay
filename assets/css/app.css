@@ -923,12 +923,12 @@
     }
 
     video::cue {
-      background-color: rgba(0, 0, 0, 0.8);
+      background-color: transparent !important;
       color: #ffffff;
-      font-family: 'Segoe UI', -apple-system, sans-serif;
+      font-family: 'Segoe UI', -apple-system, Roboto, sans-serif;
       font-size: 1.15rem;
-      font-weight: 600;
-      text-shadow: 0 2px 4px #000;
+      font-weight: 700;
+      text-shadow: 0 0 4px #000, 0 0 8px #000, 0 2px 4px rgba(0, 0, 0, 0.95), 1px 1px 2px #000, -1px -1px 2px #000, 1px -1px 2px #000, -1px 1px 2px #000;
       line-height: 1.4;
     }
 

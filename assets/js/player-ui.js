@@ -8,7 +8,12 @@
   const container = video.closest('.video-container');
   if (!container) return;
   let ui, seek, currentTime, duration, playBtn, center, menu, resume, hideTimer, toastTimer;
-  const state = { speed: Number(localStorage.getItem('andplay_player_speed') || 1), volume: Number(localStorage.getItem('andplay_player_volume') || .85) };
+  const state = {
+    speed: Number(localStorage.getItem('andplay_player_speed') || 1),
+    volume: Number(localStorage.getItem('andplay_player_volume') || .85),
+    zoomMode: localStorage.getItem('andplay_player_zoom_mode') || 'fit',
+    zoomScale: Number(localStorage.getItem('andplay_player_zoom_scale') || 1)
+  };
   function fmt(sec) {
     if (!Number.isFinite(sec) || sec < 0) return '00:00';
     sec = Math.floor(sec);
@@ -220,6 +225,97 @@
     document.querySelectorAll('[data-speed]').forEach(b => b.classList.toggle('active', Number(b.dataset.speed) === v));
     const label = $('eplaySpeedLabel'); if (label) label.textContent = v + 'x';
   }
+  const ZOOM_CYCLE = ['fit', 'ultrawide', 'zoom133', 'fill'];
+  function applyZoom(mode, scale = 1, notify = true) {
+    state.zoomMode = mode || 'fit';
+    state.zoomScale = typeof scale === 'number' && Number.isFinite(scale) ? Math.max(0.5, Math.min(2.5, scale)) : 1;
+    try {
+      localStorage.setItem('andplay_player_zoom_mode', state.zoomMode);
+      localStorage.setItem('andplay_player_zoom_scale', String(state.zoomScale));
+    } catch (_) {}
+
+    let fit = 'contain';
+    let effectiveScale = state.zoomScale;
+    let label = 'Padrão (16:9)';
+    let btnText = '⛶ 16:9';
+
+    if (state.zoomMode === 'ultrawide') {
+      fit = 'cover';
+      label = '21:9 Ultrawide';
+      btnText = '⛶ 21:9';
+      effectiveScale = state.zoomScale;
+    } else if (state.zoomMode === 'zoom133') {
+      fit = 'contain';
+      effectiveScale = Math.round(1.3333 * state.zoomScale * 100) / 100;
+      label = 'Zoom 133% (21:9)';
+      btnText = '🔍 133%';
+    } else if (state.zoomMode === 'zoom125') {
+      fit = 'contain';
+      effectiveScale = Math.round(1.25 * state.zoomScale * 100) / 100;
+      label = 'Zoom 125%';
+      btnText = '🔍 125%';
+    } else if (state.zoomMode === 'zoom150') {
+      fit = 'contain';
+      effectiveScale = Math.round(1.5 * state.zoomScale * 100) / 100;
+      label = 'Zoom 150%';
+      btnText = '🔍 150%';
+    } else if (state.zoomMode === 'fill') {
+      fit = 'fill';
+      label = 'Esticar (Fill)';
+      btnText = '⛶ Esticar';
+      effectiveScale = state.zoomScale;
+    } else if (state.zoomMode === 'custom') {
+      fit = 'contain';
+      effectiveScale = Math.round(state.zoomScale * 100) / 100;
+      const pct = Math.round(effectiveScale * 100);
+      label = `Zoom ${pct}%`;
+      btnText = `🔍 ${pct}%`;
+    }
+
+    video.style.setProperty('--eplay-video-fit', fit);
+    video.style.setProperty('--eplay-video-zoom', String(effectiveScale));
+    video.style.objectFit = fit;
+    video.style.transform = `scale(${effectiveScale})`;
+    video.style.transformOrigin = 'center center';
+
+    const zoomBtn = $('eplayZoom');
+    if (zoomBtn) {
+      zoomBtn.textContent = btnText;
+      zoomBtn.title = `Proporção / Zoom: ${label} (Atalho: Z)`;
+      zoomBtn.setAttribute('aria-label', `Proporção e Zoom: ${label}`);
+    }
+
+    const zoomLabel = $('eplayZoomLabel');
+    if (zoomLabel) zoomLabel.textContent = label;
+
+    const zoomVal = $('eplayZoomVal');
+    if (zoomVal) zoomVal.textContent = Math.round(effectiveScale * 100) + '%';
+
+    document.querySelectorAll('[data-zoom-mode]').forEach(b => {
+      b.classList.toggle('active', b.dataset.zoomMode === state.zoomMode);
+    });
+
+    if (notify) {
+      showToast(`Zoom: ${label}`);
+    }
+  }
+
+  function cycleZoomMode() {
+    const currentIdx = ZOOM_CYCLE.indexOf(state.zoomMode);
+    const nextMode = ZOOM_CYCLE[(currentIdx + 1) % ZOOM_CYCLE.length] || 'fit';
+    applyZoom(nextMode, 1, true);
+    reveal();
+  }
+
+  function adjustZoomScale(delta) {
+    let base = state.zoomScale;
+    if (state.zoomMode === 'zoom133') base = 1.3333 * state.zoomScale;
+    else if (state.zoomMode === 'zoom125') base = 1.25 * state.zoomScale;
+    else if (state.zoomMode === 'zoom150') base = 1.5 * state.zoomScale;
+    let newScale = Math.max(0.5, Math.min(2.5, Math.round((base + delta) * 100) / 100));
+    applyZoom('custom', newScale, true);
+    reveal();
+  }
   function openSubtitles() { closeMenu(); const b=$('toggleSubPanelBtn'); if(b) b.click(); else showToast('Opções de legenda indisponíveis'); }
   function openInfo() { closeMenu(); const b=$('toggleMovieInfoBtn'); if(b) b.click(); else $('movieInfoSidebar')?.classList.toggle('collapsed'); }
   function downloadVideo() {
@@ -249,10 +345,13 @@
       '<div class="eplay-player-bottom"><div class="eplay-seek-wrap"><span class="eplay-time" id="eplayCurrentTime">00:00</span><input id="eplaySeek" class="eplay-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="Posição da reprodução"><span class="eplay-time" id="eplayDuration">00:00</span></div>',
       '<div class="eplay-controls"><button class="eplay-control small eplay-series-nav" id="eplayPrevEpisode" aria-label="Episódio anterior" style="display:none">‹ Ant</button><button class="eplay-control small" id="eplayBack10" aria-label="Voltar 10 segundos">−10</button><button class="eplay-control" id="eplayPlay" aria-label="Reproduzir">▶</button><button class="eplay-control small" id="eplayForward10" aria-label="Avançar 10 segundos">+10</button><button class="eplay-control small eplay-series-nav" id="eplayNextEpisode" aria-label="Próximo episódio" style="display:none">Pro ›</button>',
       '<div class="eplay-volume"><button class="eplay-control" id="eplayVolumeBtn" aria-label="Volume">🔊</button><input id="eplayVolume" class="eplay-range" type="range" min="0" max="100" value="85" aria-label="Volume"></div><div class="eplay-spacer"></div>',
-      '<button class="eplay-control small eplay-audio-track-btn" id="eplayAudioBtn" aria-label="Áudio e Versão" title="Áudio / Versão">🎧 Áudio</button><button class="eplay-control small" id="eplaySubtitle" aria-label="Legendas">CC</button><button class="eplay-control small" id="eplayInfo" aria-label="Ficha técnica">ⓘ</button><button class="eplay-control small" id="eplayPip" aria-label="Picture-in-Picture">▣</button><button class="eplay-control" id="eplaySettings" aria-label="Configurações" aria-expanded="false">⚙</button><button class="eplay-control" id="eplayFullscreen" aria-label="Tela cheia">⛶</button></div></div>',
+      '<button class="eplay-control small eplay-audio-track-btn" id="eplayAudioBtn" aria-label="Áudio e Versão" title="Áudio / Versão">🎧 Áudio</button><button class="eplay-control small" id="eplaySubtitle" aria-label="Legendas">CC</button><button class="eplay-control small eplay-zoom-btn" id="eplayZoom" aria-label="Proporção / Zoom 21:9" title="Proporção / Zoom 21:9 (Atalho: Z)">⛶ 16:9</button><button class="eplay-control small" id="eplayInfo" aria-label="Ficha técnica">ⓘ</button><button class="eplay-control small" id="eplayPip" aria-label="Picture-in-Picture">▣</button><button class="eplay-control" id="eplaySettings" aria-label="Configurações" aria-expanded="false">⚙</button><button class="eplay-control" id="eplayFullscreen" aria-label="Tela cheia">⛶</button></div></div>',
       '<div class="eplay-menu" id="eplayMenu"><h4>Configurações de reprodução</h4>',
       '<div class="eplay-version-section" id="eplayVersionSection" style="display:none;"><div class="eplay-menu-row"><span>Áudio / Versão</span><strong id="eplayVersionBadge" style="color:#ffc107;font-size:11px;"></strong></div><div class="eplay-version-list" id="eplayVersionItems"></div></div>',
       '<button id="eplayAudioSyncMenu" style="display:none">🔊 Sincronizar áudio híbrido</button>',
+      '<div class="eplay-menu-row"><span>Zoom / Proporção (21:9)</span><strong id="eplayZoomLabel" style="color:#ffc107;font-size:11px;">Padrão (16:9)</strong></div>',
+      '<div class="eplay-zoom-list" id="eplayZoomList"><button data-zoom-mode="fit">Padrão (16:9)</button><button data-zoom-mode="ultrawide">21:9 Ultrawide</button><button data-zoom-mode="zoom133">Zoom 133%</button><button data-zoom-mode="zoom125">1.25x</button><button data-zoom-mode="zoom150">1.50x</button><button data-zoom-mode="fill">Esticar</button></div>',
+      '<div class="eplay-zoom-adjust"><span style="font-size:11px;color:#8f99aa;">Ajuste fino de Zoom:</span><div style="display:flex;align-items:center;gap:6px;"><button type="button" id="eplayZoomMinus" class="eplay-control small" style="width:28px;height:28px;padding:0;font-size:14px;border-radius:6px;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.15);cursor:pointer;" title="Diminuir zoom (−5%)">−</button><span id="eplayZoomVal" style="font-size:12px;font-weight:700;color:#ffc107;min-width:44px;text-align:center;">100%</span><button type="button" id="eplayZoomPlus" class="eplay-control small" style="width:28px;height:28px;padding:0;font-size:14px;border-radius:6px;background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.15);cursor:pointer;" title="Aumentar zoom (+5%)">+</button><button type="button" id="eplayZoomReset" class="eplay-control small" style="padding:4px 8px;font-size:10px;border-radius:6px;background:rgba(255,255,255,.06);color:#bbb;border:1px solid rgba(255,255,255,.12);cursor:pointer;" title="Restaurar padrão">Reset</button></div></div>',
       '<div class="eplay-menu-row"><span>Velocidade</span><strong id="eplaySpeedLabel">1x</strong></div>',
       '<div class="eplay-speed-list"><button data-speed="0.75">0.75x</button><button data-speed="1">1x</button><button data-speed="1.25">1.25x</button><button data-speed="1.5">1.5x</button><button data-speed="1.75">1.75x</button><button data-speed="2">2x</button></div>',
       '<label class="eplay-auto-skip-row" id="eplayAutoSkipRow"><input type="checkbox" id="eplayAutoSkipToggle"><span><b>Pular abertura automaticamente</b><small>Somente quando houver marcador comunitário válido</small></span></label>',
@@ -342,6 +441,11 @@
   document.addEventListener('touchstart', closeMenuFromOutside, true);
   seek.addEventListener('input',()=>{if(Number.isFinite(video.duration))video.currentTime=Number(seek.value);setRange();reveal();});
   document.querySelectorAll('[data-speed]').forEach(b=>b.addEventListener('click',()=>applySpeed(b.dataset.speed)));
+  $on('eplayZoom','click',cycleZoomMode);
+  $on('eplayZoomMinus','click',()=>adjustZoomScale(-0.05));
+  $on('eplayZoomPlus','click',()=>adjustZoomScale(0.05));
+  $on('eplayZoomReset','click',()=>applyZoom('fit',1,true));
+  document.querySelectorAll('[data-zoom-mode]').forEach(b=>b.addEventListener('click',()=>applyZoom(b.dataset.zoomMode,1,true)));
   let lastMoveTime = 0;
   function throttledReveal() {
     const now = Date.now();
@@ -371,7 +475,7 @@
     }, 220);
   });
   video.addEventListener('play',()=>{setPlayIcon();reveal()}); video.addEventListener('pause',()=>{setPlayIcon();reveal()}); video.addEventListener('ended',()=>{setPlayIcon();reveal()});
-  video.addEventListener('timeupdate',setRange); video.addEventListener('durationchange',setRange); video.addEventListener('loadedmetadata',()=>{setRange();updateTitle()});
+  video.addEventListener('timeupdate',setRange); video.addEventListener('durationchange',setRange); video.addEventListener('loadedmetadata',()=>{setRange();updateTitle();applyZoom(state.zoomMode,state.zoomScale,false);});
   video.addEventListener('volumechange',updateVolume); video.addEventListener('ratechange',()=>applySpeed(video.playbackRate));
   function onFsChange() {
     const active = isFullscreenActive();
@@ -411,7 +515,7 @@
         return;
       }
       e.preventDefault();seekBy(10);
-    } else if(e.key==='ArrowUp'){e.preventDefault();setVolume(video.volume+.05)} else if(e.key==='ArrowDown'){e.preventDefault();setVolume(video.volume-.05)} else if(e.key.toLowerCase()==='m'){e.preventDefault();toggleMute()} else if(e.key.toLowerCase()==='f'){e.preventDefault();fullscreen()} else if(e.key.toLowerCase()==='p'){e.preventDefault();pip()} else if(e.key.toLowerCase()==='c'){e.preventDefault();openSubtitles()} else if(e.key.toLowerCase()==='s'){e.preventDefault();skipIntroNow()} else if(e.key==='Escape'){closeMenu();reveal()} else reveal();
+    } else if(e.key==='ArrowUp'){e.preventDefault();setVolume(video.volume+.05)} else if(e.key==='ArrowDown'){e.preventDefault();setVolume(video.volume-.05)} else if(e.key.toLowerCase()==='m'){e.preventDefault();toggleMute()} else if(e.key.toLowerCase()==='f'){e.preventDefault();fullscreen()} else if(e.key.toLowerCase()==='p'){e.preventDefault();pip()} else if(e.key.toLowerCase()==='c'){e.preventDefault();openSubtitles()} else if(e.key.toLowerCase()==='s'){e.preventDefault();skipIntroNow()} else if(e.key.toLowerCase()==='z'){e.preventDefault();cycleZoomMode()} else if((e.key==='='||e.key==='+')&&!e.ctrlKey&&!e.altKey){e.preventDefault();adjustZoomScale(0.05)} else if((e.key==='-'||e.key==='_')&&!e.ctrlKey&&!e.altKey){e.preventDefault();adjustZoomScale(-0.05)} else if(e.key==='0'&&!e.ctrlKey&&!e.altKey){e.preventDefault();applyZoom('fit',1,true)} else if(e.key==='Escape'){closeMenu();reveal()} else reveal();
   }, true);
   let sx=0,sy=0,st=0,lastTapTime=0,lastTapX=0,lastTapY=0;
   container.addEventListener('touchstart',e=>{
@@ -435,8 +539,8 @@
       }
     }
   },{passive:true});
-  video.volume=state.volume;applySpeed(state.speed);updateVolume();setPlayIcon();setRange();
+  video.volume=state.volume;applySpeed(state.speed);applyZoom(state.zoomMode,state.zoomScale,false);updateVolume();setPlayIcon();setRange();
   function updateTitle(){const title=$('modalTitle')?.textContent||'EPlay';const n=window.EPlaySeriesNavigation;const meta=n?'Temporada '+n.seasonNum+' • Episódio '+n.episodeNum:'';$('eplayPlayerTitle').textContent=title;$('eplayPlayerMeta').textContent=meta;$('eplayPlayerMeta').style.display=meta?'block':'none';$('eplayLiveBadge').style.display=/ao vivo|live|canal/i.test(title)?'inline-block':'none';syncSkipTools();}
   const observer=new MutationObserver(updateTitle);observer.observe($('modalTitle'),{childList:true,characterData:true,subtree:true});window.addEventListener('eplay:series-context',updateTitle);updateTitle();
-  window.EPlayPlayerUI={showToast,reveal,seekBy,playPause,fullscreen,pip,openAudioVersionMenu,closeMenu};
+  window.EPlayPlayerUI={showToast,reveal,seekBy,playPause,fullscreen,pip,openAudioVersionMenu,closeMenu,applyZoom,cycleZoomMode,adjustZoomScale};
 })();
