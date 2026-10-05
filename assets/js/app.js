@@ -12026,7 +12026,7 @@ function showHome(targetScroll = 0) {
       const videoUrl = `${CONFIG.server}/movie/${CONFIG.user}/${CONFIG.pass}/${effectiveVideoStreamId}.${ext}`;
       const baseTitle = groupOrMovie.name || groupOrMovie.title || 'Filme';
       const displayTitle = (effectivePlayableVersions && effectivePlayableVersions.length > 1)
-        ? `${baseTitle} (${selectedVersion.versionInfo.label})`
+        ? `${baseTitle} (${selectedVersion.versionInfo?.label || 'Dublado'})`
         : baseTitle;
 
       setupPlayerVersionSwitcher(groupOrMovie, selectedVersion, effectivePlayableVersions);
@@ -15128,14 +15128,21 @@ function showHome(targetScroll = 0) {
       elements.contentMoviePanel.hidden = false;
       elements.contentMovieVersions.innerHTML = '';
 
-      const rawVersions = groupOrMovie?.versions || [{
+      const rawVersions = groupOrMovie?.versions?.length > 0 ? groupOrMovie.versions : [{
         item: groupOrMovie,
         versionInfo: detectMovieVersion(groupOrMovie),
         streamId: groupOrMovie?.stream_id,
-        ext: groupOrMovie?.container_extension || 'mp4'
+        ext: groupOrMovie?.container_extension || null
       }];
       const versions = getMovieAllPlayableVersions(groupOrMovie, rawVersions);
-      const preferredVer = pickPreferredMovieVersion(versions);
+
+      // Garante que preferredVer nunca é null — mesmo que versions esteja vazio (situação anormal)
+      const preferredVer = pickPreferredMovieVersion(versions) || versions[0] || {
+        item: groupOrMovie,
+        versionInfo: { type: 'dublado', label: 'Dublado', badge: 'DUB', icon: '▶', desc: 'Clique para assistir' },
+        streamId: groupOrMovie?.stream_id || groupOrMovie?.primaryItem?.stream_id,
+        ext: groupOrMovie?.container_extension || null
+      };
 
       const canHevc = isHevcSupported();
       const hasDublado = versions.some(v => v.versionInfo?.type === 'dublado' || (canHevc && v.versionInfo?.type === '4k_dub'));
