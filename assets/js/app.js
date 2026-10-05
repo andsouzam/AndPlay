@@ -281,6 +281,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       contentSeasonSelect: document.getElementById('contentSeasonSelect'),
       contentSeriesVersionSwitcher: document.getElementById('contentSeriesVersionSwitcher'),
       contentEpisodesList: document.getElementById('contentEpisodesList'),
+      contentRelatedPanel: document.getElementById('contentRelatedPanel'),
+      contentRelatedHeading: document.getElementById('contentRelatedHeading'),
+      contentRelatedGrid: document.getElementById('contentRelatedGrid'),
       tabSeriesBtn: document.getElementById('tabSeriesBtn'),
       tabLiveBtn: document.getElementById('tabLiveBtn'),
       tabWatchedBtn: document.getElementById('tabWatchedBtn'),
@@ -14815,6 +14818,7 @@ function showHome(targetScroll = 0) {
     }
 
     function renderContentPageCast(item) {
+      scheduleRelatedTitles(item);
       if (!elements.contentPageCast) return;
       const imdbId = item?.imdbId || item?.imdb_id || item?.primaryItem?.imdbId || item?.primaryItem?.imdb_id || '';
       const cached = imdbId ? readHomeRatingCache()[String(imdbId)] : null;
@@ -14839,6 +14843,133 @@ function showHome(targetScroll = 0) {
             escapeHtml(actor) +
           '</button>'
         ).join('');
+    }
+
+    // ==========================================
+    // RECOMENDADOS: "Já que gostou de X, veja estes"
+    // Pontua filmes E séries (misturados) por estilos, elenco e direção em comum.
+    // ==========================================
+    const RELATED_TITLES_LIMIT = 15;
+    const RELATED_WEIGHTS = { genre: 1, cast: 3, director: 4 };
+    const relatedThemesCache = new WeakMap();
+    let relatedTitlesTimer = null;
+    let relatedLastItem = null;
+
+    function relatedPersonKey(name) {
+      return String(name || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+    }
+
+    function getRelatedProfile(entry, ratingCache) {
+      const src = entry?.item || entry;
+      const imdbId = entry?.imdbId || entry?.imdb_id || src?.imdbId || src?.imdb_id || src?.primaryItem?.imdbId || src?.primaryItem?.imdb_id || '';
+      const cached = imdbId ? ratingCache[String(imdbId)] : null;
+
+      let themes = src && typeof src === 'object' ? relatedThemesCache.get(src) : null;
+      if (!themes) {
+        themes = getHomeThemesForItem(entry);
+        if (src && typeof src === 'object' && themes.length) relatedThemesCache.set(src, themes);
+      }
+
+      const castRaw = parseCastList(src?.cast || src?.actors || src?.primaryItem?.cast || src?.primaryItem?.actors || cached?.cast);
+      const dirRaw = parseDirectorList(src?.director || src?.primaryItem?.director || cached?.director);
+      const cast = new Map();
+      castRaw.forEach(n => { const k = relatedPersonKey(n); if (k) cast.set(k, n); });
+      const directors = new Map();
+      dirRaw.forEach(n => { const k = relatedPersonKey(n); if (k) directors.set(k, n); });
+      return { themes, cast, directors };
+    }
+
+    function computeRelatedTitles(currentItem, currentType) {
+      const ratingCache = readHomeRatingCache();
+      const base = getRelatedProfile(currentItem, ratingCache);
+      if (!base.themes.length && !base.cast.size && !base.directors.size) return [];
+
+      const baseSrc = currentItem?.primaryItem || currentItem;
+      const currentId = String(
+        currentType === 'series'
+          ? (currentItem?.series_id || currentItem?.versions?.[0]?.seriesId || baseSrc?.series_id || '')
+          : (currentItem?.stream_id || baseSrc?.stream_id || '')
+      );
+      const currentTitleKey = normalizeSearch(cleanDisplayTitle(currentItem?.name || currentItem?.title || ''));
+      const baseThemes = new Set(base.themes);
+
+      const scored = [];
+      [...getHomeCatalogItems('movie'), ...getHomeCatalogItems('series')].forEach(entry => {
+        if (entry.type === currentType && entry.id === currentId) return;
+        if (currentTitleKey && normalizeSearch(entry.title) === currentTitleKey) return;
+
+        const prof = getRelatedProfile(entry, ratingCache);
+        const sharedGenres = prof.themes.filter(t => baseThemes.has(t));
+        const sharedCast = [];
+        prof.cast.forEach((name, key) => { if (base.cast.has(key)) sharedCast.push(name); });
+        const sharedDirectors = [];
+        prof.directors.forEach((name, key) => { if (base.directors.has(key)) sharedDirectors.push(name); });
+
+        const score = sharedGenres.length * RELATED_WEIGHTS.genre
+          + sharedCast.length * RELATED_WEIGHTS.cast
+          + sharedDirectors.length * RELATED_WEIGHTS.director;
+        if (score <= 0) return;
+
+        let reason = '';
+        if (sharedDirectors.length) reason = 'Direção: ' + sharedDirectors[0];
+        else if (sharedCast.length) reason = 'Elenco: ' + sharedCast.slice(0, 2).join(', ');
+        else reason = sharedGenres.slice(0, 2).join(' • ');
+
+        scored.push({ entry, score, reason, rating: parseFloat(entry.rating) || 0 });
+      });
+
+      scored.sort((a, b) => (b.score - a.score) || (b.rating - a.rating) || ((b.entry.added || 0) - (a.entry.added || 0)));
+      return scored.slice(0, RELATED_TITLES_LIMIT);
+    }
+
+    function renderRelatedTitles(item) {
+      const panel = elements.contentRelatedPanel;
+      const grid = elements.contentRelatedGrid;
+      if (!panel || !grid) return;
+      if (!contentPageOpen || currentContentPageItem !== item) return;
+
+      const results = computeRelatedTitles(item, currentContentPageType === 'series' ? 'series' : 'movie');
+      grid.innerHTML = '';
+      if (!results.length) {
+        panel.hidden = true;
+        return;
+      }
+
+      const shownTitle = cleanDisplayTitle(item?.name || item?.title || '');
+      if (elements.contentRelatedHeading) {
+        elements.contentRelatedHeading.textContent = shownTitle
+          ? 'Já que gostou de "' + shownTitle + '", veja estes'
+          : 'Já que gostou, veja estes';
+      }
+
+      const fragment = document.createDocumentFragment();
+      results.forEach(({ entry, reason }) => {
+        const card = renderHomeTitleCard(entry);
+        if (reason) {
+          const reasonEl = document.createElement('span');
+          reasonEl.className = 'eplay-related-reason';
+          reasonEl.title = reason;
+          reasonEl.textContent = reason;
+          card.appendChild(reasonEl);
+        }
+        fragment.appendChild(card);
+      });
+      grid.appendChild(fragment);
+      panel.hidden = false;
+    }
+
+    function scheduleRelatedTitles(item) {
+      if (!item || !elements.contentRelatedPanel) return;
+      if (relatedLastItem !== item) {
+        relatedLastItem = item;
+        elements.contentRelatedPanel.hidden = true;
+        if (elements.contentRelatedGrid) elements.contentRelatedGrid.innerHTML = '';
+      }
+      clearTimeout(relatedTitlesTimer);
+      // Debounce: metadados (elenco/direção) chegam em etapas e disparam novos renders
+      relatedTitlesTimer = setTimeout(() => {
+        try { renderRelatedTitles(item); } catch (err) { console.warn('[EPlay] Falha ao montar recomendados:', err); }
+      }, 350);
     }
 
     function searchByContextTerm(term, forceGlobal = false) {
