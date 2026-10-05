@@ -87,6 +87,17 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
             holder.favBadge.setVisibility(movie.isFavorite ? View.VISIBLE : View.GONE);
         }
 
+        if (holder.typeBadge != null) {
+            holder.typeBadge.setVisibility(View.VISIBLE);
+            if (movie.isSeries) {
+                holder.typeBadge.setText("SÉRIE");
+                holder.typeBadge.setTextColor(0xFF38BDF8);
+            } else {
+                holder.typeBadge.setText("FILME");
+                holder.typeBadge.setTextColor(0xFFFFC107);
+            }
+        }
+
         holder.itemView.setOnClickListener(v -> {
             if (listener != null) listener.onMovieClick(movie);
         });
@@ -139,6 +150,7 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
         TextView subtitle;
         android.widget.ProgressBar progressBar;
         TextView favBadge;
+        TextView typeBadge;
 
         ViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -147,6 +159,7 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
             subtitle = itemView.findViewById(R.id.movieSubtitle);
             progressBar = itemView.findViewById(R.id.movieProgressBar);
             favBadge = itemView.findViewById(R.id.movieFavBadge);
+            typeBadge = itemView.findViewById(R.id.movieTypeBadge);
         }
     }
 }

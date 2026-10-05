@@ -62,10 +62,9 @@ public class UserActivity extends Activity {
 
     private View cardModeSelection;
     private View btnOpenModeModal;
-    private LinearLayout cardModeTv;
-    private TextView tagModeTvActive;
-    private LinearLayout cardModeCinema;
-    private TextView tagModeCinemaActive;
+    private TextView txtCurrentModeTitle;
+    private TextView tagCurrentModeBadge;
+    private TextView txtCurrentModeDesc;
 
     private TextView statMoviesVal;
     private TextView statSeriesVal;
@@ -112,10 +111,9 @@ public class UserActivity extends Activity {
 
         cardModeSelection = findViewById(R.id.cardModeSelection);
         btnOpenModeModal = findViewById(R.id.btnOpenModeModal);
-        cardModeTv = findViewById(R.id.cardModeTv);
-        tagModeTvActive = findViewById(R.id.tagModeTvActive);
-        cardModeCinema = findViewById(R.id.cardModeCinema);
-        tagModeCinemaActive = findViewById(R.id.tagModeCinemaActive);
+        txtCurrentModeTitle = findViewById(R.id.txtCurrentModeTitle);
+        tagCurrentModeBadge = findViewById(R.id.tagCurrentModeBadge);
+        txtCurrentModeDesc = findViewById(R.id.txtCurrentModeDesc);
 
         statMoviesVal = findViewById(R.id.statMoviesVal);
         statSeriesVal = findViewById(R.id.statSeriesVal);
@@ -148,29 +146,7 @@ public class UserActivity extends Activity {
             setupFocusAnimation(btnOpenModeModal);
         }
 
-        // Modo TV
-        cardModeTv.setOnClickListener(v -> openModeSelectionModal());
-        cardModeTv.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
-                openModeSelectionModal();
-                return true;
-            }
-            return false;
-        });
 
-        // Modo Cinema
-        cardModeCinema.setOnClickListener(v -> openModeSelectionModal());
-        cardModeCinema.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
-                openModeSelectionModal();
-                return true;
-            }
-            return false;
-        });
-
-        // Animação de foco
-        setupFocusAnimation(cardModeTv);
-        setupFocusAnimation(cardModeCinema);
         setupFocusAnimation(btnUserGoogle);
         setupFocusAnimation(btnUserQrCode);
         setupFocusAnimation(btnUserLogin);
@@ -284,10 +260,14 @@ public class UserActivity extends Activity {
         // Modo de visualização ativo
         String mode = am.getViewMode();
         boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(mode);
-        tagModeTvActive.setVisibility(isCinema ? View.GONE : View.VISIBLE);
-        tagModeCinemaActive.setVisibility(isCinema ? View.VISIBLE : View.GONE);
-        cardModeTv.setSelected(!isCinema);
-        cardModeCinema.setSelected(isCinema);
+        if (txtCurrentModeTitle != null) {
+            txtCurrentModeTitle.setText(isCinema ? "🎬 Modo Cinema (Filmes & Séries)" : "📺 Modo TV Ao Vivo");
+        }
+        if (txtCurrentModeDesc != null) {
+            txtCurrentModeDesc.setText(isCinema
+                    ? "Focado em streaming on-demand: banner em destaque, continuar assistindo, catálogo completo de filmes e séries em alta."
+                    : "Central com PiP do canal ao vivo, grade de canais abertos e fechados e trilho de esportes em tempo real.");
+        }
 
         // Estatísticas
         int favCount = am.getFavorites().size();

@@ -298,7 +298,7 @@
                             android:gravity="center"
                             android:paddingStart="14dp"
                             android:paddingEnd="14dp"
-                            android:text="⚡ ALTERAR MODO"
+                            android:text="⚡ ALTERAR NO PAINEL"
                             android:textColor="#000000"
                             android:textSize="11.5sp"
                             android:textStyle="bold" />
@@ -309,121 +309,58 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="3dp"
                         android:layout_marginBottom="12dp"
-                        android:text="Abra o seletor visual em tela cheia para escolher entre o Modo Cinema e o Modo TV Ao Vivo."
+                        android:text="Para alternar entre o Modo Cinema e o Modo TV Ao Vivo, acesse o painel visual de modos."
                         android:textColor="#94A3B8"
                         android:textSize="11.5sp" />
 
+                    <!-- STATUS DO MODO ATUALMENTE ATIVO -->
                     <LinearLayout
+                        android:id="@+id/cardActiveModeStatus"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal">
+                        android:background="#151E32"
+                        android:orientation="vertical"
+                        android:padding="14dp">
 
-                        <!-- MODO 1: TV AO VIVO -->
                         <LinearLayout
-                            android:id="@+id/cardModeTv"
-                            android:layout_width="0dp"
+                            android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginEnd="8dp"
-                            android:layout_weight="1"
-                            android:background="@drawable/card_focus_bg"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:orientation="vertical"
-                            android:padding="14dp">
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="📺 Modo TV Ao Vivo"
-                                    android:textColor="#FFFFFF"
-                                    android:textSize="14sp"
-                                    android:textStyle="bold" />
-
-                                <TextView
-                                    android:id="@+id/tagModeTvActive"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:background="@drawable/badge_gold"
-                                    android:paddingStart="6dp"
-                                    android:paddingTop="2dp"
-                                    android:paddingEnd="6dp"
-                                    android:paddingBottom="2dp"
-                                    android:text="ATIVO"
-                                    android:textColor="#000000"
-                                    android:textSize="10sp"
-                                    android:textStyle="bold" />
-                            </LinearLayout>
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
                             <TextView
-                                android:layout_width="match_parent"
+                                android:id="@+id/txtCurrentModeTitle"
+                                android:layout_width="0dp"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="6dp"
-                                android:text="Central com PiP do canal ao vivo, grade de canais abertos e fechados e trilho de esportes em tempo real."
-                                android:textColor="#94A3B8"
-                                android:textSize="11sp" />
-                        </LinearLayout>
-
-                        <!-- MODO 2: CINEMA (FILMES & SÉRIES) -->
-                        <LinearLayout
-                            android:id="@+id/cardModeCinema"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:layout_weight="1"
-                            android:background="@drawable/card_focus_bg"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:focusableInTouchMode="true"
-                            android:orientation="vertical"
-                            android:padding="14dp">
-
-                            <LinearLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:gravity="center_vertical"
-                                android:orientation="horizontal">
-
-                                <TextView
-                                    android:layout_width="0dp"
-                                    android:layout_height="wrap_content"
-                                    android:layout_weight="1"
-                                    android:text="🎬 Modo Cinema (Filmes &amp; Séries)"
-                                    android:textColor="#FFFFFF"
-                                    android:textSize="14sp"
-                                    android:textStyle="bold" />
-
-                                <TextView
-                                    android:id="@+id/tagModeCinemaActive"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:background="@drawable/badge_gold"
-                                    android:paddingStart="6dp"
-                                    android:paddingTop="2dp"
-                                    android:paddingEnd="6dp"
-                                    android:paddingBottom="2dp"
-                                    android:text="ATIVO"
-                                    android:textColor="#000000"
-                                    android:textSize="10sp"
-                                    android:textStyle="bold"
-                                    android:visibility="gone" />
-                            </LinearLayout>
+                                android:layout_weight="1"
+                                android:text="📺 Modo TV Ao Vivo"
+                                android:textColor="#FFFFFF"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
 
                             <TextView
-                                android:layout_width="match_parent"
+                                android:id="@+id/tagCurrentModeBadge"
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="6dp"
-                                android:text="Focado em streaming on-demand: banner em destaque, continuar assistindo, catálogo de filmes e séries em alta."
-                                android:textColor="#94A3B8"
-                                android:textSize="11sp" />
+                                android:background="@drawable/badge_gold"
+                                android:paddingStart="8dp"
+                                android:paddingTop="3dp"
+                                android:paddingEnd="8dp"
+                                android:paddingBottom="3dp"
+                                android:text="MODO ATIVO"
+                                android:textColor="#000000"
+                                android:textSize="10.5sp"
+                                android:textStyle="bold" />
                         </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/txtCurrentModeDesc"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="Central com PiP do canal ao vivo, grade de canais abertos e fechados e trilho de esportes em tempo real."
+                            android:textColor="#94A3B8"
+                            android:textSize="11.5sp" />
                     </LinearLayout>
                 </LinearLayout>
 

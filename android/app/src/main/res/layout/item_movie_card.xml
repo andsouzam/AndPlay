@@ -80,4 +80,22 @@
         android:textColor="#FFC107"
         android:textSize="10sp"
         android:visibility="gone" />
+
+    <!-- Badge de Tipo (Filme ou Série, estilo Web) -->
+    <TextView
+        android:id="@+id/movieTypeBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="3dp"
+        android:background="#D9000000"
+        android:paddingStart="5dp"
+        android:paddingTop="1.5dp"
+        android:paddingEnd="5dp"
+        android:paddingBottom="1.5dp"
+        android:text="FILME"
+        android:textColor="#38BDF8"
+        android:textSize="8sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
 </FrameLayout>

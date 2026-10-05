@@ -217,7 +217,7 @@ public class MainActivity extends Activity {
 
     // Cinema Navigation Tabs
     private LinearLayout cinemaNavTabs;
-    private TextView btnCinemaTabMovies, btnCinemaTabSeries, btnCinemaTabWatched, btnCinemaTabFavorites, btnCinemaTabSearch;
+    private TextView btnCinemaTabMovies, btnCinemaTabSeries, btnCinemaTabLive, btnCinemaTabWatched, btnCinemaTabFavorites, btnCinemaTabSearch, btnCinemaTabAccount;
 
     // TV Mode Navigation Tabs
     private LinearLayout tvNavTabs;
@@ -520,9 +520,11 @@ public class MainActivity extends Activity {
         cinemaNavTabs = findViewById(R.id.cinemaNavTabs);
         btnCinemaTabMovies = findViewById(R.id.btnCinemaTabMovies);
         btnCinemaTabSeries = findViewById(R.id.btnCinemaTabSeries);
+        btnCinemaTabLive = findViewById(R.id.btnCinemaTabLive);
         btnCinemaTabWatched = findViewById(R.id.btnCinemaTabWatched);
         btnCinemaTabFavorites = findViewById(R.id.btnCinemaTabFavorites);
         btnCinemaTabSearch = findViewById(R.id.btnCinemaTabSearch);
+        btnCinemaTabAccount = findViewById(R.id.btnCinemaTabAccount);
 
         // Rail Action Buttons
         btnAllWatched = findViewById(R.id.btnAllWatched);
@@ -5059,9 +5061,14 @@ public class MainActivity extends Activity {
         // Cinema Navigation Tabs
         setupTabButton(btnCinemaTabMovies, () -> openVodExplorer("movies"));
         setupTabButton(btnCinemaTabSeries, () -> openVodExplorer("series"));
+        setupTabButton(btnCinemaTabLive, () -> {
+            applyViewMode(AccountManager.VIEW_MODE_TV, true);
+            AccountManager.getInstance(this).setViewMode(AccountManager.VIEW_MODE_TV);
+        });
         setupTabButton(btnCinemaTabWatched, this::openWatchedPage);
         setupTabButton(btnCinemaTabFavorites, this::openFavoritesPage);
         setupTabButton(btnCinemaTabSearch, this::showVodSearchDialog);
+        setupTabButton(btnCinemaTabAccount, this::openUserActivity);
 
         // TV Mode Navigation Tabs
         setupTabButton(btnTvTabWatched, this::openWatchedPage);
@@ -8279,10 +8286,15 @@ public class MainActivity extends Activity {
                         }
                     } else {
                         // Em VOD (Filme ou Série):
-                        // D-pad Esquerdo abre a gaveta lateral
+                        // D-pad Esquerdo retrocede 10s
                         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                            openDrawer();
-                            return true;
+                            if (exoPlayer != null) {
+                                long target = Math.max(0, exoPlayer.getCurrentPosition() - 10000);
+                                exoPlayer.seekTo(target);
+                                updateVodProgress();
+                                showOsdBanner(5000);
+                                return true;
+                            }
                         }
                         // D-pad Direito avança 30s
                         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {

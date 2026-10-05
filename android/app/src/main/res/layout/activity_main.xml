@@ -37,6 +37,140 @@
                 android:paddingEnd="24dp"
                 android:paddingBottom="36dp">
 
+                <!-- BARRA DE ABAS DE NAVEGAÇÃO NO MODO CINEMA (FILMES, SÉRIES, AO VIVO, ASSISTIDOS, FAVORITOS, BUSCAR, CONTA) -->
+                <LinearLayout
+                    android:id="@+id/cinemaNavTabs"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/btnCinemaTabMovies"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:background="@drawable/pill_focus_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:gravity="center"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:text="🎬 FILMES"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btnCinemaTabSeries"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/pill_focus_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:gravity="center"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:text="🍿 SÉRIES"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btnCinemaTabLive"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/pill_focus_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:gravity="center"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:text="🔴 AO VIVO"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btnCinemaTabWatched"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/pill_focus_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:gravity="center"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:text="👁 ASSISTIDOS"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btnCinemaTabFavorites"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/pill_focus_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:gravity="center"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:text="⭐ FAVORITOS"
+                        android:textColor="#FFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/btnCinemaTabSearch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:background="@drawable/pill_focus_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:gravity="center"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:text="🔍 BUSCAR"
+                        android:textColor="#4FC3F7"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/btnCinemaTabAccount"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/pill_focus_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:gravity="center"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:text="👤 CONTA"
+                        android:textColor="#FFC107"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
                 <!-- SEÇÃO HERO CINEMA (MODO FILMES & SÉRIES - DESTAQUE HERO CARROSSEL ESTILO WEB) -->
                 <FrameLayout
                     android:id="@+id/cinemaHeroLayout"
@@ -330,106 +464,6 @@
                     </LinearLayout>
                 </FrameLayout>
 
-                <!-- BARRA DE ABAS DE NAVEGAÇÃO NO MODO CINEMA (FILMES, SÉRIES, ASSISTIDOS, FAVORITOS) -->
-                <LinearLayout
-                    android:id="@+id/cinemaNavTabs"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:layout_marginBottom="6dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:visibility="gone">
-
-                    <TextView
-                        android:id="@+id/btnCinemaTabMovies"
-                        android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:background="@drawable/pill_focus_bg"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:gravity="center"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:text="🎬 FILMES"
-                        android:textColor="#FFFFFF"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btnCinemaTabSeries"
-                        android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:layout_marginStart="8dp"
-                        android:background="@drawable/pill_focus_bg"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:gravity="center"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:text="🍿 SÉRIES"
-                        android:textColor="#FFFFFF"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btnCinemaTabWatched"
-                        android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:layout_marginStart="8dp"
-                        android:background="@drawable/pill_focus_bg"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:gravity="center"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:text="👁 ASSISTIDOS"
-                        android:textColor="#FFFFFF"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/btnCinemaTabFavorites"
-                        android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:layout_marginStart="8dp"
-                        android:background="@drawable/pill_focus_bg"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:gravity="center"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:text="⭐ FAVORITOS"
-                        android:textColor="#FFFFFF"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <View
-                        android:layout_width="0dp"
-                        android:layout_height="1dp"
-                        android:layout_weight="1" />
-
-                    <TextView
-                        android:id="@+id/btnCinemaTabSearch"
-                        android:layout_width="wrap_content"
-                        android:layout_height="36dp"
-                        android:background="@drawable/pill_focus_bg"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:focusableInTouchMode="true"
-                        android:gravity="center"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:text="🔍 BUSCAR"
-                        android:textColor="#4FC3F7"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
                 <!-- SEÇÃO SUPERIOR: PIP À ESQUERDA (FIXO 16:9) + 4 CARDS À DIREITA (2x2) -->
                 <androidx.constraintlayout.widget.ConstraintLayout
                     android:id="@+id/tvTopSection"
@@ -662,12 +696,116 @@
                     </LinearLayout>
                 </androidx.constraintlayout.widget.ConstraintLayout>
 
+                <!-- TRILHO 1: CANAIS EM DESTAQUE -->
+                <LinearLayout
+                    android:id="@+id/channelsLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="4dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/channelsTitle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="📺 Canais em Destaque"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/btnOpenChannelDrawer"
+                            android:layout_width="wrap_content"
+                            android:layout_height="30dp"
+                            android:background="@drawable/pill_focus_bg"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:gravity="center"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:text="☰ TODOS OS CANAIS"
+                            android:textColor="#4FC3F7"
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/channelsRail"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:orientation="horizontal"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="12dp" />
+                </LinearLayout>
+
+                <!-- TRILHO 2: JOGOS E EVENTOS AO VIVO -->
+                <LinearLayout
+                    android:id="@+id/sportsLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginTop="12dp"
+                        android:layout_marginBottom="4dp">
+
+                        <TextView
+                            android:id="@+id/sportsTitle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="⚽ Jogos e Eventos Ao Vivo"
+                            android:textColor="#FFFFFF"
+                            android:textSize="15sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/btnAllSports"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="VER TUDO ▶"
+                            android:textSize="12sp"
+                            android:textColor="#4FC3F7"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp"
+                            android:background="#1A4FC3F7"
+                            android:focusable="true"
+                            android:clickable="true" />
+                    </LinearLayout>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/sportsRail"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:orientation="horizontal"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="12dp" />
+                </LinearLayout>
+
                 <!-- BARRA DE ATALHOS / ABAS DO MODO TV (ASSISTIDOS, FAVORITOS, FILMES, SÉRIES) -->
                 <LinearLayout
                     android:id="@+id/tvNavTabs"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
+                    android:layout_marginTop="14dp"
                     android:layout_marginBottom="4dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
@@ -861,110 +999,6 @@
 
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/favoritesRail"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:clipChildren="false"
-                        android:clipToPadding="false"
-                        android:orientation="horizontal"
-                        android:paddingTop="8dp"
-                        android:paddingBottom="12dp" />
-                </LinearLayout>
-
-                <!-- TRILHO 1: CANAIS EM DESTAQUE -->
-                <LinearLayout
-                    android:id="@+id/channelsLayout"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="16dp"
-                        android:layout_marginBottom="4dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:id="@+id/channelsTitle"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="📺 Canais em Destaque"
-                            android:textColor="#FFFFFF"
-                            android:textSize="15sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/btnOpenChannelDrawer"
-                            android:layout_width="wrap_content"
-                            android:layout_height="30dp"
-                            android:background="@drawable/pill_focus_bg"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp"
-                            android:text="☰ TODOS OS CANAIS"
-                            android:textColor="#4FC3F7"
-                            android:textSize="11sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/channelsRail"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:clipChildren="false"
-                        android:clipToPadding="false"
-                        android:orientation="horizontal"
-                        android:paddingTop="8dp"
-                        android:paddingBottom="12dp" />
-                </LinearLayout>
-
-                <!-- TRILHO 2: JOGOS E EVENTOS AO VIVO -->
-                <LinearLayout
-                    android:id="@+id/sportsLayout"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginTop="12dp"
-                        android:layout_marginBottom="4dp">
-
-                        <TextView
-                            android:id="@+id/sportsTitle"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="⚽ Jogos e Eventos Ao Vivo"
-                            android:textColor="#FFFFFF"
-                            android:textSize="15sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/btnAllSports"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="VER TUDO ▶"
-                            android:textSize="12sp"
-                            android:textColor="#4FC3F7"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp"
-                            android:paddingTop="4dp"
-                            android:paddingBottom="4dp"
-                            android:background="#1A4FC3F7"
-                            android:focusable="true"
-                            android:clickable="true" />
-                    </LinearLayout>
-
-                    <androidx.recyclerview.widget.RecyclerView
-                        android:id="@+id/sportsRail"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:clipChildren="false"
