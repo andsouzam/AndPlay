@@ -724,21 +724,35 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       }
     }
 
-    // Detecta se uma versão é Dublada, Legendada, 4K Dublada ou 4K Legendada
+    // Detecta a resolução de um item de mídia a partir de tags no nome/metadados
+    // Se não especificado na etiqueta: padroniza como 1080p (ou 4K se for categoria/stream 4K)
+    function detectMediaResolution(item, is4KFallback = false) {
+      if (is4KFallback) return '4K';
+      const text = `${item?.name || ''} ${item?.title || ''} ${item?.rawName || ''} ${item?.channel_name || ''}`;
+      if (/(?:\[|\(|\b)(?:4k|2160p|uhd)(?:\]|\)|\b)/i.test(text)) return '4K';
+      if (/(?:\[|\(|\b)(?:1440p|2k|qhd)(?:\]|\)|\b)/i.test(text)) return '1440p';
+      if (/(?:\[|\(|\b)(?:1080p|fhd|full[\s-]*hd)(?:\]|\)|\b)/i.test(text)) return '1080p';
+      if (/(?:\[|\(|\b)(?:720p|hd)(?:\]|\)|\b)/i.test(text)) return '720p';
+      if (/(?:\[|\(|\b)(?:480p|sd)(?:\]|\)|\b)/i.test(text)) return '480p';
+      return '1080p';
+    }
+
+    // Detecta se uma versão é Dublada, Legendada, 4K Dublada ou 4K Legendada com resolução
     function detectMovieVersion(item) {
       const name = item.name || item.title || '';
       const catId = String(item.category_id || '');
       const is4K = (catId === '765') || /\b4k\b/i.test(name) || /\[(?:HDR|DV|Hybrid)\]/i.test(name);
       const isLeg = (catId === '630') || /\[\s*(?:L|LEG|LEGENDADO)\s*\]/i.test(name) || /\b(legendado)\b/i.test(name);
+      const res = detectMediaResolution(item, is4K);
 
-      if (is4K) {
-        if (isLeg) return { type: '4k_leg', label: '4K Legendado', badge: '4K LEG', icon: '✨', desc: 'Resolução 4K Ultra HD • Áudio Original com Legenda' };
-        return { type: '4k_dub', label: '4K Ultra HD', badge: '4K DUB', icon: '✨', desc: 'Resolução 4K Ultra HD • Dublado em Português' };
+      if (is4K || res === '4K') {
+        if (isLeg) return { type: '4k_leg', resolution: '4K', label: '4K Legendado', badge: '4K LEG', icon: '✨', desc: 'Resolução 4K Ultra HD • Áudio Original com Legenda' };
+        return { type: '4k_dub', resolution: '4K', label: '4K Ultra HD', badge: '4K DUB', icon: '✨', desc: 'Resolução 4K Ultra HD • Dublado em Português' };
       }
       if (isLeg) {
-        return { type: 'legendado', label: 'Legendado', badge: 'LEG', icon: '💬', desc: 'Áudio Original com Legendas em Português' };
+        return { type: 'legendado', resolution: res, label: `Legendado (${res})`, badge: `LEG ${res}`, icon: '💬', desc: `Resolução ${res} • Áudio Original com Legendas em Português` };
       }
-      return { type: 'dublado', label: 'Dublado', badge: 'DUB', icon: '🔊', desc: 'Áudio Dublado em Português' };
+      return { type: 'dublado', resolution: res, label: `Dublado (${res})`, badge: `DUB ${res}`, icon: '🔊', desc: `Resolução ${res} • Áudio Dublado em Português` };
     }
 
     // Gera todas as versões reproduzíveis de um filme, sintetizando opções híbridas quando aplicável
@@ -749,7 +763,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           ? [...groupOrMovie.versions]
           : [{
               item: groupOrMovie,
-              versionInfo: (typeof detectMovieVersion === 'function') ? detectMovieVersion(groupOrMovie) : { type: 'dublado', label: 'Dublado', badge: 'DUB', icon: '🔊', desc: 'Áudio Dublado em Português' },
+              versionInfo: (typeof detectMovieVersion === 'function') ? detectMovieVersion(groupOrMovie) : { type: 'dublado', resolution: '1080p', label: 'Dublado (1080p)', badge: 'DUB 1080p', icon: '🔊', desc: 'Áudio Dublado em Português' },
               streamId: groupOrMovie?.stream_id || groupOrMovie?.streamId,
               ext: groupOrMovie?.container_extension || 'mp4'
             }];
@@ -775,6 +789,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             item: fourKDubVer.item,
             versionInfo: {
               type: '4k_leg_hybrid',
+              resolution: '4K',
               label: '4K Legendado (Híbrido)',
               badge: '4K HÍBRIDO',
               icon: '✨',
@@ -788,6 +803,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       if (legVer && dubVer) {
         const alreadyHasLegDub = baseVersions.some(v => v.isHybrid && v.hybridType === 'leg_dub_hybrid');
         if (!alreadyHasLegDub) {
+          const legRes = legVer.versionInfo?.resolution || '1080p';
           baseVersions.push({
             isHybrid: true,
             hybridType: 'leg_dub_hybrid',
@@ -799,10 +815,11 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             item: legVer.item,
             versionInfo: {
               type: 'leg_dub_hybrid',
-              label: 'Legenda Fixa + Dublado (Híbrido)',
-              badge: 'LEG+DUB',
+              resolution: legRes,
+              label: `Legenda Fixa + Dublado (Híbrido ${legRes})`,
+              badge: `LEG+DUB ${legRes}`,
               icon: '✨',
-              desc: 'Vídeo Legendado com Legenda no Frame + Áudio Dublado'
+              desc: `Vídeo Legendado (${legRes}) com Legenda no Frame + Áudio Dublado`
             }
           });
         }
@@ -917,15 +934,22 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       return false;
     }
 
-    // Detecta se uma versão de série é Dublada ou Legendada
+    // Detecta se uma versão de série é Dublada ou Legendada com resolução
     function detectSeriesVersion(item) {
       const name = item.name || item.title || '';
       const catId = String(item.category_id || '');
       const isLeg = (catId === '671') || /\[\s*(?:L|LEG|LEGENDADO)\s*\]/i.test(name) || /\b(legendado)\b/i.test(name);
-      if (isLeg) {
-        return { type: 'legendado', label: 'Legendado', badge: 'LEG', icon: '💬', desc: 'Áudio Original com Legenda' };
+      const is4K = /\b4k\b/i.test(name) || /\[(?:HDR|DV)\]/i.test(name);
+      const res = detectMediaResolution(item, is4K);
+
+      if (is4K || res === '4K') {
+        if (isLeg) return { type: '4k_leg', resolution: '4K', label: '4K Legendado', badge: '4K LEG', icon: '✨', desc: 'Resolução 4K Ultra HD • Áudio Original com Legenda' };
+        return { type: '4k_dub', resolution: '4K', label: '4K Dublado', badge: '4K DUB', icon: '✨', desc: 'Resolução 4K Ultra HD • Dublado em Português' };
       }
-      return { type: 'dublado', label: 'Dublado', badge: 'DUB', icon: '🔊', desc: 'Áudio Dublado em Português' };
+      if (isLeg) {
+        return { type: 'legendado', resolution: res, label: `Legendado (${res})`, badge: `LEG ${res}`, icon: '💬', desc: `Resolução ${res} • Áudio Original com Legenda` };
+      }
+      return { type: 'dublado', resolution: res, label: `Dublado (${res})`, badge: `DUB ${res}`, icon: '🔊', desc: `Resolução ${res} • Áudio Dublado em Português` };
     }
 
     // Título limpo e elegante para exibição no card (remove ano, 4K, tags [dub], etc.)
@@ -12311,7 +12335,7 @@ function showHome(targetScroll = 0) {
       const panelHint = elements.panelVersionHint || document.getElementById('panelVersionHint');
 
       const epAudioBtn = document.getElementById('eplayAudioBtn');
-      const activeLabel = activeVersion?.versionInfo?.label || (groupOrMovie?.name && isLegendadoMedia(groupOrMovie) ? 'Legendado' : 'Dublado');
+      const activeLabel = activeVersion?.versionInfo?.label || (groupOrMovie?.name && isLegendadoMedia(groupOrMovie) ? 'Legendado (1080p)' : 'Dublado (1080p)');
       if (epAudioBtn) {
         epAudioBtn.style.display = 'inline-flex';
         epAudioBtn.title = `Áudio / Versão: ${activeLabel}`;
@@ -12500,7 +12524,7 @@ function showHome(targetScroll = 0) {
       const panelHint = elements.panelVersionHint || document.getElementById('panelVersionHint');
 
       const epAudioBtn = document.getElementById('eplayAudioBtn');
-      const activeLabel = activeVersion?.versionInfo?.label || (seriesGroup?.name && isLegendadoMedia(seriesGroup) ? 'Legendado' : 'Dublado');
+      const activeLabel = activeVersion?.versionInfo?.label || (seriesGroup?.name && isLegendadoMedia(seriesGroup) ? 'Legendado (1080p)' : 'Dublado (1080p)');
       if (epAudioBtn) {
         epAudioBtn.style.display = 'inline-flex';
         epAudioBtn.title = `Áudio / Versão: ${activeLabel}`;
@@ -15598,7 +15622,7 @@ function showHome(targetScroll = 0) {
         ? 'Você parou em ' + formatResumeTime(progress.position) + ' • restam ' + formatResumeTime(Math.max(0, progress.duration - progress.position))
         : (hasDublado ? 'Versão Dublada • Alterne para legendado ou 4K no player' : (displayVer.versionInfo?.desc || 'Clique para assistir'));
 
-      const badgeText = hasDublado ? 'DUBLADO' : (displayVer.versionInfo?.badge || 'PADRÃO');
+      const badgeText = displayVer.versionInfo?.badge || (hasDublado ? 'DUB 1080p' : 'PADRÃO');
 
       primaryBtn.innerHTML =
         '<span class="eplay-version-icon" style="font-size: 26px;">' + escapeHtml(displayVer.versionInfo?.icon || '▶') + '</span>' +
