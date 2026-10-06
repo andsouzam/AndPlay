@@ -22,6 +22,27 @@
   let tabMirrorOffered = false;
   let castMediaPending = false;
   let castPendingMedia = null;
+  let castLoadToken = 0;
+  let castWatchTimer = null;
+
+  function cancelCastAttempt() {
+    castLoadToken += 1;
+    castMediaPending = false;
+    castPendingMedia = null;
+    if (castWatchTimer) {
+      clearInterval(castWatchTimer);
+      castWatchTimer = null;
+    }
+  }
+
+  function isCurrentCastAttempt(token, session) {
+    if (token !== castLoadToken) return false;
+    try {
+      return cast.framework.CastContext.getInstance().getCurrentSession() === session;
+    } catch (_) {
+      return false;
+    }
+  }
 
   function isCastCompatEnabled() {
     try { return localStorage.getItem(CAST_COMPAT_KEY) === '1'; } catch (_) { return false; }
@@ -698,20 +719,34 @@
 
   async function castMedia(session) {
     if (!session || typeof chrome === 'undefined' || !chrome.cast || !chrome.cast.media) return;
+
+    const attemptToken = ++castLoadToken;
+    if (castWatchTimer) {
+      clearInterval(castWatchTimer);
+      castWatchTimer = null;
+    }
+
     let media = getMediaForCast();
     if (!media.url) {
       showToast('Nenhum vídeo carregado para transmitir', 2500);
       return;
     }
 
+    // Compatibilidade é opt-in. Se estiver desligada, nenhum candidato alternativo
+    // é consultado: o URL atual vai diretamente para o Receiver padrão.
     if (isCastCompatEnabled() && media.mediaType !== 'live') {
       media = await applyCastCompatMedia(media);
+      if (!isCurrentCastAttempt(attemptToken, session)) return;
       if (media?.compatFailed) {
-        activateTabMirrorMode();
+        castMediaPending = false;
+        castPendingMedia = null;
+        setCastButtonState(false, false);
+        offerTabMirrorFallback('Não encontrei uma versão compatível para este Chromecast.');
         return;
       }
     }
 
+    if (!isCurrentCastAttempt(attemptToken, session)) return;
     if (!media.url) {
       showToast('Não foi possível preparar o vídeo para o Chromecast', 3500);
       return;
@@ -720,27 +755,29 @@
     const cleanPath = media.url.split('?')[0].split('#')[0].toLowerCase();
     const isHls = /\.m3u8(?:$|[?#])/i.test(media.url);
     const isLivePath = /\/live\//.test(cleanPath);
-    // No Default Media Receiver do Chromecast, qualquer VOD deve ser anunciado como video/mp4
-    // (MIME types como video/x-matroska e video/mp2t não são suportados pelo receiver padrão do Google)
+    // O Receiver padrão usa video/mp4 para VOD e application/x-mpegURL para HLS.
     const contentType = isHls ? 'application/x-mpegURL' : 'video/mp4';
-    const isLive = isHls || isLivePath || (media.mediaType && media.mediaType === 'live');
+    const isLive = isHls || isLivePath || media.mediaType === 'live';
 
-    // Avisos proativos de compatibilidade
     const isHybrid = typeof window.isHybridAudioActive === 'function' && window.isHybridAudioActive();
     if (isHybrid) {
-      showToast('⚠️ Esta versão usa áudio híbrido no celular. Na TV pode tocar sem a dublagem; prefira a versão Dublado padrão.', 6000);
-    }
-    const is4k = /\b4k\b/i.test(media.title) || /\b4k\b/i.test(media.url);
-    if (is4k) {
-      showToast('📺 Transmitindo em 4K (HEVC). Requer Chromecast 4K / Google TV. Se ficar em espera, use a versão 1080p.', 6000);
+      showToast('⚠️ Esta versão usa áudio híbrido no computador. Na TV pode tocar sem a dublagem.', 5000);
     }
 
-    // O servidor IPTV responde 302 para um endereço http:// sem CORS, que o receptor do Chromecast
-    // não consegue abrir. Resolvemos o destino final (https) e enviamos esse link já tratado.
-    resolveCastUrl(media.url, isLive).then(finalUrl => {
+    try {
+      // O endpoint resolve-stream remove o redirect HTTP do provedor antes do Receiver receber a URL.
+      const finalUrl = await resolveCastUrl(media.url, isLive);
+      if (!isCurrentCastAttempt(attemptToken, session)) return;
       media.url = finalUrl;
-      sendToCast(session, media, contentType, isLive);
-    });
+      await sendToCast(session, media, contentType, isLive, attemptToken);
+    } catch (e) {
+      if (!isCurrentCastAttempt(attemptToken, session)) return;
+      console.warn('[Cast] Falha ao preparar transmissão:', e);
+      castMediaPending = false;
+      castPendingMedia = null;
+      setCastButtonState(false, false);
+      offerTabMirrorFallback('Não foi possível preparar o vídeo para o Chromecast.');
+    }
   }
 
   async function resolveCastUrl(url, isLive) {
@@ -775,23 +812,26 @@
     return String(error.code || error.message || error.error || 'erro desconhecido');
   }
 
-  function startCastLoadWatch(session, media, loadStartedAt) {
+  function startCastLoadWatch(session, media, loadStartedAt, attemptToken) {
     if (media.mediaType === 'live') return;
+    if (castWatchTimer) clearInterval(castWatchTimer);
     let checks = 0;
-    const maxChecks = 10;
+    const maxChecks = 12;
     const timer = setInterval(() => {
       checks += 1;
+      if (!isCurrentCastAttempt(attemptToken, session)) {
+        clearInterval(timer);
+        if (castWatchTimer === timer) castWatchTimer = null;
+        return;
+      }
       try {
-        const currentSession = cast.framework.CastContext.getInstance().getCurrentSession();
-        if (!currentSession || currentSession !== session) {
-          clearInterval(timer);
-          return;
-        }
-
         const mediaSession = typeof session.getMediaSession === 'function' ? session.getMediaSession() : null;
         const remoteState = remotePlayer?.playerState || '';
         const idleReason = remotePlayer?.idleReason || mediaSession?.idleReason || '';
         const playerState = mediaSession?.playerState || '';
+        const stateText = String(playerState || remoteState || '').toUpperCase();
+        const playing = /PLAYING|BUFFERING|LOADING/i.test(stateText);
+        const idle = /IDLE/i.test(stateText);
 
         console.log('[Cast] Estado após load', {
           checks,
@@ -801,11 +841,9 @@
           idleReason
         });
 
-        const stateText = String(playerState || remoteState || '').toUpperCase();
-        const playing = /PLAYING|BUFFERING|LOADING/i.test(stateText);
-        const idle = /IDLE/i.test(stateText);
         if (playing) {
           clearInterval(timer);
+          if (castWatchTimer === timer) castWatchTimer = null;
           castMediaPending = false;
           castPendingMedia = null;
           setCastButtonState(true, false);
@@ -814,35 +852,36 @@
           return;
         }
 
-        if (!idle && checks < maxChecks) {
-          return;
-        }
-
-        if (checks >= maxChecks || idle || /ERROR|CANCELLED|INTERRUPTED/i.test(String(idleReason))) {
+        const failed = idle || /ERROR|CANCELLED|INTERRUPTED|INVALID/i.test(String(idleReason));
+        if (failed || checks >= maxChecks) {
           clearInterval(timer);
+          if (castWatchTimer === timer) castWatchTimer = null;
           console.warn('[Cast] Mídia não entrou em reprodução no prazo esperado.', {
-            idleReason, playerState, remoteState
+            idleReason, playerState, remoteState, timedOut: checks >= maxChecks
           });
           castMediaPending = false;
           castPendingMedia = null;
           setCastButtonState(false, false);
-          offerTabMirrorFallback('O Chromecast não iniciou este arquivo. Você pode tentar o espelhamento da guia.');
+          const detail = idleReason || playerState || remoteState || 'sem resposta do Receiver';
+          offerTabMirrorFallback('O Chromecast não iniciou este arquivo (' + detail + '). Você pode tentar o espelhamento da guia.');
         }
       } catch (e) {
         if (checks >= maxChecks) {
           clearInterval(timer);
+          if (castWatchTimer === timer) castWatchTimer = null;
           console.warn('[Cast] Falha ao consultar estado da mídia:', e);
           castMediaPending = false;
           castPendingMedia = null;
           setCastButtonState(false, false);
-          offerTabMirrorFallback('Não foi possível confirmar a reprodução no Chromecast. Tentando o espelhamento da guia.');
+          offerTabMirrorFallback('Não foi possível confirmar a reprodução no Chromecast. Você pode tentar o espelhamento da guia.');
         }
       }
     }, 700);
   }
 
-  async function sendToCast(session, media, contentType, isLive) {
-    console.log('[Cast] Enviando', { url: media.url, contentType, isLive });
+  async function sendToCast(session, media, contentType, isLive, attemptToken) {
+    if (!isCurrentCastAttempt(attemptToken, session)) return;
+    console.log('[Cast] Enviando', { url: media.url, contentType, isLive, compat: !!media.compat });
 
     try {
       const mediaInfo = new chrome.cast.media.MediaInfo(media.url, contentType);
@@ -850,7 +889,7 @@
 
       const metadata = new chrome.cast.media.GenericMediaMetadata();
       metadata.title = media.title;
-      metadata.subtitle = media.subtitle;
+      metadata.subtitle = media.subtitle || (media.compat ? 'Chromecast: H.264 + AAC' : '');
 
       if (media.poster && !media.poster.startsWith('data:')) {
         metadata.images = [new chrome.cast.Image(media.poster)];
@@ -866,7 +905,8 @@
       castPendingMedia = media;
       try {
         await session.loadMedia(request);
-        console.log('[Cast] loadMedia aceito pelo Chromecast');
+        if (!isCurrentCastAttempt(attemptToken, session)) return;
+        console.log('[Cast] loadMedia aceito pelo Chromecast', { compat: !!media.compat });
         if (isLive) {
           castMediaPending = false;
           castPendingMedia = null;
@@ -875,19 +915,28 @@
           showToast('Transmissão ao vivo enviada para a TV 📺', 3000);
           return;
         }
-        setCastButtonState(true, true);
-        showToast('Chromecast recebeu o vídeo; confirmando reprodução...', 2200);
-        startCastLoadWatch(session, media, loadStartedAt);
+        setCastButtonState(false, true);
+        showToast(
+          media.compat
+            ? 'Versão compatível enviada; confirmando reprodução...'
+            : 'Vídeo enviado; confirmando reprodução...',
+          2200
+        );
+        startCastLoadWatch(session, media, loadStartedAt, attemptToken);
       } catch (err) {
+        if (!isCurrentCastAttempt(attemptToken, session)) return;
         const label = getCastErrorLabel(err);
         console.warn('[Cast] loadMedia rejeitado:', err);
         castMediaPending = false;
         castPendingMedia = null;
         setCastButtonState(false, false);
-        offerTabMirrorFallback('O Chromecast recusou este vídeo (' + label + '). Tentando espelhamento da guia.');
+        offerTabMirrorFallback('O Chromecast recusou este vídeo (' + label + '). Você pode tentar o espelhamento da guia.');
       }
     } catch (e) {
+      if (!isCurrentCastAttempt(attemptToken, session)) return;
       console.warn('[Cast] Exceção ao preparar MediaInfo:', e);
+      castMediaPending = false;
+      castPendingMedia = null;
       setCastButtonState(false, false);
       offerTabMirrorFallback('Não foi possível iniciar o Cast direto. Você pode tentar o espelhamento da guia.');
     }
@@ -909,12 +958,18 @@
         cast.framework.RemotePlayerEventType.IS_CONNECTED_CHANGED,
         () => {
           const isConnected = !!remotePlayer.isConnected;
-          setCastButtonState(isConnected, !isConnected);
-          if (isConnected) {
-            showToast('Chromecast conectado; preparando reprodução...', 2500);
-          } else {
+          if (!isConnected) {
+            setCastButtonState(false, false);
             showToast('Chromecast desconectado', 2000);
+            return;
           }
+
+          const stateText = String(remotePlayer.playerState || '').toUpperCase();
+          const alreadyPlaying = /PLAYING|BUFFERING|LOADING/i.test(stateText);
+          setCastButtonState(alreadyPlaying, !alreadyPlaying);
+          showToast(alreadyPlaying
+            ? 'Chromecast conectado e reproduzindo 📺'
+            : 'Chromecast conectado; pronto para enviar o vídeo.', 2500);
         }
       );
 
@@ -928,17 +983,18 @@
               break;
             case cast.framework.SessionState.SESSION_STARTED:
             case cast.framework.SessionState.SESSION_RESUMED:
+              // A sessão só significa que a TV foi selecionada. O envio da mídia
+              // é iniciado pelo clique do usuário (ou por troca de mídia já conectada).
               setCastButtonState(false, true);
-              castMedia(context.getCurrentSession());
               break;
             case cast.framework.SessionState.SESSION_ENDED: {
               const wasPending = castMediaPending;
               const failedMedia = castPendingMedia;
-              castMediaPending = false;
-              castPendingMedia = null;
+              const hadActiveWatch = !!castWatchTimer;
+              cancelCastAttempt();
               setCastButtonState(false, false);
-              if (wasPending && failedMedia?.mediaType !== 'live') {
-                offerTabMirrorFallback('O Chromecast encerrou a tentativa de reprodução. Você pode usar o espelhamento da guia como último recurso.');
+              if ((wasPending || hadActiveWatch) && failedMedia?.mediaType !== 'live') {
+                offerTabMirrorFallback('O Chromecast encerrou a tentativa de reprodução. Você pode tentar o espelhamento da guia.');
               }
               break;
             }
@@ -1014,24 +1070,36 @@
         const context = cast.framework.CastContext.getInstance();
         const currentSession = context.getCurrentSession();
         if (currentSession) {
-          const choice = confirm('EPlay já está conectado ao Chromecast.\n\nDeseja desconectar da TV agora?');
-          if (choice) {
-            context.endCurrentSession(true);
-            setCastButtonState(false, false);
-            showToast('Chromecast desconectado');
+          const remoteState = String(remotePlayer?.playerState || '').toUpperCase();
+          const hasRemoteMedia = /PLAYING|BUFFERING|LOADING|PAUSED/i.test(remoteState) || castMediaPending;
+          if (hasRemoteMedia) {
+            const choice = confirm('EPlay já está transmitindo para o Chromecast.\n\nDeseja desconectar da TV agora?');
+            if (choice) {
+              cancelCastAttempt();
+              context.endCurrentSession(true);
+              setCastButtonState(false, false);
+              showToast('Chromecast desconectado');
+            }
           } else {
+            // A TV está selecionada, mas ainda não existe mídia remota. Envia o vídeo agora.
             castMedia(currentSession);
           }
           return;
         }
 
         context.requestSession().then(
-          () => {
-            console.log('[Cast] Sessão solicitada.');
+          async () => {
+            const session = context.getCurrentSession();
+            if (!session) {
+              showToast('O Chromecast foi selecionado, mas a sessão não ficou disponível.', 3500);
+              return;
+            }
+            console.log('[Cast] Sessão solicitada; iniciando envio da mídia.');
+            await castMedia(session);
           },
           (err) => {
             if (err === 'receiver_unavailable') {
-              showToast('Nenhum Chromecast encontrado. Use o mesmo Wi‑Fi do celular.', 4000);
+              showToast('Nenhum Chromecast encontrado. Use o mesmo Wi‑Fi do computador.', 4000);
             } else if (err && err !== 'cancel') {
               console.log('[Cast] Solicitação de sessão cancelada ou erro:', err);
               showToast('Não foi possível iniciar o Chromecast (' + err + ')', 3500);
@@ -1182,16 +1250,25 @@
     const enabled = !isCastCompatEnabled();
     setCastCompatEnabled(enabled);
     closeMenu();
-    showToast(enabled
-      ? 'Modo compatibilidade ativado: será usado H.264 + AAC quando disponível.'
-      : 'Modo compatibilidade desativado.',
-      3500);
-    if (enabled && window.cast && cast.framework) {
+
+    // Trocar o modo enquanto existe uma sessão ativa não deve reutilizar a mídia
+    // anterior. Encerramos a sessão e invalidamos qualquer tentativa pendente;
+    // o próximo clique em Chromecast começa do zero usando o modo escolhido.
+    if (window.cast && cast.framework) {
       try {
-        const session = cast.framework.CastContext.getInstance().getCurrentSession();
-        if (session) await castMedia(session);
+        const context = cast.framework.CastContext.getInstance();
+        if (context.getCurrentSession()) {
+          cancelCastAttempt();
+          context.endCurrentSession(true);
+          setCastButtonState(false, false);
+        }
       } catch (_) {}
     }
+
+    showToast(enabled
+      ? 'Modo compatibilidade ATIVADO. O próximo envio tentará H.264 + AAC.'
+      : 'Modo compatibilidade DESATIVADO. O próximo envio será feito normalmente.',
+      3500);
   });
   $on('eplayCastTabMirrorMenu','click',()=>{
     updateTabMirrorFallbackAvailability();
