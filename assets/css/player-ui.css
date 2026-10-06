@@ -292,3 +292,48 @@ body.eplay-fullscreen-active #videoModal #subOptionsPanel {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Botão e Indicadores do Chromecast / Google Cast */
+.eplay-control.eplay-cast-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.eplay-control.eplay-cast-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  transition: transform .18s ease, fill .18s ease, filter .18s ease;
+  pointer-events: none;
+}
+.eplay-control.eplay-cast-btn:hover svg {
+  transform: scale(1.15);
+  color: #ffc107;
+}
+.eplay-control.eplay-cast-btn.casting {
+  color: #ffc107 !important;
+}
+.eplay-control.eplay-cast-btn.casting svg {
+  fill: #ffc107 !important;
+  filter: drop-shadow(0 0 6px rgba(255,193,7,.85));
+}
+.eplay-control.eplay-cast-btn.connecting svg {
+  animation: eplayCastPulse 0.9s infinite alternate ease-in-out;
+  color: #ffc107;
+}
+.eplay-control.eplay-cast-btn google-cast-launcher {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.001;
+  cursor: pointer;
+  z-index: 5;
+}
+@keyframes eplayCastPulse {
+  0% { opacity: 0.35; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1.15); }
+}
+

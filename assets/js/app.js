@@ -11660,6 +11660,29 @@ function showHome(targetScroll = 0) {
         activeHls = null;
       }
 
+      activeVideoUrl = isEmbed ? '' : streamUrl;
+      currentPlaybackMeta = {
+        title: title || item?.name || 'Transmissão Ao Vivo',
+        url: streamUrl,
+        mediaType: 'live',
+        mediaMeta: item,
+        poster: item?.logo || item?.image || ''
+      };
+      window.currentPlaybackMeta = currentPlaybackMeta;
+
+      if (!isEmbed) {
+        try {
+          window.dispatchEvent(new CustomEvent('eplay:media-loaded', {
+            detail: {
+              url: streamUrl,
+              title: currentPlaybackMeta.title,
+              mediaType: 'live',
+              mediaMeta: item
+            }
+          }));
+        } catch (_) {}
+      }
+
       if (isEmbed) {
         // Modo Embed (Zero Anúncios com Sandbox Bloqueador de Popups)
         elements.videoPlayer.pause();
@@ -13041,6 +13064,35 @@ function showHome(targetScroll = 0) {
         autoRetryCount: 0,
         startPosition: safeStartPosition
       };
+      window.currentPlaybackMeta = currentPlaybackMeta;
+
+      window.getEPlayCurrentMedia = function() {
+        let streamUrl = activeVideoUrl || (activeHls && activeHls.url) || elements.videoPlayer?.currentSrc || elements.videoPlayer?.src || '';
+        if (streamUrl.startsWith('blob:') && activeHls && activeHls.url) {
+          streamUrl = activeHls.url;
+        }
+        return {
+          url: streamUrl,
+          title: currentPlaybackMeta?.title || elements.modalTitle?.textContent || 'EPlay',
+          mediaType: currentPlaybackMeta?.mediaType || 'video',
+          mediaMeta: currentPlaybackMeta?.mediaMeta || null,
+          poster: elements.sidebarPoster?.src || currentPlaybackMeta?.poster || '',
+          currentTime: elements.videoPlayer ? elements.videoPlayer.currentTime : 0
+        };
+      };
+
+      try {
+        window.dispatchEvent(new CustomEvent('eplay:media-loaded', {
+          detail: {
+            url,
+            title,
+            mediaType,
+            mediaMeta,
+            startPosition: safeStartPosition
+          }
+        }));
+      } catch (_) {}
+
       resetSkipIntroUi();
       updateSkipIntroAutoUi(mediaType);
       hideVideoErrorOverlay();

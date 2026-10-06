@@ -8,7 +8,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests; default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; script-src 'self' https://cdn.jsdelivr.net; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; media-src 'self' blob: https: http:; connect-src 'self' https: http:; frame-src 'self' https://rdcanais.net https://v2.rdembed.sbs https://www.youtube-nocookie.com; font-src 'self' data: https:;">
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests; default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; script-src 'self' https://cdn.jsdelivr.net https://www.gstatic.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; media-src 'self' blob: https: http:; connect-src 'self' https: http:; frame-src 'self' https://rdcanais.net https://v2.rdembed.sbs https://www.youtube-nocookie.com https://www.gstatic.com; font-src 'self' data: https:;">
   <title>EPlay - Filmes, Séries & TV Ao Vivo</title>
 
   <!-- Favicon & Ícones do App -->
@@ -20,6 +20,17 @@
 
   <!-- HLS.js para reprodução fluida de canais .m3u8 -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
+
+  <!-- Google Cast SDK para transmissão via Chromecast -->
+  <script>
+    window.__onGCastApiAvailable = function(isAvailable) {
+      window.__eplayGCastAvailable = !!isAvailable;
+      if (isAvailable && typeof window.initEPlayChromecast === 'function') {
+        window.initEPlayChromecast();
+      }
+    };
+  </script>
+  <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
 
   <!-- Redirecionamento automático de pareamento da TV -->
   <script>
@@ -35,7 +46,7 @@
   <script src="./assets/js/security.js?v=20261004-01"></script>
 
   <link rel="stylesheet" href="./assets/css/app.css?v=20261005-01">
-  <link rel="stylesheet" href="./assets/css/player-ui.css?v=20261004-04">
+  <link rel="stylesheet" href="./assets/css/player-ui.css?v=20261005-05">
 </head>
 
 <body class="auth-pending not-authenticated">
@@ -1316,8 +1327,8 @@
   <script src="./assets/js/supabase-config.js?v=20261004-01"></script>
   <script src="./assets/js/tv-epg.js?v=20261004-01"></script>
   <script src="./assets/js/account.js?v=20261004-01"></script>
-  <script src="./assets/js/app.js?v=20261005-02"></script>
-  <script src="./assets/js/player-ui.js?v=20261004-03"></script>
+  <script src="./assets/js/app.js?v=20261005-03"></script>
+  <script src="./assets/js/player-ui.js?v=20261005-05"></script>
 </body>
 
 </html>
