@@ -18,6 +18,8 @@
 
   const CAST_COMPAT_KEY = 'eplay_chromecast_compat_mode';
   const castCodecProbeCache = new Map();
+  let tabMirrorMode = false;
+  let tabMirrorOffered = false;
 
   function isCastCompatEnabled() {
     try { return localStorage.getItem(CAST_COMPAT_KEY) === '1'; } catch (_) { return false; }
@@ -228,7 +230,7 @@
     }
 
     showToast('Não encontrei uma versão H.264 + AAC neste título. O Chromecast pode ser incompatível.', 6000);
-    return media;
+    return { ...media, compatFailed: true };
   }
 
   function updateCastCompatMenu() {
@@ -240,6 +242,86 @@
       : 'Compatibilidade Chromecast: desativada';
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
     btn.classList.toggle('active', active);
+  }
+
+  function setTabMirrorMode(enabled) {
+    tabMirrorMode = !!enabled;
+    modal.classList.toggle('eplay-tab-mirror-mode', tabMirrorMode);
+    container.classList.toggle('eplay-tab-mirror-mode', tabMirrorMode);
+    document.body.classList.toggle('eplay-tab-mirror-mode', tabMirrorMode);
+    if (tabMirrorMode) {
+      ui?.classList.remove('idle');
+      clearTimeout(hideTimer);
+      if (!video.paused) {
+        hideTimer = setTimeout(() => ui?.classList.add('idle'), 2600);
+      }
+    }
+  }
+
+  function closeTabMirrorDialog() {
+    const dialog = $('eplayTabMirrorDialog');
+    if (dialog) dialog.remove();
+    setTabMirrorMode(false);
+  }
+
+  function activateTabMirrorMode() {
+    closeMenu();
+    setTabMirrorMode(true);
+
+    if (window.cast && cast.framework) {
+      try {
+        const context = cast.framework.CastContext.getInstance();
+        if (context.getCurrentSession()) context.endCurrentSession(true);
+      } catch (_) {}
+    }
+    setCastButtonState(false, false);
+
+    const existing = $('eplayTabMirrorDialog');
+    if (existing) {
+      existing.classList.add('show');
+      return;
+    }
+
+    const dialog = document.createElement('div');
+    dialog.id = 'eplayTabMirrorDialog';
+    dialog.className = 'eplay-tab-mirror-dialog show';
+    dialog.innerHTML = [
+      '<div class="eplay-tab-mirror-card" role="dialog" aria-modal="true" aria-labelledby="eplayTabMirrorTitle">',
+      '<div class="eplay-tab-mirror-icon">📺</div>',
+      '<h3 id="eplayTabMirrorTitle">Espelhamento de guia — último recurso</h3>',
+      '<p>O EPlay preparou o player para você transmitir <b>esta guia do Chrome</b>. Assim, o Chromecast recebe a imagem já renderizada pelo computador em vez de tentar decodificar o H.265 diretamente.</p>',
+      '<div class="eplay-tab-mirror-steps">',
+      '<div><b>1.</b><span>No Chrome, abra <b>⋮ → Transmitir, salvar e compartilhar → Transmitir…</b>.</span></div>',
+      '<div><b>2.</b><span>Escolha o seu Chromecast e use a opção de <b>transmitir a guia atual</b>.</span></div>',
+      '<div><b>3.</b><span>Deixe esta guia e o computador ligados durante toda a reprodução.</span></div>',
+      '</div>',
+      '<div class="eplay-tab-mirror-note">A projeção de guia é um fallback do próprio Chrome. A Google informa limite de até 720p e áudio estéreo nesse modo.</div>',
+      '<div class="eplay-tab-mirror-actions"><button type="button" id="eplayTabMirrorClose">Voltar ao player</button><button type="button" id="eplayTabMirrorHelp">Ajuda do Chrome</button></div>',
+      '</div>'
+    ].join('');
+    document.body.appendChild(dialog);
+
+    $('eplayTabMirrorClose')?.addEventListener('click', closeTabMirrorDialog);
+    $('eplayTabMirrorHelp')?.addEventListener('click', () => {
+      window.open('https://support.google.com/chromecast/answer/3228332?hl=pt-BR', '_blank', 'noopener,noreferrer');
+    });
+  }
+
+  function updateTabMirrorFallbackAvailability() {
+    const btn = $('eplayCastTabMirrorMenu');
+    if (!btn) return;
+    const usable = !!(video && !video.paused && video.readyState >= 2);
+    btn.disabled = !usable;
+    btn.title = usable
+      ? 'Prepara o player para transmitir esta guia pelo Chrome'
+      : 'Inicie o vídeo antes de usar o espelhamento da guia';
+  }
+
+  function offerTabMirrorFallback(reason) {
+    if (tabMirrorOffered || tabMirrorMode) return;
+    tabMirrorOffered = true;
+    if (reason) showToast(reason, 4200);
+    setTimeout(() => activateTabMirrorMode(), 500);
   }
 
   function fmt(sec) {
@@ -622,6 +704,10 @@
 
     if (isCastCompatEnabled() && media.mediaType !== 'live') {
       media = await applyCastCompatMedia(media);
+      if (media?.compatFailed) {
+        activateTabMirrorMode();
+        return;
+      }
     }
 
     if (!media.url) {
@@ -801,7 +887,8 @@
           if (remotePlayer.isConnected && remotePlayer.playerState === chrome.cast.media.PlayerState.IDLE) {
             if (remotePlayer.idleReason === 'ERROR') {
               console.warn('[Cast] Receptor encerrou por erro de decodificação/codec.');
-              showToast('O Chromecast não conseguiu reproduzir o formato deste arquivo. Tente a versão 1080p Dublado.', 6000);
+              showToast('O Chromecast não conseguiu reproduzir diretamente este arquivo. Abrindo opção de espelhamento da guia...', 4500);
+              offerTabMirrorFallback();
             }
           }
         }
@@ -897,6 +984,9 @@
 
   // Notificação de troca de mídia enquanto já está conectado ao Chromecast
   window.addEventListener('eplay:media-loaded', () => {
+    closeTabMirrorDialog();
+    setTabMirrorMode(false);
+    tabMirrorOffered = false;
     if (window.cast && window.cast.framework) {
       try {
         const context = cast.framework.CastContext.getInstance();
@@ -932,7 +1022,7 @@
       '<div class="eplay-speed-list"><button data-speed="0.75">0.75x</button><button data-speed="1">1x</button><button data-speed="1.25">1.25x</button><button data-speed="1.5">1.5x</button><button data-speed="1.75">1.75x</button><button data-speed="2">2x</button></div>',
       '<label class="eplay-auto-skip-row" id="eplayAutoSkipRow"><input type="checkbox" id="eplayAutoSkipToggle"><span><b>Pular abertura automaticamente</b><small>Somente quando houver marcador comunitário válido</small></span></label>',
       '<button id="eplaySkipIntroNow" style="display:none">⏭ Pular abertura agora</button>',
-      '<button id="eplaySubMenu">💬 Legendas e sincronização</button><button id="eplayInfoMenu">ⓘ Ficha técnica</button><button id="eplayDownloadMenu">⇩ Baixar vídeo</button><button id="eplayPipMenu">▣ Picture-in-Picture</button><button id="eplayCastMenu">📺 Enviar para Chromecast</button><button id="eplayCastCompatMenu" aria-pressed="false">Compatibilidade Chromecast: desativada</button><button id="eplayLiveSyncMenu" style="display:none">⚡ Sincronizar ao vivo</button><button id="eplayLatencyMenu" style="display:none">⚡ Alternar buffer</button><button id="eplayFsMenu">⛶ Tela cheia</button></div>',
+      '<button id="eplaySubMenu">💬 Legendas e sincronização</button><button id="eplayInfoMenu">ⓘ Ficha técnica</button><button id="eplayDownloadMenu">⇩ Baixar vídeo</button><button id="eplayPipMenu">▣ Picture-in-Picture</button><button id="eplayCastMenu">📺 Enviar para Chromecast</button><button id="eplayCastCompatMenu" aria-pressed="false">Compatibilidade Chromecast: desativada</button><button id="eplayCastTabMirrorMenu">📺 Espelhar esta guia (último recurso)</button><button id="eplayLiveSyncMenu" style="display:none">⚡ Sincronizar ao vivo</button><button id="eplayLatencyMenu" style="display:none">⚡ Alternar buffer</button><button id="eplayFsMenu">⛶ Tela cheia</button></div>',
       '<div class="eplay-toast" id="eplayPlayerToast"></div>',
       '<div class="eplay-resume" id="eplayResume"><span id="eplayResumeText">Continuar reprodução?</span><button class="continue" id="eplayResumeContinue">Continuar</button><button class="restart" id="eplayResumeRestart">Do início</button></div>',
       '</div>'
@@ -959,7 +1049,12 @@
   if (embedElInit) sourceObserver.observe(embedElInit, { attributes: true, attributeFilter: ['style', 'src'] });
   syncPlaybackSurface();
   const $on=(id,ev,fn)=>$(id)?.addEventListener(ev,fn);
-  $on('eplayPlayerClose','click',()=>{$('closeVideoModal')?.click();});
+  $on('eplayPlayerClose','click',()=>{
+    closeTabMirrorDialog();
+    setTabMirrorMode(false);
+    tabMirrorOffered = false;
+    $('closeVideoModal')?.click();
+  });
   $on('eplayPlay','click',playPause); $on('eplayCenterPlay','click',playPause);
   $on('eplayBack10','click',()=>seekBy(-10)); $on('eplayForward10','click',()=>seekBy(10));
   $on('eplayPrevEpisode','click',()=>{ closeMenu(); window.EPlaySeriesNavigation?.previous?.(); }); $on('eplayNextEpisode','click',()=>{ closeMenu(); window.EPlaySeriesNavigation?.next?.(); });
@@ -1005,7 +1100,17 @@
       } catch (_) {}
     }
   });
+  $on('eplayCastTabMirrorMenu','click',()=>{
+    updateTabMirrorFallbackAvailability();
+    const btn = $('eplayCastTabMirrorMenu');
+    if (btn?.disabled) {
+      showToast('Inicie a reprodução antes de preparar o espelhamento.', 3000);
+      return;
+    }
+    activateTabMirrorMode();
+  });
   updateCastCompatMenu();
+  updateTabMirrorFallbackAvailability();
   $on('eplaySettings','click',toggleMenu); $on('eplayDownloadMenu','click',downloadVideo); $on('eplayInfoMenu','click',openInfo); $on('eplaySubMenu','click',openSubtitles); $on('eplayPipMenu','click',pip); $on('eplayFsMenu','click',fullscreen); $on('eplayFullscreen','click',fullscreen);
   $on('eplayAudioSyncMenu','click',()=>{
     closeMenu();
@@ -1073,8 +1178,8 @@
       reveal();
     }, 220);
   });
-  video.addEventListener('play',()=>{setPlayIcon();reveal()}); video.addEventListener('pause',()=>{setPlayIcon();reveal()}); video.addEventListener('ended',()=>{setPlayIcon();reveal()});
-  video.addEventListener('timeupdate',setRange); video.addEventListener('durationchange',setRange); video.addEventListener('loadedmetadata',()=>{setRange();updateTitle();applyZoom(state.zoomMode,state.zoomScale,false);});
+  video.addEventListener('play',()=>{setPlayIcon();reveal();updateTabMirrorFallbackAvailability()}); video.addEventListener('pause',()=>{setPlayIcon();reveal();updateTabMirrorFallbackAvailability()}); video.addEventListener('ended',()=>{setPlayIcon();reveal();updateTabMirrorFallbackAvailability()});
+  video.addEventListener('timeupdate',setRange); video.addEventListener('durationchange',setRange); video.addEventListener('loadedmetadata',()=>{setRange();updateTitle();applyZoom(state.zoomMode,state.zoomScale,false);updateTabMirrorFallbackAvailability();});
   video.addEventListener('volumechange',updateVolume); video.addEventListener('ratechange',()=>applySpeed(video.playbackRate));
   function onFsChange() {
     const active = isFullscreenActive();

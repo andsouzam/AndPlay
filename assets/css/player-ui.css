@@ -388,3 +388,155 @@ body.eplay-fullscreen-active #videoModal #subOptionsPanel {
     padding-bottom:calc(18px + env(safe-area-inset-bottom, 0px))!important;
   }
 }
+
+
+/* Fallback gratuito: preparar a guia para projeção nativa do Chrome */
+#videoModal.eplay-tab-mirror-mode .player-info-sidebar,
+#videoModal.eplay-tab-mirror-mode .modal-header,
+#videoModal.eplay-tab-mirror-mode .modal-footer,
+#videoModal.eplay-tab-mirror-mode #subOptionsPanel,
+body.eplay-tab-mirror-mode #videoModal .player-info-sidebar,
+body.eplay-tab-mirror-mode #videoModal .modal-header,
+body.eplay-tab-mirror-mode #videoModal .modal-footer,
+body.eplay-tab-mirror-mode #videoModal #subOptionsPanel{
+  display:none!important;
+}
+#videoModal.eplay-tab-mirror-mode .modal-content,
+body.eplay-tab-mirror-mode #videoModal .modal-content{
+  width:100vw!important;
+  max-width:none!important;
+  height:100vh!important;
+  max-height:none!important;
+  margin:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:#000!important;
+}
+#videoModal.eplay-tab-mirror-mode .player-body-wrapper,
+#videoModal.eplay-tab-mirror-mode .player-main-area,
+#videoModal.eplay-tab-mirror-mode .video-container,
+body.eplay-tab-mirror-mode #videoModal .player-body-wrapper,
+body.eplay-tab-mirror-mode #videoModal .player-main-area,
+body.eplay-tab-mirror-mode #videoModal .video-container{
+  width:100vw!important;
+  height:100vh!important;
+  min-height:100vh!important;
+  max-height:none!important;
+}
+.eplay-tab-mirror-dialog{
+  position:fixed;
+  inset:0;
+  z-index:100000;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+  background:rgba(0,0,0,.72);
+  backdrop-filter:blur(7px);
+}
+.eplay-tab-mirror-dialog.show{display:flex}
+.eplay-tab-mirror-card{
+  width:min(620px,94vw);
+  max-height:min(88vh,720px);
+  overflow:auto;
+  box-sizing:border-box;
+  padding:26px;
+  border:1px solid rgba(255,193,7,.32);
+  border-radius:18px;
+  background:rgba(17,17,17,.98);
+  box-shadow:0 24px 80px rgba(0,0,0,.72);
+  color:#eee;
+}
+.eplay-tab-mirror-icon{
+  width:48px;
+  height:48px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:12px;
+  background:rgba(255,193,7,.12);
+  border:1px solid rgba(255,193,7,.24);
+  font-size:22px;
+  margin-bottom:14px;
+}
+.eplay-tab-mirror-card h3{
+  margin:0 0 10px;
+  color:#fff;
+  font-size:19px;
+  line-height:1.25;
+}
+.eplay-tab-mirror-card p{
+  margin:0 0 18px;
+  color:#c7c7c7;
+  font-size:13px;
+  line-height:1.6;
+}
+.eplay-tab-mirror-steps{
+  display:flex;
+  flex-direction:column;
+  gap:9px;
+  margin-bottom:16px;
+}
+.eplay-tab-mirror-steps>div{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+  padding:11px 12px;
+  border:1px solid #2c2c2c;
+  border-radius:10px;
+  background:#111;
+  color:#ccc;
+  font-size:12px;
+  line-height:1.5;
+}
+.eplay-tab-mirror-steps>div>b{
+  color:#ffc107;
+  flex:0 0 auto;
+}
+.eplay-tab-mirror-note{
+  padding:10px 12px;
+  border-radius:10px;
+  background:rgba(255,193,7,.07);
+  border:1px solid rgba(255,193,7,.16);
+  color:#bfbfbf;
+  font-size:10px;
+  line-height:1.5;
+}
+.eplay-tab-mirror-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:18px;
+}
+.eplay-tab-mirror-actions button{
+  border:1px solid #3a3a3a;
+  border-radius:9px;
+  padding:9px 14px;
+  background:#202020;
+  color:#fff;
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+}
+.eplay-tab-mirror-actions button:first-child{
+  background:#ffc107;
+  color:#111;
+  border-color:#ffc107;
+}
+.eplay-tab-mirror-actions button:hover{
+  filter:brightness(1.08);
+}
+#eplayCastTabMirrorMenu:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+#eplayCastCompatMenu.active{
+  color:#ffc107;
+  background:#24200f;
+}
+@media(max-width:620px){
+  .eplay-tab-mirror-card{padding:20px;border-radius:14px}
+  .eplay-tab-mirror-card h3{font-size:17px}
+  .eplay-tab-mirror-actions{flex-direction:column}
+  .eplay-tab-mirror-actions button{width:100%}
+}
