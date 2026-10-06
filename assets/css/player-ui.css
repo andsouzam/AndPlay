@@ -366,3 +366,25 @@ body.eplay-fullscreen-active #videoModal #subOptionsPanel {
 @supports(height:100dvh){
   @media(max-width:920px){#videoModal{height:100dvh}}
 }
+
+/* Player em página própria (mobile): ocupa exatamente a área visível, sem rolagem nem corte na base (iOS Safari) */
+@media(max-width:920px){
+  #videoModal.eplay-player-page{
+    position:fixed;top:0;left:0;right:0;bottom:0;
+    height:100vh;height:-webkit-fill-available;height:100dvh;
+    min-height:0;overflow:hidden;
+  }
+  #videoModal.eplay-player-page .modal-content{
+    height:100%!important;min-height:0!important;max-height:100%!important;
+  }
+  #videoModal.eplay-player-page .player-body-wrapper{
+    flex:1 1 auto;height:100%!important;min-height:0!important;max-height:100%!important;
+  }
+  #videoModal.eplay-player-page .player-main-area,
+  #videoModal.eplay-player-page .video-container{
+    height:100%!important;min-height:0!important;max-height:100%!important;
+  }
+  #videoModal.eplay-player-page .eplay-player-bottom{
+    padding-bottom:calc(18px + env(safe-area-inset-bottom, 0px))!important;
+  }
+}
