@@ -52,7 +52,7 @@
                         android:id="@+id/btnCinemaTabMovies"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
-                        android:background="@drawable/pill_focus_bg"
+                        android:background="@drawable/cinema_tab_bg"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
@@ -60,7 +60,7 @@
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
                         android:text="🎬 FILMES"
-                        android:textColor="#FFFFFF"
+                        android:textColor="@color/tab_text_color_selector"
                         android:textSize="12sp"
                         android:textStyle="bold" />
 
@@ -69,7 +69,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
                         android:layout_marginStart="8dp"
-                        android:background="@drawable/pill_focus_bg"
+                        android:background="@drawable/cinema_tab_bg"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
@@ -77,7 +77,7 @@
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
                         android:text="🍿 SÉRIES"
-                        android:textColor="#FFFFFF"
+                        android:textColor="@color/tab_text_color_selector"
                         android:textSize="12sp"
                         android:textStyle="bold" />
 
@@ -86,7 +86,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
                         android:layout_marginStart="8dp"
-                        android:background="@drawable/pill_focus_bg"
+                        android:background="@drawable/cinema_tab_bg"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
@@ -94,7 +94,7 @@
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
                         android:text="🔴 AO VIVO"
-                        android:textColor="#FFFFFF"
+                        android:textColor="@color/tab_text_color_selector"
                         android:textSize="12sp"
                         android:textStyle="bold" />
 
@@ -103,7 +103,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
                         android:layout_marginStart="8dp"
-                        android:background="@drawable/pill_focus_bg"
+                        android:background="@drawable/cinema_tab_bg"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
@@ -111,7 +111,7 @@
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
                         android:text="👁 ASSISTIDOS"
-                        android:textColor="#FFFFFF"
+                        android:textColor="@color/tab_text_color_selector"
                         android:textSize="12sp"
                         android:textStyle="bold" />
 
@@ -120,7 +120,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
                         android:layout_marginStart="8dp"
-                        android:background="@drawable/pill_focus_bg"
+                        android:background="@drawable/cinema_tab_bg"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
@@ -128,7 +128,7 @@
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
                         android:text="⭐ FAVORITOS"
-                        android:textColor="#FFFFFF"
+                        android:textColor="@color/tab_text_color_selector"
                         android:textSize="12sp"
                         android:textStyle="bold" />
 
@@ -141,7 +141,7 @@
                         android:id="@+id/btnCinemaTabSearch"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
-                        android:background="@drawable/pill_focus_bg"
+                        android:background="@drawable/cinema_tab_bg"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
@@ -149,7 +149,7 @@
                         android:paddingStart="16dp"
                         android:paddingEnd="16dp"
                         android:text="🔍 BUSCAR"
-                        android:textColor="#4FC3F7"
+                        android:textColor="@color/tab_text_color_selector"
                         android:textSize="12sp"
                         android:textStyle="bold" />
 
@@ -158,15 +158,15 @@
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
                         android:layout_marginStart="8dp"
-                        android:background="@drawable/pill_focus_bg"
+                        android:background="@drawable/cinema_tab_bg"
                         android:clickable="true"
                         android:focusable="true"
                         android:focusableInTouchMode="true"
                         android:gravity="center"
-                        android:paddingStart="14dp"
-                        android:paddingEnd="14dp"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
                         android:text="👤 CONTA"
-                        android:textColor="#FFC107"
+                        android:textColor="@color/tab_text_color_selector"
                         android:textSize="12sp"
                         android:textStyle="bold" />
                 </LinearLayout>
@@ -327,53 +327,53 @@
                                 <TextView
                                     android:id="@+id/btnCinemaHeroPlay"
                                     android:layout_width="wrap_content"
-                                    android:layout_height="38dp"
-                                    android:background="@drawable/badge_gold"
+                                    android:layout_height="40dp"
+                                    android:background="@drawable/btn_hero_play_bg"
                                     android:clickable="true"
                                     android:focusable="true"
                                     android:focusableInTouchMode="true"
                                     android:gravity="center"
-                                    android:paddingStart="20dp"
-                                    android:paddingEnd="20dp"
+                                    android:paddingStart="22dp"
+                                    android:paddingEnd="22dp"
                                     android:text="▶ ASSISTIR"
-                                    android:textColor="#000000"
-                                    android:textSize="12.5sp"
+                                    android:textColor="#050810"
+                                    android:textSize="13sp"
                                     android:textStyle="bold" />
 
                                 <!-- BOTÃO SALVAR / FAVORITO -->
                                 <TextView
                                     android:id="@+id/btnCinemaHeroFav"
                                     android:layout_width="wrap_content"
-                                    android:layout_height="38dp"
+                                    android:layout_height="40dp"
                                     android:layout_marginStart="10dp"
-                                    android:background="@drawable/pill_focus_bg"
+                                    android:background="@drawable/btn_hero_secondary_bg"
                                     android:clickable="true"
                                     android:focusable="true"
                                     android:focusableInTouchMode="true"
                                     android:gravity="center"
-                                    android:paddingStart="16dp"
-                                    android:paddingEnd="16dp"
+                                    android:paddingStart="18dp"
+                                    android:paddingEnd="18dp"
                                     android:text="⭐ SALVAR"
-                                    android:textColor="#FFFFFF"
-                                    android:textSize="12sp"
+                                    android:textColor="@color/tab_text_color_selector"
+                                    android:textSize="12.5sp"
                                     android:textStyle="bold" />
 
                                 <!-- BOTÃO EXPLORAR CATÁLOGO -->
                                 <TextView
                                     android:id="@+id/btnCinemaHeroCatalog"
                                     android:layout_width="wrap_content"
-                                    android:layout_height="38dp"
+                                    android:layout_height="40dp"
                                     android:layout_marginStart="10dp"
-                                    android:background="@drawable/pill_focus_bg"
+                                    android:background="@drawable/btn_hero_secondary_bg"
                                     android:clickable="true"
                                     android:focusable="true"
                                     android:focusableInTouchMode="true"
                                     android:gravity="center"
-                                    android:paddingStart="16dp"
-                                    android:paddingEnd="16dp"
+                                    android:paddingStart="18dp"
+                                    android:paddingEnd="18dp"
                                     android:text="🔍 CATÁLOGO"
-                                    android:textColor="#4FC3F7"
-                                    android:textSize="12sp"
+                                    android:textColor="@color/tab_text_color_selector"
+                                    android:textSize="12.5sp"
                                     android:textStyle="bold" />
 
                                 <!-- ESPAÇADOR FLEXÍVEL -->
@@ -401,12 +401,15 @@
                             android:gravity="center"
                             android:orientation="vertical">
 
-                            <!-- POSTER VERTICAL REAL (2:3) SEM CORTES -->
-                            <FrameLayout
+                            <!-- POSTER VERTICAL REAL (2:3) COM CANTOS ARREDONDADOS E SEM VAZAMENTO -->
+                            <androidx.cardview.widget.CardView
                                 android:id="@+id/cinemaHeroPosterCard"
                                 android:layout_width="135dp"
                                 android:layout_height="195dp"
-                                android:background="@drawable/card_focus_bg"
+                                app:cardCornerRadius="12dp"
+                                app:cardElevation="6dp"
+                                app:cardBackgroundColor="#0C101B"
+                                android:foreground="@drawable/card_focus_fg"
                                 android:clickable="true"
                                 android:focusable="true"
                                 android:focusableInTouchMode="true">
@@ -416,12 +419,7 @@
                                     android:layout_width="match_parent"
                                     android:layout_height="match_parent"
                                     android:scaleType="centerCrop" />
-
-                                <View
-                                    android:layout_width="match_parent"
-                                    android:layout_height="match_parent"
-                                    android:background="@drawable/card_focus_fg" />
-                            </FrameLayout>
+                            </androidx.cardview.widget.CardView>
 
                             <!-- SETAS DE NAVEGAÇÃO ANTERIOR / PRÓXIMO -->
                             <LinearLayout
@@ -433,30 +431,30 @@
 
                                 <TextView
                                     android:id="@+id/btnCinemaHeroPrev"
-                                    android:layout_width="38dp"
-                                    android:layout_height="32dp"
-                                    android:background="@drawable/pill_focus_bg"
+                                    android:layout_width="36dp"
+                                    android:layout_height="36dp"
+                                    android:background="@drawable/btn_hero_nav_bg"
                                     android:clickable="true"
                                     android:focusable="true"
                                     android:focusableInTouchMode="true"
                                     android:gravity="center"
                                     android:text="◀"
-                                    android:textColor="#FFFFFF"
+                                    android:textColor="@color/tab_text_color_selector"
                                     android:textSize="13sp"
                                     android:textStyle="bold" />
 
                                 <TextView
                                     android:id="@+id/btnCinemaHeroNext"
-                                    android:layout_width="38dp"
-                                    android:layout_height="32dp"
+                                    android:layout_width="36dp"
+                                    android:layout_height="36dp"
                                     android:layout_marginStart="10dp"
-                                    android:background="@drawable/pill_focus_bg"
+                                    android:background="@drawable/btn_hero_nav_bg"
                                     android:clickable="true"
                                     android:focusable="true"
                                     android:focusableInTouchMode="true"
                                     android:gravity="center"
                                     android:text="▶"
-                                    android:textColor="#FFFFFF"
+                                    android:textColor="@color/tab_text_color_selector"
                                     android:textSize="13sp"
                                     android:textStyle="bold" />
                             </LinearLayout>
