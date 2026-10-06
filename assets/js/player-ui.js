@@ -564,24 +564,35 @@
       }
     }
 
-    // 2. W3C Remote Playback API no elemento de vídeo nativo (Chrome Android / Desktop)
+    // 2. Apple AirPlay (Safari no iOS / Mac) - Safari não suporta o Google Cast SDK
+    if (typeof video.webkitShowPlaybackTargetPicker === 'function') {
+      try {
+        video.setAttribute('x-webkit-airplay', 'allow');
+        video.removeAttribute('disableRemotePlayback');
+        video.disableRemotePlayback = false;
+        video.webkitShowPlaybackTargetPicker();
+      } catch (err) {
+        console.warn('[Cast] AirPlay falhou:', err);
+        showToast('Não foi possível abrir o AirPlay', 3000);
+      }
+      return;
+    }
+
+    // 3. W3C Remote Playback API no elemento de vídeo nativo (Chrome Android / Desktop)
     if (video.remote && typeof video.remote.prompt === 'function') {
       video.remote.prompt().then(() => {
         showToast('Conectando ao dispositivo remoto...');
       }).catch(err => {
         console.log('[Cast] Remote playback prompt cancelado:', err);
+        if (err && err.name && err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+          showToast('Nenhum dispositivo de transmissão disponível', 3000);
+        }
       });
       return;
     }
 
-    // 3. Apple AirPlay (Safari no iOS / Mac)
-    if (typeof video.webkitShowPlaybackTargetPicker === 'function') {
-      video.webkitShowPlaybackTargetPicker();
-      return;
-    }
-
-    // 4. Mensagem amigável caso não esteja no Google Chrome/Edge com suporte a Cast
-    showToast('Para transmitir para a TV, abra o EPlay no Google Chrome ou Edge', 3500);
+    // 4. Mensagem amigável caso o navegador não suporte
+    showToast('Este navegador não suporta transmissão. No iPhone use AirPlay (Safari); no Android/PC use o Google Chrome.', 4500);
   }
 
   // Notificação de troca de mídia enquanto já está conectado ao Chromecast

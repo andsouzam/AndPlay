@@ -353,3 +353,16 @@ body.eplay-fullscreen-active #videoModal #subOptionsPanel {
   .eplay-audio-track-btn{min-width:56px!important;padding:0 6px!important;font-size:10px!important}
   .eplay-zoom-btn{min-width:48px!important;padding:0 5px!important;font-size:10px!important}
 }
+
+/* iOS Safari/mobile: 100vh inclui a barra do navegador e corta a base; usar dvh + safe-area */
+@media(max-width:920px){
+  #videoModal .modal-content,
+  #videoModal .player-body-wrapper,
+  #videoModal .player-main-area,
+  #videoModal .video-container{height:100vh;height:100dvh!important;max-height:100dvh!important}
+  #videoModal .eplay-player-ui{height:100%;bottom:0}
+  .eplay-player-bottom{padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px))!important}
+}
+@supports(height:100dvh){
+  @media(max-width:920px){#videoModal{height:100dvh}}
+}
