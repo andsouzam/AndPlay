@@ -394,22 +394,23 @@
     }
 
     const cleanPath = media.url.split('?')[0].split('#')[0].toLowerCase();
-    const extMatch = cleanPath.match(/\.([a-z0-9]{2,4})$/);
-    const ext = extMatch ? extMatch[1] : '';
-    const isHls = ext === 'm3u8';
+    const isHls = /\.m3u8(?:$|[?#])/i.test(media.url);
     const isLivePath = /\/live\//.test(cleanPath);
-    const typeByExt = {
-      m3u8: 'application/x-mpegURL',
-      ts: 'video/mp2t',
-      mp4: 'video/mp4',
-      m4v: 'video/mp4',
-      mkv: 'video/x-matroska',
-      webm: 'video/webm',
-      mov: 'video/mp4',
-      avi: 'video/x-msvideo'
-    };
-    const contentType = typeByExt[ext] || 'video/mp4';
+    // No Default Media Receiver do Chromecast, qualquer VOD deve ser anunciado como video/mp4
+    // (MIME types como video/x-matroska e video/mp2t não são suportados pelo receiver padrão do Google)
+    const contentType = isHls ? 'application/x-mpegURL' : 'video/mp4';
     const isLive = isHls || isLivePath || (media.mediaType && media.mediaType === 'live');
+
+    // Avisos proativos de compatibilidade
+    const isHybrid = typeof window.isHybridAudioActive === 'function' && window.isHybridAudioActive();
+    if (isHybrid) {
+      showToast('⚠️ Esta versão usa áudio híbrido no celular. Na TV pode tocar sem a dublagem; prefira a versão Dublado padrão.', 6000);
+    }
+    const is4k = /\b4k\b/i.test(media.title) || /\b4k\b/i.test(media.url);
+    if (is4k) {
+      showToast('📺 Transmitindo em 4K (HEVC). Requer Chromecast 4K / Google TV. Se ficar em espera, use a versão 1080p.', 6000);
+    }
+
     // O servidor IPTV responde 302 para um endereço http:// sem CORS, que o receptor do Chromecast
     // não consegue abrir. Resolvemos o destino final (https) e enviamos esse link já tratado.
     resolveCastUrl(media.url, isLive).then(finalUrl => {
@@ -553,6 +554,19 @@
           if (remotePlayer.isConnected && playBtn) {
             playBtn.textContent = remotePlayer.isPaused ? '▶' : '❚❚';
             playBtn.setAttribute('aria-label', remotePlayer.isPaused ? 'Reproduzir' : 'Pausar');
+          }
+        }
+      );
+
+      // Notifica caso o Chromecast reporte erro de decodificação ou formato incompatível
+      remotePlayerController.addEventListener(
+        cast.framework.RemotePlayerEventType.PLAYER_STATE_CHANGED,
+        () => {
+          if (remotePlayer.isConnected && remotePlayer.playerState === chrome.cast.media.PlayerState.IDLE) {
+            if (remotePlayer.idleReason === 'ERROR') {
+              console.warn('[Cast] Receptor encerrou por erro de decodificação/codec.');
+              showToast('O Chromecast não conseguiu reproduzir o formato deste arquivo. Tente a versão 1080p Dublado.', 6000);
+            }
           }
         }
       );
