@@ -410,6 +410,11 @@
     };
     const contentType = typeByExt[ext] || 'video/mp4';
     const isLive = isHls || isLivePath || (media.mediaType && media.mediaType === 'live');
+    // Proxy https com CORS (resolve o 302 http:// do servidor IPTV, que o receptor do Chromecast bloqueia)
+    const castProxy = (window.ANDPLAY_PUBLIC_CONFIG && window.ANDPLAY_PUBLIC_CONFIG.castProxy) || '';
+    if (castProxy && !isLive && /^https?:\/\//i.test(media.url) && media.url.indexOf(castProxy) !== 0) {
+      media.url = castProxy.replace(/\/+$/, '') + '/?u=' + encodeURIComponent(media.url);
+    }
     console.log('[Cast] Enviando', { url: media.url, contentType, isLive });
 
     try {
