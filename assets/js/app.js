@@ -15983,6 +15983,7 @@ function showHome(targetScroll = 0) {
           malId: sInfo.mal_id || sInfo.malId || currentSeriesGroup?.malId || currentSeriesGroup?.mal_id || '',
           mal_id: sInfo.mal_id || sInfo.malId || currentSeriesGroup?.mal_id || currentSeriesGroup?.malId || '',
           selectedVersion: activeVer,
+          allVersions: currentSeriesGroup?.versions || [],
           versionInfo: activeVer ? activeVer.versionInfo : null,
           fromContentPage: openedFromContentPage,
           streamId: ep.id,

@@ -15,6 +15,233 @@
     zoomMode: localStorage.getItem('andplay_player_zoom_mode') || 'fit',
     zoomScale: Number(localStorage.getItem('andplay_player_zoom_scale') || 1)
   };
+
+  const CAST_COMPAT_KEY = 'eplay_chromecast_compat_mode';
+  const castCodecProbeCache = new Map();
+
+  function isCastCompatEnabled() {
+    try { return localStorage.getItem(CAST_COMPAT_KEY) === '1'; } catch (_) { return false; }
+  }
+
+  function setCastCompatEnabled(enabled) {
+    try { localStorage.setItem(CAST_COMPAT_KEY, enabled ? '1' : '0'); } catch (_) {}
+    updateCastCompatMenu();
+  }
+
+  function getVersionResolution(version) {
+    const resolution = String(version?.versionInfo?.resolution || '').toLowerCase();
+    if (resolution === '4k' || resolution === '2160p') return 2160;
+    if (resolution === '1440p' || resolution === '2k' || resolution === 'qhd') return 1440;
+    if (resolution === '1080p' || resolution === 'fhd') return 1080;
+    if (resolution === '720p' || resolution === 'hd') return 720;
+    if (resolution === '480p' || resolution === 'sd') return 480;
+    const text = String(version?.versionInfo?.label || version?.item?.name || '').toLowerCase();
+    if (/4k|2160p|uhd/.test(text)) return 2160;
+    if (/1440p|2k|qhd/.test(text)) return 1440;
+    if (/1080p|fhd|full[ -]?hd/.test(text)) return 1080;
+    if (/720p|hd/.test(text)) return 720;
+    if (/480p|sd/.test(text)) return 480;
+    return 1080;
+  }
+
+  function codecMarkersFromBytes(bytes) {
+    const markers = new Set();
+    if (!bytes || !bytes.length) return markers;
+    const needles = [
+      ['avc1', 'h264'], ['avc3', 'h264'],
+      ['hvc1', 'hevc'], ['hev1', 'hevc'],
+      ['vp09', 'vp9'], ['av01', 'av1'],
+      ['mp4a', 'aac'], ['ac-3', 'ac3'], ['ec-3', 'eac3']
+    ];
+    for (let i = 0; i <= bytes.length - 4; i++) {
+      const code = String.fromCharCode(bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]);
+      for (const [needle, value] of needles) {
+        if (code === needle) markers.add(value);
+      }
+    }
+    return markers;
+  }
+
+  function mergeCodecMarkers(a, b) {
+    return new Set([...(a || []), ...(b || [])]);
+  }
+
+  async function fetchRangeBytes(url, range, maxBytes = 8 * 1024 * 1024 + 1024) {
+    try {
+      const resp = await fetch(url, {
+        headers: { Range: range },
+        cache: 'no-store',
+        credentials: 'omit'
+      });
+      if (!resp.ok) return null;
+
+      const contentRange = resp.headers.get('content-range') || '';
+      const contentLength = Number(resp.headers.get('content-length') || 0);
+      if (resp.status === 200 && !contentRange && (!contentLength || contentLength > maxBytes)) return null;
+
+      const buffer = await resp.arrayBuffer();
+      if (buffer.byteLength > maxBytes) return null;
+      return new Uint8Array(buffer);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function probeMp4Codecs(url) {
+    if (!url || !/^https?:\/\//i.test(url)) return null;
+    if (castCodecProbeCache.has(url)) return castCodecProbeCache.get(url);
+
+    const promise = (async () => {
+      let markers = codecMarkersFromBytes(
+        await fetchRangeBytes(url, 'bytes=0-1048575') || new Uint8Array()
+      );
+
+      if (!markers.has('h264') && !markers.has('hevc') && !markers.has('vp9') && !markers.has('av1')) {
+        markers = mergeCodecMarkers(
+          markers,
+          codecMarkersFromBytes(
+            await fetchRangeBytes(url, 'bytes=-8388608') || new Uint8Array()
+          )
+        );
+      }
+
+      const video = markers.has('h264') ? 'h264'
+        : markers.has('hevc') ? 'hevc'
+        : markers.has('av1') ? 'av1'
+        : markers.has('vp9') ? 'vp9'
+        : null;
+      const audio = markers.has('aac') ? 'aac'
+        : markers.has('eac3') ? 'eac3'
+        : markers.has('ac3') ? 'ac3'
+        : null;
+
+      return {
+        video,
+        audio,
+        supported: video === 'h264' && audio === 'aac',
+        known: !!(video || audio)
+      };
+    })();
+
+    castCodecProbeCache.set(url, promise);
+    try {
+      return await promise;
+    } catch (_) {
+      castCodecProbeCache.delete(url);
+      return null;
+    }
+  }
+
+  function getCastCompatibilityVersions(media) {
+    const meta = media?.mediaMeta || currentPlaybackMeta?.mediaMeta || {};
+    const versions = Array.isArray(meta.allVersions) ? meta.allVersions : [];
+    const selected = meta.selectedVersion || null;
+    if (media?.mediaType === 'live' || !versions.length) return [];
+
+    const preferredType = selected?.versionInfo?.type || '';
+    return versions
+      .filter(v => v && !v.isHybrid)
+      .filter(v => v !== selected)
+      .filter(v => getVersionResolution(v) <= 1080)
+      .sort((a, b) => {
+        const aSame = preferredType && a.versionInfo?.type === preferredType ? 0 : 1;
+        const bSame = preferredType && b.versionInfo?.type === preferredType ? 0 : 1;
+        if (aSame !== bSame) return aSame - bSame;
+        return getVersionResolution(b) - getVersionResolution(a);
+      });
+  }
+
+  async function buildCastCompatibilityCandidate(media, version) {
+    const cfg = window.ANDPLAY_PUBLIC_CONFIG || {};
+    if (!cfg.server || !cfg.user || !cfg.pass || !version) return null;
+
+    let url = version.url || '';
+    let episode = null;
+
+    if (media.mediaType === 'series') {
+      const seriesId = version.seriesId || version.item?.series_id;
+      const episodeNum = media.mediaMeta?.episodeNum || media.mediaMeta?.episode_num;
+      if (!seriesId || episodeNum == null) return null;
+
+      try {
+        const apiUrl = String(cfg.server).replace(/\/+$/, '')
+          + '/player_api.php?username=' + encodeURIComponent(cfg.user)
+          + '&password=' + encodeURIComponent(cfg.pass)
+          + '&action=get_series_info&series_id=' + encodeURIComponent(seriesId);
+        const resp = await fetch(apiUrl, { cache: 'no-store', credentials: 'omit' });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        const seasonKey = String(media.mediaMeta?.seasonNum || media.mediaMeta?.season || 1);
+        const episodes = Array.isArray(data?.episodes?.[seasonKey]) ? data.episodes[seasonKey] : [];
+        episode = episodes.find(ep => Number(ep.episode_num) === Number(episodeNum));
+        if (!episode?.id) return null;
+        const ext = episode.container_extension || 'mp4';
+        url = String(cfg.server).replace(/\/+$/, '') + '/series/'
+          + encodeURIComponent(cfg.user) + '/' + encodeURIComponent(cfg.pass) + '/'
+          + encodeURIComponent(episode.id) + '.' + ext;
+      } catch (_) {
+        return null;
+      }
+    } else {
+      const ext = version.ext || version.item?.container_extension || 'ts';
+      const streamId = version.streamId || version.item?.stream_id;
+      if (!streamId) return null;
+      url = url || (String(cfg.server).replace(/\/+$/, '') + '/movie/'
+        + encodeURIComponent(cfg.user) + '/' + encodeURIComponent(cfg.pass) + '/'
+        + encodeURIComponent(streamId) + '.' + ext);
+    }
+
+    if (!url || !/^https?:\/\//i.test(url) || !/\.mp4(?:$|[?#])/i.test(url)) return null;
+
+    const resolvedUrl = await resolveCastUrl(url, false);
+    const codecs = await probeMp4Codecs(resolvedUrl);
+    if (!codecs?.supported) return null;
+
+    return {
+      ...media,
+      url: resolvedUrl,
+      subtitle: (media.subtitle ? media.subtitle + ' • ' : '') + 'Chromecast: H.264 + AAC',
+      compatVersion: version,
+      compatEpisode: episode,
+      compat: true
+    };
+  }
+
+  async function applyCastCompatMedia(media) {
+    if (!isCastCompatEnabled() || !media || media.mediaType === 'live') return media;
+
+    if (media.url && /\.mp4(?:$|[?#])/i.test(media.url)) {
+      const resolvedOriginal = await resolveCastUrl(media.url, false);
+      const originalCodecs = await probeMp4Codecs(resolvedOriginal);
+      if (originalCodecs?.supported) {
+        return { ...media, url: resolvedOriginal };
+      }
+    }
+
+    const candidates = getCastCompatibilityVersions(media);
+    for (const candidate of candidates) {
+      const compat = await buildCastCompatibilityCandidate(media, candidate);
+      if (compat) {
+        showToast('Modo compatibilidade: H.264 + AAC', 3000);
+        return compat;
+      }
+    }
+
+    showToast('Não encontrei uma versão H.264 + AAC neste título. O Chromecast pode ser incompatível.', 6000);
+    return media;
+  }
+
+  function updateCastCompatMenu() {
+    const btn = $('eplayCastCompatMenu');
+    if (!btn) return;
+    const active = isCastCompatEnabled();
+    btn.textContent = active
+      ? 'Compatibilidade Chromecast: ATIVADA'
+      : 'Compatibilidade Chromecast: desativada';
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    btn.classList.toggle('active', active);
+  }
+
   function fmt(sec) {
     if (!Number.isFinite(sec) || sec < 0) return '00:00';
     sec = Math.floor(sec);
@@ -385,11 +612,20 @@
     return { url, title, subtitle, poster, currentTime, mediaType: media?.mediaType };
   }
 
-  function castMedia(session) {
+  async function castMedia(session) {
     if (!session || typeof chrome === 'undefined' || !chrome.cast || !chrome.cast.media) return;
-    const media = getMediaForCast();
+    let media = getMediaForCast();
     if (!media.url) {
       showToast('Nenhum vídeo carregado para transmitir', 2500);
+      return;
+    }
+
+    if (isCastCompatEnabled() && media.mediaType !== 'live') {
+      media = await applyCastCompatMedia(media);
+    }
+
+    if (!media.url) {
+      showToast('Não foi possível preparar o vídeo para o Chromecast', 3500);
       return;
     }
 
@@ -696,7 +932,7 @@
       '<div class="eplay-speed-list"><button data-speed="0.75">0.75x</button><button data-speed="1">1x</button><button data-speed="1.25">1.25x</button><button data-speed="1.5">1.5x</button><button data-speed="1.75">1.75x</button><button data-speed="2">2x</button></div>',
       '<label class="eplay-auto-skip-row" id="eplayAutoSkipRow"><input type="checkbox" id="eplayAutoSkipToggle"><span><b>Pular abertura automaticamente</b><small>Somente quando houver marcador comunitário válido</small></span></label>',
       '<button id="eplaySkipIntroNow" style="display:none">⏭ Pular abertura agora</button>',
-      '<button id="eplaySubMenu">💬 Legendas e sincronização</button><button id="eplayInfoMenu">ⓘ Ficha técnica</button><button id="eplayDownloadMenu">⇩ Baixar vídeo</button><button id="eplayPipMenu">▣ Picture-in-Picture</button><button id="eplayCastMenu">📺 Enviar para Chromecast</button><button id="eplayLiveSyncMenu" style="display:none">⚡ Sincronizar ao vivo</button><button id="eplayLatencyMenu" style="display:none">⚡ Alternar buffer</button><button id="eplayFsMenu">⛶ Tela cheia</button></div>',
+      '<button id="eplaySubMenu">💬 Legendas e sincronização</button><button id="eplayInfoMenu">ⓘ Ficha técnica</button><button id="eplayDownloadMenu">⇩ Baixar vídeo</button><button id="eplayPipMenu">▣ Picture-in-Picture</button><button id="eplayCastMenu">📺 Enviar para Chromecast</button><button id="eplayCastCompatMenu" aria-pressed="false">Compatibilidade Chromecast: desativada</button><button id="eplayLiveSyncMenu" style="display:none">⚡ Sincronizar ao vivo</button><button id="eplayLatencyMenu" style="display:none">⚡ Alternar buffer</button><button id="eplayFsMenu">⛶ Tela cheia</button></div>',
       '<div class="eplay-toast" id="eplayPlayerToast"></div>',
       '<div class="eplay-resume" id="eplayResume"><span id="eplayResumeText">Continuar reprodução?</span><button class="continue" id="eplayResumeContinue">Continuar</button><button class="restart" id="eplayResumeRestart">Do início</button></div>',
       '</div>'
@@ -754,6 +990,22 @@
   $on('eplayVolumeBtn','click',toggleMute); $on('eplayVolume','input',e=>setVolume(Number(e.target.value)/100));
   $on('eplaySubtitle','click',openSubtitles); $on('eplayInfo','click',openInfo); $on('eplayPip','click',pip);
   $on('eplayCastBtn','click',handleCastButtonClick); $on('eplayCastMenu','click',handleCastButtonClick);
+  $on('eplayCastCompatMenu','click',async()=>{
+    const enabled = !isCastCompatEnabled();
+    setCastCompatEnabled(enabled);
+    closeMenu();
+    showToast(enabled
+      ? 'Modo compatibilidade ativado: será usado H.264 + AAC quando disponível.'
+      : 'Modo compatibilidade desativado.',
+      3500);
+    if (enabled && window.cast && cast.framework) {
+      try {
+        const session = cast.framework.CastContext.getInstance().getCurrentSession();
+        if (session) await castMedia(session);
+      } catch (_) {}
+    }
+  });
+  updateCastCompatMenu();
   $on('eplaySettings','click',toggleMenu); $on('eplayDownloadMenu','click',downloadVideo); $on('eplayInfoMenu','click',openInfo); $on('eplaySubMenu','click',openSubtitles); $on('eplayPipMenu','click',pip); $on('eplayFsMenu','click',fullscreen); $on('eplayFullscreen','click',fullscreen);
   $on('eplayAudioSyncMenu','click',()=>{
     closeMenu();
