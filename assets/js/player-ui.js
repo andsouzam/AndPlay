@@ -382,7 +382,7 @@
     const subtitle = $('eplayPlayerMeta')?.textContent || '';
     const poster = media?.poster || $('sidebarPoster')?.src || '';
     const currentTime = video?.currentTime || 0;
-    return { url, title, subtitle, poster, currentTime };
+    return { url, title, subtitle, poster, currentTime, mediaType: media?.mediaType };
   }
 
   function castMedia(session) {
@@ -393,12 +393,28 @@
       return;
     }
 
-    const isHls = /\.m3u8(?:$|[?#])/i.test(media.url);
-    const contentType = isHls ? 'application/x-mpegURL' : 'video/mp4';
+    const cleanPath = media.url.split('?')[0].split('#')[0].toLowerCase();
+    const extMatch = cleanPath.match(/\.([a-z0-9]{2,4})$/);
+    const ext = extMatch ? extMatch[1] : '';
+    const isHls = ext === 'm3u8';
+    const isLivePath = /\/live\//.test(cleanPath);
+    const typeByExt = {
+      m3u8: 'application/x-mpegURL',
+      ts: 'video/mp2t',
+      mp4: 'video/mp4',
+      m4v: 'video/mp4',
+      mkv: 'video/x-matroska',
+      webm: 'video/webm',
+      mov: 'video/mp4',
+      avi: 'video/x-msvideo'
+    };
+    const contentType = typeByExt[ext] || 'video/mp4';
+    const isLive = isHls || isLivePath || (media.mediaType && media.mediaType === 'live');
+    console.log('[Cast] Enviando', { url: media.url, contentType, isLive });
 
     try {
       const mediaInfo = new chrome.cast.media.MediaInfo(media.url, contentType);
-      mediaInfo.streamType = isHls ? chrome.cast.media.StreamType.LIVE : chrome.cast.media.StreamType.BUFFERED;
+      mediaInfo.streamType = isLive ? chrome.cast.media.StreamType.LIVE : chrome.cast.media.StreamType.BUFFERED;
 
       const metadata = new chrome.cast.media.GenericMediaMetadata();
       metadata.title = media.title;
