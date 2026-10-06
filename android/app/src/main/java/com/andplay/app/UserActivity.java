@@ -31,10 +31,22 @@ import com.google.android.gms.tasks.Task;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.common.BitMatrix;
 import com.google.zxing.qrcode.QRCodeWriter;
+import android.os.Handler;
+import android.os.Looper;
+import android.widget.ProgressBar;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.WebSocket;
+import okhttp3.WebSocketListener;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 public class UserActivity extends Activity {
 
@@ -44,6 +56,11 @@ public class UserActivity extends Activity {
     private static final String GOOGLE_WEB_CLIENT_ID = "949615938522-judfcp611kbuvvat8jkl95lhog9docom.apps.googleusercontent.com";
 
     private GoogleSignInClient googleSignInClient;
+
+    private WebSocket tvPairingWebSocket;
+    private final Handler pairingHandler = new Handler(Looper.getMainLooper());
+    private Runnable heartbeatRunnable;
+    private AlertDialog tvPairingDialog;
 
     private TextView userAvatarDisplay;
     private TextView userProfileName;
@@ -455,54 +472,179 @@ public class UserActivity extends Activity {
                 return;
             }
             Log.e("UserActivity", "Erro no Google Sign-In: " + code, e);
-            Toast.makeText(this, "Serviços Google retornaram código " + code + ". Tentando navegador...", Toast.LENGTH_SHORT).show();
-            fallbackGoogleOAuthBrowser();
+            Toast.makeText(this, "Serviços Google indisponíveis na TV (código " + code + "). Conecte pelo celular!", Toast.LENGTH_LONG).show();
+            showQrCodeLoginDialog();
         }
     }
 
     private void showQrCodeLoginDialog() {
+        // Gera código de pareamento de 4 dígitos (ex: 4819)
+        String pairCode = String.format(Locale.US, "%04d", 1000 + new Random().nextInt(9000));
+        String pairUrl = "https://andsouzam.github.io/AndPlay/tv-login.html?code=" + pairCode;
+
         AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
-        builder.setTitle("📱 Conectar pelo Celular (QR Code)");
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_qr_login, null);
+        builder.setView(dialogView);
 
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(40, 20, 40, 20);
-        layout.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
+        ImageView ivQr = dialogView.findViewById(R.id.dialogQrImage);
+        TextView tvCode = dialogView.findViewById(R.id.dialogQrCodeText);
+        TextView tvUrl = dialogView.findViewById(R.id.dialogQrUrlText);
+        TextView tvStatus = dialogView.findViewById(R.id.dialogQrStatusText);
+        ProgressBar pbProgress = dialogView.findViewById(R.id.dialogQrProgress);
+        View btnClose = dialogView.findViewById(R.id.dialogQrBtnClose);
 
-        TextView tvDesc = new TextView(this);
-        tvDesc.setText("Aponte a câmera do seu celular para o QR Code abaixo para acessar sua conta EPlay:");
-        tvDesc.setTextColor(Color.parseColor("#E2E8F0"));
-        tvDesc.setTextSize(14f);
-        tvDesc.setPadding(0, 0, 0, 16);
-        tvDesc.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-        layout.addView(tvDesc);
+        tvCode.setText(pairCode);
+        tvUrl.setText("andsouzam.github.io/AndPlay/tv-login.html?code=" + pairCode);
 
-        ImageView ivQr = new ImageView(this);
-        int qrSizePx = (int) (220 * getResources().getDisplayMetrics().density);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(qrSizePx, qrSizePx);
-        lp.gravity = android.view.Gravity.CENTER_HORIZONTAL;
-        ivQr.setLayoutParams(lp);
-
-        String webUrl = "https://andsouzam.github.io/AndPlay/";
-        Bitmap qrBitmap = generateQrCodeBitmap(webUrl, 512, 512);
-        if (qrBitmap != null) {
-            ivQr.setImageBitmap(qrBitmap);
-            ivQr.setBackgroundColor(Color.WHITE);
-            int pad = (int) (8 * getResources().getDisplayMetrics().density);
-            ivQr.setPadding(pad, pad, pad, pad);
+        Bitmap qrBmp = generateQrCodeBitmap(pairUrl, 512, 512);
+        if (qrBmp != null) {
+            ivQr.setImageBitmap(qrBmp);
         }
-        layout.addView(ivQr);
 
-        TextView tvUrl = new TextView(this);
-        tvUrl.setText("\nOu acesse no navegador do celular:\n" + webUrl);
-        tvUrl.setTextColor(Color.parseColor("#38BDF8"));
-        tvUrl.setTextSize(13f);
-        tvUrl.setGravity(android.view.Gravity.CENTER_HORIZONTAL);
-        layout.addView(tvUrl);
+        tvPairingDialog = builder.create();
+        if (tvPairingDialog.getWindow() != null) {
+            tvPairingDialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        }
 
-        builder.setView(layout);
-        builder.setPositiveButton("Fechar", null);
-        builder.show();
+        btnClose.setOnClickListener(v -> tvPairingDialog.dismiss());
+        btnClose.setOnFocusChangeListener((v, hasFocus) -> {
+            v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(120).start();
+        });
+
+        tvPairingDialog.setOnDismissListener(d -> {
+            pairingHandler.removeCallbacksAndMessages(null);
+            if (tvPairingWebSocket != null) {
+                try {
+                    tvPairingWebSocket.close(1000, "Dialog closed");
+                } catch (Exception ignored) {}
+                tvPairingWebSocket = null;
+            }
+        });
+
+        // Inicia conexão WebSocket com Supabase Realtime
+        startPairingListener(pairCode, tvStatus, pbProgress);
+
+        tvPairingDialog.show();
+        btnClose.requestFocus();
+    }
+
+    private void startPairingListener(String pairCode, TextView tvStatus, ProgressBar pbProgress) {
+        if (tvPairingWebSocket != null) {
+            try {
+                tvPairingWebSocket.close(1000, "New session");
+            } catch (Exception ignored) {}
+            tvPairingWebSocket = null;
+        }
+
+        OkHttpClient client = new OkHttpClient.Builder()
+                .readTimeout(0, TimeUnit.MILLISECONDS)
+                .build();
+
+        Request request = new Request.Builder()
+                .url("wss://zfawwhqogtynuygniskz.supabase.co/realtime/v1/websocket?apikey=sb_publishable_naUBrBzRCU_SQbSiNtpQQQ_7Q8h1VoJ&vsn=1.0.0")
+                .build();
+
+        tvPairingWebSocket = client.newWebSocket(request, new WebSocketListener() {
+            @Override
+            public void onOpen(WebSocket webSocket, Response response) {
+                // Entra no canal tv_pair_<pairCode>
+                JsonObject joinPayload = new JsonObject();
+                JsonObject config = new JsonObject();
+                JsonObject broadcast = new JsonObject();
+                broadcast.addProperty("self", false);
+                config.add("broadcast", broadcast);
+                joinPayload.add("config", config);
+
+                JsonObject joinMsg = new JsonObject();
+                joinMsg.addProperty("topic", "realtime:tv_pair_" + pairCode);
+                joinMsg.addProperty("event", "phx_join");
+                joinMsg.add("payload", joinPayload);
+                joinMsg.addProperty("ref", "join_1");
+
+                webSocket.send(joinMsg.toString());
+
+                // Inicia batimento cardíaco (heartbeat) a cada 25 segundos
+                heartbeatRunnable = new Runnable() {
+                    @Override
+                    public void run() {
+                        if (tvPairingWebSocket != null) {
+                            JsonObject hb = new JsonObject();
+                            hb.addProperty("topic", "phoenix");
+                            hb.addProperty("event", "heartbeat");
+                            hb.add("payload", new JsonObject());
+                            hb.addProperty("ref", "hb_" + System.currentTimeMillis());
+                            tvPairingWebSocket.send(hb.toString());
+                            pairingHandler.postDelayed(this, 25000);
+                        }
+                    }
+                };
+                pairingHandler.postDelayed(heartbeatRunnable, 25000);
+            }
+
+            @Override
+            public void onMessage(WebSocket webSocket, String text) {
+                try {
+                    JsonObject msg = JsonParser.parseString(text).getAsJsonObject();
+                    String event = msg.has("event") ? msg.get("event").getAsString() : "";
+                    if ("broadcast".equals(event) && msg.has("payload")) {
+                        JsonObject pl = msg.getAsJsonObject("payload");
+                        if (pl.has("payload")) {
+                            JsonObject data = pl.getAsJsonObject("payload");
+                            String accessToken = data.has("accessToken") ? data.get("accessToken").getAsString()
+                                    : (data.has("access_token") ? data.get("access_token").getAsString() : null);
+                            String refreshToken = data.has("refreshToken") ? data.get("refreshToken").getAsString()
+                                    : (data.has("refresh_token") ? data.get("refresh_token").getAsString() : null);
+                            String displayName = data.has("displayName") ? data.get("displayName").getAsString()
+                                    : (data.has("display_name") ? data.get("display_name").getAsString() : "Usuário");
+
+                            if (accessToken != null && !accessToken.isEmpty()) {
+                                runOnUiThread(() -> {
+                                    if (tvStatus != null) {
+                                        tvStatus.setText("✅ Celular conectado! Finalizando login...");
+                                        tvStatus.setTextColor(Color.parseColor("#4ADE80"));
+                                    }
+                                    if (pbProgress != null) {
+                                        pbProgress.setVisibility(View.GONE);
+                                    }
+                                    AccountManager.getInstance(UserActivity.this).saveSessionFromTokens(
+                                            accessToken, refreshToken, new AccountManager.AuthCallback() {
+                                                @Override
+                                                public void onSuccess(String uEmail, String uName) {
+                                                    Toast.makeText(UserActivity.this, "🎉 TV conectada com sucesso como " + uName + "!", Toast.LENGTH_LONG).show();
+                                                    modeChanged = true;
+                                                    updateUi();
+                                                    pairingHandler.postDelayed(() -> {
+                                                        if (tvPairingDialog != null && tvPairingDialog.isShowing()) {
+                                                            tvPairingDialog.dismiss();
+                                                        }
+                                                        if (!AccountManager.getInstance(UserActivity.this).hasChosenInitialMode()) {
+                                                            openModeSelectionModal();
+                                                        }
+                                                    }, 1200);
+                                                }
+
+                                                @Override
+                                                public void onError(String message) {
+                                                    if (tvStatus != null) {
+                                                        tvStatus.setText("❌ Erro ao autenticar: " + message);
+                                                        tvStatus.setTextColor(Color.parseColor("#EF4444"));
+                                                    }
+                                                }
+                                            });
+                                });
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    Log.e("UserActivity", "Erro no processamento da mensagem de pareamento", e);
+                }
+            }
+
+            @Override
+            public void onFailure(WebSocket webSocket, Throwable t, Response response) {
+                Log.w("UserActivity", "WebSocket pareamento falhou: " + t.getMessage());
+            }
+        });
     }
 
     private Bitmap generateQrCodeBitmap(String content, int width, int height) {

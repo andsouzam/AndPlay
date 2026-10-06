@@ -24,6 +24,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -136,6 +137,8 @@ public class MainActivity extends Activity {
     // Central Views
     private FrameLayout centralLayout;
     private NestedScrollView centralScroll;
+    private View headerLayout;
+    private View headerDivider;
     private TextView headerClock;
     private TextView headerDate;
     private View btnHeaderOptions;
@@ -473,6 +476,8 @@ public class MainActivity extends Activity {
         // Central
         centralLayout = findViewById(R.id.centralLayout);
         centralScroll = findViewById(R.id.centralScroll);
+        headerLayout = findViewById(R.id.headerLayout);
+        headerDivider = findViewById(R.id.headerDivider);
         headerClock = findViewById(R.id.headerClock);
         headerDate = findViewById(R.id.headerDate);
         btnHeaderOptions = findViewById(R.id.btnHeaderOptions);
@@ -4104,6 +4109,16 @@ public class MainActivity extends Activity {
 
     private void applyViewMode(String mode, boolean requestFocus) {
         boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(mode);
+
+        if (headerLayout != null) headerLayout.setVisibility(isCinema ? View.GONE : View.VISIBLE);
+        if (headerDivider != null) headerDivider.setVisibility(isCinema ? View.GONE : View.VISIBLE);
+        if (centralScroll != null) {
+            ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) centralScroll.getLayoutParams();
+            if (lp != null) {
+                lp.topMargin = isCinema ? 0 : (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 42, getResources().getDisplayMetrics());
+                centralScroll.setLayoutParams(lp);
+            }
+        }
 
         if (isCinema) {
             if (tvTopSection != null) tvTopSection.setVisibility(View.GONE);

@@ -181,7 +181,7 @@
                             android:gravity="center"
                             android:paddingStart="14dp"
                             android:paddingEnd="14dp"
-                            android:text="📱 QR Code"
+                            android:text="📱 Conectar pelo Celular"
                             android:textColor="#FFFFFF"
                             android:textSize="13sp"
                             android:textStyle="bold" />

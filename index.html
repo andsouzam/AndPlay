@@ -21,6 +21,16 @@
   <!-- HLS.js para reprodução fluida de canais .m3u8 -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.15/dist/hls.min.js"></script>
 
+  <!-- Redirecionamento automático de pareamento da TV -->
+  <script>
+    (function() {
+      var p = new URLSearchParams(window.location.search);
+      if (p.has('code') || p.has('pair')) {
+        window.location.replace('tv-login.html' + window.location.search);
+      }
+    })();
+  </script>
+
   <!-- Escudo Zero Anúncios (Ad-Shield) -->
   <script src="./assets/js/security.js?v=20261004-01"></script>
 

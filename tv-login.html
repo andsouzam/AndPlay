@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>EPlay - Conectar TV pelo Celular</title>
+  <link rel="icon" type="image/png" href="./assets/apple-touch-icon.png">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background-color: #070709;
+      color: #F8FAFC;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px 16px;
+    }
+    .container {
+      width: 100%;
+      max-width: 420px;
+      background: #0F172A;
+      border: 1px solid #1E293B;
+      border-radius: 20px;
+      padding: 28px 24px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+      text-align: center;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .brand img {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+    }
+    .brand h1 {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: #FFFFFF;
+    }
+    .tv-code-box {
+      background: #1E293B;
+      border: 2px dashed #38BDF8;
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 24px;
+    }
+    .tv-code-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94A3B8;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .tv-code-value {
+      font-size: 32px;
+      font-weight: 900;
+      color: #F59E0B;
+      letter-spacing: 4px;
+      margin-top: 2px;
+    }
+    .code-input-wrap {
+      margin-top: 8px;
+    }
+    .code-input {
+      width: 160px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 4px;
+      padding: 8px;
+      background: #0F172A;
+      border: 1px solid #38BDF8;
+      border-radius: 8px;
+      color: #F59E0B;
+      outline: none;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #94A3B8;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .btn {
+      width: 100%;
+      height: 48px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+      border: none;
+      outline: none;
+    }
+    .btn-google {
+      background: #FFFFFF;
+      color: #1E293B;
+      margin-bottom: 16px;
+    }
+    .btn-google:active {
+      transform: scale(0.98);
+      background: #F1F5F9;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #38BDF8, #0284C7);
+      color: #FFFFFF;
+    }
+    .btn-primary:active {
+      transform: scale(0.98);
+      opacity: 0.9;
+    }
+    .btn-secondary {
+      background: #1E293B;
+      color: #CBD5E1;
+      margin-top: 10px;
+    }
+    .divider {
+      display: flex;
+      align-items: center;
+      text-align: center;
+      color: #64748B;
+      font-size: 12px;
+      margin: 18px 0;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1px solid #1E293B;
+    }
+    .divider span {
+      padding: 0 10px;
+    }
+    .form-group {
+      text-align: left;
+      margin-bottom: 14px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      color: #94A3B8;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .form-input {
+      width: 100%;
+      height: 44px;
+      background: #1E293B;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      color: #FFFFFF;
+      font-size: 14px;
+      padding: 0 14px;
+      outline: none;
+    }
+    .form-input:focus {
+      border-color: #38BDF8;
+    }
+    .status-msg {
+      font-size: 13px;
+      min-height: 20px;
+      margin: 12px 0;
+      font-weight: 600;
+    }
+    .status-msg.error {
+      color: #EF4444;
+    }
+    .status-msg.success {
+      color: #4ADE80;
+    }
+    .status-msg.info {
+      color: #38BDF8;
+    }
+    .profile-card {
+      background: #1E293B;
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      text-align: left;
+      margin-bottom: 20px;
+    }
+    .profile-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: #38BDF8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: bold;
+      color: #0F172A;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .profile-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .profile-info {
+      flex: 1;
+      overflow: hidden;
+    }
+    .profile-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: #FFFFFF;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .profile-email {
+      font-size: 12px;
+      color: #94A3B8;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .success-screen {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    .success-icon {
+      font-size: 64px;
+      margin-bottom: 12px;
+    }
+    .success-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: #4ADE80;
+      margin-bottom: 8px;
+    }
+    .success-desc {
+      font-size: 14px;
+      color: #CBD5E1;
+      line-height: 1.5;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="container">
+    <div class="brand">
+      <img src="./assets/apple-touch-icon.png" alt="EPlay">
+      <h1>EPlay TV</h1>
+    </div>
+
+    <!-- TELA DE SUCESSO -->
+    <div id="successScreen" class="success-screen">
+      <div class="success-icon">🎉</div>
+      <h2 class="success-title">TV Conectada!</h2>
+      <p class="success-desc">Sua conta foi vinculada com sucesso à sua TV.<br>O aplicativo na TV já está pronto para uso!</p>
+      <button class="btn btn-secondary" onclick="window.close()" style="margin-top: 24px;">Fechar esta página</button>
+    </div>
+
+    <!-- TELA PRINCIPAL -->
+    <div id="mainScreen">
+      <div class="tv-code-box">
+        <div class="tv-code-label">Código de Pareamento da TV</div>
+        <div id="codeDisplay" class="tv-code-value">----</div>
+        <div id="codeInputWrap" class="code-input-wrap" style="display: none;">
+          <input type="text" id="manualCodeInput" class="code-input" maxlength="6" placeholder="0000">
+        </div>
+      </div>
+
+      <!-- SE JÁ ESTIVER LOGADO NO CELULAR -->
+      <div id="loggedInSection" style="display: none;">
+        <p class="subtitle">Confirme a conexão para vincular sua conta à TV:</p>
+        <div class="profile-card">
+          <div id="profileAvatar" class="profile-avatar">👤</div>
+          <div class="profile-info">
+            <div id="profileName" class="profile-name">Nome do Usuário</div>
+            <div id="profileEmail" class="profile-email">usuario@email.com</div>
+          </div>
+        </div>
+        <button id="btnConfirmPairing" class="btn btn-primary">
+          📺 Conectar esta TV Agora
+        </button>
+        <button id="btnLogout" class="btn btn-secondary">
+          Entrar com outra conta
+        </button>
+      </div>
+
+      <!-- SE NÃO ESTIVER LOGADO -->
+      <div id="loggedOutSection" style="display: none;">
+        <p class="subtitle">Faça login para conectar esta TV instantaneamente:</p>
+
+        <button id="btnGoogleLogin" class="btn btn-google">
+          <svg width="20" height="20" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          Continuar com Google
+        </button>
+
+        <div class="divider">
+          <span>ou entre com e-mail</span>
+        </div>
+
+        <form id="emailLoginForm" onsubmit="return false;">
+          <div class="form-group">
+            <label for="inputEmail">E-mail</label>
+            <input type="email" id="inputEmail" class="form-input" placeholder="seu@email.com" required>
+          </div>
+          <div class="form-group">
+            <label for="inputPassword">Senha</label>
+            <input type="password" id="inputPassword" class="form-input" placeholder="Sua senha" required>
+          </div>
+          <button id="btnEmailLogin" class="btn btn-primary" type="button">
+            Entrar e Conectar TV
+          </button>
+        </form>
+      </div>
+
+      <div id="statusMsg" class="status-msg"></div>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://zfawwhqogtynuygniskz.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_naUBrBzRCU_SQbSiNtpQQQ_7Q8h1VoJ';
+
+    let supabase = null;
+    let currentPairCode = '';
+
+    function init() {
+      // 1. Inicializa Supabase
+      if (window.supabase) {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      }
+
+      // 2. Extrai o código da URL ou hash
+      const params = new URLSearchParams(window.location.search);
+      let code = params.get('code') || params.get('pair') || '';
+      if (!code && window.location.hash) {
+        const hashParams = new URLSearchParams(window.location.hash.replace('#', '?'));
+        code = hashParams.get('code') || hashParams.get('pair') || '';
+      }
+      if (!code && sessionStorage.getItem('eplay_pair_code')) {
+        code = sessionStorage.getItem('eplay_pair_code');
+      }
+
+      const codeDisplay = document.getElementById('codeDisplay');
+      const codeInputWrap = document.getElementById('codeInputWrap');
+      const manualCodeInput = document.getElementById('manualCodeInput');
+
+      if (code) {
+        currentPairCode = code.trim().toUpperCase();
+        sessionStorage.setItem('eplay_pair_code', currentPairCode);
+        codeDisplay.textContent = currentPairCode;
+      } else {
+        codeDisplay.style.display = 'none';
+        codeInputWrap.style.display = 'block';
+        manualCodeInput.addEventListener('input', (e) => {
+          currentPairCode = e.target.value.trim().toUpperCase();
+        });
+      }
+
+      // 3. Verifica sessão atual
+      checkAuth();
+    }
+
+    async function checkAuth() {
+      if (!supabase) return;
+
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data && data.session) {
+          showLoggedIn(data.session);
+          // Se já veio com código da URL após redirecionamento do Google, conecta automaticamente!
+          if (currentPairCode && sessionStorage.getItem('eplay_auto_pair') === 'true') {
+            sessionStorage.removeItem('eplay_auto_pair');
+            pairWithTv(data.session);
+          }
+        } else {
+          showLoggedOut();
+        }
+      } catch (e) {
+        showLoggedOut();
+      }
+    }
+
+    function showLoggedIn(session) {
+      document.getElementById('loggedOutSection').style.display = 'none';
+      document.getElementById('loggedInSection').style.display = 'block';
+
+      const user = session.user;
+      const meta = user.user_metadata || {};
+      const name = meta.full_name || meta.name || user.email.split('@')[0];
+      const avatar = meta.avatar_url || meta.picture || '';
+
+      document.getElementById('profileName').textContent = name;
+      document.getElementById('profileEmail').textContent = user.email;
+
+      const avatarEl = document.getElementById('profileAvatar');
+      if (avatar) {
+        avatarEl.innerHTML = `<img src="${avatar}" alt="${name}">`;
+      } else {
+        avatarEl.textContent = name.charAt(0).toUpperCase();
+      }
+
+      document.getElementById('btnConfirmPairing').onclick = () => pairWithTv(session);
+      document.getElementById('btnLogout').onclick = async () => {
+        await supabase.auth.signOut();
+        showLoggedOut();
+      };
+    }
+
+    function showLoggedOut() {
+      document.getElementById('loggedInSection').style.display = 'none';
+      document.getElementById('loggedOutSection').style.display = 'block';
+
+      document.getElementById('btnGoogleLogin').onclick = startGoogleLogin;
+      document.getElementById('btnEmailLogin').onclick = startEmailLogin;
+    }
+
+    function setStatus(text, type = 'info') {
+      const el = document.getElementById('statusMsg');
+      el.textContent = text;
+      el.className = 'status-msg ' + type;
+    }
+
+    function getCode() {
+      if (currentPairCode) return currentPairCode;
+      const input = document.getElementById('manualCodeInput');
+      return input ? input.value.trim().toUpperCase() : '';
+    }
+
+    async function pairWithTv(session) {
+      const code = getCode();
+      if (!code) {
+        setStatus('Por favor, informe o código de 4 números da TV.', 'error');
+        return;
+      }
+
+      setStatus('Conectando à TV...', 'info');
+
+      const user = session.user;
+      const meta = user.user_metadata || {};
+      const payload = {
+        accessToken: session.access_token,
+        refreshToken: session.refresh_token,
+        email: user.email,
+        displayName: meta.full_name || meta.name || user.email.split('@')[0],
+        avatar: meta.avatar_url || meta.picture || ''
+      };
+
+      try {
+        // Envio via canal Realtime Supabase
+        const channelName = 'tv_pair_' + code;
+        const channel = supabase.channel(channelName, {
+          config: { broadcast: { self: false } }
+        });
+
+        await channel.subscribe();
+
+        // Envia broadcast 3 pulsos para garantir recepção sem perda de pacote
+        for (let i = 0; i < 3; i++) {
+          await channel.send({
+            type: 'broadcast',
+            event: 'login',
+            payload: payload
+          });
+          await new Promise(r => setTimeout(r, 350));
+        }
+
+        // Também dispara via raw WebSocket para redundância total
+        sendRawBroadcast(code, payload);
+
+        // Sucesso visual
+        document.getElementById('mainScreen').style.display = 'none';
+        document.getElementById('successScreen').style.display = 'block';
+      } catch (err) {
+        console.error('Erro ao parear:', err);
+        setStatus('Erro ao comunicar com a TV: ' + (err.message || 'tente novamente'), 'error');
+      }
+    }
+
+    function sendRawBroadcast(code, payload) {
+      try {
+        const ws = new WebSocket('wss://zfawwhqogtynuygniskz.supabase.co/realtime/v1/websocket?apikey=' + SUPABASE_ANON_KEY + '&vsn=1.0.0');
+        ws.onopen = () => {
+          ws.send(JSON.stringify({
+            topic: 'realtime:tv_pair_' + code,
+            event: 'phx_join',
+            payload: { config: { broadcast: { self: false } } },
+            ref: 'raw_1'
+          }));
+        };
+        ws.onmessage = (msg) => {
+          try {
+            const data = JSON.parse(msg.data);
+            if (data.event === 'phx_reply' && data.ref === 'raw_1') {
+              ws.send(JSON.stringify({
+                topic: 'realtime:tv_pair_' + code,
+                event: 'broadcast',
+                payload: {
+                  type: 'broadcast',
+                  event: 'login',
+                  payload: payload
+                },
+                ref: 'raw_2'
+              }));
+              setTimeout(() => ws.close(), 1000);
+            }
+          } catch (e) {}
+        };
+      } catch (e) {}
+    }
+
+    async function startGoogleLogin() {
+      const code = getCode();
+      if (code) {
+        sessionStorage.setItem('eplay_pair_code', code);
+        sessionStorage.setItem('eplay_auto_pair', 'true');
+      }
+
+      setStatus('Redirecionando para login do Google...', 'info');
+
+      const redirectUrl = window.location.origin + window.location.pathname + (code ? '?code=' + code : '');
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl
+        }
+      });
+
+      if (error) {
+        setStatus('Erro ao iniciar Google Login: ' + error.message, 'error');
+      }
+    }
+
+    async function startEmailLogin() {
+      const email = document.getElementById('inputEmail').value.trim();
+      const password = document.getElementById('inputPassword').value;
+
+      if (!email || !password) {
+        setStatus('Preencha seu e-mail e senha.', 'error');
+        return;
+      }
+
+      setStatus('Autenticando...', 'info');
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        setStatus('Falha no login: ' + error.message, 'error');
+        return;
+      }
+
+      if (data && data.session) {
+        showLoggedIn(data.session);
+        pairWithTv(data.session);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
