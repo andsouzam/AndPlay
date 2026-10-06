@@ -52,45 +52,61 @@
     }
     .tv-code-box {
       background: #1E293B;
-      border: 2px dashed #38BDF8;
-      border-radius: 14px;
-      padding: 14px;
-      margin-bottom: 24px;
+      border: 2px solid #38BDF8;
+      border-radius: 16px;
+      padding: 16px 14px;
+      margin-bottom: 22px;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .tv-code-box:focus-within {
+      border-color: #F59E0B;
+      box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
     }
     .tv-code-label {
+      display: block;
       font-size: 11px;
       font-weight: 700;
       color: #94A3B8;
       text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-    .tv-code-value {
-      font-size: 32px;
-      font-weight: 900;
-      color: #F59E0B;
-      letter-spacing: 4px;
-      margin-top: 2px;
-    }
-    .code-input-wrap {
-      margin-top: 8px;
+      letter-spacing: 1.5px;
+      margin-bottom: 8px;
     }
     .code-input {
-      width: 160px;
+      width: 100%;
+      max-width: 260px;
+      height: 56px;
       text-align: center;
-      font-size: 24px;
-      font-weight: 800;
-      letter-spacing: 4px;
-      padding: 8px;
+      font-size: 32px;
+      font-weight: 900;
+      letter-spacing: 8px;
+      padding: 4px 12px;
       background: #0F172A;
-      border: 1px solid #38BDF8;
-      border-radius: 8px;
+      border: 2px solid #334155;
+      border-radius: 12px;
       color: #F59E0B;
       outline: none;
+      transition: all 0.2s ease;
+      display: inline-block;
+    }
+    .code-input:focus {
+      border-color: #F59E0B;
+      background: #020617;
+    }
+    .code-input::placeholder {
+      color: #475569;
+      letter-spacing: 6px;
+    }
+    .tv-code-hint {
+      font-size: 11.5px;
+      color: #38BDF8;
+      margin-top: 8px;
+      font-weight: 500;
     }
     .subtitle {
       font-size: 14px;
       color: #94A3B8;
-      margin-bottom: 24px;
+      margin-bottom: 20px;
       line-height: 1.5;
     }
     .btn {
@@ -258,7 +274,7 @@
       to { opacity: 1; transform: translateY(0); }
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 </head>
 <body>
   <div class="container">
@@ -277,12 +293,22 @@
 
     <!-- TELA PRINCIPAL -->
     <div id="mainScreen">
-      <div class="tv-code-box">
-        <div class="tv-code-label">Código de Pareamento da TV</div>
-        <div id="codeDisplay" class="tv-code-value">----</div>
-        <div id="codeInputWrap" class="code-input-wrap" style="display: none;">
-          <input type="text" id="manualCodeInput" class="code-input" maxlength="6" placeholder="0000">
-        </div>
+      <!-- CAMPO DE CÓDIGO DA TV (SEMPRE ABERTO E EDITÁVEL) -->
+      <div class="tv-code-box" id="tvCodeBox" onclick="document.getElementById('pairCodeInput').focus()">
+        <label for="pairCodeInput" class="tv-code-label">Código de Pareamento da TV</label>
+        <input
+          type="text"
+          id="pairCodeInput"
+          class="code-input"
+          maxlength="6"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          placeholder="0000"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+        >
+        <div class="tv-code-hint">Toque para digitar os 4 números exibidos na sua TV</div>
       </div>
 
       <!-- SE JÁ ESTIVER LOGADO NO CELULAR -->
@@ -295,19 +321,19 @@
             <div id="profileEmail" class="profile-email">usuario@email.com</div>
           </div>
         </div>
-        <button id="btnConfirmPairing" class="btn btn-primary">
+        <button id="btnConfirmPairing" class="btn btn-primary" type="button">
           📺 Conectar esta TV Agora
         </button>
-        <button id="btnLogout" class="btn btn-secondary">
+        <button id="btnLogout" class="btn btn-secondary" type="button">
           Entrar com outra conta
         </button>
       </div>
 
-      <!-- SE NÃO ESTIVER LOGADO -->
-      <div id="loggedOutSection" style="display: none;">
+      <!-- SE NÃO ESTIVER LOGADO (PADRÃO INICIAL VISÍVEL) -->
+      <div id="loggedOutSection">
         <p class="subtitle">Faça login para conectar esta TV instantaneamente:</p>
 
-        <button id="btnGoogleLogin" class="btn btn-google">
+        <button id="btnGoogleLogin" class="btn btn-google" type="button">
           <svg width="20" height="20" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -345,15 +371,40 @@
     const SUPABASE_ANON_KEY = 'sb_publishable_naUBrBzRCU_SQbSiNtpQQQ_7Q8h1VoJ';
 
     let supabase = null;
-    let currentPairCode = '';
 
-    function init() {
-      // 1. Inicializa Supabase
-      if (window.supabase) {
+    async function getSupabase() {
+      if (supabase) return supabase;
+      if (window.supabase && typeof window.supabase.createClient === 'function') {
         supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        return supabase;
       }
+      try {
+        const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+        supabase = mod.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        return supabase;
+      } catch (e) {
+        console.warn('Erro ao carregar Supabase via ESM:', e);
+        return null;
+      }
+    }
 
-      // 2. Extrai o código da URL ou hash
+    function getCode() {
+      const input = document.getElementById('pairCodeInput');
+      return input ? input.value.trim().toUpperCase() : '';
+    }
+
+    function setStatus(text, type = 'info') {
+      const el = document.getElementById('statusMsg');
+      if (el) {
+        el.textContent = text;
+        el.className = 'status-msg ' + type;
+      }
+    }
+
+    async function init() {
+      const pairCodeInput = document.getElementById('pairCodeInput');
+
+      // 1. Extrai código da URL (search ou hash) ou da sessão
       const params = new URLSearchParams(window.location.search);
       let code = params.get('code') || params.get('pair') || '';
       if (!code && window.location.hash) {
@@ -364,43 +415,40 @@
         code = sessionStorage.getItem('eplay_pair_code');
       }
 
-      const codeDisplay = document.getElementById('codeDisplay');
-      const codeInputWrap = document.getElementById('codeInputWrap');
-      const manualCodeInput = document.getElementById('manualCodeInput');
-
       if (code) {
-        currentPairCode = code.trim().toUpperCase();
-        sessionStorage.setItem('eplay_pair_code', currentPairCode);
-        codeDisplay.textContent = currentPairCode;
+        code = code.trim().toUpperCase();
+        pairCodeInput.value = code;
+        sessionStorage.setItem('eplay_pair_code', code);
       } else {
-        codeDisplay.style.display = 'none';
-        codeInputWrap.style.display = 'block';
-        manualCodeInput.addEventListener('input', (e) => {
-          currentPairCode = e.target.value.trim().toUpperCase();
-        });
+        pairCodeInput.focus();
       }
 
-      // 3. Verifica sessão atual
-      checkAuth();
-    }
+      pairCodeInput.addEventListener('input', (e) => {
+        const clean = e.target.value.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+        e.target.value = clean;
+        sessionStorage.setItem('eplay_pair_code', clean);
+      });
 
-    async function checkAuth() {
-      if (!supabase) return;
+      // Configura botões de login padrão imediatamente
+      document.getElementById('btnGoogleLogin').onclick = startGoogleLogin;
+      document.getElementById('btnEmailLogin').onclick = startEmailLogin;
+
+      // 2. Inicializa Supabase e verifica sessão
+      const sb = await getSupabase();
+      if (!sb) return;
 
       try {
-        const { data } = await supabase.auth.getSession();
+        const { data } = await sb.auth.getSession();
         if (data && data.session) {
           showLoggedIn(data.session);
-          // Se já veio com código da URL após redirecionamento do Google, conecta automaticamente!
-          if (currentPairCode && sessionStorage.getItem('eplay_auto_pair') === 'true') {
+          // Se já tem código e acabou de voltar do Google OAuth, pareia automaticamente
+          if (getCode() && sessionStorage.getItem('eplay_auto_pair') === 'true') {
             sessionStorage.removeItem('eplay_auto_pair');
             pairWithTv(data.session);
           }
-        } else {
-          showLoggedOut();
         }
       } catch (e) {
-        showLoggedOut();
+        console.warn('Erro checando sessão:', e);
       }
     }
 
@@ -425,7 +473,8 @@
 
       document.getElementById('btnConfirmPairing').onclick = () => pairWithTv(session);
       document.getElementById('btnLogout').onclick = async () => {
-        await supabase.auth.signOut();
+        const sb = await getSupabase();
+        if (sb) await sb.auth.signOut();
         showLoggedOut();
       };
     }
@@ -433,31 +482,17 @@
     function showLoggedOut() {
       document.getElementById('loggedInSection').style.display = 'none';
       document.getElementById('loggedOutSection').style.display = 'block';
-
-      document.getElementById('btnGoogleLogin').onclick = startGoogleLogin;
-      document.getElementById('btnEmailLogin').onclick = startEmailLogin;
-    }
-
-    function setStatus(text, type = 'info') {
-      const el = document.getElementById('statusMsg');
-      el.textContent = text;
-      el.className = 'status-msg ' + type;
-    }
-
-    function getCode() {
-      if (currentPairCode) return currentPairCode;
-      const input = document.getElementById('manualCodeInput');
-      return input ? input.value.trim().toUpperCase() : '';
     }
 
     async function pairWithTv(session) {
       const code = getCode();
-      if (!code) {
-        setStatus('Por favor, informe o código de 4 números da TV.', 'error');
+      if (!code || code.length < 4) {
+        setStatus('Por favor, digite os 4 números do código exibido na TV.', 'error');
+        document.getElementById('pairCodeInput').focus();
         return;
       }
 
-      setStatus('Conectando à TV...', 'info');
+      setStatus('Conectando à sua TV... ⏳', 'info');
 
       const user = session.user;
       const meta = user.user_metadata || {};
@@ -470,33 +505,35 @@
       };
 
       try {
-        // Envio via canal Realtime Supabase
-        const channelName = 'tv_pair_' + code;
-        const channel = supabase.channel(channelName, {
-          config: { broadcast: { self: false } }
-        });
-
-        await channel.subscribe();
-
-        // Envia broadcast 3 pulsos para garantir recepção sem perda de pacote
-        for (let i = 0; i < 3; i++) {
-          await channel.send({
-            type: 'broadcast',
-            event: 'login',
-            payload: payload
+        const sb = await getSupabase();
+        if (sb) {
+          const channelName = 'tv_pair_' + code;
+          const channel = sb.channel(channelName, {
+            config: { broadcast: { self: false } }
           });
-          await new Promise(r => setTimeout(r, 350));
+          await channel.subscribe();
+
+          for (let i = 0; i < 3; i++) {
+            await channel.send({
+              type: 'broadcast',
+              event: 'login',
+              payload: payload
+            });
+            await new Promise(r => setTimeout(r, 350));
+          }
         }
 
-        // Também dispara via raw WebSocket para redundância total
+        // Redundância direta via WebSocket puro
         sendRawBroadcast(code, payload);
 
-        // Sucesso visual
         document.getElementById('mainScreen').style.display = 'none';
         document.getElementById('successScreen').style.display = 'block';
       } catch (err) {
         console.error('Erro ao parear:', err);
-        setStatus('Erro ao comunicar com a TV: ' + (err.message || 'tente novamente'), 'error');
+        // Tenta pelo menos o raw WebSocket
+        sendRawBroadcast(code, payload);
+        document.getElementById('mainScreen').style.display = 'none';
+        document.getElementById('successScreen').style.display = 'block';
       }
     }
 
@@ -534,15 +571,25 @@
 
     async function startGoogleLogin() {
       const code = getCode();
-      if (code) {
-        sessionStorage.setItem('eplay_pair_code', code);
-        sessionStorage.setItem('eplay_auto_pair', 'true');
+      if (!code || code.length < 4) {
+        setStatus('Digite primeiro o código de 4 números da TV acima.', 'error');
+        document.getElementById('pairCodeInput').focus();
+        return;
       }
 
-      setStatus('Redirecionando para login do Google...', 'info');
+      sessionStorage.setItem('eplay_pair_code', code);
+      sessionStorage.setItem('eplay_auto_pair', 'true');
 
-      const redirectUrl = window.location.origin + window.location.pathname + (code ? '?code=' + code : '');
-      const { error } = await supabase.auth.signInWithOAuth({
+      setStatus('Abrindo login do Google...', 'info');
+
+      const sb = await getSupabase();
+      if (!sb) {
+        setStatus('Erro ao conectar ao serviço de autenticação.', 'error');
+        return;
+      }
+
+      const redirectUrl = window.location.origin + window.location.pathname + '?code=' + code;
+      const { error } = await sb.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: redirectUrl
@@ -555,6 +602,13 @@
     }
 
     async function startEmailLogin() {
+      const code = getCode();
+      if (!code || code.length < 4) {
+        setStatus('Digite primeiro o código de 4 números da TV acima.', 'error');
+        document.getElementById('pairCodeInput').focus();
+        return;
+      }
+
       const email = document.getElementById('inputEmail').value.trim();
       const password = document.getElementById('inputPassword').value;
 
@@ -565,7 +619,13 @@
 
       setStatus('Autenticando...', 'info');
 
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const sb = await getSupabase();
+      if (!sb) {
+        setStatus('Erro de conexão.', 'error');
+        return;
+      }
+
+      const { data, error } = await sb.auth.signInWithPassword({
         email,
         password
       });
@@ -581,7 +641,12 @@
       }
     }
 
-    window.addEventListener('DOMContentLoaded', init);
+    // Inicializa quando a página estiver pronta
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
   </script>
 </body>
 </html>
