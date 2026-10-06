@@ -995,8 +995,12 @@
     try {
       const email = document.getElementById('accountEmail')?.value.trim();
       const password = document.getElementById('accountPassword')?.value || '';
+      const displayName = (document.getElementById('accountNameSignup')?.value || '').trim();
       if (!email || password.length < 6) {
         throw new Error('Use um email válido e uma senha de pelo menos 6 caracteres.');
+      }
+      if (displayName.length < 2) {
+        throw new Error('Escolha um nome de usuário (mínimo 2 caracteres).');
       }
       setStatus('Criando conta...');
       const client = await getClient();
@@ -1004,6 +1008,7 @@
         email,
         password,
         options: {
+          data: { display_name: displayName, name: displayName },
           emailRedirectTo: window.location.origin + window.location.pathname
         }
       });
@@ -1334,6 +1339,7 @@
         </div>
 
         <div data-account-view="signup" style="display:none">
+          <label>Nome de usuário<input id="accountNameSignup" type="text" maxlength="32" autocomplete="nickname" placeholder="Como você quer ser chamado"></label>
           <label>Email<input id="accountEmailSignup" type="email" autocomplete="email" placeholder="seu@email.com"></label>
           <label>Senha<input id="accountPasswordSignup" type="password" autocomplete="new-password" placeholder="mínimo 6 caracteres"></label>
           <button class="andplay-account-primary" type="button" id="accountSignupBtn">Criar conta</button>
@@ -1670,13 +1676,12 @@
       await refreshAccountUsage().catch(() => {});
       return data;
     },
-    signUpDirect: async (email, password) => {
+    signUpDirect: async (email, password, displayName) => {
       const client = await getClient();
-      const { data, error } = await client.auth.signUp({
-        email,
-        password,
-        options: { emailRedirectTo: window.location.origin + window.location.pathname }
-      });
+      const cleanName = (displayName || '').trim();
+      const options = { emailRedirectTo: window.location.origin + window.location.pathname };
+      if (cleanName) options.data = { display_name: cleanName, name: cleanName };
+      const { data, error } = await client.auth.signUp({ email, password, options });
       if (error) throw error;
       currentSession = data.session;
       updateAccountUi();

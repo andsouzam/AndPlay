@@ -417,6 +417,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       userAuthTabRecovery: document.getElementById('userAuthTabRecovery'),
       userAuthEmailInput: document.getElementById('userAuthEmailInput'),
       userAuthPassGroup: document.getElementById('userAuthPassGroup'),
+      userAuthNameGroup: document.getElementById('userAuthNameGroup'),
+      userAuthNameInput: document.getElementById('userAuthNameInput'),
       userAuthPassInput: document.getElementById('userAuthPassInput'),
       userAuthStatusMsg: document.getElementById('userAuthStatusMsg'),
       userAuthSubmitBtn: document.getElementById('userAuthSubmitBtn'),
@@ -431,6 +433,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       authScreenTabRecovery: document.getElementById('authScreenTabRecovery'),
       authScreenEmailInput: document.getElementById('authScreenEmailInput'),
       authScreenPassGroup: document.getElementById('authScreenPassGroup'),
+      authScreenNameGroup: document.getElementById('authScreenNameGroup'),
+      authScreenNameInput: document.getElementById('authScreenNameInput'),
       authScreenPassInput: document.getElementById('authScreenPassInput'),
       authScreenStatusMsg: document.getElementById('authScreenStatusMsg'),
       authScreenSubmitBtn: document.getElementById('authScreenSubmitBtn'),
@@ -5004,6 +5008,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         tab.addEventListener('click', () => {
           currentAuthTab = tab.dataset.authTab;
           document.querySelectorAll('.user-auth-tab').forEach(t => t.classList.toggle('active', t === tab));
+          if (elements.userAuthNameGroup) {
+            elements.userAuthNameGroup.style.display = currentAuthTab === 'register' ? 'flex' : 'none';
+          }
           if (elements.userAuthPassGroup) {
             elements.userAuthPassGroup.style.display = currentAuthTab === 'recovery' ? 'none' : 'flex';
           }
@@ -5039,7 +5046,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             await window.AndPlayAccount?.signInDirect?.(email, password);
             if (statusEl) { statusEl.className = 'user-auth-status success'; statusEl.textContent = 'Conta conectada com sucesso!'; }
           } else if (currentAuthTab === 'register') {
-            await window.AndPlayAccount?.signUpDirect?.(email, password);
+            const regName = (elements.userAuthNameInput?.value || '').trim();
+            if (regName.length < 2) throw new Error('Escolha um nome de usuário (mínimo 2 caracteres).');
+            await window.AndPlayAccount?.signUpDirect?.(email, password, regName);
             if (statusEl) { statusEl.className = 'user-auth-status success'; statusEl.textContent = 'Conta criada com sucesso!'; }
           } else {
             await window.AndPlayAccount?.requestPasswordResetDirect?.(email);
@@ -5285,6 +5294,9 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         if (t.btn) t.btn.classList.toggle('active', t.name === tab);
       });
 
+      if (elements.authScreenNameGroup) {
+        elements.authScreenNameGroup.style.display = tab === 'register' ? 'flex' : 'none';
+      }
       if (elements.authScreenPassGroup) {
         elements.authScreenPassGroup.style.display = tab === 'recovery' ? 'none' : 'flex';
       }
@@ -5355,6 +5367,16 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
         return;
       }
 
+      const displayName = (elements.authScreenNameInput?.value || '').trim();
+      if (currentAuthScreenTab === 'register' && displayName.length < 2) {
+        if (statusEl) {
+          statusEl.className = 'auth-status-msg error';
+          statusEl.textContent = 'Escolha um nome de usuário (mínimo 2 caracteres).';
+        }
+        elements.authScreenNameInput?.focus();
+        return;
+      }
+
       if (currentAuthScreenTab !== 'recovery' && (!password || password.length < 6)) {
         if (statusEl) {
           statusEl.className = 'auth-status-msg error';
@@ -5380,7 +5402,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           hideLoginScreen();
           onUserAuthenticated();
         } else if (currentAuthScreenTab === 'register') {
-          await window.AndPlayAccount?.signUpDirect?.(email, password);
+          await window.AndPlayAccount?.signUpDirect?.(email, password, displayName);
           if (statusEl) {
             statusEl.className = 'auth-status-msg success';
             statusEl.textContent = 'Conta criada com sucesso!';

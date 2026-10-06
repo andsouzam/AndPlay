@@ -304,6 +304,10 @@
 
       <div class="auth-card-body">
         <form id="authScreenForm" onsubmit="return false;" novalidate>
+          <div id="authScreenNameGroup" class="auth-input-group" style="display: none;">
+            <label for="authScreenNameInput">Nome de usuário</label>
+            <input type="text" id="authScreenNameInput" maxlength="32" placeholder="Como você quer ser chamado" autocomplete="nickname" />
+          </div>
           <div class="auth-input-group">
             <label for="authScreenEmailInput">E-mail</label>
             <input type="email" id="authScreenEmailInput" placeholder="seuemail@exemplo.com" autocomplete="email" required />
@@ -563,6 +567,10 @@
         </div>
 
         <div class="user-auth-body">
+          <div id="userAuthNameGroup" class="user-input-group" style="display: none;">
+            <label for="userAuthNameInput">Nome de usuário</label>
+            <input type="text" id="userAuthNameInput" maxlength="32" placeholder="Como você quer ser chamado" autocomplete="nickname" />
+          </div>
           <div class="user-input-group">
             <label for="userAuthEmailInput">E-mail</label>
             <input type="email" id="userAuthEmailInput" placeholder="seuemail@exemplo.com" autocomplete="email" />
