@@ -410,11 +410,40 @@
     };
     const contentType = typeByExt[ext] || 'video/mp4';
     const isLive = isHls || isLivePath || (media.mediaType && media.mediaType === 'live');
-    // Proxy https com CORS (resolve o 302 http:// do servidor IPTV, que o receptor do Chromecast bloqueia)
-    const castProxy = (window.ANDPLAY_PUBLIC_CONFIG && window.ANDPLAY_PUBLIC_CONFIG.castProxy) || '';
-    if (castProxy && !isLive && /^https?:\/\//i.test(media.url) && media.url.indexOf(castProxy) !== 0) {
-      media.url = castProxy.replace(/\/+$/, '') + '/?u=' + encodeURIComponent(media.url);
+    // O servidor IPTV responde 302 para um endereço http:// sem CORS, que o receptor do Chromecast
+    // não consegue abrir. Resolvemos o destino final (https) e enviamos esse link já tratado.
+    resolveCastUrl(media.url, isLive).then(finalUrl => {
+      media.url = finalUrl;
+      sendToCast(session, media, contentType, isLive);
+    });
+  }
+
+  async function resolveCastUrl(url, isLive) {
+    if (isLive || !/^https?:\/\//i.test(url)) return url;
+    const cfg = window.ANDPLAY_SUPABASE_CONFIG || {};
+    if (!cfg.url) return url;
+    try {
+      showToast('Preparando vídeo para o Chromecast...', 2500);
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12000);
+      const resp = await fetch(cfg.url.replace(/\/+$/, '') + '/functions/v1/resolve-stream?u=' + encodeURIComponent(url), {
+        headers: { apikey: cfg.publishableKey || '', Authorization: 'Bearer ' + (cfg.publishableKey || '') },
+        signal: ctrl.signal
+      });
+      clearTimeout(timer);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      if (data && data.url) {
+        console.log('[Cast] Link resolvido:', data.url);
+        return data.url;
+      }
+    } catch (e) {
+      console.warn('[Cast] Não foi possível resolver o redirecionamento, enviando link original:', e);
     }
+    return url;
+  }
+
+  function sendToCast(session, media, contentType, isLive) {
     console.log('[Cast] Enviando', { url: media.url, contentType, isLive });
 
     try {
