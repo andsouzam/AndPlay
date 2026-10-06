@@ -15,6 +15,216 @@
     zoomMode: localStorage.getItem('andplay_player_zoom_mode') || 'fit',
     zoomScale: Number(localStorage.getItem('andplay_player_zoom_scale') || 1)
   };
+  const CAST_COMPAT_NAMESPACE = 'urn:x-cast:com.eplay.cast.compat.v1';
+  const CAST_COMPAT_KEY = 'eplay_chromecast_compat_mode';
+  let castCompatRequestedMode = 'direct';
+  const castCompat = {
+    active: false,
+    session: null,
+    pc: null,
+    capture: null,
+    listener: null,
+    previousMuted: false,
+    muted: false,
+    volume: state.volume,
+    negotiationStarted: false
+  };
+
+  function getCastCompatAppId() {
+    return String(window.ANDPLAY_PUBLIC_CONFIG?.castCompatReceiverAppId || '').trim();
+  }
+  function isCastCompatConfigured() { return !!getCastCompatAppId(); }
+  function isCastCompatSelected() { return localStorage.getItem(CAST_COMPAT_KEY) === '1'; }
+  function setCastCompatSelected(enabled) {
+    localStorage.setItem(CAST_COMPAT_KEY, enabled ? '1' : '0');
+    updateCastCompatMenu();
+  }
+  function updateCastCompatMenu() {
+    const btn = $('eplayCastCompatMenu');
+    if (!btn) return;
+    const configured = isCastCompatConfigured();
+    const selected = isCastCompatSelected();
+    btn.disabled = !configured;
+    btn.textContent = configured
+      ? (selected ? '📺 Compatibilidade Chromecast: ATIVADA' : '📺 Compatibilidade Chromecast: desativada')
+      : '📺 Compatibilidade Chromecast: configurar Receiver';
+  }
+  function compatSend(data) {
+    if (!castCompat.session) return Promise.reject(new Error('Sessão Cast compatível ausente'));
+    return Promise.resolve(castCompat.session.sendMessage(CAST_COMPAT_NAMESPACE, data));
+  }
+  function waitForIceGathering(pc, timeoutMs = 8000) {
+    if (pc.iceGatheringState === 'complete') return Promise.resolve();
+    return new Promise(resolve => {
+      let done = false;
+      const finish = () => { if (done) return; done = true; clearTimeout(timer); resolve(); };
+      const timer = setTimeout(finish, timeoutMs);
+      pc.addEventListener('icegatheringstatechange', () => {
+        if (pc.iceGatheringState === 'complete') finish();
+      });
+    });
+  }
+  function tuneCompatSender(sender, kind) {
+    try {
+      const params = sender.getParameters();
+      if (!params.encodings?.length) return;
+      params.encodings[0].maxBitrate = kind === 'video' ? 3500000 : 128000;
+      if (kind === 'video') {
+        const width = video.videoWidth || 1280;
+        const height = video.videoHeight || 720;
+        params.encodings[0].maxFramerate = 30;
+        params.encodings[0].degradationPreference = 'maintain-framerate';
+        params.encodings[0].scaleResolutionDownBy = Math.max(1, Math.max(width / 1280, height / 720));
+      }
+      sender.setParameters(params).catch(() => {});
+    } catch (_) {}
+  }
+  function preferCompatH264(transceiver) {
+    try {
+      const caps = RTCRtpSender.getCapabilities?.('video');
+      if (!caps?.codecs?.length || typeof transceiver.setCodecPreferences !== 'function') return;
+      const h264 = caps.codecs.filter(c => /^video\/H264$/i.test(c.mimeType));
+      if (h264.length) transceiver.setCodecPreferences(h264);
+    } catch (e) {
+      console.warn('[Cast Compat] Não foi possível priorizar H.264:', e);
+    }
+  }
+  function stopCastCompat(restoreLocalAudio = true) {
+    const pc = castCompat.pc;
+    const session = castCompat.session;
+    const listener = castCompat.listener;
+    castCompat.active = false;
+    castCompat.negotiationStarted = false;
+    if (castCompat.capture) {
+      castCompat.capture.getTracks().forEach(track => {
+        try { track.stop(); } catch (_) {}
+      });
+    }
+    castCompat.capture = null;
+    castCompat.pc = null;
+    if (pc) {
+      try { pc.close(); } catch (_) {}
+    }
+    if (session && listener) {
+      try { session.removeMessageListener(CAST_COMPAT_NAMESPACE, listener); } catch (_) {}
+    }
+    castCompat.listener = null;
+    castCompat.session = null;
+    if (restoreLocalAudio && video) video.muted = castCompat.previousMuted;
+    updateCastCompatMenu();
+  }
+  async function startCastCompat(session) {
+    if (!session || !isCastCompatConfigured()) return false;
+    if (castCompat.active && castCompat.session === session && castCompat.pc) return true;
+    const wasActive = castCompat.active;
+    if (!wasActive) castCompat.previousMuted = video.muted;
+    stopCastCompat(false);
+    castCompat.session = session;
+    if (!wasActive) castCompat.previousMuted = video.muted;
+    castCompat.muted = false;
+    castCompat.volume = state.volume;
+
+    if (typeof video.captureStream !== 'function') {
+      showToast('Este navegador não permite o modo compatibilidade do Chromecast.', 4500);
+      return false;
+    }
+    try {
+      await video.play().catch(() => {});
+      const stream = video.captureStream();
+      const videoTracks = stream.getVideoTracks();
+      if (!videoTracks.length) throw new Error('captureStream não forneceu faixa de vídeo');
+      const hasAudio = stream.getAudioTracks().length > 0;
+      for (let i = 0; i < 8; i++) {
+        if (!videoTracks[0].muted && videoTracks[0].readyState === 'live') break;
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      if (videoTracks[0].muted) throw new Error('A fonte não está disponível para captura (CORS ou proteção de mídia)');
+
+      const pc = new RTCPeerConnection({ iceServers: [] });
+      castCompat.pc = pc;
+      castCompat.capture = stream;
+      castCompat.active = true;
+      castCompat.negotiationStarted = false;
+      video.muted = true;
+
+      const videoTx = pc.addTransceiver(videoTracks[0], { direction: 'sendonly' });
+      preferCompatH264(videoTx);
+      tuneCompatSender(videoTx.sender, 'video');
+      if (hasAudio) {
+        const audioTx = pc.addTransceiver(stream.getAudioTracks()[0], { direction: 'sendonly' });
+        tuneCompatSender(audioTx.sender, 'audio');
+      }
+      pc.onconnectionstatechange = () => {
+        if (!castCompat.active) return;
+        const s = pc.connectionState;
+        if (s === 'connected') showToast('Chromecast em modo compatibilidade ativo', 3000);
+        if (s === 'failed') showToast('A conexão compatível com o Chromecast falhou.', 4500);
+      };
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === 'failed') console.warn('[Cast Compat] ICE falhou.');
+      };
+
+      if (castCompat.listener) {
+        try { session.removeMessageListener(CAST_COMPAT_NAMESPACE, castCompat.listener); } catch (_) {}
+      }
+      castCompat.listener = (namespace, raw) => {
+        let msg = raw;
+        if (typeof msg === 'string') { try { msg = JSON.parse(msg); } catch (_) { return; } }
+        if (!msg || !castCompat.active || castCompat.session !== session) return;
+        if (msg.type === 'answer' && msg.sdp && pc.signalingState !== 'closed') {
+          pc.setRemoteDescription({ type: 'answer', sdp: msg.sdp }).catch(e => console.warn('[Cast Compat] Answer inválido:', e));
+        } else if (msg.type === 'state') {
+          if (Number.isFinite(Number(msg.volume))) castCompat.volume = Number(msg.volume);
+          castCompat.muted = !!msg.muted;
+          updateVolume();
+        } else if (msg.type === 'error') {
+          console.warn('[Cast Compat] Receiver:', msg);
+          showToast(msg.message || 'O Receiver não conseguiu iniciar a transmissão compatível.', 5000);
+          stopCastCompat();
+        }
+      };
+      session.addMessageListener(CAST_COMPAT_NAMESPACE, castCompat.listener);
+      await compatSend({ type: 'hello', version: 1 });
+      await new Promise(resolve => setTimeout(resolve, 350));
+      const offer = await pc.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false });
+      await pc.setLocalDescription(offer);
+      await waitForIceGathering(pc);
+      await compatSend({
+        type: 'offer',
+        version: 1,
+        sdp: pc.localDescription?.sdp || offer.sdp,
+        title: $('eplayPlayerTitle')?.textContent || 'EPlay',
+        currentTime: Number(video.currentTime || 0),
+        width: video.videoWidth || 1280,
+        height: video.videoHeight || 720,
+        audio: hasAudio
+      });
+      castCompat.negotiationStarted = true;
+      setCastButtonState(true, false);
+      updateCastCompatMenu();
+      showToast('Preparando transmissão compatível...', 2500);
+      return true;
+    } catch (e) {
+      console.warn('[Cast Compat] Falha ao iniciar:', e);
+      stopCastCompat();
+      showToast('Não foi possível preparar a transmissão compatível neste navegador.', 5000);
+      return false;
+    }
+  }
+  window.EPlayCastCompat = {
+    get active() { return castCompat.active; },
+    sendCommand: data => compatSend(data),
+    setVolume(volume, muted = false) {
+      castCompat.volume = Math.max(0, Math.min(1, Number(volume) || 0));
+      castCompat.muted = !!muted;
+      return compatSend({ type: 'command', command: muted ? 'mute' : 'volume', value: castCompat.volume });
+    },
+    toggleMute() {
+      castCompat.muted = !castCompat.muted;
+      return compatSend({ type: 'command', command: castCompat.muted ? 'mute' : 'unmute', value: castCompat.volume });
+    }
+  };
+
   function fmt(sec) {
     if (!Number.isFinite(sec) || sec < 0) return '00:00';
     sec = Math.floor(sec);
@@ -44,6 +254,12 @@
     setTimeout(() => center.classList.remove('show'), 450);
   }
   function playPause() {
+    if (window.EPlayCastCompat?.active) {
+      if (video.paused) video.play().catch(() => showToast('Clique novamente para iniciar'));
+      else video.pause();
+      flashCenter(video.paused ? '▶' : '❚❚');
+      return;
+    }
     if (remotePlayer && remotePlayer.isConnected && remotePlayerController) {
       remotePlayerController.playOrPause();
       flashCenter(remotePlayer.isPaused ? '▶' : '❚❚');
@@ -54,6 +270,13 @@
     flashCenter(video.paused ? '▶' : '❚❚');
   }
   function seekBy(delta) {
+    if (window.EPlayCastCompat?.active) {
+      if (!Number.isFinite(video.duration)) return;
+      video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + delta));
+      showToast((delta > 0 ? '⏩ +' : '⏪ ') + Math.abs(delta) + 's');
+      flashCenter(delta > 0 ? '⏩' : '⏪'); reveal();
+      return;
+    }
     if (remotePlayer && remotePlayer.isConnected && remotePlayerController && remotePlayer.duration > 0) {
       const nextTime = Math.max(0, Math.min(remotePlayer.duration, remotePlayer.currentTime + delta));
       remotePlayer.currentTime = nextTime;
@@ -100,6 +323,12 @@
   }
   function setVolume(v) {
     state.volume = Math.max(0, Math.min(1, v));
+    if (window.EPlayCastCompat?.active) {
+      window.EPlayCastCompat.setVolume(state.volume, false).catch(() => {});
+      updateVolume();
+      localStorage.setItem('andplay_player_volume', String(state.volume));
+      return;
+    }
     if (window.isHybridAudioActive && window.isHybridAudioActive()) {
       if (window.setHybridVolume) window.setHybridVolume(state.volume);
       localStorage.setItem('andplay_player_volume', String(state.volume));
@@ -111,14 +340,20 @@
   }
   function updateVolume() {
     const b = $('eplayVolumeBtn'), range = $('eplayVolume');
+    const isCompat = !!window.EPlayCastCompat?.active;
     const isHybrid = !!(window.isHybridAudioActive && window.isHybridAudioActive());
-    const isMuted = isHybrid ? (window.isHybridMuted ? window.isHybridMuted() : false) : video.muted;
-    const vol = isHybrid ? (window.getHybridVolume ? window.getHybridVolume() : state.volume) : video.volume;
+    const isMuted = isCompat ? !!castCompat.muted : (isHybrid ? (window.isHybridMuted ? window.isHybridMuted() : false) : video.muted);
+    const vol = isCompat ? castCompat.volume : (isHybrid ? (window.getHybridVolume ? window.getHybridVolume() : state.volume) : video.volume);
     if (range) range.value = Math.round(isMuted ? 0 : vol * 100);
     if (b) b.textContent = isMuted || vol === 0 ? '🔇' : vol < .5 ? '🔉' : '🔊';
   }
   window.updatePlayerVolumeUI = updateVolume;
   function toggleMute() {
+    if (window.EPlayCastCompat?.active) {
+      window.EPlayCastCompat.toggleMute().catch(() => {});
+      updateVolume();
+      return;
+    }
     if (window.isHybridAudioActive && window.isHybridAudioActive()) {
       if (window.toggleHybridMute) window.toggleHybridMute();
       updateVolume();
@@ -493,6 +728,7 @@
         receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
         autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
       });
+      updateCastCompatMenu();
 
       remotePlayer = new cast.framework.RemotePlayer();
       remotePlayerController = new cast.framework.RemotePlayerController(remotePlayer);
@@ -504,6 +740,7 @@
           setCastButtonState(isConnected, false);
           if (isConnected) {
             showToast('Conectado ao Chromecast 📺', 2500);
+            if (castCompat.active) return;
             if (video && !video.paused) video.pause();
           } else {
             showToast('Chromecast desconectado', 2000);
@@ -522,10 +759,20 @@
             case cast.framework.SessionState.SESSION_STARTED:
             case cast.framework.SessionState.SESSION_RESUMED:
               setCastButtonState(true, false);
-              castMedia(context.getCurrentSession());
+              if (castCompatRequestedMode === 'compat' || isCastCompatSelected()) {
+                Promise.resolve(startCastCompat(context.getCurrentSession())).then(ok => {
+                  if (!ok) {
+                    try { context.endCurrentSession(true); } catch (_) {}
+                  }
+                });
+              } else {
+                castMedia(context.getCurrentSession());
+              }
               break;
             case cast.framework.SessionState.SESSION_ENDED:
+              stopCastCompat();
               setCastButtonState(false, false);
+              castCompatRequestedMode = 'direct';
               break;
           }
         }
@@ -535,7 +782,7 @@
       remotePlayerController.addEventListener(
         cast.framework.RemotePlayerEventType.CURRENT_TIME_CHANGED,
         () => {
-          if (remotePlayer.isConnected && seek && remotePlayer.duration > 0) {
+          if (remotePlayer.isConnected && !castCompat.active && seek && remotePlayer.duration > 0) {
             const t = remotePlayer.currentTime;
             const d = remotePlayer.duration;
             seek.value = t;
@@ -551,7 +798,7 @@
       remotePlayerController.addEventListener(
         cast.framework.RemotePlayerEventType.IS_PAUSED_CHANGED,
         () => {
-          if (remotePlayer.isConnected && playBtn) {
+          if (remotePlayer.isConnected && !castCompat.active && playBtn) {
             playBtn.textContent = remotePlayer.isPaused ? '▶' : '❚❚';
             playBtn.setAttribute('aria-label', remotePlayer.isPaused ? 'Reproduzir' : 'Pausar');
           }
@@ -562,7 +809,7 @@
       remotePlayerController.addEventListener(
         cast.framework.RemotePlayerEventType.PLAYER_STATE_CHANGED,
         () => {
-          if (remotePlayer.isConnected && remotePlayer.playerState === chrome.cast.media.PlayerState.IDLE) {
+          if (remotePlayer.isConnected && !castCompat.active && remotePlayer.playerState === chrome.cast.media.PlayerState.IDLE) {
             if (remotePlayer.idleReason === 'ERROR') {
               console.warn('[Cast] Receptor encerrou por erro de decodificação/codec.');
               showToast('O Chromecast não conseguiu reproduzir o formato deste arquivo. Tente a versão 1080p Dublado.', 6000);
@@ -600,13 +847,34 @@
         if (currentSession) {
           const choice = confirm('EPlay já está conectado ao Chromecast.\n\nDeseja desconectar da TV agora?');
           if (choice) {
+            stopCastCompat();
             context.endCurrentSession(true);
             setCastButtonState(false, false);
             showToast('Chromecast desconectado');
+          } else if (castCompat.active || castCompatRequestedMode === 'compat' || isCastCompatSelected()) {
+            startCastCompat(currentSession);
           } else {
             castMedia(currentSession);
           }
           return;
+        }
+
+        castCompatRequestedMode = isCastCompatSelected() ? 'compat' : 'direct';
+        if (castCompatRequestedMode === 'compat') {
+          const appId = getCastCompatAppId();
+          if (!appId) {
+            showToast('Modo compatibilidade ainda não está configurado. Cadastre o Custom Receiver do EPlay.', 5000);
+            return;
+          }
+          context.setOptions({
+            receiverApplicationId: appId,
+            autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+          });
+        } else {
+          context.setOptions({
+            receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+            autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+          });
         }
 
         context.requestSession().then(
@@ -666,7 +934,10 @@
         const context = cast.framework.CastContext.getInstance();
         const session = context.getCurrentSession();
         if (session) {
-          setTimeout(() => castMedia(session), 400);
+          setTimeout(() => {
+            if (castCompat.active || castCompatRequestedMode === 'compat' || isCastCompatSelected()) startCastCompat(session);
+            else castMedia(session);
+          }, 400);
         }
       } catch (_) {}
     }
@@ -696,7 +967,7 @@
       '<div class="eplay-speed-list"><button data-speed="0.75">0.75x</button><button data-speed="1">1x</button><button data-speed="1.25">1.25x</button><button data-speed="1.5">1.5x</button><button data-speed="1.75">1.75x</button><button data-speed="2">2x</button></div>',
       '<label class="eplay-auto-skip-row" id="eplayAutoSkipRow"><input type="checkbox" id="eplayAutoSkipToggle"><span><b>Pular abertura automaticamente</b><small>Somente quando houver marcador comunitário válido</small></span></label>',
       '<button id="eplaySkipIntroNow" style="display:none">⏭ Pular abertura agora</button>',
-      '<button id="eplaySubMenu">💬 Legendas e sincronização</button><button id="eplayInfoMenu">ⓘ Ficha técnica</button><button id="eplayDownloadMenu">⇩ Baixar vídeo</button><button id="eplayPipMenu">▣ Picture-in-Picture</button><button id="eplayCastMenu">📺 Enviar para Chromecast</button><button id="eplayLiveSyncMenu" style="display:none">⚡ Sincronizar ao vivo</button><button id="eplayLatencyMenu" style="display:none">⚡ Alternar buffer</button><button id="eplayFsMenu">⛶ Tela cheia</button></div>',
+      '<button id="eplaySubMenu">💬 Legendas e sincronização</button><button id="eplayInfoMenu">ⓘ Ficha técnica</button><button id="eplayDownloadMenu">⇩ Baixar vídeo</button><button id="eplayPipMenu">▣ Picture-in-Picture</button><button id="eplayCastMenu">📺 Enviar para Chromecast</button><button id="eplayCastCompatMenu" type="button">📺 Compatibilidade Chromecast: desativada</button><button id="eplayLiveSyncMenu" style="display:none">⚡ Sincronizar ao vivo</button><button id="eplayLatencyMenu" style="display:none">⚡ Alternar buffer</button><button id="eplayFsMenu">⛶ Tela cheia</button></div>',
       '<div class="eplay-toast" id="eplayPlayerToast"></div>',
       '<div class="eplay-resume" id="eplayResume"><span id="eplayResumeText">Continuar reprodução?</span><button class="continue" id="eplayResumeContinue">Continuar</button><button class="restart" id="eplayResumeRestart">Do início</button></div>',
       '</div>'
@@ -754,6 +1025,19 @@
   $on('eplayVolumeBtn','click',toggleMute); $on('eplayVolume','input',e=>setVolume(Number(e.target.value)/100));
   $on('eplaySubtitle','click',openSubtitles); $on('eplayInfo','click',openInfo); $on('eplayPip','click',pip);
   $on('eplayCastBtn','click',handleCastButtonClick); $on('eplayCastMenu','click',handleCastButtonClick);
+  $on('eplayCastCompatMenu','click',()=>{
+    if (castCompat.active) {
+      showToast('Desconecte o Chromecast antes de trocar o modo de transmissão.', 3500);
+      return;
+    }
+    if (!isCastCompatConfigured()) {
+      showToast('Cadastre o Custom Receiver no Google Cast SDK Console antes de ativar este modo.', 5000);
+      return;
+    }
+    setCastCompatSelected(!isCastCompatSelected());
+    showToast(isCastCompatSelected() ? 'Modo compatibilidade ativado' : 'Modo compatibilidade desativado');
+  });
+  updateCastCompatMenu();
   $on('eplaySettings','click',toggleMenu); $on('eplayDownloadMenu','click',downloadVideo); $on('eplayInfoMenu','click',openInfo); $on('eplaySubMenu','click',openSubtitles); $on('eplayPipMenu','click',pip); $on('eplayFsMenu','click',fullscreen); $on('eplayFullscreen','click',fullscreen);
   $on('eplayAudioSyncMenu','click',()=>{
     closeMenu();
@@ -821,7 +1105,7 @@
       reveal();
     }, 220);
   });
-  video.addEventListener('play',()=>{setPlayIcon();reveal()}); video.addEventListener('pause',()=>{setPlayIcon();reveal()}); video.addEventListener('ended',()=>{setPlayIcon();reveal()});
+  video.addEventListener('play',()=>{setPlayIcon();reveal();if(window.EPlayCastCompat?.active)compatSend({type:'command',command:'play'}).catch(()=>{})}); video.addEventListener('pause',()=>{setPlayIcon();reveal();if(window.EPlayCastCompat?.active)compatSend({type:'command',command:'pause'}).catch(()=>{})}); video.addEventListener('ended',()=>{setPlayIcon();reveal();if(window.EPlayCastCompat?.active)compatSend({type:'command',command:'stop'}).catch(()=>{})});
   video.addEventListener('timeupdate',setRange); video.addEventListener('durationchange',setRange); video.addEventListener('loadedmetadata',()=>{setRange();updateTitle();applyZoom(state.zoomMode,state.zoomScale,false);});
   video.addEventListener('volumechange',updateVolume); video.addEventListener('ratechange',()=>applySpeed(video.playbackRate));
   function onFsChange() {
