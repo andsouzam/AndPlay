@@ -528,8 +528,9 @@
     }
 
     // 1. Google Cast SDK (CAF)
-    if (window.cast && window.cast.framework) {
+    if (window.cast && window.cast.framework && window.chrome && chrome.cast) {
       try {
+        if (!remotePlayer) initCastFramework();
         const context = cast.framework.CastContext.getInstance();
         const currentSession = context.getCurrentSession();
         if (currentSession) {
@@ -549,8 +550,11 @@
             console.log('[Cast] Sessão solicitada.');
           },
           (err) => {
-            if (err && err !== 'cancel') {
+            if (err === 'receiver_unavailable') {
+              showToast('Nenhum Chromecast encontrado. Use o mesmo Wi‑Fi do celular.', 4000);
+            } else if (err && err !== 'cancel') {
               console.log('[Cast] Solicitação de sessão cancelada ou erro:', err);
+              showToast('Não foi possível iniciar o Chromecast (' + err + ')', 3500);
             }
           }
         );
@@ -606,7 +610,7 @@
       '<div class="eplay-player-bottom"><div class="eplay-seek-wrap"><span class="eplay-time" id="eplayCurrentTime">00:00</span><input id="eplaySeek" class="eplay-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="Posição da reprodução"><span class="eplay-time" id="eplayDuration">00:00</span></div>',
       '<div class="eplay-controls"><button class="eplay-control small eplay-series-nav" id="eplayPrevEpisode" aria-label="Episódio anterior" style="display:none">‹ Ant</button><button class="eplay-control small" id="eplayBack10" aria-label="Voltar 10 segundos">−10</button><button class="eplay-control" id="eplayPlay" aria-label="Reproduzir">▶</button><button class="eplay-control small" id="eplayForward10" aria-label="Avançar 10 segundos">+10</button><button class="eplay-control small eplay-series-nav" id="eplayNextEpisode" aria-label="Próximo episódio" style="display:none">Pro ›</button>',
       '<div class="eplay-volume"><button class="eplay-control" id="eplayVolumeBtn" aria-label="Volume">🔊</button><input id="eplayVolume" class="eplay-range" type="range" min="0" max="100" value="85" aria-label="Volume"></div><div class="eplay-spacer"></div>',
-      '<button class="eplay-control small eplay-audio-track-btn" id="eplayAudioBtn" aria-label="Áudio e Versão" title="Áudio / Versão">🎧 Áudio</button><button class="eplay-control small" id="eplaySubtitle" aria-label="Legendas">CC</button><button class="eplay-control small eplay-zoom-btn" id="eplayZoom" aria-label="Proporção / Zoom 21:9" title="Proporção / Zoom 21:9 (Atalho: Z)">⛶ 16:9</button><button class="eplay-control small" id="eplayInfo" aria-label="Ficha técnica">ⓘ</button><button class="eplay-control small" id="eplayPip" aria-label="Picture-in-Picture">▣</button><button class="eplay-control small eplay-cast-btn" id="eplayCastBtn" aria-label="Enviar para Chromecast" title="Enviar para Chromecast (Transmitir na TV)"><svg class="eplay-cast-svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.92-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg><google-cast-launcher class="eplay-cast-launcher-el"></google-cast-launcher></button><button class="eplay-control" id="eplaySettings" aria-label="Configurações" aria-expanded="false">⚙</button><button class="eplay-control" id="eplayFullscreen" aria-label="Tela cheia">⛶</button></div></div>',
+      '<button class="eplay-control small eplay-audio-track-btn" id="eplayAudioBtn" aria-label="Áudio e Versão" title="Áudio / Versão">🎧 Áudio</button><button class="eplay-control small" id="eplaySubtitle" aria-label="Legendas">CC</button><button class="eplay-control small eplay-zoom-btn" id="eplayZoom" aria-label="Proporção / Zoom 21:9" title="Proporção / Zoom 21:9 (Atalho: Z)">⛶ 16:9</button><button class="eplay-control small" id="eplayInfo" aria-label="Ficha técnica">ⓘ</button><button class="eplay-control small" id="eplayPip" aria-label="Picture-in-Picture">▣</button><button class="eplay-control small eplay-cast-btn" id="eplayCastBtn" aria-label="Enviar para Chromecast" title="Enviar para Chromecast (Transmitir na TV)"><svg class="eplay-cast-svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.92-11-11-11zm20-7H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg></button><button class="eplay-control" id="eplaySettings" aria-label="Configurações" aria-expanded="false">⚙</button><button class="eplay-control" id="eplayFullscreen" aria-label="Tela cheia">⛶</button></div></div>',
       '<div class="eplay-menu" id="eplayMenu"><h4>Configurações de reprodução</h4>',
       '<div class="eplay-version-section" id="eplayVersionSection" style="display:none;"><div class="eplay-menu-row"><span>Áudio / Versão</span><strong id="eplayVersionBadge" style="color:#ffc107;font-size:11px;"></strong></div><div class="eplay-version-list" id="eplayVersionItems"></div></div>',
       '<button id="eplayAudioSyncMenu" style="display:none">🔊 Sincronizar áudio híbrido</button>',

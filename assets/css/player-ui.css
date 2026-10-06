@@ -337,3 +337,19 @@ body.eplay-fullscreen-active #videoModal #subOptionsPanel {
   100% { opacity: 1; transform: scale(1.15); }
 }
 
+
+/* Mobile: controles quebram em mais de uma linha em vez de sair da tela */
+@media(max-width:920px){
+  .eplay-controls{flex-wrap:wrap;row-gap:4px;column-gap:2px;justify-content:center}
+  .eplay-controls .eplay-spacer{flex:0 0 100%;height:0;order:5}
+  .eplay-controls .eplay-audio-track-btn,
+  .eplay-controls #eplaySubtitle,
+  .eplay-controls .eplay-zoom-btn,
+  .eplay-controls #eplayInfo,
+  .eplay-controls #eplayPip,
+  .eplay-controls .eplay-cast-btn,
+  .eplay-controls #eplaySettings,
+  .eplay-controls #eplayFullscreen{order:6}
+  .eplay-audio-track-btn{min-width:56px!important;padding:0 6px!important;font-size:10px!important}
+  .eplay-zoom-btn{min-width:48px!important;padding:0 5px!important;font-size:10px!important}
+}
