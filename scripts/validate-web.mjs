@@ -31,8 +31,7 @@ const jsFiles = [
   'assets/js/tv-epg.js',
   'assets/js/account.js',
   'assets/js/app.js',
-  'assets/js/player-ui.js',
-  'cast-receiver/receiver.js'
+  'assets/js/player-ui.js'
 ];
 
 for (const file of jsFiles) {
