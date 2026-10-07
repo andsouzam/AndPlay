@@ -701,39 +701,16 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical">
 
-                    <LinearLayout
-                        android:layout_width="match_parent"
+                    <TextView
+                        android:id="@+id/channelsTitle"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
                         android:layout_marginBottom="4dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:id="@+id/channelsTitle"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="📺 Canais em Destaque"
-                            android:textColor="#FFFFFF"
-                            android:textSize="15sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/btnOpenChannelDrawer"
-                            android:layout_width="wrap_content"
-                            android:layout_height="30dp"
-                            android:background="@drawable/pill_focus_bg"
-                            android:clickable="true"
-                            android:focusable="true"
-                            android:gravity="center"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp"
-                            android:text="☰ TODOS OS CANAIS"
-                            android:textColor="#4FC3F7"
-                            android:textSize="11sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
+                        android:text="📺 Canais em Destaque"
+                        android:textColor="#FFFFFF"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
 
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/channelsRail"
@@ -1244,148 +1221,40 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <!-- TOP OVERLAY: BOTÃO VOLTAR TOUCH + TÍTULO DO CONTEÚDO + BADGE CANAL -->
+        <!-- BADGE DO CANAL NO CANTO SUPERIOR DIREITO -->
         <LinearLayout
-            android:id="@+id/playerTopOverlay"
-            android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:layout_gravity="top"
-            android:background="@drawable/player_top_gradient"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
-            android:visibility="gone">
-
-            <TextView
-                android:id="@+id/btnPlayerBack"
-                android:layout_width="wrap_content"
-                android:layout_height="38dp"
-                android:background="@drawable/pill_focus_bg"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:text="◀ VOLTAR"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/playerTitleText"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:layout_marginEnd="16dp"
-                android:layout_weight="1"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:text=""
-                android:textColor="#FFFFFF"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <!-- BADGE DO CANAL NO CANTO SUPERIOR DIREITO -->
-            <LinearLayout
-                android:id="@+id/topChannelBadge"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="#D0080E1C"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingStart="12dp"
-                android:paddingTop="6dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="6dp"
-                android:visibility="gone">
-
-                <TextView
-                    android:id="@+id/topChNum"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="CH 001"
-                    android:textColor="#FFC107"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/topChName"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:text="Globo SP"
-                    android:textColor="#FFFFFF"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- CONTROLES CENTRAIS TOUCH (PLAY / PAUSE / REWIND / FORWARD / PRÓXIMO EP) -->
-        <LinearLayout
-            android:id="@+id/playerCenterControls"
+            android:id="@+id/topChannelBadge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center"
+            android:layout_gravity="top|end"
+            android:layout_margin="16dp"
+            android:background="#D0080E1C"
+            android:gravity="center_vertical"
             android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="6dp"
             android:visibility="gone">
 
             <TextView
-                android:id="@+id/btnPlayerRewind"
-                android:layout_width="54dp"
-                android:layout_height="54dp"
-                android:background="@drawable/pill_focus_bg"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:text="⏪"
-                android:textColor="#FFFFFF"
-                android:textSize="22sp" />
-
-            <TextView
-                android:id="@+id/btnPlayerPlayPause"
-                android:layout_width="68dp"
-                android:layout_height="68dp"
-                android:layout_marginStart="24dp"
-                android:layout_marginEnd="24dp"
-                android:background="@drawable/badge_gold"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:text="⏸"
-                android:textColor="#000000"
-                android:textSize="30sp"
+                android:id="@+id/topChNum"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CH 001"
+                android:textColor="#FFC107"
+                android:textSize="13sp"
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/btnPlayerForward"
-                android:layout_width="54dp"
-                android:layout_height="54dp"
-                android:background="@drawable/pill_focus_bg"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:text="⏩"
-                android:textColor="#FFFFFF"
-                android:textSize="22sp" />
-
-            <TextView
-                android:id="@+id/btnPlayerNextEp"
+                android:id="@+id/topChName"
                 android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:layout_marginStart="20dp"
-                android:background="@drawable/pill_focus_bg"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:text="⏭ PRÓXIMO"
-                android:textColor="#FFC107"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="Globo SP"
+                android:textColor="#FFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
         <!-- BANNER OSD ESTILO TV A CABO (RODAPÉ) -->
@@ -1470,15 +1339,13 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
-            <!-- BARRA DE PROGRESSO DO PROGRAMA (SCRUBBABLE TOUCH) -->
+            <!-- BARRA DE PROGRESSO DO PROGRAMA -->
             <ProgressBar
                 android:id="@+id/osdProgressBar"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
-                android:layout_height="14dp"
+                android:layout_height="4dp"
                 android:layout_marginTop="6dp"
-                android:paddingTop="2dp"
-                android:paddingBottom="2dp"
                 android:max="100"
                 android:progress="45"
                 android:progressTint="#FFC107" />
@@ -1829,7 +1696,7 @@
                 android:clickable="true"
                 android:focusable="true"
                 android:nextFocusLeft="@+id/btnDrawerOptions"
-                android:nextFocusRight="@+id/btnDrawerClose"
+                android:nextFocusRight="@+id/btnDrawerMosaic"
                 android:nextFocusUp="@+id/btnDrawerMosaic"
                 android:nextFocusDown="@+id/drawerCatsRecycler"
                 android:paddingStart="10dp"
@@ -1838,27 +1705,6 @@
                 android:paddingBottom="4dp"
                 android:text="⊞ MOSAICO"
                 android:textColor="#FFFFFF"
-                android:textSize="11sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/btnDrawerClose"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:background="@drawable/card_focus_bg"
-                android:clickable="true"
-                android:focusable="true"
-                android:nextFocusLeft="@+id/btnDrawerMosaic"
-                android:nextFocusRight="@+id/btnDrawerClose"
-                android:nextFocusUp="@+id/btnDrawerClose"
-                android:nextFocusDown="@+id/drawerCatsRecycler"
-                android:paddingStart="10dp"
-                android:paddingTop="4dp"
-                android:paddingEnd="10dp"
-                android:paddingBottom="4dp"
-                android:text="✕ FECHAR"
-                android:textColor="#FF5252"
                 android:textSize="11sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -2383,22 +2229,6 @@
             android:orientation="horizontal">
 
             <TextView
-                android:id="@+id/btnGuideBack"
-                android:layout_width="wrap_content"
-                android:layout_height="32dp"
-                android:layout_marginEnd="14dp"
-                android:background="@drawable/pill_focus_bg"
-                android:clickable="true"
-                android:focusable="true"
-                android:gravity="center"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:text="◀ VOLTAR"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-            <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
@@ -2406,6 +2236,14 @@
                 android:textColor="#FFC107"
                 android:textSize="16sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="16dp"
+                android:text="VOLTAR: Fechar"
+                android:textColor="#888888"
+                android:textSize="11sp" />
 
             <TextView
                 android:id="@+id/guideClock"

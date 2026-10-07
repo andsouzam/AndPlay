@@ -100,15 +100,6 @@ public class SportsHubActivity extends Activity {
         setupSidebar();
         setupContentRv();
 
-        View btnHubBack = findViewById(R.id.btnHubBack);
-        if (btnHubBack != null) {
-            btnHubBack.setOnClickListener(v -> finish());
-        }
-        View btnHubHeaderBack = findViewById(R.id.btnHubHeaderBack);
-        if (btnHubHeaderBack != null) {
-            btnHubHeaderBack.setOnClickListener(v -> finish());
-        }
-
         // Inicia na primeira liga (Brasileirão A) revelando TABELA e CALENDÁRIO
         selectLeague(0, false);
 
