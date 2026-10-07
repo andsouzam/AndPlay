@@ -10,8 +10,8 @@ android {
         applicationId 'com.andplay.app'
         minSdk 21
         targetSdk 34
-        versionCode 27
-        versionName '2.3.9'
+        versionCode 28
+        versionName '2.4.0'
 
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
@@ -51,6 +51,7 @@ dependencies {
     implementation 'androidx.media3:media3-exoplayer:1.2.1'
     implementation 'androidx.media3:media3-ui:1.2.1'
     implementation 'androidx.media3:media3-exoplayer-hls:1.2.1'
+    implementation 'androidx.media3:media3-exoplayer-dash:1.2.1'
     implementation 'androidx.media3:media3-datasource-okhttp:1.2.1'
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'com.google.android.gms:play-services-auth:21.0.0'

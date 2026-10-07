@@ -59,9 +59,11 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
+import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.datasource.okhttp.OkHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.ui.PlayerView;
+import com.andplay.app.provider.RdCanaisResolver;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -335,6 +337,7 @@ public class MainActivity extends Activity {
 
     private int currentChannelIdx = 0;
     private String currentActiveStreamUrl = "";
+    private String currentResolvingUrl = null;
     private boolean isPlayingEmbed = false;
     private boolean isPlayingVod = false;
     private boolean isVideoPlaybackActive = false;
@@ -1793,6 +1796,57 @@ public class MainActivity extends Activity {
 
         boolean isSlotFocused = (slot.slotView != null && slot.slotView.isFocused());
 
+        // Suporte nativo ao RDCanais / RDEmbed no Mosaico via ExoPlayer
+        if (fb.url != null && RdCanaisResolver.isRdCanaisUrl(fb.url)) {
+            final String resolveUrl = fb.url;
+            RdCanaisResolver.resolve(resolveUrl, sharedOkHttpClient, new RdCanaisResolver.Callback() {
+                @Override
+                public void onSuccess(@NonNull RdCanaisResolver.ResolvedStream stream) {
+                    mainHandler.post(() -> {
+                        if (slot.channel != ch) return;
+                        slot.isPlayingEmbed = false;
+                        PlayerView pv = new PlayerView(MainActivity.this);
+                        pv.setFocusable(false);
+                        pv.setFocusableInTouchMode(false);
+                        pv.setUseController(false);
+                        slot.playerView = pv;
+
+                        ExoPlayer ep = new ExoPlayer.Builder(MainActivity.this).build();
+                        slot.exoPlayer = ep;
+                        pv.setPlayer(ep);
+
+                        slot.playerHost.addView(pv, new FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT
+                        ));
+
+                        ep.addListener(new Player.Listener() {
+                            @Override
+                            public void onPlayerError(@NonNull PlaybackException error) {
+                                Log.w("Mosaic", "Slot " + slotIdx + " ExoPlayer error: " + error.getMessage() + ", tentando próximo fallback");
+                                mainHandler.post(() -> tryNextMosaicFallback(slotIdx));
+                            }
+                        });
+
+                        ep.setVolume(isSlotFocused ? 1.0f : 0.0f);
+                        MediaSource mediaSource = RdCanaisResolver.buildMediaSource(MainActivity.this, stream, sharedOkHttpClient);
+                        ep.setMediaSource(mediaSource);
+                        ep.prepare();
+                        ep.play();
+                    });
+                }
+
+                @Override
+                public void onError(@NonNull Exception error) {
+                    mainHandler.post(() -> {
+                        if (slot.channel != ch) return;
+                        Log.w("Mosaic", "Slot " + slotIdx + " falhou ao resolver RDCanais nativo: " + error.getMessage() + ", tentando próximo fallback");
+                        tryNextMosaicFallback(slotIdx);
+                    });
+                }
+            });
+            return;
+        }
+
         if (fb.isEmbed) {
             if (fb.url != null && (fb.url.contains("bolodechocolate") || fb.url.contains("bitmovin"))) {
                 onBitmovinDetectedInMosaic(slotIdx);
@@ -2183,7 +2237,12 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPlayerError(@NonNull PlaybackException error) {
-                Log.w("EPlayPlayer", "ExoPlayer erro: " + error.getMessage() + ", tentando próximo fallback...");
+                Log.w("EPlayPlayer", "ExoPlayer erro: " + error.getMessage() + ", tentando contingência...");
+                if (currentActiveStreamUrl != null && RdCanaisResolver.isRdCanaisUrl(currentActiveStreamUrl) && !isPlayingEmbed) {
+                    Log.i("EPlayPlayer", "Tentando WebView embed como contingência antes de alternar provedor...");
+                    fallbackToEmbedWebView(currentActiveStreamUrl);
+                    return;
+                }
                 mainHandler.post(() -> tryNextFallback());
             }
         });
@@ -5807,31 +5866,63 @@ public class MainActivity extends Activity {
         isPlayingEmbed = isEmbed;
         enforceMaxVolume();
 
-        if (isEmbed) {
+        // 1. Tenta resolver transmissões do RDCanais / RDEmbed para reprodução 100% nativa via ExoPlayer
+        if (RdCanaisResolver.isRdCanaisUrl(url)) {
+            final String targetUrl = url;
+            currentResolvingUrl = targetUrl;
+
             if (exoPlayer != null) {
                 exoPlayer.stop();
                 exoPlayer.clearMediaItems();
             }
-            unifiedExoPlayerView.setVisibility(View.GONE);
-            unifiedEmbedWebView.setVisibility(View.VISIBLE);
+            unifiedEmbedWebView.stopLoading();
+            unifiedEmbedWebView.loadUrl("about:blank");
+            unifiedEmbedWebView.setVisibility(View.GONE);
+            unifiedExoPlayerView.setVisibility(View.VISIBLE);
 
-            // Garante autoplay no parâmetro da URL
-            String autoplayUrl = url + (url.contains("?") ? "&" : "?") + "autoplay=1";
-            unifiedEmbedWebView.loadUrl(autoplayUrl);
+            if (currentMode == ScreenMode.FULLSCREEN) {
+                showOsdBannerLoading();
+            }
 
-            mainHandler.postDelayed(() -> {
-                if (isPlayingEmbed && !isVideoPlaybackActive && currentMode == ScreenMode.FULLSCREEN) {
-                    triggerAutoplayTap();
+            RdCanaisResolver.resolve(targetUrl, sharedOkHttpClient, new RdCanaisResolver.Callback() {
+                @Override
+                public void onSuccess(@NonNull RdCanaisResolver.ResolvedStream stream) {
+                    mainHandler.post(() -> {
+                        if (!targetUrl.equals(currentResolvingUrl)) return;
+                        Log.i("EPlay", "RDCanais resolvido para sinal nativo (" + stream.type + "): " + stream.streamUrl);
+                        try {
+                            unifiedEmbedWebView.setVisibility(View.GONE);
+                            unifiedExoPlayerView.setVisibility(View.VISIBLE);
+                            isPlayingEmbed = false;
+
+                            MediaSource mediaSource = RdCanaisResolver.buildMediaSource(MainActivity.this, stream, sharedOkHttpClient);
+                            exoPlayer.setMediaSource(mediaSource);
+                            if (startPositionMs > 0) {
+                                exoPlayer.seekTo(startPositionMs);
+                            }
+                            exoPlayer.prepare();
+                            exoPlayer.play();
+                        } catch (Exception e) {
+                            Log.e("EPlay", "Erro ao iniciar ExoPlayer nativo com stream resolvido: " + e.getMessage() + ", acionando contingência WebView");
+                            fallbackToEmbedWebView(targetUrl);
+                        }
+                    });
                 }
-            }, 1200);
-            mainHandler.postDelayed(() -> {
-                if (isPlayingEmbed) {
-                    onPlaybackStarted();
-                    if (currentMode == ScreenMode.FULLSCREEN) {
-                        scheduleOsdHide(getOsdTimeoutMs());
-                    }
+
+                @Override
+                public void onError(@NonNull Exception error) {
+                    mainHandler.post(() -> {
+                        if (!targetUrl.equals(currentResolvingUrl)) return;
+                        Log.w("EPlay", "Falha ao resolver stream RDCanais: " + error.getMessage() + ", acionando contingência WebView");
+                        fallbackToEmbedWebView(targetUrl);
+                    });
                 }
-            }, 2200);
+            });
+            return;
+        }
+
+        if (isEmbed) {
+            fallbackToEmbedWebView(url);
         } else {
             unifiedEmbedWebView.stopLoading();
             unifiedEmbedWebView.loadUrl("about:blank");
@@ -5847,6 +5938,34 @@ public class MainActivity extends Activity {
             exoPlayer.prepare();
             exoPlayer.play();
         }
+    }
+
+    private void fallbackToEmbedWebView(String url) {
+        if (exoPlayer != null) {
+            exoPlayer.stop();
+            exoPlayer.clearMediaItems();
+        }
+        unifiedExoPlayerView.setVisibility(View.GONE);
+        unifiedEmbedWebView.setVisibility(View.VISIBLE);
+        isPlayingEmbed = true;
+
+        // Garante autoplay no parâmetro da URL
+        String autoplayUrl = url + (url.contains("?") ? "&" : "?") + "autoplay=1";
+        unifiedEmbedWebView.loadUrl(autoplayUrl);
+
+        mainHandler.postDelayed(() -> {
+            if (isPlayingEmbed && !isVideoPlaybackActive && currentMode == ScreenMode.FULLSCREEN) {
+                triggerAutoplayTap();
+            }
+        }, 1200);
+        mainHandler.postDelayed(() -> {
+            if (isPlayingEmbed) {
+                onPlaybackStarted();
+                if (currentMode == ScreenMode.FULLSCREEN) {
+                    scheduleOsdHide(getOsdTimeoutMs());
+                }
+            }
+        }, 2200);
     }
 
     public void playMovie(Movie movie) {

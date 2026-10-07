@@ -76,13 +76,13 @@ public class Channel implements Serializable {
         for (String prov : priorityOrder) {
             if (com.andplay.app.provider.ProviderManager.PROVIDER_RDCANAIS.equals(prov)) {
                 String rdCleanSlug = getRdCanaisSlug(cleanSlug, id);
-                list.add(new StreamFallback("RDCanais (HD " + serverNum + ")", "https://rdcanais.net/" + rdCleanSlug, true));
+                list.add(new StreamFallback("RDCanais (Nativo HD " + serverNum + ")", "https://rdcanais.net/" + rdCleanSlug, true));
                 serverNum++;
             } else if (com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED.equals(prov)) {
                 if (embed != null && !embed.isEmpty()) {
-                    list.add(new StreamFallback("RDEmbed (HD " + serverNum + ")", embed, true));
+                    list.add(new StreamFallback("RDEmbed (Nativo HD " + serverNum + ")", embed, true));
                 } else {
-                    list.add(new StreamFallback("RDEmbed (HD " + serverNum + ")", "https://v2.rdembed.sbs/" + rdSlug, true));
+                    list.add(new StreamFallback("RDEmbed (Nativo HD " + serverNum + ")", "https://v2.rdembed.sbs/" + rdSlug, true));
                 }
                 serverNum++;
             } else if (com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE.equals(prov)) {
