@@ -2288,92 +2288,161 @@ public class ApiClient {
         public String lang;
         public String format;
         public String release;
+        public String candidateTitle;
 
         @Override
         public String toString() {
-            return lang + (release != null && !release.isEmpty() ? " (" + release + ")" : "");
+            String flag = (lang != null && lang.contains("Brasil")) ? "🇧🇷 " : "🇵🇹 ";
+            String rel = (release != null && !release.isEmpty()) ? release :
+                    (candidateTitle != null && !candidateTitle.isEmpty() ? candidateTitle : lang);
+            return flag + rel;
+        }
+    }
+
+    private static class SubCandidate {
+        final String id;
+        final String name;
+        final String year;
+
+        SubCandidate(String id, String name, String year) {
+            this.id = id;
+            this.name = name;
+            this.year = year;
         }
     }
 
     /**
+     * Limpa título de metadados IPTV para busca precisa no catálogo Stremio Cinemeta.
+     * Remove prefixos numéricos, tags entre colchetes/parênteses, diacríticos e pontuações que geram 504 no Cinemeta.
+     */
+    public static String cleanTitleForSearch(String rawTitle) {
+        if (rawTitle == null || rawTitle.trim().isEmpty()) return "";
+
+        // 1. Remove numeração inicial comum ("01 - ", "123 - ", "TOP 10 - ")
+        String q = rawTitle.replaceFirst("^[0-9]+\\s*[-–—]\\s*", "");
+        q = q.replaceFirst("(?i)^top\\s*[0-9]*\\s*[-–—]\\s*", "");
+
+        // 2. Remove tags em colchetes e parênteses ("[4K]", "(2024)", "[DUBLADO]")
+        q = q.replaceAll("\\[.*?\\]", " ");
+        q = q.replaceAll("\\(.*?\\)", " ");
+
+        // 3. Remove termos de qualidade e metadados comuns
+        q = q.replaceAll("(?i)\\b(4k|uhd|hdr|dv|hdcam|cam|ts|tc|cinema|dublado|dub|legendado|leg|lancamento|lançamento|completo|temporada|episodio|temp|ep|fhd|hd|720p|1080p|2160p|web-dl|webdl|bluray|bdrip|brrip|repack|vostfr|multi)\\b", " ");
+
+        // 4. Normaliza acentos para caracteres simples sem diacríticos (ex: "Bússola" -> "Bussola")
+        q = java.text.Normalizer.normalize(q, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "");
+
+        // 5. Substitui qualquer pontuação e caracteres especiais por espaço (evita 504/timeout no Cinemeta por ':')
+        q = q.replaceAll("[^a-zA-Z0-9\\s]", " ");
+
+        // 6. Colapsa múltiplos espaços
+        q = q.replaceAll("\\s+", " ").trim();
+
+        if (q.isEmpty()) {
+            q = rawTitle.trim().replaceAll("[^a-zA-Z0-9\\s]", " ").replaceAll("\\s+", " ").trim();
+        }
+        return q;
+    }
+
+    /**
      * Busca legendas online em português (PT-BR e PT-PT) via Cinemeta + OpenSubtitles v3 (Stremio).
+     * Consulta os melhores candidatos do Cinemeta e agrega os resultados de legendas em português.
      */
     public static List<OnlineSubtitle> searchOnlineSubtitles(String rawTitle, String mediaType, int season, int episode) {
         List<OnlineSubtitle> results = new ArrayList<>();
         if (rawTitle == null || rawTitle.trim().isEmpty()) return results;
 
         try {
-            // Limpa título de tags e metadados
-            String cleanQuery = rawTitle
-                    .replaceAll("\\[.*?\\]", "")
-                    .replaceAll("\\(.*?\\)", "")
-                    .replaceAll("(?i)\\b(4k|dublado|legendado|completo|temporada|episodio|hd|fhd)\\b", "")
-                    .trim();
-
+            String cleanQuery = cleanTitleForSearch(rawTitle);
             if (cleanQuery.isEmpty()) cleanQuery = rawTitle.trim();
 
             String type = "series".equalsIgnoreCase(mediaType) ? "series" : "movie";
 
-            // 1. Busca Cinemeta para descobrir o IMDB ID
-            String searchUrl = "https://v3-cinemeta.strem.io/catalog/" + type + "/top/search=" + java.net.URLEncoder.encode(cleanQuery, "UTF-8") + ".json";
+            // 1. Busca Cinemeta para descobrir os candidatos IMDb mais relevantes
+            String searchUrl = "https://v3-cinemeta.strem.io/catalog/" + type + "/top/search="
+                    + java.net.URLEncoder.encode(cleanQuery, "UTF-8") + ".json";
             Request cinemetaReq = new Request.Builder()
                     .url(searchUrl)
-                    .header("User-Agent", "Mozilla/5.0")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .build();
 
-            String imdbId = null;
+            List<SubCandidate> candidates = new ArrayList<>();
             try (Response resp = httpClient.newCall(cinemetaReq).execute()) {
                 if (resp.isSuccessful() && resp.body() != null) {
                     JsonObject json = JsonParser.parseString(resp.body().string()).getAsJsonObject();
                     if (json.has("metas") && json.get("metas").isJsonArray()) {
                         JsonArray metas = json.getAsJsonArray("metas");
-                        if (metas.size() > 0) {
-                            JsonObject first = metas.get(0).getAsJsonObject();
-                            if (first.has("imdb_id") && !first.get("imdb_id").isJsonNull()) {
-                                imdbId = first.get("imdb_id").getAsString();
-                            } else if (first.has("id") && !first.get("id").isJsonNull()) {
-                                imdbId = first.get("id").getAsString();
+                        int maxCands = Math.min(metas.size(), 3);
+                        for (int i = 0; i < maxCands; i++) {
+                            JsonObject m = metas.get(i).getAsJsonObject();
+                            String cid = null;
+                            if (m.has("imdb_id") && !m.get("imdb_id").isJsonNull()) {
+                                cid = m.get("imdb_id").getAsString();
+                            } else if (m.has("id") && !m.get("id").isJsonNull()) {
+                                cid = m.get("id").getAsString();
+                            }
+                            if (cid != null && !cid.isEmpty()) {
+                                String name = optString(m, "name", "");
+                                String year = optString(m, "year", optString(m, "releaseInfo", ""));
+                                candidates.add(new SubCandidate(cid, name, year));
                             }
                         }
                     }
                 }
             }
 
-            if (imdbId == null || imdbId.isEmpty()) return results;
+            if (candidates.isEmpty()) return results;
 
-            // 2. Busca legendas no OpenSubtitles v3
-            String subQuery = type.equals("series") && season > 0 && episode > 0
-                    ? imdbId + ":" + season + ":" + episode
-                    : imdbId;
+            // 2. Busca legendas no OpenSubtitles v3 para os candidatos encontrados
+            Set<String> seenUrls = new HashSet<>();
+            for (SubCandidate cand : candidates) {
+                String subQuery = type.equals("series") && season > 0 && episode > 0
+                        ? cand.id + ":" + season + ":" + episode
+                        : cand.id;
 
-            String subUrl = "https://opensubtitles-v3.strem.io/subtitles/" + type + "/" + subQuery + ".json";
-            Request subReq = new Request.Builder()
-                    .url(subUrl)
-                    .header("User-Agent", "Mozilla/5.0")
-                    .build();
+                String subUrl = "https://opensubtitles-v3.strem.io/subtitles/" + type + "/" + subQuery + ".json";
+                Request subReq = new Request.Builder()
+                        .url(subUrl)
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                        .build();
 
-            try (Response resp = httpClient.newCall(subReq).execute()) {
-                if (resp.isSuccessful() && resp.body() != null) {
-                    JsonObject json = JsonParser.parseString(resp.body().string()).getAsJsonObject();
-                    if (json.has("subtitles") && json.get("subtitles").isJsonArray()) {
-                        JsonArray subs = json.getAsJsonArray("subtitles");
-                        for (int i = 0; i < subs.size(); i++) {
-                            JsonObject s = subs.get(i).getAsJsonObject();
-                            String lang = s.has("lang") ? optString(s, "lang", "").toLowerCase(Locale.ROOT) : "";
-                            // Filtrar legendas em português
-                            if (lang.equals("pob") || lang.equals("por") || lang.startsWith("po") || lang.equals("pt")) {
-                                OnlineSubtitle sub = new OnlineSubtitle();
-                                sub.id = s.has("id") ? optString(s, "id", String.valueOf(i)) : String.valueOf(i);
-                                sub.url = optString(s, "url", "");
-                                sub.format = optString(s, "format", "srt");
-                                sub.lang = lang.equals("pob") ? "Português (Brasil)" : "Português";
-                                sub.release = optString(s, "release", "");
-                                if (!sub.url.isEmpty()) {
+                try (Response resp = httpClient.newCall(subReq).execute()) {
+                    if (resp.isSuccessful() && resp.body() != null) {
+                        JsonObject json = JsonParser.parseString(resp.body().string()).getAsJsonObject();
+                        if (json.has("subtitles") && json.get("subtitles").isJsonArray()) {
+                            JsonArray subs = json.getAsJsonArray("subtitles");
+                            for (int i = 0; i < subs.size(); i++) {
+                                JsonObject s = subs.get(i).getAsJsonObject();
+                                String lang = s.has("lang") ? optString(s, "lang", "").toLowerCase(Locale.ROOT) : "";
+                                // Filtrar legendas em português
+                                if (lang.equals("pob") || lang.equals("por") || lang.startsWith("po") || lang.equals("pt")) {
+                                    String subUrlVal = optString(s, "url", "");
+                                    if (subUrlVal.isEmpty() || seenUrls.contains(subUrlVal)) continue;
+                                    seenUrls.add(subUrlVal);
+
+                                    OnlineSubtitle sub = new OnlineSubtitle();
+                                    sub.id = s.has("id") ? optString(s, "id", String.valueOf(i)) : String.valueOf(i);
+                                    sub.url = subUrlVal;
+                                    sub.format = optString(s, "format", "srt");
+                                    sub.lang = lang.equals("pob") ? "Português (Brasil)" : "Português";
+
+                                    String fileName = optString(s, "subtitleFileName",
+                                            optString(s, "movieReleaseName", optString(s, "release", "")));
+                                    fileName = fileName.replaceAll("(?i)\\.srt$", "").trim();
+                                    sub.release = fileName;
+                                    sub.candidateTitle = cand.name + (cand.year.isEmpty() ? "" : " (" + cand.year + ")");
+
                                     results.add(sub);
                                 }
                             }
                         }
                     }
+                } catch (Exception ignored) {}
+
+                // Se já obteve legendas suficientes para o usuário escolher, evita requests desnecessários
+                if (results.size() >= 8) {
+                    break;
                 }
             }
         } catch (Exception e) {

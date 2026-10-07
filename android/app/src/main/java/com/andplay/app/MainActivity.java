@@ -6969,6 +6969,10 @@ public class MainActivity extends Activity {
     }
 
     private void searchAndSelectOnlineSubtitles() {
+        searchAndSelectOnlineSubtitles(null);
+    }
+
+    private void searchAndSelectOnlineSubtitles(String queryOverride) {
         if (isPlayingEmbed || exoPlayer == null) {
             Toast.makeText(this, "Legendas externas não disponíveis neste fluxo.", Toast.LENGTH_SHORT).show();
             return;
@@ -6980,22 +6984,33 @@ public class MainActivity extends Activity {
         int epNum = 0;
 
         if (activeVodMovie != null) {
-            title = activeVodMovie.getRawTitle();
+            title = (activeVodMovie.getDisplayTitle() != null && !activeVodMovie.getDisplayTitle().isEmpty())
+                    ? activeVodMovie.getDisplayTitle()
+                    : activeVodMovie.getRawTitle();
             mediaType = "movie";
         } else if (activeVodSeries != null) {
-            title = activeVodSeries.getRawTitle();
+            title = (activeVodSeries.getDisplayTitle() != null && !activeVodSeries.getDisplayTitle().isEmpty())
+                    ? activeVodSeries.getDisplayTitle()
+                    : activeVodSeries.getRawTitle();
             mediaType = "series";
             try {
                 if (activeVodSeasonNum != null) {
                     sNum = Integer.parseInt(activeVodSeasonNum.replaceAll("[^0-9]", ""));
                 }
             } catch (Exception ignored) {}
+            if (sNum <= 0) sNum = 1;
+
             if (activeVodEpisode != null) {
                 epNum = activeVodEpisode.episode_num;
             }
+            if (epNum <= 0) epNum = 1;
         } else {
             Toast.makeText(this, "Nenhuma mídia em reprodução.", Toast.LENGTH_SHORT).show();
             return;
+        }
+
+        if (queryOverride != null && !queryOverride.trim().isEmpty()) {
+            title = queryOverride.trim();
         }
 
         final String finalTitle = title;
@@ -7003,14 +7018,28 @@ public class MainActivity extends Activity {
         final int finalSeason = sNum;
         final int finalEpisode = epNum;
 
-        Toast.makeText(this, "🔍 Buscando legendas online (OpenSubtitles)...", Toast.LENGTH_SHORT).show();
+        // Diálogo informativo com loading para dar feedback visual imediato ao usuário
+        AlertDialog progressDialog = createThemedDialogBuilder()
+                .setTitle("🔍 Buscando Legendas Online")
+                .setMessage("Pesquisando legendas em português para:\n\"" + finalTitle + "\"\n\nAguarde um instante...")
+                .setNegativeButton("Cancelar", (d, w) -> d.dismiss())
+                .setCancelable(true)
+                .create();
+        styleDialogButtons(progressDialog);
+        progressDialog.show();
 
         executor.execute(() -> {
             List<ApiClient.OnlineSubtitle> subs = ApiClient.searchOnlineSubtitles(finalTitle, finalMediaType, finalSeason, finalEpisode);
             mainHandler.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
+                try {
+                    if (progressDialog.isShowing()) {
+                        progressDialog.dismiss();
+                    }
+                } catch (Exception ignored) {}
+
                 if (subs == null || subs.isEmpty()) {
-                    Toast.makeText(MainActivity.this, "Nenhuma legenda em português encontrada online.", Toast.LENGTH_LONG).show();
+                    showManualSubtitleSearchDialog(finalTitle, finalMediaType, finalSeason, finalEpisode);
                     return;
                 }
 
@@ -7021,10 +7050,14 @@ public class MainActivity extends Activity {
                 }
 
                 AlertDialog dialog = createThemedDialogBuilder()
-                        .setTitle("🌐 Legendas em Português (" + subs.size() + ")")
+                        .setTitle("🌐 Legendas Disponíveis (" + subs.size() + ")")
                         .setItems(options, (d, which) -> {
                             d.dismiss();
                             applyOnlineSubtitle(subs.get(which));
+                        })
+                        .setNeutralButton("✏️ Buscar outro título", (d, w) -> {
+                            d.dismiss();
+                            showManualSubtitleSearchDialog(finalTitle, finalMediaType, finalSeason, finalEpisode);
                         })
                         .setNegativeButton("Voltar", (d, w) -> showAudioAndSubtitleDialog())
                         .create();
@@ -7032,6 +7065,48 @@ public class MainActivity extends Activity {
                 dialog.show();
             });
         });
+    }
+
+    private void showManualSubtitleSearchDialog(String initialQuery, String mediaType, int season, int episode) {
+        if (isFinishing() || isDestroyed()) return;
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(48, 24, 48, 16);
+
+        TextView prompt = new TextView(this);
+        prompt.setText("Não encontramos legendas automáticas para:\n\"" + initialQuery + "\"\n\nDigite o nome do filme/série (ou o título em inglês) para pesquisar:");
+        prompt.setTextColor(Color.parseColor("#E0E6ED"));
+        prompt.setTextSize(14f);
+        prompt.setPadding(0, 0, 0, 16);
+        layout.addView(prompt);
+
+        EditText input = new EditText(this);
+        input.setText(ApiClient.cleanTitleForSearch(initialQuery));
+        input.setHint("Ex: Inception, Matrix, Dune...");
+        input.setTextColor(Color.WHITE);
+        input.setHintTextColor(Color.parseColor("#80A0C0"));
+        input.setBackgroundColor(Color.parseColor("#202838"));
+        input.setPadding(24, 20, 24, 20);
+        input.setSingleLine(true);
+        input.setFocusable(true);
+        input.setFocusableInTouchMode(true);
+        layout.addView(input);
+
+        AlertDialog searchDialog = createThemedDialogBuilder()
+                .setTitle("🔍 Buscar Legenda Manual")
+                .setView(layout)
+                .setPositiveButton("🔍 Pesquisar", (d, w) -> {
+                    String custom = input.getText().toString().trim();
+                    if (!custom.isEmpty()) {
+                        searchAndSelectOnlineSubtitles(custom);
+                    }
+                })
+                .setNegativeButton("Voltar", (d, w) -> showAudioAndSubtitleDialog())
+                .create();
+        styleDialogButtons(searchDialog);
+        searchDialog.show();
+        input.requestFocus();
     }
 
     private void applyOnlineSubtitle(ApiClient.OnlineSubtitle sub) {
@@ -7046,11 +7121,15 @@ public class MainActivity extends Activity {
                     ? MimeTypes.TEXT_VTT
                     : MimeTypes.APPLICATION_SUBRIP;
 
+            String label = sub.release != null && !sub.release.isEmpty()
+                    ? sub.release
+                    : "Legenda Online (" + sub.lang + ")";
+
             MediaItem.SubtitleConfiguration subConfig = new MediaItem.SubtitleConfiguration.Builder(Uri.parse(sub.url))
                     .setMimeType(mimeType)
                     .setLanguage("por")
-                    .setLabel(sub.release != null && !sub.release.isEmpty() ? sub.release : "Legenda Online (" + sub.lang + ")")
-                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                    .setLabel(label)
+                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT | C.SELECTION_FLAG_FORCED)
                     .build();
 
             MediaItem newItem = currentItem.buildUpon()
@@ -7062,14 +7141,34 @@ public class MainActivity extends Activity {
             if (isPlaying) {
                 exoPlayer.play();
             }
+
+            // Ativa exibição de faixas de texto no ExoPlayer
             exoPlayer.setTrackSelectionParameters(
                     exoPlayer.getTrackSelectionParameters()
                             .buildUpon()
+                            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
                             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                            .setPreferredTextLanguage("por")
                             .build()
             );
+
+            // Garante estilo visual elegante e nítido das legendas (texto branco, contorno preto)
+            if (unifiedExoPlayerView != null && unifiedExoPlayerView.getSubtitleView() != null) {
+                androidx.media3.ui.SubtitleView subView = unifiedExoPlayerView.getSubtitleView();
+                androidx.media3.ui.CaptionStyleCompat style = new androidx.media3.ui.CaptionStyleCompat(
+                        Color.WHITE,
+                        Color.TRANSPARENT,
+                        Color.TRANSPARENT,
+                        androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                        Color.BLACK,
+                        null
+                );
+                subView.setStyle(style);
+                subView.setFractionalTextSize(0.053f);
+            }
+
             if (playerOptAudioSubsValue != null) {
-                playerOptAudioSubsValue.setText(sub.lang != null ? sub.lang : "Legenda Online");
+                playerOptAudioSubsValue.setText(label.length() > 20 ? label.substring(0, 18) + "..." : label);
             }
             Toast.makeText(this, "💬 Legenda online aplicada!", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
