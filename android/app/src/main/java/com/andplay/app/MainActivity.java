@@ -6307,12 +6307,93 @@ public class MainActivity extends Activity {
             return false;
         });
         btn.setOnFocusChangeListener((v, hasFocus) -> {
-            v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start();
+            v.animate().scaleX(hasFocus ? 1.02f : 1.0f).scaleY(hasFocus ? 1.02f : 1.0f).setDuration(80).start();
         });
+    }
+
+    private List<View> getVisiblePlayerOptionItems() {
+        List<View> items = new ArrayList<>();
+        if (btnPlayerOptSkipIntro != null && btnPlayerOptSkipIntro.getVisibility() == View.VISIBLE) items.add(btnPlayerOptSkipIntro);
+        if (btnPlayerOptVersions != null && btnPlayerOptVersions.getVisibility() == View.VISIBLE) items.add(btnPlayerOptVersions);
+        if (btnPlayerOptAudioSubs != null && btnPlayerOptAudioSubs.getVisibility() == View.VISIBLE) items.add(btnPlayerOptAudioSubs);
+        if (btnPlayerOptSpeed != null && btnPlayerOptSpeed.getVisibility() == View.VISIBLE) items.add(btnPlayerOptSpeed);
+        if (btnPlayerOptNextEpisode != null && btnPlayerOptNextEpisode.getVisibility() == View.VISIBLE) items.add(btnPlayerOptNextEpisode);
+        return items;
+    }
+
+    private boolean handlePlayerOptionsMenuKeyEvent(KeyEvent event) {
+        if (playerOptionsMenu == null || playerOptionsMenu.getVisibility() != View.VISIBLE) {
+            return false;
+        }
+
+        int keyCode = event.getKeyCode();
+        int action = event.getAction();
+
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (action == KeyEvent.ACTION_UP) {
+                closePlayerOptionsMenu();
+            }
+            return true;
+        }
+
+        if (action != KeyEvent.ACTION_DOWN) {
+            return keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER;
+        }
+
+        List<View> items = getVisiblePlayerOptionItems();
+        if (items.isEmpty()) return true;
+
+        int currentIdx = -1;
+        for (int i = 0; i < items.size(); i++) {
+            if (items.get(i).hasFocus()) {
+                currentIdx = i;
+                break;
+            }
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+            if (currentIdx >= 0 && currentIdx < items.size() - 1) {
+                items.get(currentIdx + 1).requestFocus();
+            } else if (currentIdx == -1) {
+                items.get(0).requestFocus();
+            }
+            return true;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            if (currentIdx > 0) {
+                items.get(currentIdx - 1).requestFocus();
+            } else if (currentIdx == 0) {
+                // No item do topo, subir fecha o painel de opções
+                closePlayerOptionsMenu();
+            } else {
+                items.get(0).requestFocus();
+            }
+            return true;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+            if (currentIdx >= 0 && currentIdx < items.size()) {
+                items.get(currentIdx).performClick();
+                return true;
+            }
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            return true; // Isola teclas horizontais dentro do menu vertical
+        }
+
+        return false;
     }
 
     private void openPlayerOptionsMenu() {
         if (!isPlayingVod || playerOptionsMenu == null) return;
+
+        // Regra de exclusão mútua: overlays não devem se sobrepor
+        if (osdBanner != null) osdBanner.setVisibility(View.GONE);
+        if (topChannelBadge != null) topChannelBadge.setVisibility(View.GONE);
+        osdHandler.removeCallbacks(osdHideRunnable);
+
         playerOptionsMenu.setVisibility(View.VISIBLE);
         playerOptionsMenu.bringToFront();
 
@@ -6343,14 +6424,11 @@ public class MainActivity extends Activity {
                     : currentPlaybackSpeed + "×");
         }
 
-        // Set focus on first visible focusable item
-        View focusTarget = (btnPlayerOptSkipIntro != null && btnPlayerOptSkipIntro.getVisibility() == View.VISIBLE)
-                ? btnPlayerOptSkipIntro
-                : (btnPlayerOptVersions != null && btnPlayerOptVersions.getVisibility() == View.VISIBLE)
-                ? btnPlayerOptVersions : btnPlayerOptAudioSubs;
-        if (focusTarget != null) focusTarget.requestFocus();
-
-        osdHandler.removeCallbacks(osdHideRunnable);
+        // Foca no primeiro item visível da lista de opções
+        List<View> items = getVisiblePlayerOptionItems();
+        if (!items.isEmpty()) {
+            items.get(0).requestFocus();
+        }
     }
 
     private void closePlayerOptionsMenu() {
@@ -6908,6 +6986,10 @@ public class MainActivity extends Activity {
 
     public void showOsdBannerLoading() {
         if (isMosaicActive) return;
+        // Overlays não devem se sobrepor: ao exibir OSD, fecha o menu de opções
+        if (playerOptionsMenu != null && playerOptionsMenu.getVisibility() == View.VISIBLE) {
+            closePlayerOptionsMenu();
+        }
         osdHandler.removeCallbacks(osdHideRunnable);
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
         if (osdBanner != null) osdBanner.setVisibility(View.VISIBLE);
@@ -6919,6 +7001,10 @@ public class MainActivity extends Activity {
         // Fechar overlay sports para não coexistir com o OSD
         if (standingsOverlayVisible) {
             hideSportsOverlay();
+        }
+        // Overlays não devem se sobrepor: ao exibir OSD, fecha o menu de opções
+        if (playerOptionsMenu != null && playerOptionsMenu.getVisibility() == View.VISIBLE) {
+            closePlayerOptionsMenu();
         }
         osdHandler.removeCallbacks(osdHideRunnable);
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.VISIBLE);
@@ -6938,9 +7024,6 @@ public class MainActivity extends Activity {
     }
 
     public void hideOsdBanner() {
-        if (playerOptionsMenu != null && playerOptionsMenu.getVisibility() == View.VISIBLE) {
-            return; // Mantém visível/ativo se o usuário estiver escolhendo opções no menu
-        }
         osdHandler.removeCallbacks(osdHideRunnable);
         if (topChannelBadge != null) topChannelBadge.setVisibility(View.GONE);
         if (osdBanner != null) osdBanner.setVisibility(View.GONE);
@@ -9022,18 +9105,10 @@ public class MainActivity extends Activity {
                         }
                     } else {
                         // Em VOD (Filme ou Série):
-                        // 1. Se o menu de opções estiver visível na tela:
+                        // 1. Se o menu de opções estiver visível na tela, navega entre as opções por D-pad
                         if (playerOptionsMenu != null && playerOptionsMenu.getVisibility() == View.VISIBLE) {
-                            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                                closePlayerOptionsMenu();
+                            if (handlePlayerOptionsMenuKeyEvent(event)) {
                                 return true;
-                            }
-                            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                                return true; // Consome para evitar rolagem
-                            }
-                            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
-                                    || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
-                                return super.dispatchKeyEvent(event);
                             }
                         }
 
