@@ -5830,7 +5830,6 @@ public class MainActivity extends Activity {
         if (currentFallbackIdx < currentChannelFallbacks.size()) {
             Channel.StreamFallback nextFb = currentChannelFallbacks.get(currentFallbackIdx);
             Log.i("EPlay", "Acionando fallback #" + (currentFallbackIdx + 1) + ": " + nextFb.name + " (" + nextFb.url + ")");
-            Toast.makeText(this, "Alternando para: " + nextFb.name, Toast.LENGTH_SHORT).show();
             playStream(nextFb.url, nextFb.isEmbed);
         } else {
             Log.w("EPlay", "Todos os provedores de transmissão falharam para o canal atual.");
