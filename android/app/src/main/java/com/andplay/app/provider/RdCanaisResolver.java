@@ -289,7 +289,8 @@ public class RdCanaisResolver {
      * Desofuscação matemática das camadas Base64 do bolodechocolate / esportesembed.
      */
     public static String decodeBolodechocolateHtml(String html) {
-        if (html == null || (!html.contains("String.fromCharCode") && !html.contains("atob"))) {
+        if (html == null || html.contains("window.STREAM_URLS") || html.contains("\"ref\":")
+                || (!html.contains("String.fromCharCode") && !html.contains("atob"))) {
             return html;
         }
         try {

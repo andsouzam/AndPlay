@@ -28,10 +28,10 @@ public class ProviderManager {
 
     public static List<String> getPriorityList(Context context) {
         if (context == null) {
-            return new ArrayList<>(Arrays.asList(PROVIDER_STREAMVERDE, PROVIDER_RDCANAIS, PROVIDER_RDEMBED));
+            return new ArrayList<>(Arrays.asList(PROVIDER_RDCANAIS, PROVIDER_RDEMBED, PROVIDER_STREAMVERDE));
         }
         SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-        String saved = prefs.getString(KEY_PRIORITY, "streamverde,rdcanais,rdembed");
+        String saved = prefs.getString(KEY_PRIORITY, "rdcanais,rdembed,streamverde");
 
         String[] parts = saved.split(",");
         List<String> list = new ArrayList<>();
@@ -41,9 +41,9 @@ public class ProviderManager {
                 list.add(clean);
             }
         }
-        if (!list.contains(PROVIDER_STREAMVERDE)) list.add(PROVIDER_STREAMVERDE);
         if (!list.contains(PROVIDER_RDCANAIS)) list.add(PROVIDER_RDCANAIS);
         if (!list.contains(PROVIDER_RDEMBED)) list.add(PROVIDER_RDEMBED);
+        if (!list.contains(PROVIDER_STREAMVERDE)) list.add(PROVIDER_STREAMVERDE);
         return list;
     }
 

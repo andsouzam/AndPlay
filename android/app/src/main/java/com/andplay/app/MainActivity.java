@@ -903,15 +903,6 @@ public class MainActivity extends Activity {
                         onMosaicSlotClicked(slotIdx);
                     }
                 });
-                slot.slotView.setOnKeyListener((v, keyCode, event) -> {
-                    if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
-                        if (isMosaicActive) {
-                            onMosaicSlotClicked(slotIdx);
-                            return true;
-                        }
-                    }
-                    return false;
-                });
             }
         }
     }
@@ -1212,7 +1203,11 @@ public class MainActivity extends Activity {
         }
     }
 
+    private long lastMosaicSlotClickedAt = 0;
     private void onMosaicSlotClicked(int slotIdx) {
+        long now = SystemClock.uptimeMillis();
+        if (now - lastMosaicSlotClickedAt < 450) return;
+        lastMosaicSlotClickedAt = now;
         mosaicTargetSlotIdx = slotIdx;
         openDrawer();
     }
@@ -1514,17 +1509,69 @@ public class MainActivity extends Activity {
             }
         }
 
-        // 5. Intercepta páginas e frames do rdcanais.net, bolodechocolate, rdembed, esportesembed e localhost.tattoo limpando anúncios, controles e garantindo permissões de autoplay
-        if (url.contains("rdcanais.net") || url.contains("rdembed") || url.contains("redecanais") || url.contains("bolodechocolate") || url.contains("esportesembed") || url.contains("localhost.tattoo")) {
+        // 5. Intercepta páginas e frames do ecossistema RDCanais, bolodechocolate, RDEmbed, esportesembed limpando anúncios, controles e garantindo permissões de autoplay
+        boolean isEmbedStreamHost = !url.contains("google") && !url.contains("gstatic") && (
+                url.contains("rdcanais")
+                || url.contains("rdembed")
+                || url.contains("redecanais")
+                || url.contains("reidosembeds")
+                || url.contains("bolodechocolate")
+                || url.contains("esportesembed")
+                || url.contains("localhost.tattoo")
+                || url.contains("comeumamao")
+                || url.contains("repositoratacadao")
+                || url.contains("wordprees")
+                || url.contains("seraquevaiter")
+                || url.contains("goldorayanhoje")
+                || url.contains("pamonha")
+                || url.contains("telematricula")
+                || url.contains("ourlawyermadeuschangethenameofthissongsowewouldntgetsued")
+                || url.contains(".monster")
+                || url.contains(".cyou")
+                || url.contains(".sbs")
+                || url.contains(".forum")
+                || url.contains(".shop")
+                || url.contains(".xyz")
+                || url.contains(".top")
+                || url.contains(".lat")
+                || url.contains(".cfd")
+                || url.contains(".fit")
+                || url.contains(".click")
+                || url.contains(".site")
+                || url.contains(".online")
+                || url.contains(".fun")
+                || url.contains(".live")
+                || url.contains(".stream")
+                || url.contains(".pro")
+                || url.contains(".link")
+                || url.contains(".icu")
+                || request.isForMainFrame()
+                || (request.getRequestHeaders() != null && "iframe".equalsIgnoreCase(request.getRequestHeaders().get("Sec-Fetch-Dest")))
+        );
+
+        if (isEmbedStreamHost) {
             boolean isHtml = request.isForMainFrame()
                     || (request.getRequestHeaders() != null && String.valueOf(request.getRequestHeaders().get("Accept")).contains("text/html"))
-                    || (!url.contains(".js") && !url.contains(".css") && !url.contains(".png") && !url.contains(".jpg") && !url.contains(".m3u8") && !url.contains(".ts") && !url.contains(".woff") && !url.contains(".svg"));
+                    || (request.getRequestHeaders() != null && "iframe".equalsIgnoreCase(request.getRequestHeaders().get("Sec-Fetch-Dest")))
+                    || (!url.contains(".js") && !url.contains(".css") && !url.contains(".png") && !url.contains(".jpg") && !url.contains(".m3u8") && !url.contains(".ts") && !url.contains(".woff") && !url.contains(".svg") && !url.contains(".mpd") && !url.contains(".mp4") && !url.contains(".json"));
             if (isHtml) {
                 try {
-                    Request okReq = new Request.Builder()
-                            .url(url)
-                            .header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
-                            .build();
+                    Request.Builder okBuilder = new Request.Builder().url(url);
+                    if (request.getRequestHeaders() != null) {
+                        for (Map.Entry<String, String> entry : request.getRequestHeaders().entrySet()) {
+                            if (!entry.getKey().equalsIgnoreCase("User-Agent")) {
+                                okBuilder.header(entry.getKey(), entry.getValue());
+                            }
+                        }
+                    }
+                    try {
+                        String cookie = CookieManager.getInstance().getCookie(url);
+                        if (cookie != null && !cookie.isEmpty()) {
+                            okBuilder.header("Cookie", cookie);
+                        }
+                    } catch (Exception ignored) {}
+                    okBuilder.header("User-Agent", "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36");
+                    Request okReq = okBuilder.build();
                     Response okRes = sharedOkHttpClient.newCall(okReq).execute();
                     if (okRes.isSuccessful() && okRes.body() != null) {
                         String html = okRes.body().string();
@@ -1534,15 +1581,24 @@ public class MainActivity extends Activity {
                             return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
                         }
                         html = decodeBolodechocolateHtml(html);
+
+                        // Neutraliza restrições de autoplay e popups VAST em players RDEmbed / Clappr / HLS
+                        html = html.replace("window.__PLAY_AUTOPLAY_ENABLED = false;", "window.__PLAY_AUTOPLAY_ENABLED = true;");
+                        html = html.replace("window.__PLAY_VAST_ACTIVE = true;", "window.__PLAY_VAST_ACTIVE = false;");
+                        html = html.replace("window.__PLAY_AUTOPLAY_ENABLED=false;", "window.__PLAY_AUTOPLAY_ENABLED=true;");
+                        html = html.replace("window.__PLAY_VAST_ACTIVE=true;", "window.__PLAY_VAST_ACTIVE=false;");
+
                         String hideStyle = "<style>" +
                                 ".jw-display-icon-container, .jw-display-icon-display, .jw-icon-playback, .jw-controlbar, .jw-overlays, .jw-logo, .jw-title, " +
                                 ".plyr__control--overlaid, .plyr__controls, .vjs-big-play-button, .vjs-control-bar, button[data-plyr=\"play\"], " +
                                 "video::-webkit-media-controls, " +
                                 ".bmpui-ui-seekbar, .bmpui-ui-volumeslider, .bmpui-ui-controlbar, .bmpui-controlbar, " +
                                 ".bmpui-ui-playbacktogglebutton, .bmpui-ui-hugeplaybacktogglebutton, .bmpui-ui-watermark, " +
-                                ".bmpui-ui-settings-panel, .bmpui-ui-selectbox, #status { " +
+                                ".bmpui-ui-settings-panel, .bmpui-ui-selectbox, #status, " +
+                                ".adsbox, .ad-banner, .pub_300x250, .click-layer, #play-final-frame-vast { " +
                                 "  display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; " +
                                 "} " +
+                                ".center-play-btn { opacity: 0.01 !important; } " +
                                 "body, html, #wrapper, #player { " +
                                 "  background: #000 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; " +
                                 "  width: 100% !important; height: 100% !important; " +
@@ -1640,7 +1696,7 @@ public class MainActivity extends Activity {
                                 "      }\n" +
                                 "    } catch(e) {}\n" +
                                 "    try {\n" +
-                                "      var btns = document.querySelectorAll('.vjs-big-play-button, .plyr__control--overlaid, button[aria-label*=\"Play\" i], button[title*=\"Play\" i]');\n" +
+                                "      var btns = document.querySelectorAll('.vjs-big-play-button, .plyr__control--overlaid, button[aria-label*=\"Play\" i], button[title*=\"Play\" i], .center-play-btn, #channel-player, .bmpui-ui-playbacktogglebutton, .bmpui-ui-hugeplaybacktogglebutton');\n" +
                                 "      for (var j = 0; j < btns.length; j++) {\n" +
                                 "        btns[j].click();\n" +
                                 "      }\n" +
@@ -1678,13 +1734,15 @@ public class MainActivity extends Activity {
                                 "      }\n" +
                                 "    }, true);\n" +
                                 "  }\n" +
-                                "  setInterval(updateAudioAndPlay, 400);\n" +
+                                "  setInterval(updateAudioAndPlay, 250);\n" +
                                 "  document.addEventListener('DOMContentLoaded', updateAudioAndPlay);\n" +
                                 "  window.addEventListener('load', updateAudioAndPlay);\n" +
                                 "})();\n" +
                                 "</script>";
                         html = html.replaceAll("(?is)<script[^>]*aclib[^>]*>.*?</script>", "")
                                    .replaceAll("(?is)<script[^>]*histats[^>]*>.*?</script>", "")
+                                   .replaceAll("(?is)<script[^>]*asiafilm[^>]*>.*?</script>", "")
+                                   .replaceAll("(?is)<script[^>]*capitalhospitals[^>]*>.*?</script>", "")
                                    .replaceAll("(?i)<iframe\\b([^>]*)>", "<iframe$1 allow=\"autoplay *; encrypted-media *; fullscreen *; picture-in-picture *\">");
                         if (html.toLowerCase().contains("<head>")) {
                             html = html.replaceFirst("(?i)<head>", "<head>" + hideStyle + autoplayScript);
@@ -2045,6 +2103,36 @@ public class MainActivity extends Activity {
                         InetAddress.getByName("104.21.28.81"),
                         InetAddress.getByName("172.67.170.106")
                 ));
+                CACHE.put("bolodechocolate.fit", Arrays.asList(
+                        InetAddress.getByName("172.67.194.241"),
+                        InetAddress.getByName("104.21.90.44")
+                ));
+                CACHE.put("f8umt2oop68t.sbs", Arrays.asList(
+                        InetAddress.getByName("172.67.203.192"),
+                        InetAddress.getByName("104.21.14.153")
+                ));
+                CACHE.put("ourlawyermadeuschangethenameofthissongsowewouldntgetsued.cfd", Arrays.asList(
+                        InetAddress.getByName("188.114.96.5"),
+                        InetAddress.getByName("188.114.97.5"),
+                        InetAddress.getByName("104.21.33.37"),
+                        InetAddress.getByName("172.67.158.131")
+                ));
+                CACHE.put("ourlawyermadeuschangethenameofthissongsowewouldntgetsued.lat", Arrays.asList(
+                        InetAddress.getByName("104.21.88.182"),
+                        InetAddress.getByName("172.67.151.194")
+                ));
+                CACHE.put("ourlawyermadeuschangethenameofthissongsowewouldntgetsued.monster", Arrays.asList(
+                        InetAddress.getByName("172.67.131.68"),
+                        InetAddress.getByName("104.21.10.88")
+                ));
+                CACHE.put("repositoratacadao.cyou", Arrays.asList(
+                        InetAddress.getByName("104.21.50.242"),
+                        InetAddress.getByName("172.67.215.2")
+                ));
+                CACHE.put("wordprees.sbs", Arrays.asList(
+                        InetAddress.getByName("104.21.28.94"),
+                        InetAddress.getByName("172.67.145.79")
+                ));
             } catch (Exception ignored) {}
         }
 
@@ -2061,7 +2149,35 @@ public class MainActivity extends Activity {
                 if (ips != null) return ips;
             }
             if (hostname.contains("ourlawyermadeuschangethenameofthissongsowewouldntgetsued")) {
+                if (hostname.endsWith(".cfd")) {
+                    List<InetAddress> ips = CACHE.get("ourlawyermadeuschangethenameofthissongsowewouldntgetsued.cfd");
+                    if (ips != null) return ips;
+                }
+                if (hostname.endsWith(".lat")) {
+                    List<InetAddress> ips = CACHE.get("ourlawyermadeuschangethenameofthissongsowewouldntgetsued.lat");
+                    if (ips != null) return ips;
+                }
+                if (hostname.endsWith(".monster")) {
+                    List<InetAddress> ips = CACHE.get("ourlawyermadeuschangethenameofthissongsowewouldntgetsued.monster");
+                    if (ips != null) return ips;
+                }
                 List<InetAddress> ips = CACHE.get("ourlawyermadeuschangethenameofthissongsowewouldntgetsued.sbs");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("bolodechocolate") || hostname.endsWith(".fit")) {
+                List<InetAddress> ips = CACHE.get("bolodechocolate.fit");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("f8umt2oop68t")) {
+                List<InetAddress> ips = CACHE.get("f8umt2oop68t.sbs");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("repositoratacadao")) {
+                List<InetAddress> ips = CACHE.get("repositoratacadao.cyou");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("wordprees")) {
+                List<InetAddress> ips = CACHE.get("wordprees.sbs");
                 if (ips != null) return ips;
             }
             if (hostname.contains("seraquevaiter")) {
@@ -2105,6 +2221,11 @@ public class MainActivity extends Activity {
                     || hostname.endsWith(".shop")
                     || hostname.endsWith(".top")
                     || hostname.endsWith(".click")
+                    || hostname.endsWith(".lat")
+                    || hostname.endsWith(".cfd")
+                    || hostname.endsWith(".fit")
+                    || hostname.endsWith(".site")
+                    || hostname.endsWith(".online")
                     || hostname.endsWith(".st");
 
             // Para domínios frequentemente bloqueados por operadoras, consulta DoH prioritariamente
@@ -2448,6 +2569,10 @@ public class MainActivity extends Activity {
                         "      if (window.AndroidPlayback) window.AndroidPlayback.onVideoStarted();" +
                         "    }" +
                         "  }" +
+                        "  try {" +
+                        "    var btns = document.querySelectorAll('.center-play-btn, #channel-player, .vjs-big-play-button, .plyr__control--overlaid, button[aria-label*=\\\"Play\\\" i], button[title*=\\\"Play\\\" i], .bmpui-ui-playbacktogglebutton, .bmpui-ui-hugeplaybacktogglebutton');" +
+                        "    for (var k = 0; k < btns.length; k++) { btns[k].click(); }" +
+                        "  } catch(e) {}" +
                         "}" +
                         "fixIframesAndAudio();" +
                         "setInterval(fixIframesAndAudio, 600);" +
@@ -2690,6 +2815,15 @@ public class MainActivity extends Activity {
             if (osdProgressBar != null) {
                 osdProgressBar.setProgress(0);
             }
+        }
+
+        if (activeVodMovie != null) {
+            if (osdNowTitle != null) osdNowTitle.setText("🎬 " + activeVodMovie.getDisplayTitle());
+            if (osdChName != null) osdChName.setText(activeVodMovie.getDisplayTitle());
+        } else if (activeVodSeries != null && activeVodEpisode != null) {
+            String fullTitle = activeVodSeries.getDisplayTitle() + " • T" + activeVodSeasonNum + ":E" + activeVodEpisode.episode_num;
+            if (osdNowTitle != null) osdNowTitle.setText("🍿 " + activeVodEpisode.getDisplayTitle());
+            if (osdChName != null) osdChName.setText(fullTitle);
         }
     }
 
@@ -3263,7 +3397,8 @@ public class MainActivity extends Activity {
 
         // Re-match de canal normal: se estiver em tela cheia assistindo um canal regular,
         // re-verifica se o canal tem evento ao vivo detectado (atualiza inclusive se encerrou -> null)
-        if (!isPlayingSportsEvent && currentMode == ScreenMode.FULLSCREEN
+        if (!isPlayingVod && activeVodMovie == null && activeVodSeries == null
+                && !isPlayingSportsEvent && currentMode == ScreenMode.FULLSCREEN
                 && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
             Channel curCh = allChannels.get(currentChannelIdx);
             SportsEvent detected = detectSportsEventForChannel(curCh);
@@ -5327,9 +5462,11 @@ public class MainActivity extends Activity {
 
     private void triggerAutoplayTap() {
         if (unifiedEmbedWebView == null) return;
-        // Segurança absoluta: nunca disparar touch events simulados no modo CENTRAL para não clicar acidentalmente nos canais do grid
-        if (currentMode != ScreenMode.FULLSCREEN) return;
+        View focused = getCurrentFocus();
         triggerViewTap(unifiedEmbedWebView);
+        if (focused != null && currentMode != ScreenMode.FULLSCREEN) {
+            mainHandler.postDelayed(() -> focused.requestFocus(), 60);
+        }
     }
 
     private void setupDrawer() {
@@ -5692,17 +5829,20 @@ public class MainActivity extends Activity {
             }
         }
         ChannelRailAdapter adapter = new ChannelRailAdapter(this, filtered, true, (ch, idx) -> {
-            if (android.os.SystemClock.elapsedRealtime() - lastDrawerOpenedAt < 350) {
+            if (android.os.SystemClock.elapsedRealtime() - lastDrawerOpenedAt < 450) {
                 return;
             }
             if (isMosaicActive) {
                 closeDrawer();
                 if (mosaicTargetSlotIdx >= 0 && mosaicTargetSlotIdx < 4) {
-                    tuneMosaicSlot(mosaicTargetSlotIdx, ch);
-                    if (mosaicSlots[mosaicTargetSlotIdx] != null && mosaicSlots[mosaicTargetSlotIdx].slotView != null) {
-                        mosaicSlots[mosaicTargetSlotIdx].slotView.requestFocus();
-                        onMosaicSlotFocused(mosaicTargetSlotIdx);
-                    }
+                    final int targetSlot = mosaicTargetSlotIdx;
+                    tuneMosaicSlot(targetSlot, ch);
+                    mainHandler.postDelayed(() -> {
+                        if (isMosaicActive && mosaicSlots[targetSlot] != null && mosaicSlots[targetSlot].slotView != null) {
+                            mosaicSlots[targetSlot].slotView.requestFocus();
+                            onMosaicSlotFocused(targetSlot);
+                        }
+                    }, 200);
                 }
                 return;
             }
@@ -5892,7 +6032,7 @@ public class MainActivity extends Activity {
             leagueInfo += " • Horário: " + activeSportsEvent.matchTime;
         }
         osdNowTitle.setText(leagueInfo);
-        osdSynopsis.setText(activeSportsEvent.getDisplayName() + ((activeSportsEvent.isLive || activeSportsEvent.isFinished) && activeSportsEvent.score != null ? " [" + activeSportsEvent.score + "]" : "") + " - Transmissão via " + fb.name);
+        osdSynopsis.setText(activeSportsEvent.getDisplayName() + ((activeSportsEvent.isLive || activeSportsEvent.isFinished) && activeSportsEvent.score != null ? " [" + activeSportsEvent.score + "]" : ""));
         osdRemaining.setText(activeSportsEvent.clock != null && !activeSportsEvent.clock.isEmpty() ? activeSportsEvent.clock : (activeSportsEvent.matchTime != null ? activeSportsEvent.matchTime : "Ao Vivo"));
         showOsdBanner(5000);
 
@@ -6005,11 +6145,46 @@ public class MainActivity extends Activity {
         String autoplayUrl = url + (url.contains("?") ? "&" : "?") + "autoplay=1";
         unifiedEmbedWebView.loadUrl(autoplayUrl);
 
+        // Disparos escalonados de tap simulado (touch) e JS para garantir início instantâneo
         mainHandler.postDelayed(() -> {
-            if (isPlayingEmbed && !isVideoPlaybackActive && currentMode == ScreenMode.FULLSCREEN) {
+            if (isPlayingEmbed && !isVideoPlaybackActive) {
                 triggerAutoplayTap();
             }
-        }, 1200);
+        }, 800);
+        mainHandler.postDelayed(() -> {
+            if (isPlayingEmbed && !isVideoPlaybackActive) {
+                triggerAutoplayTap();
+            }
+        }, 1600);
+        mainHandler.postDelayed(() -> {
+            if (isPlayingEmbed && !isVideoPlaybackActive) {
+                triggerAutoplayTap();
+            }
+        }, 2500);
+        mainHandler.postDelayed(() -> {
+            if (isPlayingEmbed && !isVideoPlaybackActive) {
+                triggerAutoplayTap();
+            }
+        }, 3600);
+        mainHandler.postDelayed(() -> {
+            if (isPlayingEmbed && !isVideoPlaybackActive) {
+                triggerAutoplayTap();
+            }
+        }, 4800);
+
+        Runnable jsClicker = () -> {
+            if (isPlayingEmbed && unifiedEmbedWebView != null) {
+                unifiedEmbedWebView.evaluateJavascript(
+                    "(function(){ " +
+                    "  try { var v = document.querySelector('video'); if (v) { v.muted = false; v.play().catch(function(){}); } } catch(e){} " +
+                    "  try { var btns = document.querySelectorAll('.center-play-btn, #channel-player, .vjs-big-play-button, .plyr__control--overlaid, button[aria-label*=\\\"Play\\\" i], button[title*=\\\"Play\\\" i], .bmpui-ui-playbacktogglebutton, .bmpui-ui-hugeplaybacktogglebutton'); for(var i=0; i<btns.length; i++) btns[i].click(); } catch(e){} " +
+                    "})()", null
+                );
+            }
+        };
+        mainHandler.postDelayed(jsClicker, 1500);
+        mainHandler.postDelayed(jsClicker, 2800);
+        mainHandler.postDelayed(jsClicker, 4200);
         mainHandler.postDelayed(() -> {
             if (isPlayingEmbed) {
                 onPlaybackStarted();
@@ -6644,7 +6819,7 @@ public class MainActivity extends Activity {
         }
         osdNowTitle.setText(leagueInfo);
         osdRemaining.setText(ev.clock != null && !ev.clock.isEmpty() ? ev.clock : (ev.isLive ? "Ao Vivo" : (ev.matchTime != null ? ev.matchTime : "Esportes")));
-        osdSynopsis.setText(ev.getDisplayName() + ((ev.isLive || ev.isFinished) && ev.score != null ? " [" + ev.score + "]" : "") + " - Transmissão via " + fb.name);
+        osdSynopsis.setText(ev.getDisplayName() + ((ev.isLive || ev.isFinished) && ev.score != null ? " [" + ev.score + "]" : ""));
         osdNextProgram.setText("Compactos e melhores momentos ao final da partida.");
         osdProgressBar.setProgress(100);
 
@@ -6652,7 +6827,7 @@ public class MainActivity extends Activity {
     }
 
     private void updateOsd(Channel ch, int chIdx, LiveSchedule epg) {
-        if (ch == null || isPlayingVod || currentMode == ScreenMode.VOD) return;
+        if (ch == null || isPlayingVod || activeVodMovie != null || activeVodSeries != null || currentMode == ScreenMode.VOD) return;
 
         // Se NÃO estiver reproduzindo um evento esportivo direto do hub/rail,
         // o evento esportivo DEVE ser detectado especificamente para este canal 'ch'.
