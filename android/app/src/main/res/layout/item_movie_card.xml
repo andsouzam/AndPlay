@@ -84,6 +84,25 @@
         android:textSize="9sp"
         android:visibility="gone" />
 
+    <!-- Badge de Versões Disponíveis (ex: 4K • DUB, DUB • LEG) -->
+    <TextView
+        android:id="@+id/movieVersionBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="4dp"
+        android:background="@drawable/badge_pill_dark"
+        android:paddingStart="6dp"
+        android:paddingTop="2dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="2dp"
+        android:text="4K • DUB"
+        android:textColor="#38BDF8"
+        android:textSize="7.5sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
     <!-- Badge de Tipo (Filme ou Série, estilo Web) -->
     <TextView
         android:id="@+id/movieTypeBadge"

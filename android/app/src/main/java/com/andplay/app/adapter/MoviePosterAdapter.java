@@ -87,6 +87,24 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
             holder.favBadge.setVisibility(movie.isFavorite ? View.VISIBLE : View.GONE);
         }
 
+        if (holder.versionBadge != null) {
+            if (movie.versionsSummary != null && !movie.versionsSummary.isEmpty()) {
+                holder.versionBadge.setVisibility(View.VISIBLE);
+                holder.versionBadge.setText(movie.versionsSummary);
+                if (movie.versionsSummary.contains("4K")) {
+                    holder.versionBadge.setTextColor(0xFFFBBF24); // Ouro para 4K
+                } else {
+                    holder.versionBadge.setTextColor(0xFF38BDF8); // Ciano
+                }
+            } else if (movie.activeVersion != null && movie.activeVersion.badge != null) {
+                holder.versionBadge.setVisibility(View.VISIBLE);
+                holder.versionBadge.setText(movie.activeVersion.badge);
+                holder.versionBadge.setTextColor(0xFF38BDF8);
+            } else {
+                holder.versionBadge.setVisibility(View.GONE);
+            }
+        }
+
         if (holder.typeBadge != null) {
             holder.typeBadge.setVisibility(View.VISIBLE);
             if (movie.isSeries) {
@@ -151,6 +169,7 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
         android.widget.ProgressBar progressBar;
         TextView favBadge;
         TextView typeBadge;
+        TextView versionBadge;
 
         ViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -160,6 +179,7 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
             progressBar = itemView.findViewById(R.id.movieProgressBar);
             favBadge = itemView.findViewById(R.id.movieFavBadge);
             typeBadge = itemView.findViewById(R.id.movieTypeBadge);
+            versionBadge = itemView.findViewById(R.id.movieVersionBadge);
         }
     }
 }

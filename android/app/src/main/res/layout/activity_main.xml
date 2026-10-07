@@ -1388,6 +1388,165 @@
                 android:textStyle="bold"
                 android:background="#1A00C853"
                 android:visibility="gone" />
+
+            <!-- HINT DE MENU VOD: visível quando está assistindo VOD -->
+            <TextView
+                android:id="@+id/osdVodMenuHint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingTop="3dp"
+                android:paddingBottom="3dp"
+                android:text="▼  DPAD BAIXO: Opções do Player (Versões, Legendas, Velocidade, Pular)"
+                android:textColor="#38BDF8"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:background="#1A38BDF8"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- MENU DE OPÇÕES DO PLAYER VOD (ACESSADO COM SETA PARA BAIXO) -->
+        <LinearLayout
+            android:id="@+id/playerOptionsMenu"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:layout_marginBottom="28dp"
+            android:background="@drawable/player_options_panel_bg"
+            android:orientation="vertical"
+            android:paddingStart="20dp"
+            android:paddingTop="14dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="14dp"
+            android:elevation="12dp"
+            android:visibility="gone">
+
+            <!-- Cabeçalho do menu com dica de controle -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:layout_marginBottom="10dp">
+
+                <TextView
+                    android:id="@+id/playerOptionsTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="⚙️ OPÇÕES DE REPRODUÇÃO"
+                    android:textColor="#FFC107"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="▲ ou VOLTAR para fechar"
+                    android:textColor="#78909C"
+                    android:textSize="10.5sp" />
+            </LinearLayout>
+
+            <!-- Barra de Botões Focáveis por D-pad -->
+            <LinearLayout
+                android:id="@+id/playerOptionsButtonsRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <!-- 1. Pular Abertura (+85s) -->
+                <TextView
+                    android:id="@+id/btnPlayerOptSkipIntro"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/player_option_btn_selector"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:text="⏩ Pular (+85s)"
+                    android:textColor="@color/player_option_btn_text_color"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <!-- 2. Alternar Versão (Dublado, Legendado, 4K) -->
+                <TextView
+                    android:id="@+id/btnPlayerOptVersions"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/player_option_btn_selector"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:text="✨ Versões"
+                    android:textColor="@color/player_option_btn_text_color"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <!-- 3. Faixas de Áudio e Legendas -->
+                <TextView
+                    android:id="@+id/btnPlayerOptAudioSubs"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/player_option_btn_selector"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:text="💬 Legendas / Áudio"
+                    android:textColor="@color/player_option_btn_text_color"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <!-- 4. Velocidade de Reprodução -->
+                <TextView
+                    android:id="@+id/btnPlayerOptSpeed"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_marginEnd="10dp"
+                    android:background="@drawable/player_option_btn_selector"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:text="⚡ Vel: 1.0x"
+                    android:textColor="@color/player_option_btn_text_color"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <!-- 5. Próximo Episódio (Séries) -->
+                <TextView
+                    android:id="@+id/btnPlayerOptNextEpisode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:background="@drawable/player_option_btn_selector"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:text="⏭️ Próx. Ep."
+                    android:textColor="@color/player_option_btn_text_color"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 
@@ -1763,42 +1922,25 @@
         android:visibility="gone">
 
         <!-- SEÇÃO HERO PREVIEW DO VOD (TOUCH-FRIENDLY COM POSTER E BOTÃO VOLTAR) -->
+        <!-- HERO CINEMATOGRÁFICO DE FILMES / SÉRIES (MODO TV FLUIDO E MODERNO) -->
         <LinearLayout
             android:id="@+id/vodHeroLayout"
             android:layout_width="match_parent"
-            android:layout_height="72dp"
-            android:background="#101524"
+            android:layout_height="146dp"
+            android:background="#0F1424"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="16dp"
-            android:paddingTop="6dp"
-            android:paddingEnd="16dp"
-            android:paddingBottom="6dp">
+            android:paddingStart="20dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="10dp">
 
-            <!-- BOTÃO VOLTAR TOUCH / REMOTO -->
-            <TextView
-                android:id="@+id/btnVodBack"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_marginEnd="12dp"
-                android:background="@drawable/pill_focus_bg"
-                android:clickable="true"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:gravity="center"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:text="◀ VOLTAR"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-            <!-- MINI POSTER PREVIEW DO VOD -->
+            <!-- POSTER PREVIEW DO VOD -->
             <FrameLayout
                 android:id="@+id/vodHeroPosterCard"
-                android:layout_width="40dp"
-                android:layout_height="58dp"
-                android:layout_marginEnd="12dp"
+                android:layout_width="84dp"
+                android:layout_height="124dp"
+                android:layout_marginEnd="16dp"
                 android:background="@drawable/card_focus_bg">
 
                 <ImageView
@@ -1808,103 +1950,155 @@
                     android:scaleType="centerCrop" />
             </FrameLayout>
 
-            <!-- CONTEÚDO DE TEXTO -->
+            <!-- CONTEÚDO DE TEXTO CINEMATOGRÁFICO -->
             <LinearLayout
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
+                android:gravity="center_vertical"
                 android:orientation="vertical">
 
-                <LinearLayout
+                <TextView
+                    android:id="@+id/vodHeroTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="Selecione um título"
+                    android:textColor="#FFFFFF"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <!-- LINHA DE BADGES E METADADOS -->
+                <LinearLayout
+                    android:id="@+id/vodHeroBadges"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
                     <TextView
-                        android:id="@+id/vodHeroTitle"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:text="Selecione um título"
-                        android:textColor="#FFFFFF"
-                        android:textSize="15sp"
-                        android:textStyle="bold" />
-
-                    <LinearLayout
-                        android:id="@+id/vodHeroBadges"
+                        android:id="@+id/vodHeroRating"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
+                        android:background="@drawable/badge_gold"
+                        android:paddingStart="7dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="7dp"
+                        android:paddingBottom="2dp"
+                        android:text="★ 8.5"
+                        android:textColor="#000000"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold" />
 
-                        <TextView
-                            android:id="@+id/vodHeroRating"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/badge_gold"
-                            android:paddingStart="6dp"
-                            android:paddingTop="2dp"
-                            android:paddingEnd="6dp"
-                            android:paddingBottom="2dp"
-                            android:text="★ 8.5"
-                            android:textColor="#000000"
-                            android:textSize="10sp"
-                            android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/vodHeroYear"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:text="2024"
+                        android:textColor="#E0E0E0"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold" />
 
-                        <TextView
-                            android:id="@+id/vodHeroYear"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:text="2024"
-                            android:textColor="#AAAAAA"
-                            android:textSize="11sp" />
+                    <!-- BADGE DE VERSÕES (4K / DUB / LEG) -->
+                    <TextView
+                        android:id="@+id/vodHeroVersionsBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:background="@drawable/badge_pill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="2dp"
+                        android:text="4K • DUB"
+                        android:textColor="#38BDF8"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
 
-                        <TextView
-                            android:id="@+id/vodHeroGenre"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:text="Ação / Aventura"
-                            android:textColor="#AAAAAA"
-                            android:textSize="11sp" />
-                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/vodHeroGenre"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="Ação / Aventura"
+                        android:textColor="#90A4AE"
+                        android:textSize="11.5sp" />
                 </LinearLayout>
 
+                <!-- SINOPSE COMPLETA (3 LINHAS) -->
                 <TextView
                     android:id="@+id/vodHeroPlot"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
+                    android:layout_marginTop="6dp"
                     android:ellipsize="end"
-                    android:maxLines="1"
-                    android:text="Navegue pelos títulos para ver sinopse e detalhes."
-                    android:textColor="#AAAAAA"
+                    android:lineSpacingExtra="2dp"
+                    android:maxLines="3"
+                    android:text="Navegue pelos títulos para ver sinopse completa, versões disponíveis e elenco."
+                    android:textColor="#B0BEC5"
                     android:textSize="11sp" />
             </LinearLayout>
 
-            <!-- BOTÃO ASSISTIR RÁPIDO NO HEADER -->
-            <TextView
-                android:id="@+id/btnVodHeroWatch"
+            <!-- AÇÕES RÁPIDAS NO HEADER (100% CONTROLE REMOTO D-PAD) -->
+            <LinearLayout
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_marginStart="12dp"
-                android:background="@drawable/badge_gold"
-                android:clickable="true"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
+                android:layout_height="match_parent"
                 android:gravity="center"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:text="▶ ASSISTIR"
-                android:textColor="#000000"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
+                android:orientation="vertical"
+                android:layout_marginStart="16dp">
+
+                <TextView
+                    android:id="@+id/btnVodHeroWatch"
+                    android:layout_width="128dp"
+                    android:layout_height="38dp"
+                    android:background="@drawable/badge_gold"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:text="▶ ASSISTIR"
+                    android:textColor="#000000"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/btnVodHeroVersions"
+                    android:layout_width="128dp"
+                    android:layout_height="36dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/pill_focus_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:text="✨ VERSÕES"
+                    android:textColor="#38BDF8"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/btnVodBack"
+                    android:layout_width="128dp"
+                    android:layout_height="32dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/pill_focus_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:text="◀ VOLTAR"
+                    android:textColor="#78909C"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- BARRA HORIZONTAL DE CATEGORIAS VOD COM BOTÃO BUSCA -->
@@ -2054,43 +2248,25 @@
         android:orientation="vertical"
         android:visibility="gone">
 
-        <!-- HERO COMPACTO DA SÉRIE (TOUCH-FRIENDLY COM POSTER E BOTÃO VOLTAR) -->
+        <!-- HERO CINEMATOGRÁFICO DA SÉRIE (MODO TV FLUIDO E MODERNO) -->
         <LinearLayout
             android:id="@+id/seriesHeroLayout"
             android:layout_width="match_parent"
-            android:layout_height="72dp"
-            android:background="#101524"
+            android:layout_height="146dp"
+            android:background="#0F1424"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="16dp"
-            android:paddingTop="6dp"
-            android:paddingEnd="16dp"
-            android:paddingBottom="6dp">
+            android:paddingStart="20dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="20dp"
+            android:paddingBottom="10dp">
 
-            <!-- BOTÃO VOLTAR TOUCH / REMOTO -->
-            <TextView
-                android:id="@+id/btnSeriesDetailBack"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_marginEnd="12dp"
-                android:background="@drawable/pill_focus_bg"
-                android:clickable="true"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:gravity="center"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:text="◀ VOLTAR"
-                android:textColor="#FFFFFF"
-                android:textSize="12sp"
-                android:textStyle="bold" />
-
-            <!-- MINI POSTER PREVIEW DA SÉRIE -->
+            <!-- POSTER PREVIEW DA SÉRIE -->
             <FrameLayout
                 android:id="@+id/seriesDetailPosterCard"
-                android:layout_width="40dp"
-                android:layout_height="58dp"
-                android:layout_marginEnd="12dp"
+                android:layout_width="84dp"
+                android:layout_height="124dp"
+                android:layout_marginEnd="16dp"
                 android:background="@drawable/card_focus_bg">
 
                 <ImageView
@@ -2103,80 +2279,133 @@
             <!-- CONTEÚDO DE TEXTO DA SÉRIE -->
             <LinearLayout
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
+                android:gravity="center_vertical"
                 android:orientation="vertical">
 
-                <LinearLayout
+                <TextView
+                    android:id="@+id/seriesDetailTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="📺 Série"
+                    android:textColor="#FFFFFF"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:id="@+id/seriesHeroBadges"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
                     <TextView
-                        android:id="@+id/seriesDetailTitle"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:text="📺 Série"
-                        android:textColor="#FFFFFF"
-                        android:textSize="15sp"
-                        android:textStyle="bold" />
-
-                    <LinearLayout
-                        android:id="@+id/seriesHeroBadges"
+                        android:id="@+id/seriesDetailRating"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="8dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal">
+                        android:background="@drawable/badge_gold"
+                        android:paddingStart="7dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="7dp"
+                        android:paddingBottom="2dp"
+                        android:text="★ 8.5"
+                        android:textColor="#000000"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold" />
 
-                        <TextView
-                            android:id="@+id/seriesDetailRating"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:background="@drawable/badge_gold"
-                            android:paddingStart="6dp"
-                            android:paddingTop="2dp"
-                            android:paddingEnd="6dp"
-                            android:paddingBottom="2dp"
-                            android:text="★ 8.5"
-                            android:textColor="#000000"
-                            android:textSize="10sp"
-                            android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/seriesDetailYear"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:text="2024"
+                        android:textColor="#E0E0E0"
+                        android:textSize="11.5sp"
+                        android:textStyle="bold" />
 
-                        <TextView
-                            android:id="@+id/seriesDetailYear"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:text="2024"
-                            android:textColor="#AAAAAA"
-                            android:textSize="11sp" />
+                    <!-- BADGE DE VERSÕES DA SÉRIE (DUB • LEG) -->
+                    <TextView
+                        android:id="@+id/seriesDetailVersionsBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:background="@drawable/badge_pill_dark"
+                        android:paddingStart="8dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="2dp"
+                        android:text="DUB • LEG"
+                        android:textColor="#38BDF8"
+                        android:textSize="10.5sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
 
-                        <TextView
-                            android:id="@+id/seriesDetailGenre"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:text="Drama"
-                            android:textColor="#AAAAAA"
-                            android:textSize="11sp" />
-                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/seriesDetailGenre"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:text="Drama"
+                        android:textColor="#90A4AE"
+                        android:textSize="11.5sp" />
                 </LinearLayout>
 
                 <TextView
                     android:id="@+id/seriesDetailPlot"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
+                    android:layout_marginTop="6dp"
                     android:ellipsize="end"
-                    android:maxLines="1"
+                    android:lineSpacingExtra="2dp"
+                    android:maxLines="3"
                     android:text="Sinopse da série..."
-                    android:textColor="#AAAAAA"
+                    android:textColor="#B0BEC5"
                     android:textSize="11sp" />
+            </LinearLayout>
+
+            <!-- AÇÕES RÁPIDAS NO HEADER DA SÉRIE -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:orientation="vertical"
+                android:layout_marginStart="16dp">
+
+                <TextView
+                    android:id="@+id/btnSeriesDetailVersions"
+                    android:layout_width="128dp"
+                    android:layout_height="36dp"
+                    android:background="@drawable/pill_focus_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:text="✨ VERSÕES"
+                    android:textColor="#38BDF8"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/btnSeriesDetailBack"
+                    android:layout_width="128dp"
+                    android:layout_height="32dp"
+                    android:layout_marginTop="6dp"
+                    android:background="@drawable/pill_focus_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:text="◀ VOLTAR"
+                    android:textColor="#78909C"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
 
