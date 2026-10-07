@@ -2281,5 +2281,105 @@ public class ApiClient {
         return java.text.Normalizer.normalize(s.toLowerCase(Locale.ROOT), java.text.Normalizer.Form.NFD)
                 .replaceAll("[^a-z0-9]", "");
     }
+
+    public static class OnlineSubtitle {
+        public String id;
+        public String url;
+        public String lang;
+        public String format;
+        public String release;
+
+        @Override
+        public String toString() {
+            return lang + (release != null && !release.isEmpty() ? " (" + release + ")" : "");
+        }
+    }
+
+    /**
+     * Busca legendas online em português (PT-BR e PT-PT) via Cinemeta + OpenSubtitles v3 (Stremio).
+     */
+    public static List<OnlineSubtitle> searchOnlineSubtitles(String rawTitle, String mediaType, int season, int episode) {
+        List<OnlineSubtitle> results = new ArrayList<>();
+        if (rawTitle == null || rawTitle.trim().isEmpty()) return results;
+
+        try {
+            // Limpa título de tags e metadados
+            String cleanQuery = rawTitle
+                    .replaceAll("\\[.*?\\]", "")
+                    .replaceAll("\\(.*?\\)", "")
+                    .replaceAll("(?i)\\b(4k|dublado|legendado|completo|temporada|episodio|hd|fhd)\\b", "")
+                    .trim();
+
+            if (cleanQuery.isEmpty()) cleanQuery = rawTitle.trim();
+
+            String type = "series".equalsIgnoreCase(mediaType) ? "series" : "movie";
+
+            // 1. Busca Cinemeta para descobrir o IMDB ID
+            String searchUrl = "https://v3-cinemeta.strem.io/catalog/" + type + "/top/search=" + java.net.URLEncoder.encode(cleanQuery, "UTF-8") + ".json";
+            Request cinemetaReq = new Request.Builder()
+                    .url(searchUrl)
+                    .header("User-Agent", "Mozilla/5.0")
+                    .build();
+
+            String imdbId = null;
+            try (Response resp = httpClient.newCall(cinemetaReq).execute()) {
+                if (resp.isSuccessful() && resp.body() != null) {
+                    JsonObject json = JsonParser.parseString(resp.body().string()).getAsJsonObject();
+                    if (json.has("metas") && json.get("metas").isJsonArray()) {
+                        JsonArray metas = json.getAsJsonArray("metas");
+                        if (metas.size() > 0) {
+                            JsonObject first = metas.get(0).getAsJsonObject();
+                            if (first.has("imdb_id") && !first.get("imdb_id").isJsonNull()) {
+                                imdbId = first.get("imdb_id").getAsString();
+                            } else if (first.has("id") && !first.get("id").isJsonNull()) {
+                                imdbId = first.get("id").getAsString();
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (imdbId == null || imdbId.isEmpty()) return results;
+
+            // 2. Busca legendas no OpenSubtitles v3
+            String subQuery = type.equals("series") && season > 0 && episode > 0
+                    ? imdbId + ":" + season + ":" + episode
+                    : imdbId;
+
+            String subUrl = "https://opensubtitles-v3.strem.io/subtitles/" + type + "/" + subQuery + ".json";
+            Request subReq = new Request.Builder()
+                    .url(subUrl)
+                    .header("User-Agent", "Mozilla/5.0")
+                    .build();
+
+            try (Response resp = httpClient.newCall(subReq).execute()) {
+                if (resp.isSuccessful() && resp.body() != null) {
+                    JsonObject json = JsonParser.parseString(resp.body().string()).getAsJsonObject();
+                    if (json.has("subtitles") && json.get("subtitles").isJsonArray()) {
+                        JsonArray subs = json.getAsJsonArray("subtitles");
+                        for (int i = 0; i < subs.size(); i++) {
+                            JsonObject s = subs.get(i).getAsJsonObject();
+                            String lang = s.has("lang") ? optString(s, "lang", "").toLowerCase(Locale.ROOT) : "";
+                            // Filtrar legendas em português
+                            if (lang.equals("pob") || lang.equals("por") || lang.startsWith("po") || lang.equals("pt")) {
+                                OnlineSubtitle sub = new OnlineSubtitle();
+                                sub.id = s.has("id") ? optString(s, "id", String.valueOf(i)) : String.valueOf(i);
+                                sub.url = optString(s, "url", "");
+                                sub.format = optString(s, "format", "srt");
+                                sub.lang = lang.equals("pob") ? "Português (Brasil)" : "Português";
+                                sub.release = optString(s, "release", "");
+                                if (!sub.url.isEmpty()) {
+                                    results.add(sub);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return results;
+    }
 }
 

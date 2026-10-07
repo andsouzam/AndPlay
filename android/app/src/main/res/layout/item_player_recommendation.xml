@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="88dp"
+    android:layout_height="136dp"
+    android:layout_marginEnd="12dp"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:clickable="true"
+    android:focusable="true"
+    android:focusableInTouchMode="true"
+    android:background="@drawable/rec_item_focus_selector"
+    android:padding="2dp">
+
+    <FrameLayout
+        android:layout_width="82dp"
+        android:layout_height="110dp"
+        android:background="@drawable/card_focus_bg">
+
+        <ImageView
+            android:id="@+id/recPoster"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="Poster" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/recTitle"
+        android:layout_width="82dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:gravity="center"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#CBD5E1"
+        android:textSize="10sp" />
+</LinearLayout>

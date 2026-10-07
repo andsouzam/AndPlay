@@ -47,6 +47,7 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.net.Uri;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -57,6 +58,7 @@ import androidx.core.widget.NestedScrollView;
 import androidx.media3.common.C;
 import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.PlaybackParameters;
 import androidx.media3.common.Player;
@@ -261,6 +263,8 @@ public class MainActivity extends Activity {
     private TextView playerOptVersionsValue;
     private TextView playerOptAudioSubsValue;
     private TextView playerOptNextEpValue;
+    private RecyclerView playerRecommendationsRecycler;
+    private TextView playerRecommendationsTitle;
     private DefaultTrackSelector defaultTrackSelector;
     private float currentPlaybackSpeed = 1.0f;
     private static final float[] SPEED_PRESETS = new float[] { 1.0f, 1.25f, 1.5f, 2.0f, 0.75f };
@@ -607,6 +611,11 @@ public class MainActivity extends Activity {
         playerOptVersionsValue = findViewById(R.id.playerOptVersionsValue);
         playerOptAudioSubsValue = findViewById(R.id.playerOptAudioSubsValue);
         playerOptNextEpValue = findViewById(R.id.playerOptNextEpValue);
+        playerRecommendationsTitle = findViewById(R.id.playerRecommendationsTitle);
+        playerRecommendationsRecycler = findViewById(R.id.playerRecommendationsRecycler);
+        if (playerRecommendationsRecycler != null) {
+            playerRecommendationsRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        }
 
         // EPG Drawer
         epgDrawer = findViewById(R.id.epgDrawer);
@@ -6321,6 +6330,173 @@ public class MainActivity extends Activity {
         return items;
     }
 
+    private static class RecommendationItem {
+        final String title;
+        final String posterUrl;
+        final Movie movie;
+        final Series series;
+
+        RecommendationItem(Movie movie) {
+            this.movie = movie;
+            this.series = null;
+            this.title = movie.getDisplayTitle();
+            this.posterUrl = movie.getPosterUrl();
+        }
+
+        RecommendationItem(Series series) {
+            this.movie = null;
+            this.series = series;
+            this.title = series.getDisplayTitle();
+            this.posterUrl = series.getPosterUrl();
+        }
+    }
+
+    private class PlayerRecommendationsAdapter extends RecyclerView.Adapter<PlayerRecommendationsAdapter.ViewHolder> {
+        private final List<RecommendationItem> items;
+
+        PlayerRecommendationsAdapter(List<RecommendationItem> items) {
+            this.items = items;
+        }
+
+        @NonNull
+        @Override
+        public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            View v = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_player_recommendation, parent, false);
+            return new ViewHolder(v);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+            RecommendationItem item = items.get(position);
+            holder.title.setText(item.title != null ? item.title : "");
+            if (item.posterUrl != null && !item.posterUrl.isEmpty()) {
+                Glide.with(holder.itemView.getContext())
+                        .load(item.posterUrl)
+                        .override(164, 220)
+                        .diskCacheStrategy(DiskCacheStrategy.ALL)
+                        .placeholder(R.drawable.card_focus_bg)
+                        .into(holder.poster);
+            } else {
+                holder.poster.setImageResource(R.drawable.card_focus_bg);
+            }
+
+            holder.itemView.setOnClickListener(v -> {
+                closePlayerOptionsMenu();
+                if (item.movie != null) {
+                    playMovie(item.movie);
+                } else if (item.series != null) {
+                    exitFullscreenPlayer();
+                    openSeriesDetail(item.series);
+                }
+            });
+
+            holder.itemView.setOnKeyListener((v, kCode, ev) -> {
+                if (ev.getAction() == KeyEvent.ACTION_UP &&
+                        (kCode == KeyEvent.KEYCODE_DPAD_CENTER || kCode == KeyEvent.KEYCODE_ENTER)) {
+                    v.performClick();
+                    return true;
+                }
+                return false;
+            });
+
+            holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
+                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(120).start();
+            });
+        }
+
+        @Override
+        public int getItemCount() {
+            return items != null ? items.size() : 0;
+        }
+
+        class ViewHolder extends RecyclerView.ViewHolder {
+            ImageView poster;
+            TextView title;
+
+            ViewHolder(View itemView) {
+                super(itemView);
+                poster = itemView.findViewById(R.id.recPoster);
+                title = itemView.findViewById(R.id.recTitle);
+            }
+        }
+    }
+
+    private void populatePlayerRecommendations() {
+        if (playerRecommendationsRecycler == null) return;
+        List<RecommendationItem> recList = new ArrayList<>();
+
+        if (activeVodMovie != null) {
+            String currentCatId = activeVodMovie.category_id;
+            String currentStreamId = activeVodMovie.stream_id;
+
+            if (cachedMovies != null && !cachedMovies.isEmpty()) {
+                for (Movie m : cachedMovies) {
+                    if (isDemoMovie(m)) continue;
+                    if (currentStreamId != null && currentStreamId.equals(m.stream_id)) continue;
+                    if (currentCatId != null && currentCatId.equals(m.category_id)) {
+                        recList.add(new RecommendationItem(m));
+                        if (recList.size() >= 15) break;
+                    }
+                }
+                if (recList.size() < 10) {
+                    for (Movie m : cachedMovies) {
+                        if (isDemoMovie(m)) continue;
+                        if (currentStreamId != null && currentStreamId.equals(m.stream_id)) continue;
+                        boolean already = false;
+                        for (RecommendationItem item : recList) {
+                            if (item.movie != null && item.movie.stream_id != null && item.movie.stream_id.equals(m.stream_id)) {
+                                already = true;
+                                break;
+                            }
+                        }
+                        if (!already) {
+                            recList.add(new RecommendationItem(m));
+                            if (recList.size() >= 15) break;
+                        }
+                    }
+                }
+            }
+        } else if (activeVodSeries != null) {
+            String currentCatId = activeVodSeries.category_id;
+            String currentSeriesId = activeVodSeries.series_id;
+
+            if (cachedSeries != null && !cachedSeries.isEmpty()) {
+                for (Series s : cachedSeries) {
+                    if (currentSeriesId != null && currentSeriesId.equals(s.series_id)) continue;
+                    if (currentCatId != null && currentCatId.equals(s.category_id)) {
+                        recList.add(new RecommendationItem(s));
+                        if (recList.size() >= 15) break;
+                    }
+                }
+                if (recList.size() < 10) {
+                    for (Series s : cachedSeries) {
+                        if (currentSeriesId != null && currentSeriesId.equals(s.series_id)) continue;
+                        boolean already = false;
+                        for (RecommendationItem item : recList) {
+                            if (item.series != null && item.series.series_id != null && item.series.series_id.equals(s.series_id)) {
+                                already = true;
+                                break;
+                            }
+                        }
+                        if (!already) {
+                            recList.add(new RecommendationItem(s));
+                            if (recList.size() >= 15) break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (recList.isEmpty()) {
+            if (playerRecommendationsTitle != null) playerRecommendationsTitle.setVisibility(View.GONE);
+            playerRecommendationsRecycler.setVisibility(View.GONE);
+        } else {
+            if (playerRecommendationsTitle != null) playerRecommendationsTitle.setVisibility(View.VISIBLE);
+            playerRecommendationsRecycler.setVisibility(View.VISIBLE);
+            playerRecommendationsRecycler.setAdapter(new PlayerRecommendationsAdapter(recList));
+        }
+    }
+
     private boolean handlePlayerOptionsMenuKeyEvent(KeyEvent event) {
         if (playerOptionsMenu == null || playerOptionsMenu.getVisibility() != View.VISIBLE) {
             return false;
@@ -6354,13 +6530,28 @@ public class MainActivity extends Activity {
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
             if (currentIdx >= 0 && currentIdx < items.size() - 1) {
                 items.get(currentIdx + 1).requestFocus();
+            } else if (currentIdx == items.size() - 1) {
+                // Do último item de opções, passa o foco para o primeiro card de recomendações
+                if (playerRecommendationsRecycler != null && playerRecommendationsRecycler.getVisibility() == View.VISIBLE && playerRecommendationsRecycler.getChildCount() > 0) {
+                    View first = playerRecommendationsRecycler.getChildAt(0);
+                    if (first != null) first.requestFocus();
+                }
             } else if (currentIdx == -1) {
-                items.get(0).requestFocus();
+                if (playerRecommendationsRecycler == null || !playerRecommendationsRecycler.hasFocus()) {
+                    items.get(0).requestFocus();
+                }
             }
             return true;
         }
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            if (playerRecommendationsRecycler != null && playerRecommendationsRecycler.hasFocus()) {
+                // Subir a partir das recomendações devolve o foco para o último botão de opções visível
+                if (!items.isEmpty()) {
+                    items.get(items.size() - 1).requestFocus();
+                    return true;
+                }
+            }
             if (currentIdx > 0) {
                 items.get(currentIdx - 1).requestFocus();
             } else if (currentIdx == 0) {
@@ -6377,9 +6568,19 @@ public class MainActivity extends Activity {
                 items.get(currentIdx).performClick();
                 return true;
             }
+            if (playerRecommendationsRecycler != null && playerRecommendationsRecycler.hasFocus()) {
+                View focused = playerRecommendationsRecycler.getFocusedChild();
+                if (focused != null) {
+                    focused.performClick();
+                    return true;
+                }
+            }
         }
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            if (playerRecommendationsRecycler != null && playerRecommendationsRecycler.hasFocus()) {
+                return false; // Permite rolar os cards no RecyclerView horizontal
+            }
             return true; // Isola teclas horizontais dentro do menu vertical
         }
 
@@ -6423,6 +6624,8 @@ public class MainActivity extends Activity {
                     ? (int) currentPlaybackSpeed + ".0×"
                     : currentPlaybackSpeed + "×");
         }
+
+        populatePlayerRecommendations();
 
         // Foca no primeiro item visível da lista de opções
         List<View> items = getVisiblePlayerOptionItems();
@@ -6563,7 +6766,8 @@ public class MainActivity extends Activity {
 
         String[] menuItems = new String[] {
                 "🔊 Faixas de Áudio (" + (audioGroups.isEmpty() ? "Padrão" : audioGroups.size()) + ")",
-                "💬 Legendas (" + (textGroups.isEmpty() ? "Nenhuma embutida" : textGroups.size() + " disponíveis") + ")"
+                "💬 Legendas (" + (textGroups.isEmpty() ? "Nenhuma embutida" : textGroups.size() + " disponíveis") + ")",
+                "🌐 Buscar Legendas Online (OpenSubtitles)"
         };
 
         AlertDialog dialog = createThemedDialogBuilder()
@@ -6572,8 +6776,10 @@ public class MainActivity extends Activity {
                     d.dismiss();
                     if (which == 0) {
                         showAudioTracksDialog(audioGroups);
-                    } else {
+                    } else if (which == 1) {
                         showSubtitleTracksDialog(textGroups);
+                    } else {
+                        searchAndSelectOnlineSubtitles();
                     }
                 })
                 .setNegativeButton("Fechar", null)
@@ -6638,12 +6844,13 @@ public class MainActivity extends Activity {
     private void showSubtitleTracksDialog(List<Tracks.Group> textGroups) {
         List<String> options = new ArrayList<>();
         options.add("🚫 Desativar Legendas");
-        int selectedIdx = 0;
-        int count = 1;
+        options.add("🌐 Buscar Legendas Online (OpenSubtitles)...");
+        int selectedIdx = -1;
+        int count = 2;
         for (Tracks.Group group : textGroups) {
             for (int t = 0; t < group.length; t++) {
                 Format f = group.getTrackFormat(t);
-                String lang = f.language != null ? f.language.toUpperCase() : "Legenda " + count;
+                String lang = f.language != null ? f.language.toUpperCase() : "Legenda " + (count - 1);
                 String label = f.label != null && !f.label.isEmpty() ? f.label : lang;
                 boolean isSelected = group.isTrackSelected(t);
                 options.add((isSelected ? "● " : "○ ") + label);
@@ -6663,9 +6870,12 @@ public class MainActivity extends Activity {
                                         .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                                         .build()
                         );
+                        if (playerOptAudioSubsValue != null) playerOptAudioSubsValue.setText("Desativada");
                         Toast.makeText(this, "💬 Legendas desativadas", Toast.LENGTH_SHORT).show();
+                    } else if (which == 1) {
+                        searchAndSelectOnlineSubtitles();
                     } else {
-                        selectSubtitleTrack(textGroups, which - 1);
+                        selectSubtitleTrack(textGroups, which - 2);
                     }
                 })
                 .setNegativeButton("Voltar", (d, w) -> showAudioAndSubtitleDialog())
@@ -6687,11 +6897,126 @@ public class MainActivity extends Activity {
                                     .setOverrideForType(new TrackSelectionOverride(group.getMediaTrackGroup(), t))
                                     .build()
                     );
+                    Format f = group.getTrackFormat(t);
+                    if (playerOptAudioSubsValue != null) {
+                        String lang = f.label != null && !f.label.isEmpty() ? f.label : (f.language != null ? f.language.toUpperCase() : "Legenda Ativa");
+                        playerOptAudioSubsValue.setText(lang);
+                    }
                     Toast.makeText(this, "💬 Legenda ativada!", Toast.LENGTH_SHORT).show();
                     return;
                 }
                 count++;
             }
+        }
+    }
+
+    private void searchAndSelectOnlineSubtitles() {
+        if (isPlayingEmbed || exoPlayer == null) {
+            Toast.makeText(this, "Legendas externas não disponíveis neste fluxo.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String title = "";
+        String mediaType = "movie";
+        int sNum = 0;
+        int epNum = 0;
+
+        if (activeVodMovie != null) {
+            title = activeVodMovie.getRawTitle();
+            mediaType = "movie";
+        } else if (activeVodSeries != null) {
+            title = activeVodSeries.getRawTitle();
+            mediaType = "series";
+            try {
+                if (activeVodSeasonNum != null) {
+                    sNum = Integer.parseInt(activeVodSeasonNum.replaceAll("[^0-9]", ""));
+                }
+            } catch (Exception ignored) {}
+            if (activeVodEpisode != null) {
+                epNum = activeVodEpisode.episode_num;
+            }
+        } else {
+            Toast.makeText(this, "Nenhuma mídia em reprodução.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        final String finalTitle = title;
+        final String finalMediaType = mediaType;
+        final int finalSeason = sNum;
+        final int finalEpisode = epNum;
+
+        Toast.makeText(this, "🔍 Buscando legendas online (OpenSubtitles)...", Toast.LENGTH_SHORT).show();
+
+        executor.execute(() -> {
+            List<ApiClient.OnlineSubtitle> subs = ApiClient.searchOnlineSubtitles(finalTitle, finalMediaType, finalSeason, finalEpisode);
+            mainHandler.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (subs == null || subs.isEmpty()) {
+                    Toast.makeText(MainActivity.this, "Nenhuma legenda em português encontrada online.", Toast.LENGTH_LONG).show();
+                    return;
+                }
+
+                String[] options = new String[subs.size()];
+                for (int i = 0; i < subs.size(); i++) {
+                    ApiClient.OnlineSubtitle s = subs.get(i);
+                    options[i] = (i + 1) + ". " + s.toString();
+                }
+
+                AlertDialog dialog = createThemedDialogBuilder()
+                        .setTitle("🌐 Legendas em Português (" + subs.size() + ")")
+                        .setItems(options, (d, which) -> {
+                            d.dismiss();
+                            applyOnlineSubtitle(subs.get(which));
+                        })
+                        .setNegativeButton("Voltar", (d, w) -> showAudioAndSubtitleDialog())
+                        .create();
+                styleDialogButtons(dialog);
+                dialog.show();
+            });
+        });
+    }
+
+    private void applyOnlineSubtitle(ApiClient.OnlineSubtitle sub) {
+        if (exoPlayer == null || sub == null || sub.url == null || sub.url.isEmpty()) return;
+        try {
+            long currentPos = exoPlayer.getCurrentPosition();
+            boolean isPlaying = exoPlayer.isPlaying();
+            MediaItem currentItem = exoPlayer.getCurrentMediaItem();
+            if (currentItem == null) return;
+
+            String mimeType = (sub.format != null && sub.format.equalsIgnoreCase("vtt"))
+                    ? MimeTypes.TEXT_VTT
+                    : MimeTypes.APPLICATION_SUBRIP;
+
+            MediaItem.SubtitleConfiguration subConfig = new MediaItem.SubtitleConfiguration.Builder(Uri.parse(sub.url))
+                    .setMimeType(mimeType)
+                    .setLanguage("por")
+                    .setLabel(sub.release != null && !sub.release.isEmpty() ? sub.release : "Legenda Online (" + sub.lang + ")")
+                    .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                    .build();
+
+            MediaItem newItem = currentItem.buildUpon()
+                    .setSubtitleConfigurations(Collections.singletonList(subConfig))
+                    .build();
+
+            exoPlayer.setMediaItem(newItem, currentPos);
+            exoPlayer.prepare();
+            if (isPlaying) {
+                exoPlayer.play();
+            }
+            exoPlayer.setTrackSelectionParameters(
+                    exoPlayer.getTrackSelectionParameters()
+                            .buildUpon()
+                            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                            .build()
+            );
+            if (playerOptAudioSubsValue != null) {
+                playerOptAudioSubsValue.setText(sub.lang != null ? sub.lang : "Legenda Online");
+            }
+            Toast.makeText(this, "💬 Legenda online aplicada!", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Log.e("EPlay", "Erro ao aplicar legenda online", e);
+            Toast.makeText(this, "Falha ao aplicar legenda: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 

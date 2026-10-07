@@ -1408,21 +1408,20 @@
         </LinearLayout>
 
         <!-- MENU DE OPÇÕES DO PLAYER VOD (ACESSADO COM SETA PARA BAIXO) -->
-        <!-- Layout vertical tipo lista conforme spec do novo player -->
-        <!-- MENU DE OPÇÕES DO PLAYER VOD (ACESSADO COM SETA PARA BAIXO) -->
-        <!-- Card flutuante estilo vidro fumê fosco, elegante e neutro -->
+        <!-- Painel completo de ponta a ponta (match_parent) em vidro fumê fosco -->
         <LinearLayout
             android:id="@+id/playerOptionsMenu"
-            android:layout_width="560dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_gravity="bottom|center_horizontal"
-            android:layout_marginBottom="24dp"
+            android:layout_gravity="bottom"
             android:background="@drawable/player_options_panel_bg"
             android:orientation="vertical"
-            android:paddingStart="16dp"
-            android:paddingTop="12dp"
-            android:paddingEnd="16dp"
-            android:paddingBottom="12dp"
+            android:paddingStart="32dp"
+            android:paddingTop="14dp"
+            android:paddingEnd="32dp"
+            android:paddingBottom="16dp"
+            android:clipToPadding="false"
+            android:clipChildren="false"
             android:elevation="16dp"
             android:visibility="gone">
 
@@ -1466,7 +1465,9 @@
             <LinearLayout
                 android:id="@+id/btnPlayerOptSkipIntro"
                 android:layout_width="match_parent"
-                android:layout_height="46dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="6dp"
                 android:layout_marginBottom="5dp"
                 android:background="@drawable/player_option_btn_selector"
                 android:clickable="true"
@@ -1474,8 +1475,8 @@
                 android:focusableInTouchMode="true"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
                 android:visibility="gone">
 
                 <TextView
@@ -1506,7 +1507,9 @@
             <LinearLayout
                 android:id="@+id/btnPlayerOptVersions"
                 android:layout_width="match_parent"
-                android:layout_height="46dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="6dp"
                 android:layout_marginBottom="5dp"
                 android:background="@drawable/player_option_btn_selector"
                 android:clickable="true"
@@ -1514,8 +1517,8 @@
                 android:focusableInTouchMode="true"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp">
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
 
                 <TextView
                     android:layout_width="26dp"
@@ -1554,7 +1557,9 @@
             <LinearLayout
                 android:id="@+id/btnPlayerOptAudioSubs"
                 android:layout_width="match_parent"
-                android:layout_height="46dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="6dp"
                 android:layout_marginBottom="5dp"
                 android:background="@drawable/player_option_btn_selector"
                 android:clickable="true"
@@ -1562,8 +1567,8 @@
                 android:focusableInTouchMode="true"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp">
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
 
                 <TextView
                     android:layout_width="26dp"
@@ -1601,7 +1606,9 @@
             <LinearLayout
                 android:id="@+id/btnPlayerOptSpeed"
                 android:layout_width="match_parent"
-                android:layout_height="46dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="6dp"
                 android:layout_marginBottom="5dp"
                 android:background="@drawable/player_option_btn_selector"
                 android:clickable="true"
@@ -1609,8 +1616,8 @@
                 android:focusableInTouchMode="true"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp">
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp">
 
                 <TextView
                     android:layout_width="26dp"
@@ -1648,16 +1655,18 @@
             <LinearLayout
                 android:id="@+id/btnPlayerOptNextEpisode"
                 android:layout_width="match_parent"
-                android:layout_height="46dp"
-                android:layout_marginBottom="2dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="6dp"
+                android:layout_marginEnd="6dp"
+                android:layout_marginBottom="5dp"
                 android:background="@drawable/player_option_btn_selector"
                 android:clickable="true"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
                 android:visibility="gone">
 
                 <TextView
@@ -1691,6 +1700,30 @@
                     android:textColor="#64748B"
                     android:textSize="18sp" />
             </LinearLayout>
+
+            <!-- SEÇÃO DE RECOMENDAÇÕES ("MAIS PARA ASSISTIR") -->
+            <TextView
+                android:id="@+id/playerRecommendationsTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="6dp"
+                android:text="MAIS PARA ASSISTIR"
+                android:textColor="#94A3B8"
+                android:textSize="11sp"
+                android:letterSpacing="0.1"
+                android:textStyle="bold" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/playerRecommendationsRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="140dp"
+                android:orientation="horizontal"
+                android:clipToPadding="false"
+                android:clipChildren="false"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp" />
         </LinearLayout>
     </FrameLayout>
 
