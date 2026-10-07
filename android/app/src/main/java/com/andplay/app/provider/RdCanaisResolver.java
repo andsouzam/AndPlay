@@ -89,6 +89,9 @@ public class RdCanaisResolver {
         if (url == null) return false;
         String u = url.toLowerCase();
         return u.contains("rdcanais.net")
+                || u.contains("rdcanais.org")
+                || u.contains("reidoscanais")
+                || u.contains("reidosembeds.online")
                 || u.contains("bolodechocolate")
                 || u.contains("player.cdn-img.st")
                 || u.contains("rdembed")
@@ -102,6 +105,7 @@ public class RdCanaisResolver {
                 || u.contains(".goldorayanhoje")
                 || u.contains(".seraquevaiter")
                 || u.contains(".pamonha")
+                || u.contains(".sbs")
                 || u.contains("ourlawyermadeuschangethenameofthissongsowewouldntgetsued");
     }
 
@@ -160,6 +164,8 @@ public class RdCanaisResolver {
         String parentUrl = null;
         if (targetUrl.contains("rdembed")) {
             parentUrl = "https://reidosembeds.online/";
+        } else if (targetUrl.contains("rdcanais.org")) {
+            parentUrl = "https://rdcanais.org/";
         }
         String accumulatedCookies = null;
         int maxHops = 5;
@@ -411,6 +417,7 @@ public class RdCanaisResolver {
                     JSONObject json = new JSONObject(bodyStr);
                     String src = json.optString("src", "").replace("\\/", "/");
                     if (!src.isEmpty()) {
+                        if (src.startsWith("//")) src = "https:" + src;
                         ResolvedStream s = new ResolvedStream();
                         s.type = ResolvedStream.Type.HLS;
                         s.streamUrl = src;
@@ -582,9 +589,10 @@ public class RdCanaisResolver {
 
             return dashFactory.createMediaSource(mediaItem);
         } else {
-            // HLS
+            // HLS: allowChunklessPreparation = false garante que o ExoPlayer baixe o 1º fragmento
+            // (.woff MPEG-TS do RDEmbed) e monte os renderizadores de vídeo e áudio nativos corretamente
             return new HlsMediaSource.Factory(srcFactory)
-                    .setAllowChunklessPreparation(true)
+                    .setAllowChunklessPreparation(false)
                     .createMediaSource(mediaItem);
         }
     }

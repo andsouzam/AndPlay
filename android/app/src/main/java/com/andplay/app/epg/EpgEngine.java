@@ -19,6 +19,9 @@ import com.google.gson.reflect.TypeToken;
 
 import org.xmlpull.v1.XmlPullParser;
 
+import okhttp3.Request;
+import okhttp3.Response;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -219,12 +222,12 @@ public class EpgEngine {
         // 1. Carrega imediatamente o cache local do disco para ter EPG instantâneo
         loadLocalCache(appCtx);
 
-        // 2. Verifica se precisa atualizar da internet (a cada 2 horas)
+        // 2. Verifica se precisa atualizar da internet (a cada 30 minutos)
         SharedPreferences prefs = appCtx.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         long lastSync = prefs.getLong(KEY_LAST_SYNC, 0);
         long now = System.currentTimeMillis();
 
-        if (now - lastSync > 2 * 60 * 60 * 1000 || liveEpgMap.isEmpty()) {
+        if (now - lastSync > 30 * 60 * 1000 || liveEpgMap.isEmpty()) {
             syncFromNetwork(appCtx);
         } else if (!liveEpgMap.containsKey("xsports") || liveEpgMap.get("xsports").isEmpty()) {
             executor.execute(EpgEngine::fetchXsportsEpg);
@@ -275,20 +278,30 @@ public class EpgEngine {
                 Log.d(TAG, "Iniciando download e sincronização do EPG real de TV...");
                 boolean downloaded = false;
 
-                for (String epgUrl : EPG_URLS) {
-                    InputStream is = null;
-                    try {
-                        Log.d(TAG, "Tentando baixar EPG da URL: " + epgUrl);
-                        is = openStreamWithRedirects(epgUrl);
-                        parseXmltv(is);
-                        downloaded = true;
-                        Log.i(TAG, "EPG sincronizado com sucesso a partir de " + epgUrl + "! Canais mapeados: " + liveEpgMap.size());
-                        break;
-                    } catch (Exception e) {
-                        Log.w(TAG, "Falha ao baixar EPG de " + epgUrl + ": " + e.getMessage());
-                    } finally {
-                        if (is != null) {
-                            try { is.close(); } catch (Exception ignored) {}
+                // 1. Prioridade máxima: API oficial do Rei dos Canais (ultra-rápida ~150KB com metadados em tempo real)
+                try {
+                    downloaded = syncFromReiDosCanaisApi(appCtx);
+                } catch (Exception e) {
+                    Log.w(TAG, "Falha na sincronização via Rei dos Canais API: " + e.getMessage());
+                }
+
+                // 2. Se a API do Rei dos Canais falhar ou não cobrir canais suficientes, tenta XMLTV
+                if (!downloaded || liveEpgMap.size() < 50) {
+                    for (String epgUrl : EPG_URLS) {
+                        InputStream is = null;
+                        try {
+                            Log.d(TAG, "Tentando baixar EPG da URL: " + epgUrl);
+                            is = openStreamWithRedirects(epgUrl);
+                            parseXmltv(is);
+                            downloaded = true;
+                            Log.i(TAG, "EPG sincronizado com sucesso a partir de " + epgUrl + "! Canais mapeados: " + liveEpgMap.size());
+                            break;
+                        } catch (Exception e) {
+                            Log.w(TAG, "Falha ao baixar EPG de " + epgUrl + ": " + e.getMessage());
+                        } finally {
+                            if (is != null) {
+                                try { is.close(); } catch (Exception ignored) {}
+                            }
                         }
                     }
                 }
@@ -320,6 +333,86 @@ public class EpgEngine {
                 isSyncing = false;
             }
         });
+    }
+
+    public static boolean syncFromReiDosCanaisApi(Context context) {
+        try {
+            Log.d(TAG, "Consultando API oficial do Rei dos Canais (api.reidoscanais.st/channels)...");
+            Request request = new Request.Builder()
+                    .url("https://api.reidoscanais.st/channels")
+                    .header("Accept", "application/json")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .build();
+
+            try (Response response = ApiClient.httpClient.newCall(request).execute()) {
+                if (!response.isSuccessful() || response.body() == null) {
+                    Log.w(TAG, "Rei dos Canais API retornou código: " + response.code());
+                    return false;
+                }
+                String jsonStr = response.body().string();
+                JsonObject root = JsonParser.parseString(jsonStr).getAsJsonObject();
+                if (!root.has("data") || !root.get("data").isJsonArray()) {
+                    return false;
+                }
+                JsonArray data = root.getAsJsonArray("data");
+                int channelsMapped = 0;
+
+                for (int i = 0; i < data.size(); i++) {
+                    JsonElement el = data.get(i);
+                    if (!el.isJsonObject()) continue;
+                    JsonObject chObj = el.getAsJsonObject();
+
+                    String id = chObj.has("id") && !chObj.get("id").isJsonNull() ? chObj.get("id").getAsString() : "";
+                    String name = chObj.has("name") && !chObj.get("name").isJsonNull() ? chObj.get("name").getAsString() : "";
+                    if (id.isEmpty()) continue;
+
+                    if (chObj.has("epg") && chObj.get("epg").isJsonObject()) {
+                        JsonObject epgObj = chObj.getAsJsonObject("epg");
+                        List<ProgramInfo> progs = new ArrayList<>();
+
+                        if (epgObj.has("current") && epgObj.get("current").isJsonObject()) {
+                            JsonObject cur = epgObj.getAsJsonObject("current");
+                            String title = cur.has("title") && !cur.get("title").isJsonNull() ? cur.get("title").getAsString() : "";
+                            String desc = cur.has("description") && !cur.get("description").isJsonNull() ? cur.get("description").getAsString() : "";
+                            long startMs = cur.has("start_time") && !cur.get("start_time").isJsonNull() ? cur.get("start_time").getAsLong() * 1000L : 0;
+                            long endMs = cur.has("end_time") && !cur.get("end_time").isJsonNull() ? cur.get("end_time").getAsLong() * 1000L : 0;
+                            if (!title.isEmpty() && startMs > 0 && endMs > 0) {
+                                progs.add(new ProgramInfo(title, desc, startMs, endMs));
+                            }
+                        }
+
+                        if (epgObj.has("next") && epgObj.get("next").isJsonObject()) {
+                            JsonObject nxt = epgObj.getAsJsonObject("next");
+                            String title = nxt.has("title") && !nxt.get("title").isJsonNull() ? nxt.get("title").getAsString() : "";
+                            String desc = nxt.has("description") && !nxt.get("description").isJsonNull() ? nxt.get("description").getAsString() : "";
+                            long startMs = nxt.has("start_time") && !nxt.get("start_time").isJsonNull() ? nxt.get("start_time").getAsLong() * 1000L : 0;
+                            long endMs = nxt.has("end_time") && !nxt.get("end_time").isJsonNull() ? nxt.get("end_time").getAsLong() * 1000L : 0;
+                            if (!title.isEmpty() && startMs > 0 && endMs > 0) {
+                                progs.add(new ProgramInfo(title, desc, startMs, endMs));
+                            }
+                        }
+
+                        if (!progs.isEmpty()) {
+                            String kId = normalizeKey(id);
+                            liveEpgMap.put(kId, progs);
+                            if (!name.isEmpty()) {
+                                String kName = normalizeKey(name);
+                                if (!kName.equals(kId)) {
+                                    liveEpgMap.put(kName, progs);
+                                }
+                            }
+                            channelsMapped++;
+                        }
+                    }
+                }
+
+                Log.i(TAG, "Rei dos Canais API: EPG em tempo real sincronizado para " + channelsMapped + " canais com sucesso!");
+                return channelsMapped > 0;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Erro ao sincronizar EPG via Rei dos Canais API: " + e.getMessage());
+            return false;
+        }
     }
 
     private static void parseXmltv(InputStream is) {

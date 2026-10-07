@@ -53,7 +53,7 @@ public class ApiClient {
 
     private static final Gson gson = new Gson();
 
-    private static final OkHttpClient httpClient = new OkHttpClient.Builder()
+    public static final OkHttpClient httpClient = new OkHttpClient.Builder()
             .dns(new com.andplay.app.MainActivity.StreamDns())
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(35, TimeUnit.SECONDS)

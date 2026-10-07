@@ -42,6 +42,8 @@ public class Channel implements Serializable {
         List<StreamFallback> list = new ArrayList<>();
         String cleanSlug = (id != null) ? id.replaceFirst("^canal/", "").replaceFirst("\\.html$", "") : "";
         String rdSlug = cleanSlug.replaceFirst("^telecine-", "telecine").replaceFirst("^hbo-", "hbo");
+        if ("premiereclubes".equals(rdSlug)) rdSlug = "premiere";
+        if ("globo".equals(rdSlug)) rdSlug = "globosp";
 
         // Native stream overrides (direct official CDN HLS streams from tvacabo.top)
         if ("recordnews".equals(id)) {
@@ -85,7 +87,7 @@ public class Channel implements Serializable {
         for (String prov : priorityOrder) {
             if (com.andplay.app.provider.ProviderManager.PROVIDER_RDCANAIS.equals(prov)) {
                 String rdCleanSlug = getRdCanaisSlug(cleanSlug, id);
-                list.add(new StreamFallback("RDCanais (Nativo HD " + serverNum + ")", "https://rdcanais.net/" + rdCleanSlug, true));
+                list.add(new StreamFallback("RDCanais (Nativo HD " + serverNum + ")", "https://rdcanais.org/" + rdCleanSlug, true));
                 serverNum++;
             } else if (com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED.equals(prov)) {
                 if (embed != null && !embed.isEmpty()) {

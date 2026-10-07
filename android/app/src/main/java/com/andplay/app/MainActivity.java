@@ -1998,6 +1998,14 @@ public class MainActivity extends Activity {
                         InetAddress.getByName("104.21.4.193"),
                         InetAddress.getByName("172.67.154.45")
                 ));
+                CACHE.put("rdcanais.org", Arrays.asList(
+                        InetAddress.getByName("104.21.4.193"),
+                        InetAddress.getByName("172.67.154.45")
+                ));
+                CACHE.put("pescaplay.store", Arrays.asList(
+                        InetAddress.getByName("104.21.4.193"),
+                        InetAddress.getByName("172.67.154.45")
+                ));
                 CACHE.put("esportesembed.net", Arrays.asList(
                         InetAddress.getByName("172.67.162.24"),
                         InetAddress.getByName("104.21.15.95")
@@ -2005,6 +2013,29 @@ public class MainActivity extends Activity {
                 CACHE.put("v2.rdembed.sbs", Arrays.asList(
                         InetAddress.getByName("104.21.28.94"),
                         InetAddress.getByName("172.67.145.79")
+                ));
+                CACHE.put("reidosembeds.online", Arrays.asList(
+                        InetAddress.getByName("104.21.62.77"),
+                        InetAddress.getByName("172.67.221.205")
+                ));
+                CACHE.put("comeumamao.monster", Arrays.asList(
+                        InetAddress.getByName("45.81.21.12")
+                ));
+                CACHE.put("seraquevaiter.xyz", Arrays.asList(
+                        InetAddress.getByName("104.21.50.242"),
+                        InetAddress.getByName("172.67.215.2")
+                ));
+                CACHE.put("goldorayanhoje.shop", Arrays.asList(
+                        InetAddress.getByName("172.67.154.113"),
+                        InetAddress.getByName("104.21.32.196")
+                ));
+                CACHE.put("pamonha.shop", Arrays.asList(
+                        InetAddress.getByName("104.21.81.203"),
+                        InetAddress.getByName("172.67.164.74")
+                ));
+                CACHE.put("ourlawyermadeuschangethenameofthissongsowewouldntgetsued.sbs", Arrays.asList(
+                        InetAddress.getByName("172.67.131.68"),
+                        InetAddress.getByName("104.21.10.88")
                 ));
                 CACHE.put("rdcanais.net", Arrays.asList(
                         InetAddress.getByName("104.21.82.94"),
@@ -2022,6 +2053,36 @@ public class MainActivity extends Activity {
         public List<InetAddress> lookup(@NonNull String hostname) throws UnknownHostException {
             if (CACHE.containsKey(hostname)) {
                 return CACHE.get(hostname);
+            }
+
+            // Mapeamentos rápidos por padrão de domínio para ecossistema RDEmbed e Rei dos Canais
+            if (hostname.contains("comeumamao")) {
+                List<InetAddress> ips = CACHE.get("comeumamao.monster");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("ourlawyermadeuschangethenameofthissongsowewouldntgetsued")) {
+                List<InetAddress> ips = CACHE.get("ourlawyermadeuschangethenameofthissongsowewouldntgetsued.sbs");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("seraquevaiter")) {
+                List<InetAddress> ips = CACHE.get("seraquevaiter.xyz");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("goldorayanhoje")) {
+                List<InetAddress> ips = CACHE.get("goldorayanhoje.shop");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("pamonha")) {
+                List<InetAddress> ips = CACHE.get("pamonha.shop");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("reidosembeds")) {
+                List<InetAddress> ips = CACHE.get("reidosembeds.online");
+                if (ips != null) return ips;
+            }
+            if (hostname.contains("rdcanais.org") || hostname.contains("pescaplay")) {
+                List<InetAddress> ips = CACHE.get("rdcanais.org");
+                if (ips != null) return ips;
             }
 
             boolean isBlockedDomain = hostname.contains("reidoscanais")
@@ -2078,11 +2139,12 @@ public class MainActivity extends Activity {
                 List<InetAddress> ips = CACHE.get("cdn1.s22-cloudfront-net.lat");
                 if (ips != null) return ips;
             }
-            if (hostname.contains("reidoscanais")) {
+            if (hostname.contains("reidoscanais") || hostname.contains("rdcanais")) {
                 List<InetAddress> ips = CACHE.get("api.reidoscanais.st");
                 if (ips != null) return ips;
             }
-            if (hostname.contains("rdembed")) {
+            if (hostname.contains("rdembed") || hostname.endsWith(".sbs") || hostname.endsWith(".xyz")
+                    || hostname.endsWith(".shop") || hostname.endsWith(".monster") || hostname.endsWith(".cyou")) {
                 List<InetAddress> ips = CACHE.get("v2.rdembed.sbs");
                 if (ips != null) return ips;
             }
