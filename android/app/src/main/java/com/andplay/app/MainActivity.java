@@ -6513,7 +6513,9 @@ public class MainActivity extends Activity {
         }
 
         if (action != KeyEvent.ACTION_DOWN) {
-            return keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER;
+            return keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
+                    || keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                    || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN;
         }
 
         List<View> items = getVisiblePlayerOptionItems();
@@ -6528,13 +6530,22 @@ public class MainActivity extends Activity {
         }
 
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+            if (playerRecommendationsRecycler != null && playerRecommendationsRecycler.hasFocus()) {
+                return true; // No carrossel de recomendações, DPAD_DOWN é consumido para manter o foco seguro
+            }
             if (currentIdx >= 0 && currentIdx < items.size() - 1) {
                 items.get(currentIdx + 1).requestFocus();
             } else if (currentIdx == items.size() - 1) {
                 // Do último item de opções, passa o foco para o primeiro card de recomendações
-                if (playerRecommendationsRecycler != null && playerRecommendationsRecycler.getVisibility() == View.VISIBLE && playerRecommendationsRecycler.getChildCount() > 0) {
-                    View first = playerRecommendationsRecycler.getChildAt(0);
-                    if (first != null) first.requestFocus();
+                if (playerRecommendationsRecycler != null && playerRecommendationsRecycler.getVisibility() == View.VISIBLE) {
+                    View target = playerRecommendationsRecycler.getLayoutManager() != null
+                            ? playerRecommendationsRecycler.getLayoutManager().findViewByPosition(0)
+                            : playerRecommendationsRecycler.getChildAt(0);
+                    if (target != null) {
+                        target.requestFocus();
+                    } else if (playerRecommendationsRecycler.getChildCount() > 0) {
+                        playerRecommendationsRecycler.getChildAt(0).requestFocus();
+                    }
                 }
             } else if (currentIdx == -1) {
                 if (playerRecommendationsRecycler == null || !playerRecommendationsRecycler.hasFocus()) {
@@ -6569,19 +6580,66 @@ public class MainActivity extends Activity {
                 return true;
             }
             if (playerRecommendationsRecycler != null && playerRecommendationsRecycler.hasFocus()) {
-                View focused = playerRecommendationsRecycler.getFocusedChild();
-                if (focused != null) {
-                    focused.performClick();
+                View focused = playerRecommendationsRecycler.findFocus();
+                View itemView = focused != null ? playerRecommendationsRecycler.findContainingItemView(focused) : null;
+                if (itemView != null) {
+                    itemView.performClick();
+                    return true;
+                } else if (playerRecommendationsRecycler.getFocusedChild() != null) {
+                    playerRecommendationsRecycler.getFocusedChild().performClick();
                     return true;
                 }
             }
+            return true;
         }
 
-        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
             if (playerRecommendationsRecycler != null && playerRecommendationsRecycler.hasFocus()) {
-                return false; // Permite rolar os cards no RecyclerView horizontal
+                View focused = playerRecommendationsRecycler.findFocus();
+                View itemView = focused != null ? playerRecommendationsRecycler.findContainingItemView(focused) : null;
+                int pos = itemView != null ? playerRecommendationsRecycler.getChildAdapterPosition(itemView) : RecyclerView.NO_POSITION;
+                int count = playerRecommendationsRecycler.getAdapter() != null ? playerRecommendationsRecycler.getAdapter().getItemCount() : 0;
+                if (pos != RecyclerView.NO_POSITION && pos < count - 1) {
+                    int nextPos = pos + 1;
+                    playerRecommendationsRecycler.smoothScrollToPosition(nextPos);
+                    RecyclerView.LayoutManager lm = playerRecommendationsRecycler.getLayoutManager();
+                    View nextView = lm != null ? lm.findViewByPosition(nextPos) : null;
+                    if (nextView != null) {
+                        nextView.requestFocus();
+                    } else {
+                        playerRecommendationsRecycler.post(() -> {
+                            View nv = playerRecommendationsRecycler.getLayoutManager() != null ? playerRecommendationsRecycler.getLayoutManager().findViewByPosition(nextPos) : null;
+                            if (nv != null) nv.requestFocus();
+                        });
+                    }
+                }
+                return true;
             }
-            return true; // Isola teclas horizontais dentro do menu vertical
+            return true; // Isola teclas horizontais dentro do menu vertical de opções
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+            if (playerRecommendationsRecycler != null && playerRecommendationsRecycler.hasFocus()) {
+                View focused = playerRecommendationsRecycler.findFocus();
+                View itemView = focused != null ? playerRecommendationsRecycler.findContainingItemView(focused) : null;
+                int pos = itemView != null ? playerRecommendationsRecycler.getChildAdapterPosition(itemView) : RecyclerView.NO_POSITION;
+                if (pos != RecyclerView.NO_POSITION && pos > 0) {
+                    int prevPos = pos - 1;
+                    playerRecommendationsRecycler.smoothScrollToPosition(prevPos);
+                    RecyclerView.LayoutManager lm = playerRecommendationsRecycler.getLayoutManager();
+                    View prevView = lm != null ? lm.findViewByPosition(prevPos) : null;
+                    if (prevView != null) {
+                        prevView.requestFocus();
+                    } else {
+                        playerRecommendationsRecycler.post(() -> {
+                            View pv = playerRecommendationsRecycler.getLayoutManager() != null ? playerRecommendationsRecycler.getLayoutManager().findViewByPosition(prevPos) : null;
+                            if (pv != null) pv.requestFocus();
+                        });
+                    }
+                }
+                return true;
+            }
+            return true; // Isola teclas horizontais dentro do menu vertical de opções
         }
 
         return false;
@@ -9430,11 +9488,12 @@ public class MainActivity extends Activity {
                         }
                     } else {
                         // Em VOD (Filme ou Série):
-                        // 1. Se o menu de opções estiver visível na tela, navega entre as opções por D-pad
+                        // 1. Se o menu de opções estiver visível na tela, gerencia toda a navegação e NUNCA avança/recua o vídeo
                         if (playerOptionsMenu != null && playerOptionsMenu.getVisibility() == View.VISIBLE) {
                             if (handlePlayerOptionsMenuKeyEvent(event)) {
                                 return true;
                             }
+                            return super.dispatchKeyEvent(event);
                         }
 
                         // 2. Se o menu de opções NÃO estiver aberto:
