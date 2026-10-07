@@ -86,9 +86,11 @@ public class Channel implements Serializable {
                 }
                 serverNum++;
             } else if (com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE.equals(prov)) {
-                String svSlug = getStreamVerdeSlug(cleanSlug, id);
-                list.add(new StreamFallback("StreamVerde (HLS Direto)", "https://svd.cazetv.shop/streamverde/" + svSlug + ".m3u8", false));
-                serverNum++;
+                if (isStreamVerdeSupported(cleanSlug, id, cat, key)) {
+                    String svSlug = getStreamVerdeSlug(cleanSlug, id);
+                    list.add(new StreamFallback("StreamVerde (HLS Direto)", "https://svd.cazetv.shop/streamverde/" + svSlug + ".m3u8", false));
+                    serverNum++;
+                }
             }
         }
 
@@ -122,6 +124,17 @@ public class Channel implements Serializable {
             return "bandsp";
         }
         return s;
+    }
+
+    public static boolean isStreamVerdeSupported(String cleanSlug, String id, String cat, String key) {
+        if ("sports".equalsIgnoreCase(key) || "open_tv".equalsIgnoreCase(key)) return true;
+        if (cat != null && (cat.toLowerCase().contains("esporte") || cat.toLowerCase().contains("aberto"))) return true;
+        String s = (cleanSlug != null ? cleanSlug : (id != null ? id : "")).toLowerCase();
+        return s.contains("sportv") || s.contains("premiere") || s.contains("espn")
+                || s.contains("globo") || s.contains("sbt") || s.contains("record")
+                || s.contains("band") || s.contains("caze") || s.contains("tnt")
+                || s.contains("space") || s.contains("combate") || s.contains("fox")
+                || s.contains("warner");
     }
 
     public List<StreamFallback> getFallbacks() {

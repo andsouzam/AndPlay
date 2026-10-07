@@ -8,6 +8,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.MimeTypes;
 import androidx.media3.datasource.okhttp.OkHttpDataSource;
 import androidx.media3.exoplayer.dash.DashMediaSource;
 import androidx.media3.exoplayer.drm.DefaultDrmSessionManager;
@@ -93,7 +94,15 @@ public class RdCanaisResolver {
                 || u.contains("rdembed")
                 || u.contains("redecanais")
                 || u.contains("pescaplay.store")
-                || u.contains("localhost.tattoo");
+                || u.contains("localhost.tattoo")
+                || u.contains("repositoratacadao")
+                || u.contains("comeumamao")
+                || u.contains(".monster")
+                || u.contains(".cyou")
+                || u.contains(".goldorayanhoje")
+                || u.contains(".seraquevaiter")
+                || u.contains(".pamonha")
+                || u.contains("ourlawyermadeuschangethenameofthissongsowewouldntgetsued");
     }
 
     /**
@@ -147,64 +156,70 @@ public class RdCanaisResolver {
 
         Log.i(TAG, "Iniciando resolução para: " + url);
 
-        // 1. Baixa a página inicial (canal RDCanais ou página de embed direto)
-        String html = fetchHtml(url, null, client);
-        if (html == null || html.isEmpty()) {
-            throw new IOException("Página inicial vazia: " + url);
-        }
-
-        // 2. Se a página contiver iframe de player embutido, segue o iframe
-        String iframeSrc = extractIframeSrc(html);
         String targetUrl = url;
         String parentUrl = null;
+        int maxHops = 4;
 
-        if (iframeSrc != null && !iframeSrc.isEmpty()) {
-            if (iframeSrc.startsWith("//")) iframeSrc = "https:" + iframeSrc;
-            Log.i(TAG, "Encontrado iframe de player: " + iframeSrc);
-            parentUrl = url;
-            targetUrl = iframeSrc;
-            html = fetchHtml(targetUrl, parentUrl, client);
+        for (int hop = 0; hop < maxHops; hop++) {
+            Log.d(TAG, "Hop #" + (hop + 1) + " buscando: " + targetUrl);
+            String html = fetchHtml(targetUrl, parentUrl, client);
             if (html == null || html.isEmpty()) {
-                throw new IOException("Página de iframe vazia: " + targetUrl);
+                break;
+            }
+
+            // Desofusca se for bolodechocolate / redecanais
+            html = decodeBolodechocolateHtml(html);
+
+            // Caso 1: RDEmbed com troca autenticada de token 'ref' via POST
+            ResolvedStream rdembedStream = parseRdEmbedRefStream(html, targetUrl, client);
+            if (rdembedStream != null) {
+                Log.i(TAG, "Identificado stream RDEmbed nativo via ref token: " + rdembedStream.streamUrl);
+                return rdembedStream;
+            }
+
+            // Caso 2: MPEG-DASH com ClearKey DRM (ex: Premiere Clubes, SporTV)
+            ResolvedStream dashStream = parseDashClearKeyStream(html, targetUrl);
+            if (dashStream != null) {
+                Log.i(TAG, "Identificado stream MPEG-DASH com ClearKey DRM: " + dashStream.streamUrl);
+                return dashStream;
+            }
+
+            // Caso 3: HLS direto via window.STREAM_URLS (ex: ESPN, Combate, AMC bolodechocolate)
+            ResolvedStream hlsStreamUrls = parseStreamUrls(html, targetUrl);
+            if (hlsStreamUrls != null) {
+                Log.i(TAG, "Identificado stream HLS direto via STREAM_URLS: " + hlsStreamUrls.streamUrl);
+                return hlsStreamUrls;
+            }
+
+            // Caso 4: HLS direto via variáveis JS (jwplayer, streamUrl, file:, source:)
+            ResolvedStream hlsVarStream = parseInlineHlsStream(html, targetUrl, client);
+            if (hlsVarStream != null) {
+                Log.i(TAG, "Identificado stream HLS direto via variável: " + hlsVarStream.streamUrl);
+                return hlsVarStream;
+            }
+
+            // Caso 5: Globo Play Session API (localhost.tattoo)
+            if (targetUrl.contains("localhost.tattoo") || html.contains("playback.video.globo.com")) {
+                ResolvedStream globoStream = parseGloboSessionStream(html, targetUrl, client);
+                if (globoStream != null) {
+                    Log.i(TAG, "Identificado stream Globo via Session API: " + globoStream.streamUrl);
+                    return globoStream;
+                }
+            }
+
+            // Caso 6: Se encontrou iframe, avança para o próximo hop
+            String iframeSrc = extractIframeSrc(html);
+            if (iframeSrc != null && !iframeSrc.isEmpty()) {
+                if (iframeSrc.startsWith("//")) iframeSrc = "https:" + iframeSrc;
+                else if (iframeSrc.startsWith("/")) iframeSrc = extractOrigin(targetUrl) + iframeSrc;
+                parentUrl = targetUrl;
+                targetUrl = iframeSrc;
+            } else {
+                break;
             }
         }
 
-        // 3. Desofusca se contiver o algoritmo do bolodechocolate / redecanais
-        html = decodeBolodechocolateHtml(html);
-
-        // 4. Analisa o HTML decodificado para identificar os fluxos
-
-        // Caso A: MPEG-DASH com ClearKey DRM (ex: Premiere Clubes, SporTV)
-        ResolvedStream dashStream = parseDashClearKeyStream(html, targetUrl);
-        if (dashStream != null) {
-            Log.i(TAG, "Identificado stream MPEG-DASH com ClearKey DRM: " + dashStream.streamUrl);
-            return dashStream;
-        }
-
-        // Caso B: HLS direto via window.STREAM_URLS (ex: ESPN, ESPN 2, Combate)
-        ResolvedStream hlsStreamUrls = parseStreamUrls(html, targetUrl);
-        if (hlsStreamUrls != null) {
-            Log.i(TAG, "Identificado stream HLS direto via STREAM_URLS: " + hlsStreamUrls.streamUrl);
-            return hlsStreamUrls;
-        }
-
-        // Caso C: HLS direto via variáveis JS (jwplayer, streamUrl, file:, source:)
-        ResolvedStream hlsVarStream = parseInlineHlsStream(html, targetUrl);
-        if (hlsVarStream != null) {
-            Log.i(TAG, "Identificado stream HLS direto via variável: " + hlsVarStream.streamUrl);
-            return hlsVarStream;
-        }
-
-        // Caso D: Globo Play Session API (localhost.tattoo)
-        if (targetUrl.contains("localhost.tattoo") || html.contains("playback.video.globo.com")) {
-            ResolvedStream globoStream = parseGloboSessionStream(html, targetUrl, client);
-            if (globoStream != null) {
-                Log.i(TAG, "Identificado stream Globo via Session API: " + globoStream.streamUrl);
-                return globoStream;
-            }
-        }
-
-        throw new IOException("Nenhum padrão de stream conhecido encontrado no player: " + targetUrl);
+        throw new IOException("Nenhum padrão de stream ativo encontrado para: " + url);
     }
 
     private static String fetchHtml(String url, String referer, OkHttpClient client) throws IOException {
@@ -330,14 +345,73 @@ public class RdCanaisResolver {
     }
 
     /**
+     * Extrai e executa a troca autenticada do token 'ref' do provedor RDEmbed via POST.
+     */
+    private static ResolvedStream parseRdEmbedRefStream(String html, String targetUrl, OkHttpClient client) {
+        if (html == null) return null;
+        Pattern p = Pattern.compile("\"ref\"\\s*:\\s*\"([^\"]+)\"");
+        Matcher m = p.matcher(html);
+        if (!m.find()) return null;
+
+        String refPath = m.group(1).replace("\\/", "/").trim();
+        if (refPath.isEmpty()) return null;
+
+        String origin = extractOrigin(targetUrl);
+        String refUrl = refPath.startsWith("http") ? refPath : (origin + (refPath.startsWith("/") ? "" : "/") + refPath);
+
+        Log.i(TAG, "Detectado RDEmbed ref token. Efetuando POST em: " + refUrl);
+
+        try {
+            RequestBody emptyBody = RequestBody.create("", MediaType.parse("application/x-www-form-urlencoded"));
+            Request req = new Request.Builder()
+                    .url(refUrl)
+                    .post(emptyBody)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .header("Accept", "application/json")
+                    .header("Referer", targetUrl)
+                    .header("Origin", origin)
+                    .build();
+
+            try (Response res = client.newCall(req).execute()) {
+                if (res.isSuccessful() && res.body() != null) {
+                    String bodyStr = res.body().string();
+                    JSONObject json = new JSONObject(bodyStr);
+                    String src = json.optString("src", "").replace("\\/", "/");
+                    if (!src.isEmpty()) {
+                        ResolvedStream s = new ResolvedStream();
+                        s.type = ResolvedStream.Type.HLS;
+                        s.streamUrl = src;
+                        s.headers.put("Referer", targetUrl);
+                        s.headers.put("Origin", origin);
+                        s.headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                        return s;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Erro ao resolver RDEmbed ref: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
      * Extrai streams HLS declarados inline (jwplayer, const streamUrl, etc.).
      */
-    private static ResolvedStream parseInlineHlsStream(String html, String targetUrl) {
+    private static ResolvedStream parseInlineHlsStream(String html, String targetUrl, OkHttpClient client) {
         Pattern p = Pattern.compile("(?:streamUrl\\s*=\\s*|file:\\s*|source:\\s*)[\"']([^\"']+\\.m3u8[^\"']*)[\"']");
         Matcher m = p.matcher(html);
         if (!m.find()) return null;
 
         String rawUrl = m.group(1).replace("\\/", "/");
+
+        // Verificação para satlabscloud.com.br (pescaplay/rdcanais): se retornar 404, não entregar URL inválida
+        if (rawUrl.contains("satlabscloud.com.br")) {
+            if (!isStreamUrlAlive(rawUrl, targetUrl, client)) {
+                Log.w(TAG, "Stream satlabscloud retornou 404 (offline na origem): " + rawUrl);
+                return null;
+            }
+        }
+
         ResolvedStream stream = new ResolvedStream();
         stream.type = ResolvedStream.Type.HLS;
         stream.streamUrl = rawUrl;
@@ -345,6 +419,23 @@ public class RdCanaisResolver {
         stream.headers.put("Origin", extractOrigin(targetUrl));
         stream.headers.put("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         return stream;
+    }
+
+    private static boolean isStreamUrlAlive(String streamUrl, String referer, OkHttpClient client) {
+        try {
+            Request req = new Request.Builder()
+                    .url(streamUrl)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("Referer", referer)
+                    .header("Origin", extractOrigin(referer))
+                    .header("Range", "bytes=0-10")
+                    .build();
+            try (Response res = client.newCall(req).execute()) {
+                return res.isSuccessful() || res.code() == 206;
+            }
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -433,7 +524,13 @@ public class RdCanaisResolver {
             srcFactory.setDefaultRequestProperties(stream.headers);
         }
 
-        MediaItem mediaItem = MediaItem.fromUri(stream.streamUrl);
+        MediaItem.Builder miBuilder = new MediaItem.Builder().setUri(stream.streamUrl);
+        if (stream.type == ResolvedStream.Type.HLS) {
+            miBuilder.setMimeType(MimeTypes.APPLICATION_M3U8);
+        } else if (stream.type == ResolvedStream.Type.DASH) {
+            miBuilder.setMimeType(MimeTypes.APPLICATION_MPD);
+        }
+        MediaItem mediaItem = miBuilder.build();
 
         if (stream.type == ResolvedStream.Type.DASH) {
             DashMediaSource.Factory dashFactory = new DashMediaSource.Factory(srcFactory);

@@ -2022,7 +2022,18 @@ public class MainActivity extends Activity {
                     || hostname.endsWith(".lat")
                     || hostname.contains("esportesembed")
                     || hostname.contains("rdcanais")
-                    || hostname.contains("rdembed");
+                    || hostname.contains("rdembed")
+                    || hostname.contains("repositoratacadao")
+                    || hostname.contains("comeumamao")
+                    || hostname.contains("pescaplay")
+                    || hostname.contains("satlabscloud")
+                    || hostname.endsWith(".monster")
+                    || hostname.endsWith(".cyou")
+                    || hostname.endsWith(".xyz")
+                    || hostname.endsWith(".sbs")
+                    || hostname.endsWith(".shop")
+                    || hostname.endsWith(".top")
+                    || hostname.endsWith(".click");
 
             // Para domínios frequentemente bloqueados por operadoras, consulta DoH 1.1.1.1 prioritariamente
             if (isBlockedDomain) {
@@ -2158,8 +2169,13 @@ public class MainActivity extends Activity {
             @Override
             public void onPlayerError(@NonNull PlaybackException error) {
                 Log.w("EPlayPlayer", "ExoPlayer erro: " + error.getMessage() + ", tentando contingência...");
+                if (currentChannelFallbacks != null && currentFallbackIdx + 1 < currentChannelFallbacks.size()) {
+                    Log.i("EPlayPlayer", "Avançando automaticamente para o próximo servidor nativo do canal...");
+                    mainHandler.post(() -> tryNextFallback());
+                    return;
+                }
                 if (currentActiveStreamUrl != null && RdCanaisResolver.isRdCanaisUrl(currentActiveStreamUrl) && !isPlayingEmbed) {
-                    Log.i("EPlayPlayer", "Tentando WebView embed como contingência antes de alternar provedor...");
+                    Log.i("EPlayPlayer", "Tentando WebView embed como contingência final...");
                     fallbackToEmbedWebView(currentActiveStreamUrl);
                     return;
                 }
@@ -5835,8 +5851,14 @@ public class MainActivity extends Activity {
                 public void onError(@NonNull Exception error) {
                     mainHandler.post(() -> {
                         if (!targetUrl.equals(currentResolvingUrl)) return;
-                        Log.w("EPlay", "Falha ao resolver stream RDCanais: " + error.getMessage() + ", acionando contingência WebView");
-                        fallbackToEmbedWebView(targetUrl);
+                        Log.w("EPlay", "Falha ao resolver stream nativo (" + error.getMessage() + ")");
+                        if (currentChannelFallbacks != null && currentFallbackIdx + 1 < currentChannelFallbacks.size()) {
+                            Log.i("EPlay", "Avançando para o próximo servidor do canal...");
+                            tryNextFallback();
+                        } else {
+                            Log.i("EPlay", "Último servidor alcançado, acionando contingência WebView");
+                            fallbackToEmbedWebView(targetUrl);
+                        }
                     });
                 }
             });
