@@ -252,11 +252,15 @@ public class MainActivity extends Activity {
 
     // VOD Player Quick Options Menu
     private View playerOptionsMenu;
-    private TextView btnPlayerOptSkipIntro;
-    private TextView btnPlayerOptVersions;
-    private TextView btnPlayerOptAudioSubs;
-    private TextView btnPlayerOptSpeed;
-    private TextView btnPlayerOptNextEpisode;
+    private View btnPlayerOptSkipIntro;
+    private View btnPlayerOptVersions;
+    private View btnPlayerOptAudioSubs;
+    private View btnPlayerOptSpeed;
+    private View btnPlayerOptNextEpisode;
+    private TextView playerOptSpeedValue;
+    private TextView playerOptVersionsValue;
+    private TextView playerOptAudioSubsValue;
+    private TextView playerOptNextEpValue;
     private DefaultTrackSelector defaultTrackSelector;
     private float currentPlaybackSpeed = 1.0f;
     private static final float[] SPEED_PRESETS = new float[] { 1.0f, 1.25f, 1.5f, 2.0f, 0.75f };
@@ -271,11 +275,8 @@ public class MainActivity extends Activity {
     private LinearLayout vodLayout;
     private TextView vodHeroTitle, vodHeroRating, vodHeroYear, vodHeroGenre, vodHeroPlot;
     private TextView vodHeroVersionsBadge;
-    private TextView btnVodHeroVersions;
-    private TextView btnVodBack;
     private FrameLayout vodHeroPosterCard;
     private ImageView vodHeroPoster;
-    private TextView btnVodHeroWatch;
     private Movie activeVodHeroMovie;
     private Movie pendingFocusMovie = null;
     private final Runnable vodHeroDebounceRunnable = () -> {
@@ -304,8 +305,6 @@ public class MainActivity extends Activity {
     private LinearLayout seriesDetailLayout;
     private TextView seriesDetailTitle, seriesDetailRating, seriesDetailYear, seriesDetailGenre, seriesDetailPlot;
     private TextView seriesDetailVersionsBadge;
-    private TextView btnSeriesDetailVersions;
-    private TextView btnSeriesDetailBack;
     private FrameLayout seriesDetailPosterCard;
     private ImageView seriesDetailPoster;
     private RecyclerView seriesSeasonsRecycler;
@@ -603,6 +602,11 @@ public class MainActivity extends Activity {
         setupPlayerOptionButton(btnPlayerOptAudioSubs, this::showAudioAndSubtitleDialog);
         setupPlayerOptionButton(btnPlayerOptSpeed, this::cyclePlaybackSpeed);
         setupPlayerOptionButton(btnPlayerOptNextEpisode, this::playNextSeriesEpisode);
+        // Value labels for the new vertical overlay design
+        playerOptSpeedValue = findViewById(R.id.playerOptSpeedValue);
+        playerOptVersionsValue = findViewById(R.id.playerOptVersionsValue);
+        playerOptAudioSubsValue = findViewById(R.id.playerOptAudioSubsValue);
+        playerOptNextEpValue = findViewById(R.id.playerOptNextEpValue);
 
         // EPG Drawer
         epgDrawer = findViewById(R.id.epgDrawer);
@@ -621,44 +625,8 @@ public class MainActivity extends Activity {
         vodHeroGenre = findViewById(R.id.vodHeroGenre);
         vodHeroPlot = findViewById(R.id.vodHeroPlot);
         vodHeroVersionsBadge = findViewById(R.id.vodHeroVersionsBadge);
-        btnVodHeroVersions = findViewById(R.id.btnVodHeroVersions);
-        if (btnVodHeroVersions != null) {
-            btnVodHeroVersions.setOnClickListener(v -> {
-                if (activeVodHeroMovie != null) showMovieVersionsDialog(activeVodHeroMovie);
-            });
-            btnVodHeroVersions.setOnFocusChangeListener((v, hasFocus) ->
-                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
-        }
-        btnVodBack = findViewById(R.id.btnVodBack);
-        if (btnVodBack != null) {
-            btnVodBack.setOnClickListener(v -> setScreenMode(ScreenMode.CENTRAL));
-            btnVodBack.setOnFocusChangeListener((v, hasFocus) ->
-                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
-        }
         vodHeroPosterCard = findViewById(R.id.vodHeroPosterCard);
         vodHeroPoster = findViewById(R.id.vodHeroPoster);
-        btnVodHeroWatch = findViewById(R.id.btnVodHeroWatch);
-        if (btnVodHeroWatch != null) {
-            btnVodHeroWatch.setOnClickListener(v -> {
-                if (activeVodHeroMovie != null) {
-                    if (activeVodHeroMovie.isSeries) {
-                        if (cachedSeries != null) {
-                            for (Series s : cachedSeries) {
-                                if (s.series_id != null && s.series_id.equals(activeVodHeroMovie.stream_id)) {
-                                    openSeriesDetail(s);
-                                    return;
-                                }
-                            }
-                        }
-                        openVodExplorer("series");
-                    } else {
-                        playMovie(activeVodHeroMovie);
-                    }
-                }
-            });
-            btnVodHeroWatch.setOnFocusChangeListener((v, hasFocus) ->
-                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
-        }
         vodCatsRecycler = findViewById(R.id.vodCatsRecycler);
         vodGridRecycler = findViewById(R.id.vodGridRecycler);
         btnVodTabMovies = findViewById(R.id.btnVodTabMovies);
@@ -766,20 +734,6 @@ public class MainActivity extends Activity {
         seriesDetailGenre = findViewById(R.id.seriesDetailGenre);
         seriesDetailPlot = findViewById(R.id.seriesDetailPlot);
         seriesDetailVersionsBadge = findViewById(R.id.seriesDetailVersionsBadge);
-        btnSeriesDetailVersions = findViewById(R.id.btnSeriesDetailVersions);
-        if (btnSeriesDetailVersions != null) {
-            btnSeriesDetailVersions.setOnClickListener(v -> {
-                if (activeVodSeries != null) showSeriesVersionsDialog(activeVodSeries);
-            });
-            btnSeriesDetailVersions.setOnFocusChangeListener((v, hasFocus) ->
-                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
-        }
-        btnSeriesDetailBack = findViewById(R.id.btnSeriesDetailBack);
-        if (btnSeriesDetailBack != null) {
-            btnSeriesDetailBack.setOnClickListener(v -> setScreenMode(ScreenMode.VOD));
-            btnSeriesDetailBack.setOnFocusChangeListener((v, hasFocus) ->
-                v.animate().scaleX(hasFocus ? 1.08f : 1.0f).scaleY(hasFocus ? 1.08f : 1.0f).setDuration(100).start());
-        }
         seriesDetailPosterCard = findViewById(R.id.seriesDetailPosterCard);
         seriesDetailPoster = findViewById(R.id.seriesDetailPoster);
         seriesSeasonsRecycler = findViewById(R.id.seriesSeasonsRecycler);
@@ -6236,7 +6190,7 @@ public class MainActivity extends Activity {
         activeVodEpisode = null;
         isPlayingVod = true;
         currentPlaybackSpeed = 1.0f;
-        if (btnPlayerOptSpeed != null) btnPlayerOptSpeed.setText("⚡ Vel: 1.0x");
+        if (playerOptSpeedValue != null) playerOptSpeedValue.setText("1.0×");
         if (playerOptionsMenu != null) playerOptionsMenu.setVisibility(View.GONE);
         setScreenMode(ScreenMode.FULLSCREEN);
 
@@ -6305,7 +6259,7 @@ public class MainActivity extends Activity {
         destroyCurrentStream();
         isPlayingVod = true;
         currentPlaybackSpeed = 1.0f;
-        if (btnPlayerOptSpeed != null) btnPlayerOptSpeed.setText("⚡ Vel: 1.0x");
+        if (playerOptSpeedValue != null) playerOptSpeedValue.setText("1.0×");
         if (playerOptionsMenu != null) playerOptionsMenu.setVisibility(View.GONE);
         activeVodSeries = series;
         activeVodEpisode = ep;
@@ -6339,7 +6293,7 @@ public class MainActivity extends Activity {
     // MENU DE OPÇÕES DO PLAYER VOD (CONTROLE REMOTO D-PAD: SETA PARA BAIXO)
     // =========================================================================
 
-    private void setupPlayerOptionButton(TextView btn, Runnable action) {
+    private void setupPlayerOptionButton(View btn, Runnable action) {
         if (btn == null) return;
         btn.setOnClickListener(v -> {
             if (action != null) action.run();
@@ -6364,27 +6318,37 @@ public class MainActivity extends Activity {
 
         if (btnPlayerOptNextEpisode != null) {
             btnPlayerOptNextEpisode.setVisibility(activeVodSeries != null ? View.VISIBLE : View.GONE);
+            if (activeVodSeries != null && activeVodEpisode != null && playerOptNextEpValue != null) {
+                playerOptNextEpValue.setText("T" + activeVodSeasonNum + ":E" + (activeVodEpisode.episode_num + 1));
+            }
         }
 
         if (btnPlayerOptVersions != null) {
             if (activeVodMovie != null && activeVodMovie.versions != null && activeVodMovie.versions.size() > 1) {
                 btnPlayerOptVersions.setVisibility(View.VISIBLE);
-                btnPlayerOptVersions.setText("✨ Versões (" + activeVodMovie.versions.size() + ")");
+                if (playerOptVersionsValue != null)
+                    playerOptVersionsValue.setText(activeVodMovie.activeVersion != null ? activeVodMovie.activeVersion.badge : "Automático");
             } else if (activeVodSeries != null && activeVodSeries.versions != null && activeVodSeries.versions.size() > 1) {
                 btnPlayerOptVersions.setVisibility(View.VISIBLE);
-                btnPlayerOptVersions.setText("✨ Versões (" + activeVodSeries.versions.size() + ")");
+                if (playerOptVersionsValue != null)
+                    playerOptVersionsValue.setText(activeVodSeries.activeVersion != null ? activeVodSeries.activeVersion.badge : "Automático");
             } else {
                 btnPlayerOptVersions.setVisibility(View.GONE);
             }
         }
 
-        if (btnPlayerOptSpeed != null) {
-            btnPlayerOptSpeed.setText("⚡ Vel: " + currentPlaybackSpeed + "x");
+        if (playerOptSpeedValue != null) {
+            playerOptSpeedValue.setText(currentPlaybackSpeed == (int) currentPlaybackSpeed
+                    ? (int) currentPlaybackSpeed + ".0×"
+                    : currentPlaybackSpeed + "×");
         }
 
-        if (btnPlayerOptSkipIntro != null) {
-            btnPlayerOptSkipIntro.requestFocus();
-        }
+        // Set focus on first visible focusable item
+        View focusTarget = (btnPlayerOptSkipIntro != null && btnPlayerOptSkipIntro.getVisibility() == View.VISIBLE)
+                ? btnPlayerOptSkipIntro
+                : (btnPlayerOptVersions != null && btnPlayerOptVersions.getVisibility() == View.VISIBLE)
+                ? btnPlayerOptVersions : btnPlayerOptAudioSubs;
+        if (focusTarget != null) focusTarget.requestFocus();
 
         osdHandler.removeCallbacks(osdHideRunnable);
     }
@@ -6424,8 +6388,10 @@ public class MainActivity extends Activity {
         }
         currentPlaybackSpeed = SPEED_PRESETS[nextIdx];
         exoPlayer.setPlaybackParameters(new PlaybackParameters(currentPlaybackSpeed));
-        if (btnPlayerOptSpeed != null) {
-            btnPlayerOptSpeed.setText("⚡ Vel: " + currentPlaybackSpeed + "x");
+        if (playerOptSpeedValue != null) {
+            playerOptSpeedValue.setText(currentPlaybackSpeed == (int) currentPlaybackSpeed
+                    ? (int) currentPlaybackSpeed + ".0×"
+                    : currentPlaybackSpeed + "×");
         }
         Toast.makeText(this, "⚡ Velocidade: " + currentPlaybackSpeed + "x", Toast.LENGTH_SHORT).show();
     }
@@ -7669,10 +7635,6 @@ public class MainActivity extends Activity {
             }
         }
 
-        if (btnVodHeroVersions != null) {
-            btnVodHeroVersions.setVisibility(m.versions != null && m.versions.size() > 1 ? View.VISIBLE : View.GONE);
-        }
-
         if (vodHeroPoster != null) {
             String posterUrl = m.getPosterUrl();
             if (posterUrl != null && !posterUrl.isEmpty()) {
@@ -7685,9 +7647,6 @@ public class MainActivity extends Activity {
             } else {
                 vodHeroPoster.setImageResource(R.drawable.card_focus_bg);
             }
-        }
-        if (btnVodHeroWatch != null) {
-            btnVodHeroWatch.setVisibility(View.VISIBLE);
         }
     }
 
@@ -7741,10 +7700,6 @@ public class MainActivity extends Activity {
             } else {
                 seriesDetailVersionsBadge.setVisibility(View.GONE);
             }
-        }
-
-        if (btnSeriesDetailVersions != null) {
-            btnSeriesDetailVersions.setVisibility(series.versions != null && series.versions.size() > 1 ? View.VISIBLE : View.GONE);
         }
 
         if (seriesDetailPoster != null) {
