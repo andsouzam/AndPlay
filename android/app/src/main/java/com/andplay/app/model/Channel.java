@@ -64,12 +64,21 @@ public class Channel implements Serializable {
             list.add(new StreamFallback("HLS Nativo 1080p", "https://jmp2.uk/plu-6759eeb1bd523200083b4f29.m3u8", false));
         }
 
-        if (priorityOrder == null || priorityOrder.isEmpty()) {
-            priorityOrder = java.util.Arrays.asList(
-                    com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE,
-                    com.andplay.app.provider.ProviderManager.PROVIDER_RDCANAIS,
-                    com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED
-            );
+        boolean isHboOrSpecialEmbed = cleanSlug.contains("hbo") || "amc".equals(cleanSlug) || "cinemax".equals(cleanSlug);
+        if (priorityOrder == null || priorityOrder.isEmpty() || isHboOrSpecialEmbed) {
+            if (isHboOrSpecialEmbed) {
+                priorityOrder = java.util.Arrays.asList(
+                        com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED,
+                        com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE,
+                        com.andplay.app.provider.ProviderManager.PROVIDER_RDCANAIS
+                );
+            } else {
+                priorityOrder = java.util.Arrays.asList(
+                        com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE,
+                        com.andplay.app.provider.ProviderManager.PROVIDER_RDCANAIS,
+                        com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED
+                );
+            }
         }
 
         int serverNum = 1;

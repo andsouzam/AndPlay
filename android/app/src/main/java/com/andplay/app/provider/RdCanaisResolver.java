@@ -141,7 +141,7 @@ public class RdCanaisResolver {
         if (url.startsWith("//")) url = "https:" + url;
 
         // Se já for uma URL direta de mídia
-        if (url.contains(".m3u8")) {
+        if (url.contains(".m3u8") || url.contains("__index.txt")) {
             ResolvedStream s = new ResolvedStream();
             s.type = ResolvedStream.Type.HLS;
             s.streamUrl = url;
@@ -158,20 +158,25 @@ public class RdCanaisResolver {
 
         String targetUrl = url;
         String parentUrl = null;
-        int maxHops = 4;
+        if (targetUrl.contains("rdembed")) {
+            parentUrl = "https://reidosembeds.online/";
+        }
+        String accumulatedCookies = null;
+        int maxHops = 5;
 
         for (int hop = 0; hop < maxHops; hop++) {
             Log.d(TAG, "Hop #" + (hop + 1) + " buscando: " + targetUrl);
-            String html = fetchHtml(targetUrl, parentUrl, client);
-            if (html == null || html.isEmpty()) {
+            FetchResult fetchRes = fetchHtml(targetUrl, parentUrl, accumulatedCookies, client);
+            if (fetchRes == null || fetchRes.html == null || fetchRes.html.isEmpty()) {
                 break;
             }
-
-            // Desofusca se for bolodechocolate / redecanais
-            html = decodeBolodechocolateHtml(html);
+            if (fetchRes.cookies != null && !fetchRes.cookies.isEmpty()) {
+                accumulatedCookies = fetchRes.cookies;
+            }
+            String html = decodeBolodechocolateHtml(fetchRes.html);
 
             // Caso 1: RDEmbed com troca autenticada de token 'ref' via POST
-            ResolvedStream rdembedStream = parseRdEmbedRefStream(html, targetUrl, client);
+            ResolvedStream rdembedStream = parseRdEmbedRefStream(html, targetUrl, accumulatedCookies, client);
             if (rdembedStream != null) {
                 Log.i(TAG, "Identificado stream RDEmbed nativo via ref token: " + rdembedStream.streamUrl);
                 return rdembedStream;
@@ -210,6 +215,7 @@ public class RdCanaisResolver {
             // Caso 6: Se encontrou iframe, avança para o próximo hop
             String iframeSrc = extractIframeSrc(html);
             if (iframeSrc != null && !iframeSrc.isEmpty()) {
+                iframeSrc = iframeSrc.replace("&amp;", "&");
                 if (iframeSrc.startsWith("//")) iframeSrc = "https:" + iframeSrc;
                 else if (iframeSrc.startsWith("/")) iframeSrc = extractOrigin(targetUrl) + iframeSrc;
                 parentUrl = targetUrl;
@@ -222,7 +228,16 @@ public class RdCanaisResolver {
         throw new IOException("Nenhum padrão de stream ativo encontrado para: " + url);
     }
 
-    private static String fetchHtml(String url, String referer, OkHttpClient client) throws IOException {
+    private static class FetchResult {
+        final String html;
+        final String cookies;
+        FetchResult(String html, String cookies) {
+            this.html = html;
+            this.cookies = cookies;
+        }
+    }
+
+    private static FetchResult fetchHtml(String url, String referer, String cookies, OkHttpClient client) throws IOException {
         Request.Builder rb = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -231,9 +246,25 @@ public class RdCanaisResolver {
         if (referer != null && !referer.isEmpty()) {
             rb.header("Referer", referer);
         }
+        if (cookies != null && !cookies.isEmpty()) {
+            rb.header("Cookie", cookies);
+        }
         try (Response response = client.newCall(rb.build()).execute()) {
             if (response.isSuccessful() && response.body() != null) {
-                return response.body().string();
+                String body = response.body().string();
+                StringBuilder cookieBuilder = new StringBuilder();
+                if (cookies != null && !cookies.isEmpty()) {
+                    cookieBuilder.append(cookies);
+                }
+                java.util.List<String> setCookies = response.headers("Set-Cookie");
+                for (String sc : setCookies) {
+                    if (sc != null && !sc.isEmpty()) {
+                        String part = sc.split(";")[0].trim();
+                        if (cookieBuilder.length() > 0) cookieBuilder.append("; ");
+                        cookieBuilder.append(part);
+                    }
+                }
+                return new FetchResult(body, cookieBuilder.toString());
             }
         }
         return null;
@@ -347,7 +378,7 @@ public class RdCanaisResolver {
     /**
      * Extrai e executa a troca autenticada do token 'ref' do provedor RDEmbed via POST.
      */
-    private static ResolvedStream parseRdEmbedRefStream(String html, String targetUrl, OkHttpClient client) {
+    private static ResolvedStream parseRdEmbedRefStream(String html, String targetUrl, String cookies, OkHttpClient client) {
         if (html == null) return null;
         Pattern p = Pattern.compile("\"ref\"\\s*:\\s*\"([^\"]+)\"");
         Matcher m = p.matcher(html);
@@ -362,17 +393,19 @@ public class RdCanaisResolver {
         Log.i(TAG, "Detectado RDEmbed ref token. Efetuando POST em: " + refUrl);
 
         try {
-            RequestBody emptyBody = RequestBody.create("", MediaType.parse("application/x-www-form-urlencoded"));
-            Request req = new Request.Builder()
+            RequestBody emptyBody = RequestBody.create(new byte[0], MediaType.parse("application/x-www-form-urlencoded"));
+            Request.Builder reqB = new Request.Builder()
                     .url(refUrl)
                     .post(emptyBody)
                     .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                     .header("Accept", "application/json")
                     .header("Referer", targetUrl)
-                    .header("Origin", origin)
-                    .build();
+                    .header("Origin", origin);
+            if (cookies != null && !cookies.isEmpty()) {
+                reqB.header("Cookie", cookies);
+            }
 
-            try (Response res = client.newCall(req).execute()) {
+            try (Response res = client.newCall(reqB.build()).execute()) {
                 if (res.isSuccessful() && res.body() != null) {
                     String bodyStr = res.body().string();
                     JSONObject json = new JSONObject(bodyStr);

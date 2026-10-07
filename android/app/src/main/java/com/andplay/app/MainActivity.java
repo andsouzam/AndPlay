@@ -348,6 +348,11 @@ public class MainActivity extends Activity {
     private List<Category> movieCategories = new ArrayList<>();
     private List<Series> cachedSeries = new ArrayList<>();
     private List<Category> seriesCategories = new ArrayList<>();
+    private volatile boolean isPreloadingMovies = false;
+    private volatile boolean isPreloadingSeries = false;
+    private long lastDrawerOpenedAt = 0;
+    private final List<Runnable> moviesReadyCallbacks = new ArrayList<>();
+    private final List<Runnable> seriesReadyCallbacks = new ArrayList<>();
 
     private int currentChannelIdx = 0;
     private String currentActiveStreamUrl = "";
@@ -1997,6 +2002,10 @@ public class MainActivity extends Activity {
                         InetAddress.getByName("172.67.162.24"),
                         InetAddress.getByName("104.21.15.95")
                 ));
+                CACHE.put("v2.rdembed.sbs", Arrays.asList(
+                        InetAddress.getByName("104.21.28.94"),
+                        InetAddress.getByName("172.67.145.79")
+                ));
                 CACHE.put("rdcanais.net", Arrays.asList(
                         InetAddress.getByName("104.21.82.94"),
                         InetAddress.getByName("172.67.199.224")
@@ -2027,15 +2036,17 @@ public class MainActivity extends Activity {
                     || hostname.contains("comeumamao")
                     || hostname.contains("pescaplay")
                     || hostname.contains("satlabscloud")
+                    || hostname.contains("ourlawyermadeuschangethenameofthissongsowewouldntgetsued")
                     || hostname.endsWith(".monster")
                     || hostname.endsWith(".cyou")
                     || hostname.endsWith(".xyz")
                     || hostname.endsWith(".sbs")
                     || hostname.endsWith(".shop")
                     || hostname.endsWith(".top")
-                    || hostname.endsWith(".click");
+                    || hostname.endsWith(".click")
+                    || hostname.endsWith(".st");
 
-            // Para domínios frequentemente bloqueados por operadoras, consulta DoH 1.1.1.1 prioritariamente
+            // Para domínios frequentemente bloqueados por operadoras, consulta DoH prioritariamente
             if (isBlockedDomain) {
                 List<InetAddress> dohIps = queryDoh(hostname);
                 if (dohIps != null && !dohIps.isEmpty()) {
@@ -2071,17 +2082,34 @@ public class MainActivity extends Activity {
                 List<InetAddress> ips = CACHE.get("api.reidoscanais.st");
                 if (ips != null) return ips;
             }
+            if (hostname.contains("rdembed")) {
+                List<InetAddress> ips = CACHE.get("v2.rdembed.sbs");
+                if (ips != null) return ips;
+            }
 
             throw new UnknownHostException("Não foi possível resolver host: " + hostname);
         }
 
         private List<InetAddress> queryDoh(String hostname) {
+            // 1. Tenta Cloudflare DoH (1.1.1.1)
+            List<InetAddress> res = doHttpDohQuery("https://1.1.1.1/dns-query?name=" + hostname + "&type=A", "application/dns-json");
+            if (res != null && !res.isEmpty()) return res;
+
+            // 2. Redundância: Tenta Google DoH (8.8.8.8)
+            res = doHttpDohQuery("https://8.8.8.8/resolve?name=" + hostname + "&type=A", "application/json");
+            if (res != null && !res.isEmpty()) return res;
+
+            return null;
+        }
+
+        private List<InetAddress> doHttpDohQuery(String urlStr, String acceptHeader) {
             try {
-                URL url = new URL("https://1.1.1.1/dns-query?name=" + hostname + "&type=A");
+                URL url = new URL(urlStr);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setRequestProperty("Accept", "application/dns-json");
-                conn.setConnectTimeout(3000);
-                conn.setReadTimeout(3000);
+                conn.setRequestProperty("Accept", acceptHeader);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0");
+                conn.setConnectTimeout(2500);
+                conn.setReadTimeout(2500);
                 if (conn.getResponseCode() == 200) {
                     BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream()));
                     StringBuilder sb = new StringBuilder();
@@ -2867,6 +2895,7 @@ public class MainActivity extends Activity {
                 EpgEngine.init(MainActivity.this);
                 EpgEngine.setUpdateListener(() -> {
                     mainHandler.post(() -> {
+                        if (isPlayingVod || currentMode == ScreenMode.VOD) return;
                         if (!allChannels.isEmpty() && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
                             Channel ch = allChannels.get(currentChannelIdx);
                             LiveSchedule epg = EpgEngine.getLiveSchedule(ch);
@@ -2914,6 +2943,7 @@ public class MainActivity extends Activity {
             });
 
             // Pré-carrega filmes e séries em segundo plano com agrupamento inteligente de versões
+            isPreloadingMovies = true;
             try {
                 movieCategories = ApiClient.getMovieCategories();
                 List<Movie> rawMovies = ApiClient.getMovies();
@@ -2923,10 +2953,18 @@ public class MainActivity extends Activity {
                     setupContinueWatchingRail();
                     setupFavoritesRail();
                     setupCinemaHero();
+                    for (Runnable r : new ArrayList<>(moviesReadyCallbacks)) {
+                        r.run();
+                    }
+                    moviesReadyCallbacks.clear();
                 });
             } catch (Throwable t) {
                 Log.e("EPlay", "Erro ao pré-carregar filmes", t);
+            } finally {
+                isPreloadingMovies = false;
             }
+
+            isPreloadingSeries = true;
             try {
                 seriesCategories = ApiClient.getSeriesCategories();
                 List<Series> rawSeries = ApiClient.getSeries();
@@ -2936,9 +2974,15 @@ public class MainActivity extends Activity {
                     setupContinueWatchingRail();
                     setupFavoritesRail();
                     setupCinemaHero();
+                    for (Runnable r : new ArrayList<>(seriesReadyCallbacks)) {
+                        r.run();
+                    }
+                    seriesReadyCallbacks.clear();
                 });
             } catch (Throwable t) {
                 Log.e("EPlay", "Erro ao pré-carregar séries", t);
+            } finally {
+                isPreloadingSeries = false;
             }
         });
     }
@@ -3257,8 +3301,8 @@ public class MainActivity extends Activity {
                 drawerChannelsRecycler.getAdapter().notifyDataSetChanged();
             }
         }
-        // Se o banner OSD estiver visível em tela cheia, atualiza as informações do jogo no ar
-        if (currentMode == ScreenMode.FULLSCREEN && osdBanner != null && osdBanner.getVisibility() == View.VISIBLE
+        // Se o banner OSD estiver visível em tela cheia na TV ao vivo, atualiza as informações do jogo no ar
+        if (!isPlayingVod && currentMode == ScreenMode.FULLSCREEN && osdBanner != null && osdBanner.getVisibility() == View.VISIBLE
                 && currentChannelIdx >= 0 && currentChannelIdx < allChannels.size()) {
             Channel curCh = allChannels.get(currentChannelIdx);
             LiveSchedule epg = EpgEngine.getLiveSchedule(curCh);
@@ -5586,6 +5630,9 @@ public class MainActivity extends Activity {
             }
         }
         ChannelRailAdapter adapter = new ChannelRailAdapter(this, filtered, true, (ch, idx) -> {
+            if (android.os.SystemClock.elapsedRealtime() - lastDrawerOpenedAt < 350) {
+                return;
+            }
             if (isMosaicActive) {
                 closeDrawer();
                 if (mosaicTargetSlotIdx >= 0 && mosaicTargetSlotIdx < 4) {
@@ -6544,7 +6591,7 @@ public class MainActivity extends Activity {
     }
 
     private void updateOsd(Channel ch, int chIdx, LiveSchedule epg) {
-        if (ch == null) return;
+        if (ch == null || isPlayingVod || currentMode == ScreenMode.VOD) return;
 
         // Se NÃO estiver reproduzindo um evento esportivo direto do hub/rail,
         // o evento esportivo DEVE ser detectado especificamente para este canal 'ch'.
@@ -6759,6 +6806,7 @@ public class MainActivity extends Activity {
     }
 
     public void openDrawer() {
+        lastDrawerOpenedAt = android.os.SystemClock.elapsedRealtime();
         if (fullGuideLayout != null && fullGuideLayout.getVisibility() == View.VISIBLE) {
             closeFullGuide();
         }
@@ -6935,14 +6983,25 @@ public class MainActivity extends Activity {
 
     private void loadMoviesCatalog() {
         if (!cachedMovies.isEmpty()) {
+            hideLoading();
             renderVodContent(movieCategories, cachedMovies);
             return;
         }
 
         showLoading("Carregando catálogo de filmes...");
+        if (isPreloadingMovies) {
+            moviesReadyCallbacks.add(() -> {
+                hideLoading();
+                renderVodContent(movieCategories, cachedMovies);
+            });
+            return;
+        }
+
         executor.execute(() -> {
             try {
-                movieCategories = ApiClient.getMovieCategories();
+                if (movieCategories == null || movieCategories.isEmpty()) {
+                    movieCategories = ApiClient.getMovieCategories();
+                }
                 List<Movie> rawMovies = ApiClient.getMovies();
                 cachedMovies = MediaVersionHelper.groupMovies(rawMovies);
                 mainHandler.post(() -> {
@@ -6960,14 +7019,25 @@ public class MainActivity extends Activity {
 
     private void loadSeriesCatalog() {
         if (!cachedSeries.isEmpty()) {
+            hideLoading();
             renderSeriesContent(seriesCategories, cachedSeries);
             return;
         }
 
         showLoading("Carregando catálogo de séries...");
+        if (isPreloadingSeries) {
+            seriesReadyCallbacks.add(() -> {
+                hideLoading();
+                renderSeriesContent(seriesCategories, cachedSeries);
+            });
+            return;
+        }
+
         executor.execute(() -> {
             try {
-                seriesCategories = ApiClient.getSeriesCategories();
+                if (seriesCategories == null || seriesCategories.isEmpty()) {
+                    seriesCategories = ApiClient.getSeriesCategories();
+                }
                 List<Series> rawSeries = ApiClient.getSeries();
                 cachedSeries = MediaVersionHelper.groupSeries(rawSeries);
                 mainHandler.post(() -> {
@@ -8384,15 +8454,17 @@ public class MainActivity extends Activity {
                         moveMosaicFocus(0, 1);
                         return true;
                     } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
-                        onMosaicSlotClicked(currentMosaicFocusedIdx);
+                        // Consome o DOWN no slot do mosaico sem abrir a gaveta ainda, prevenindo que o UP vaze para o item da gaveta
                         return true;
                     } else if (keyCode == KeyEvent.KEYCODE_BACK) {
                         return true;
                     }
                 } else if (action == KeyEvent.ACTION_UP) {
                     if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
-                            || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
-                            || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                            || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+                        onMosaicSlotClicked(currentMosaicFocusedIdx);
                         return true;
                     } else if (keyCode == KeyEvent.KEYCODE_BACK) {
                         handleBack();

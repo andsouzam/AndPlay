@@ -15,31 +15,69 @@ public class MediaVersionHelper {
     private static final Pattern LEADING_NUM_PATTERN = Pattern.compile("^[0-9]+\\s*[-–—]\\s*");
     private static final Pattern BRACKETS_PATTERN = Pattern.compile("\\[.*?\\]");
     private static final Pattern PARENS_PATTERN = Pattern.compile("\\(.*?\\)");
-    private static final Pattern SPECIAL_CHARS_PATTERN = Pattern.compile("[^a-z0-9\\s]");
-    private static final Pattern MULTI_SPACES_PATTERN = Pattern.compile("\\s+");
     private static final Pattern FOUR_K_PATTERN = Pattern.compile("\\b4k\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern CLEAN_TAGS_PATTERN = Pattern.compile(
             "\\[\\s*(?:l|leg|legendado|dub|dublado|lan[cç]amentos?|hdr|dv|hybrid|cinema|rec|corrigido)\\s*\\]",
             Pattern.CASE_INSENSITIVE);
+    private static final Pattern MULTI_SPACES_PATTERN = Pattern.compile("\\s+");
+    private static final Pattern HDR_DV_HYBRID_PATTERN = Pattern.compile("\\[(?:HDR|DV|Hybrid)\\]", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LEG_BRACKETS_PATTERN = Pattern.compile("\\[\\s*(?:L|LEG|LEGENDADO)\\s*\\]", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LEGENDADO_WORD_PATTERN = Pattern.compile("\\b(legendado)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LANCAMENTOS_PATTERN = Pattern.compile("\\[\\s*lan[cç]amentos?\\s*\\]", Pattern.CASE_INSENSITIVE);
 
     public static String cleanTitleKey(String title) {
         if (title == null || title.isEmpty()) return "";
         String s = title;
-        s = LEADING_NUM_PATTERN.matcher(s).replaceAll("");
+        if (s.length() > 0 && Character.isDigit(s.charAt(0))) {
+            s = LEADING_NUM_PATTERN.matcher(s).replaceAll("");
+        }
         s = FOUR_K_PATTERN.matcher(s).replaceAll("");
         s = BRACKETS_PATTERN.matcher(s).replaceAll("");
         s = PARENS_PATTERN.matcher(s).replaceAll("");
-        s = s.toLowerCase(Locale.ROOT);
-        s = Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("[\\p{InCombiningDiacriticalMarks}]", "");
-        s = SPECIAL_CHARS_PATTERN.matcher(s).replaceAll(" ");
-        s = MULTI_SPACES_PATTERN.matcher(s).replaceAll(" ");
-        return s.trim();
+        return fastNormalizeAscii(s);
+    }
+
+    private static String fastNormalizeAscii(String s) {
+        if (s == null || s.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder(s.length());
+        boolean lastWasSpace = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c >= 'A' && c <= 'Z') {
+                c = (char) (c + 32);
+            }
+            switch (c) {
+                case 'á': case 'à': case 'ã': case 'â': case 'ä': c = 'a'; break;
+                case 'é': case 'è': case 'ê': case 'ë': c = 'e'; break;
+                case 'í': case 'ì': case 'î': case 'ï': c = 'i'; break;
+                case 'ó': case 'ò': case 'õ': case 'ô': case 'ö': c = 'o'; break;
+                case 'ú': case 'ù': case 'û': case 'ü': c = 'u'; break;
+                case 'ç': c = 'c'; break;
+                case 'ñ': c = 'n'; break;
+            }
+            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
+                sb.append(c);
+                lastWasSpace = false;
+            } else if (c == ' ' || c == '-' || c == '_' || c == '.' || c == ':' || c == '\'' || c == '\"' || c == '/') {
+                if (!lastWasSpace && sb.length() > 0) {
+                    sb.append(' ');
+                    lastWasSpace = true;
+                }
+            }
+        }
+        int len = sb.length();
+        if (len > 0 && sb.charAt(len - 1) == ' ') {
+            sb.setLength(len - 1);
+        }
+        return sb.toString();
     }
 
     public static String cleanDisplayTitle(String rawTitle) {
         if (rawTitle == null || rawTitle.isEmpty()) return "";
         String s = rawTitle;
-        s = LEADING_NUM_PATTERN.matcher(s).replaceAll("");
+        if (s.length() > 0 && Character.isDigit(s.charAt(0))) {
+            s = LEADING_NUM_PATTERN.matcher(s).replaceAll("");
+        }
         s = FOUR_K_PATTERN.matcher(s).replaceAll("");
         s = CLEAN_TAGS_PATTERN.matcher(s).replaceAll("");
         s = MULTI_SPACES_PATTERN.matcher(s).replaceAll(" ");
@@ -52,11 +90,11 @@ public class MediaVersionHelper {
 
         boolean is4K = "765".equals(catId) ||
                 FOUR_K_PATTERN.matcher(name).find() ||
-                Pattern.compile("\\[(?:HDR|DV|Hybrid)\\]", Pattern.CASE_INSENSITIVE).matcher(name).find();
+                HDR_DV_HYBRID_PATTERN.matcher(name).find();
 
         boolean isLeg = "630".equals(catId) ||
-                Pattern.compile("\\[\\s*(?:L|LEG|LEGENDADO)\\s*\\]", Pattern.CASE_INSENSITIVE).matcher(name).find() ||
-                Pattern.compile("\\b(legendado)\\b", Pattern.CASE_INSENSITIVE).matcher(name).find();
+                LEG_BRACKETS_PATTERN.matcher(name).find() ||
+                LEGENDADO_WORD_PATTERN.matcher(name).find();
 
         String ext = (item.container_extension != null && !item.container_extension.isEmpty()) ? item.container_extension : "mp4";
 
@@ -66,7 +104,7 @@ public class MediaVersionHelper {
                         "Resolução 4K Ultra HD • Áudio Original com Legenda", item.stream_id, ext, "4K", item);
             }
             return new Movie.MovieVersion("4k_dub", "4K Ultra HD", "4K DUB", "✨",
-                    "Resolução 4K Ultra HD • Dublado em Português", item.stream_id, ext, "4K", item);
+                        "Resolução 4K Ultra HD • Dublado em Português", item.stream_id, ext, "4K", item);
         }
 
         if (isLeg) {
@@ -83,8 +121,8 @@ public class MediaVersionHelper {
         String catId = item.category_id != null ? item.category_id : "";
 
         boolean isLeg = "671".equals(catId) ||
-                Pattern.compile("\\[\\s*(?:L|LEG|LEGENDADO)\\s*\\]", Pattern.CASE_INSENSITIVE).matcher(name).find() ||
-                Pattern.compile("\\b(legendado)\\b", Pattern.CASE_INSENSITIVE).matcher(name).find();
+                LEG_BRACKETS_PATTERN.matcher(name).find() ||
+                LEGENDADO_WORD_PATTERN.matcher(name).find();
 
         if (isLeg) {
             return new Series.SeriesVersion("legendado", "Legendado", "LEG", "💬",
@@ -123,7 +161,7 @@ public class MediaVersionHelper {
 
             String itemYear = extractYear(rawTitle, item.year);
             Movie.MovieVersion versionInfo = detectMovieVersion(item);
-            boolean isLanc = "632".equals(item.category_id) || Pattern.compile("\\[\\s*lan[cç]amentos?\\s*\\]", Pattern.CASE_INSENSITIVE).matcher(rawTitle).find();
+            boolean isLanc = "632".equals(item.category_id) || LANCAMENTOS_PATTERN.matcher(rawTitle).find();
             boolean isAnim = "621".equals(item.category_id) || "764".equals(item.category_id);
             boolean isSpec = "630".equals(item.category_id) || "765".equals(item.category_id) || "632".equals(item.category_id) || !"dublado".equals(versionInfo.type) || isLanc;
 
@@ -267,7 +305,7 @@ public class MediaVersionHelper {
 
             String itemYear = extractYear(rawTitle, item.releaseDate);
             Series.SeriesVersion versionInfo = detectSeriesVersion(item);
-            boolean isLanc = Pattern.compile("\\[\\s*lan[cç]amentos?\\s*\\]", Pattern.CASE_INSENSITIVE).matcher(rawTitle).find();
+            boolean isLanc = LANCAMENTOS_PATTERN.matcher(rawTitle).find();
 
             Series matchedGroup = null;
             List<Integer> candidateIndices = cleanToGroupIndices.get(cleanKey);
