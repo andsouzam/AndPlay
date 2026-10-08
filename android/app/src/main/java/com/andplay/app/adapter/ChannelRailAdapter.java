@@ -84,10 +84,25 @@ public class ChannelRailAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 if (listener != null) listener.onChannelClick(ch, position);
             });
 
-            vh.itemView.setOnKeyListener((v, keyCode, event) -> {
-                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
-                    v.performClick();
+            vh.itemView.setOnLongClickListener(v -> {
+                if (context instanceof com.andplay.app.MainActivity) {
+                    ((com.andplay.app.MainActivity) context).showChannelProviderSelectionDialog(ch);
                     return true;
+                }
+                return false;
+            });
+
+            vh.itemView.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP) {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                        v.performClick();
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_MENU) {
+                        if (context instanceof com.andplay.app.MainActivity) {
+                            ((com.andplay.app.MainActivity) context).showChannelProviderSelectionDialog(ch);
+                            return true;
+                        }
+                    }
                 }
                 return false;
             });
@@ -136,10 +151,25 @@ public class ChannelRailAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
                 if (listener != null) listener.onChannelClick(ch, position);
             });
 
-            vh.itemView.setOnKeyListener((v, keyCode, event) -> {
-                if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
-                    v.performClick();
+            vh.itemView.setOnLongClickListener(v -> {
+                if (context instanceof com.andplay.app.MainActivity) {
+                    ((com.andplay.app.MainActivity) context).showChannelProviderSelectionDialog(ch);
                     return true;
+                }
+                return false;
+            });
+
+            vh.itemView.setOnKeyListener((v, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_UP) {
+                    if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                        v.performClick();
+                        return true;
+                    } else if (keyCode == KeyEvent.KEYCODE_MENU) {
+                        if (context instanceof com.andplay.app.MainActivity) {
+                            ((com.andplay.app.MainActivity) context).showChannelProviderSelectionDialog(ch);
+                            return true;
+                        }
+                    }
                 }
                 return false;
             });

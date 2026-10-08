@@ -88,25 +88,16 @@ public class MediaVersionHelper {
         String name = item.getRawTitle();
         String catId = item.category_id != null ? item.category_id : "";
 
-        boolean isHybrid = HDR_DV_HYBRID_PATTERN.matcher(name).find() || name.toLowerCase(Locale.ROOT).contains("hybrid");
-
+        // Alinhado 100% com o index.html (web): tags [HDR], [DV], [Hybrid] ou '4k' ou categoria 765 identificam 4K
         boolean is4K = "765".equals(catId) ||
-                FOUR_K_PATTERN.matcher(name).find() || isHybrid;
+                FOUR_K_PATTERN.matcher(name).find() ||
+                HDR_DV_HYBRID_PATTERN.matcher(name).find();
 
         boolean isLeg = "630".equals(catId) ||
                 LEG_BRACKETS_PATTERN.matcher(name).find() ||
                 LEGENDADO_WORD_PATTERN.matcher(name).find();
 
         String ext = (item.container_extension != null && !item.container_extension.isEmpty()) ? item.container_extension : "mp4";
-
-        if (isHybrid) {
-            if (isLeg) {
-                return new Movie.MovieVersion("hybrid_leg", "Híbrido Legendado", "HYBRID LEG", "⚡",
-                        "Versão Híbrida (HDR/DV/Remux) • Áudio Original com Legenda", item.stream_id, ext, "4K/HDR", item);
-            }
-            return new Movie.MovieVersion("hybrid_dub", "Híbrido Dublado", "HYBRID DUB", "⚡",
-                    "Versão Híbrida (HDR/DV/Remux) • Dublado em Português", item.stream_id, ext, "4K/HDR", item);
-        }
 
         if (is4K) {
             if (isLeg) {
@@ -131,21 +122,14 @@ public class MediaVersionHelper {
         String name = item.getRawTitle();
         String catId = item.category_id != null ? item.category_id : "";
 
-        boolean isHybrid = HDR_DV_HYBRID_PATTERN.matcher(name).find() || name.toLowerCase(Locale.ROOT).contains("hybrid");
-        boolean is4K = FOUR_K_PATTERN.matcher(name).find() || isHybrid;
+        boolean is4K = "765".equals(catId) ||
+                FOUR_K_PATTERN.matcher(name).find() ||
+                HDR_DV_HYBRID_PATTERN.matcher(name).find();
 
         boolean isLeg = "671".equals(catId) ||
                 LEG_BRACKETS_PATTERN.matcher(name).find() ||
                 LEGENDADO_WORD_PATTERN.matcher(name).find();
 
-        if (isHybrid) {
-            if (isLeg) {
-                return new Series.SeriesVersion("hybrid_leg", "Híbrido Legendado", "HYBRID LEG", "⚡",
-                        "Versão Híbrida (HDR/DV/Remux) • Áudio Original com Legenda", item.series_id, item);
-            }
-            return new Series.SeriesVersion("hybrid_dub", "Híbrido Dublado", "HYBRID DUB", "⚡",
-                    "Versão Híbrida (HDR/DV/Remux) • Dublado em Português", item.series_id, item);
-        }
         if (is4K) {
             if (isLeg) {
                 return new Series.SeriesVersion("4k_leg", "4K Legendado", "4K LEG", "✨",
@@ -276,6 +260,35 @@ public class MediaVersionHelper {
     private static void buildMovieSummary(Movie m) {
         if (m.versions == null || m.versions.isEmpty()) return;
 
+        // Se houver 4K Dublado e Legendado, mas não 4K Legendado nativo, sintetiza opção Híbrida (como no web mode)
+        Movie.MovieVersion fourKDub = null;
+        Movie.MovieVersion legVer = null;
+        Movie.MovieVersion fourKLeg = null;
+        boolean hasExistingHybrid = false;
+        for (Movie.MovieVersion v : m.versions) {
+            if ("4k_dub".equals(v.type)) fourKDub = v;
+            else if ("legendado".equals(v.type)) legVer = v;
+            else if ("4k_leg".equals(v.type)) fourKLeg = v;
+            else if ("4k_leg_hybrid".equals(v.type)) hasExistingHybrid = true;
+        }
+        if (fourKLeg == null && fourKDub != null && legVer != null && !hasExistingHybrid) {
+            Movie.MovieVersion hybridVer = new Movie.MovieVersion(
+                    "4k_leg_hybrid",
+                    "4K Legendado (Híbrido)",
+                    "4K HÍBRIDO",
+                    "✨",
+                    "Vídeo 4K Ultra HD • Áudio Original Legendado",
+                    fourKDub.streamId,
+                    fourKDub.ext,
+                    "4K Híbrido",
+                    fourKDub.rawMovie
+            );
+            hybridVer.isHybrid = true;
+            hybridVer.audioStreamId = legVer.streamId;
+            hybridVer.audioExt = legVer.ext;
+            m.versions.add(hybridVer);
+        }
+
         boolean has4k = false;
         boolean hasDub = false;
         boolean hasLeg = false;
@@ -285,18 +298,18 @@ public class MediaVersionHelper {
 
         for (Movie.MovieVersion v : m.versions) {
             if ("4k_dub".equals(v.type) || "4k_leg".equals(v.type)) has4k = true;
-            if ("hybrid_dub".equals(v.type) || "hybrid_leg".equals(v.type)) hasHybrid = true;
+            if ("4k_leg_hybrid".equals(v.type) || "hybrid_dub".equals(v.type) || "hybrid_leg".equals(v.type)) hasHybrid = true;
             if ("dublado".equals(v.type) || "4k_dub".equals(v.type) || "hybrid_dub".equals(v.type)) hasDub = true;
             if ("legendado".equals(v.type) || "4k_leg".equals(v.type) || "hybrid_leg".equals(v.type)) hasLeg = true;
 
-            // Prioridade para versão padrão: Dublado comum > 4K Dublado > Híbrido Dublado > Legendado > qualquer
+            // Prioridade para versão padrão: Dublado comum > 4K Dublado > Legendado > qualquer
             if ("dublado".equals(v.type)) {
                 preferredVersion = v;
             } else if (preferredVersion == null && "4k_dub".equals(v.type)) {
                 preferredVersion = v;
-            } else if (preferredVersion == null && "hybrid_dub".equals(v.type)) {
-                preferredVersion = v;
             } else if (preferredVersion == null && "legendado".equals(v.type)) {
+                preferredVersion = v;
+            } else if (preferredVersion == null && "4k_leg".equals(v.type)) {
                 preferredVersion = v;
             }
         }
@@ -307,8 +320,8 @@ public class MediaVersionHelper {
         m.activeVersion = preferredVersion;
 
         List<String> parts = new ArrayList<>();
-        if (hasHybrid) parts.add("HYBRID");
-        else if (has4k) parts.add("4K");
+        if (has4k) parts.add("4K");
+        if (hasHybrid) parts.add("HÍBRIDO");
         if (hasDub) parts.add("DUB");
         if (hasLeg) parts.add("LEG");
 
@@ -424,14 +437,14 @@ public class MediaVersionHelper {
             if ("dublado".equals(v.type) || "4k_dub".equals(v.type) || "hybrid_dub".equals(v.type)) hasDub = true;
             if ("legendado".equals(v.type) || "4k_leg".equals(v.type) || "hybrid_leg".equals(v.type)) hasLeg = true;
 
-            // Prioridade: Dublado comum > 4K Dublado > Híbrido Dublado > Legendado > qualquer
+            // Prioridade: Dublado comum > 4K Dublado > Legendado > qualquer
             if ("dublado".equals(v.type)) {
                 preferred = v;
             } else if (preferred == null && "4k_dub".equals(v.type)) {
                 preferred = v;
-            } else if (preferred == null && "hybrid_dub".equals(v.type)) {
-                preferred = v;
             } else if (preferred == null && "legendado".equals(v.type)) {
+                preferred = v;
+            } else if (preferred == null && "4k_leg".equals(v.type)) {
                 preferred = v;
             }
         }
@@ -442,8 +455,8 @@ public class MediaVersionHelper {
         s.activeVersion = preferred;
 
         List<String> parts = new ArrayList<>();
-        if (hasHybrid) parts.add("HYBRID");
-        else if (has4k) parts.add("4K");
+        if (has4k) parts.add("4K");
+        if (hasHybrid) parts.add("HÍBRIDO");
         if (hasDub) parts.add("DUB");
         if (hasLeg) parts.add("LEG");
 

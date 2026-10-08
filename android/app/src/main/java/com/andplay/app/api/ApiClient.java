@@ -599,6 +599,43 @@ public class ApiClient {
         return result;
     }
 
+    public static Movie getVodInfo(String streamId) {
+        if (streamId == null || streamId.isEmpty()) return null;
+        String url = SERVER + "/player_api.php?username=" + USER + "&password=" + PASS + "&action=get_vod_info&vod_id=" + streamId;
+        Request request = new Request.Builder()
+                .url(url)
+                .header("User-Agent", "AndPlay Native Android TV 2.0")
+                .build();
+        try (Response response = httpClient.newCall(request).execute()) {
+            if (!response.isSuccessful()) return null;
+            ResponseBody body = response.body();
+            if (body == null) return null;
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8))) {
+                JsonElement root = JsonParser.parseReader(br);
+                if (root != null && root.isJsonObject()) {
+                    JsonObject obj = root.getAsJsonObject();
+                    if (obj.has("info") && obj.get("info").isJsonObject()) {
+                        JsonObject info = obj.getAsJsonObject("info");
+                        Movie m = new Movie();
+                        m.stream_id = streamId;
+                        m.name = optString(info, "name", "");
+                        m.title = optString(info, "o_name", m.name);
+                        m.plot = optString(info, "plot", optString(info, "description", ""));
+                        m.genre = optString(info, "genre", "");
+                        m.rating = optString(info, "rating", "");
+                        m.duration = optString(info, "duration", optString(info, "episode_run_time", ""));
+                        m.cast = optString(info, "cast", optString(info, "actors", ""));
+                        m.director = optString(info, "director", "");
+                        m.year = optString(info, "release_date", "");
+                        if (m.year != null && m.year.length() >= 4) m.year = m.year.substring(0, 4);
+                        return m;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
     public static List<SportsEvent> getLiveSports() {
         List<SportsEvent> events = new ArrayList<>();
         try {

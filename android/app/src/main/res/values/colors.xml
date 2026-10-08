@@ -4,4 +4,18 @@
     <color name="background">#121212</color>
     <color name="card_bg">#1e1e1e</color>
     <color name="gold">#ffc107</color>
+
+    <!-- Cinema Mode Design Tokens (EPLAY_CINEMA_TV_DESIGN_IMPLEMENTACAO.md) -->
+    <color name="cinema_bg_root">#050608</color>
+    <color name="cinema_bg_overlay">#07090D</color>
+    <color name="cinema_bg_card">#101622</color>
+    <color name="cinema_bg_surface">#151D2E</color>
+    <color name="cinema_primary_red">#E50914</color>
+    <color name="cinema_primary_red_focused">#FF2A35</color>
+    <color name="cinema_gold">#FFC107</color>
+    <color name="cinema_cyan">#38BDF8</color>
+    <color name="cinema_focus_stroke">#FFFFFF</color>
+    <color name="cinema_text_title">#FFFFFF</color>
+    <color name="cinema_text_body">#E2E8F0</color>
+    <color name="cinema_text_muted">#94A3B8</color>
 </resources>

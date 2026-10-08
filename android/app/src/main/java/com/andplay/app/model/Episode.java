@@ -23,21 +23,29 @@ public class Episode implements Serializable {
     public String getDisplayTitle() {
         if (info != null && info.name != null && !info.name.trim().isEmpty()) {
             String in = info.name.trim();
-            if (!in.equalsIgnoreCase("Episode " + episode_num) && !in.equalsIgnoreCase("Episódio " + episode_num)) {
+            if (!in.equalsIgnoreCase("Episode " + episode_num) && !in.equalsIgnoreCase("Episódio " + episode_num)
+                    && !in.matches("(?i)s[eé]rie\\s*\\d+.*")) {
                 return in;
             }
         }
         if (title != null && !title.trim().isEmpty()) {
             String t = title.trim();
-            if (!t.equalsIgnoreCase("Episode " + episode_num) && !t.equalsIgnoreCase("Episódio " + episode_num)) {
+            if (!t.equalsIgnoreCase("Episode " + episode_num) && !t.equalsIgnoreCase("Episódio " + episode_num)
+                    && !t.matches("(?i)s[eé]rie\\s*\\d+.*")) {
                 return t;
             }
         }
         if (info != null && info.name != null && !info.name.trim().isEmpty()) {
-            return info.name.trim();
+            String in = info.name.trim();
+            if (!in.matches("(?i)s[eé]rie\\s*\\d+.*")) {
+                return in;
+            }
         }
         if (title != null && !title.trim().isEmpty()) {
-            return title.trim();
+            String t = title.trim();
+            if (!t.matches("(?i)s[eé]rie\\s*\\d+.*")) {
+                return t;
+            }
         }
         return "Episódio " + episode_num;
     }

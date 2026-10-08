@@ -20,7 +20,8 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
 
     public interface OnMovieActionListener {
         void onMovieClick(Movie movie);
-        void onMovieFocus(Movie movie);
+        default void onMovieFocus(Movie movie) {}
+        default void onMovieFocus(Movie movie, int position) { onMovieFocus(movie); }
     }
 
     private final Context context;
@@ -43,13 +44,6 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(context).inflate(R.layout.item_movie_card, parent, false);
-        if (isGrid) {
-            ViewGroup.LayoutParams lp = view.getLayoutParams();
-            if (lp != null) {
-                lp.width = ViewGroup.LayoutParams.MATCH_PARENT;
-                view.setLayoutParams(lp);
-            }
-        }
         return new ViewHolder(view);
     }
 
@@ -130,10 +124,12 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
 
         holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
             v.animate().scaleX(hasFocus ? 1.05f : 1.0f).scaleY(hasFocus ? 1.05f : 1.0f).setDuration(120).start();
+            v.setElevation(hasFocus ? 12f : 2f);
             if (hasFocus) {
-                preloadUpcomingPosters(holder.getBindingAdapterPosition() >= 0 ? holder.getBindingAdapterPosition() : position);
+                int pos = holder.getBindingAdapterPosition() >= 0 ? holder.getBindingAdapterPosition() : position;
+                preloadUpcomingPosters(pos);
                 if (listener != null) {
-                    listener.onMovieFocus(movie);
+                    listener.onMovieFocus(movie, pos);
                 }
             }
         });

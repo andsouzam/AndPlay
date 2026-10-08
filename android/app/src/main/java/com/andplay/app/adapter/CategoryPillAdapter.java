@@ -58,15 +58,45 @@ public class CategoryPillAdapter extends RecyclerView.Adapter<CategoryPillAdapte
         });
 
         holder.itemView.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER || keyCode == android.view.KeyEvent.KEYCODE_ENTER)) {
+            if (event.getAction() == KeyEvent.ACTION_UP && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER)) {
                 v.performClick();
                 return true;
+            }
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                    android.content.Context ctx = v.getContext();
+                    if (ctx instanceof android.app.Activity) {
+                        android.app.Activity act = (android.app.Activity) ctx;
+                        View scroll = act.findViewById(R.id.vodHighlightsScroll);
+                        if (scroll instanceof androidx.core.widget.NestedScrollView) {
+                            ((androidx.core.widget.NestedScrollView) scroll).smoothScrollTo(0, 0);
+                        } else if (scroll instanceof android.widget.ScrollView) {
+                            ((android.widget.ScrollView) scroll).smoothScrollTo(0, 0);
+                        }
+                        View tabMovies = act.findViewById(R.id.btnVodCinemaTabMovies);
+                        View tabSeries = act.findViewById(R.id.btnVodCinemaTabSeries);
+                        if (tabSeries != null && tabSeries.isSelected()) {
+                            tabSeries.requestFocus();
+                            return true;
+                        } else if (tabMovies != null) {
+                            tabMovies.requestFocus();
+                            return true;
+                        }
+                    }
+                } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    View modeHigh = ((android.app.Activity) v.getContext()).findViewById(R.id.btnVodModeHighlights);
+                    if (modeHigh != null && modeHigh.isShown()) {
+                        modeHigh.requestFocus();
+                        return true;
+                    }
+                }
             }
             return false;
         });
 
         holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
             v.animate().scaleX(hasFocus ? 1.05f : 1.0f).scaleY(hasFocus ? 1.05f : 1.0f).setDuration(100).start();
+            v.setElevation(hasFocus ? 8f : 0f);
             if (hasFocus) {
                 holder.pillText.setTextColor(0xFF000000);
             } else if (!isSelected) {

@@ -16,6 +16,11 @@ public class Channel implements Serializable {
     public int prog;
     public List<NextProgram> next = new ArrayList<>();
 
+    public String getCleanTitle() {
+        if (name == null || name.trim().isEmpty()) return "Canal";
+        return name.replaceAll("^\\d+\\s*[-–.]?\\s*", "").trim();
+    }
+
     public static class NextProgram implements Serializable {
         public String t;
         public String s;
@@ -34,7 +39,7 @@ public class Channel implements Serializable {
     }
 
     public List<StreamFallback> getFallbacks(android.content.Context context) {
-        List<String> priority = com.andplay.app.provider.ProviderManager.getPriorityList(context);
+        List<String> priority = com.andplay.app.provider.ProviderManager.getPriorityListForChannel(context, id);
         return getFallbacks(priority);
     }
 
@@ -66,21 +71,8 @@ public class Channel implements Serializable {
             list.add(new StreamFallback("HLS Nativo 1080p", "https://jmp2.uk/plu-6759eeb1bd523200083b4f29.m3u8", false));
         }
 
-        boolean isHboOrSpecialEmbed = cleanSlug.contains("hbo") || "amc".equals(cleanSlug) || "cinemax".equals(cleanSlug);
-        if (priorityOrder == null || priorityOrder.isEmpty() || isHboOrSpecialEmbed) {
-            if (isHboOrSpecialEmbed) {
-                priorityOrder = java.util.Arrays.asList(
-                        com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED,
-                        com.andplay.app.provider.ProviderManager.PROVIDER_RDCANAIS,
-                        com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE
-                );
-            } else {
-                priorityOrder = java.util.Arrays.asList(
-                        com.andplay.app.provider.ProviderManager.PROVIDER_RDCANAIS,
-                        com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED,
-                        com.andplay.app.provider.ProviderManager.PROVIDER_STREAMVERDE
-                );
-            }
+        if (priorityOrder == null || priorityOrder.isEmpty()) {
+            priorityOrder = com.andplay.app.provider.ProviderManager.getPriorityListForChannel(null, id);
         }
 
         int serverNum = 1;

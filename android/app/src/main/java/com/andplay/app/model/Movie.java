@@ -45,6 +45,9 @@ public class Movie implements Serializable {
         public String ext;
         public String quality;
         public Movie rawMovie;
+        public boolean isHybrid;
+        public String audioStreamId;
+        public String audioExt;
 
         public MovieVersion() {}
 
