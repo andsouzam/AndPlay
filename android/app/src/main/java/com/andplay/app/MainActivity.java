@@ -5125,13 +5125,6 @@ public class MainActivity extends Activity {
 
                 @Override
                 public void onMovieFocus(Movie movie) {}
-
-                @Override
-                public void onMovieFocus(Movie movie, int position) {
-                    if (centralScroll != null) {
-                        centralScroll.smoothScrollTo(0, 0);
-                    }
-                }
             }));
             continueWatchingRail.setOnKeyListener((v, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
@@ -5229,14 +5222,6 @@ public class MainActivity extends Activity {
 
                 @Override
                 public void onMovieFocus(Movie movie) {}
-
-                @Override
-                public void onMovieFocus(Movie movie, int position) {
-                    boolean isTopRail = (continueWatchingLayout == null || continueWatchingLayout.getVisibility() != View.VISIBLE);
-                    if (isTopRail && centralScroll != null) {
-                        centralScroll.smoothScrollTo(0, 0);
-                    }
-                }
             }));
             newReleasesRail.setOnKeyListener((v, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
