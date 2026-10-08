@@ -260,33 +260,67 @@ public class MediaVersionHelper {
     private static void buildMovieSummary(Movie m) {
         if (m.versions == null || m.versions.isEmpty()) return;
 
-        // Se houver 4K Dublado e Legendado, mas não 4K Legendado nativo, sintetiza opção Híbrida (como no web mode)
-        Movie.MovieVersion fourKDub = null;
-        Movie.MovieVersion legVer = null;
-        Movie.MovieVersion fourKLeg = null;
-        boolean hasExistingHybrid = false;
-        for (Movie.MovieVersion v : m.versions) {
-            if ("4k_dub".equals(v.type)) fourKDub = v;
-            else if ("legendado".equals(v.type)) legVer = v;
-            else if ("4k_leg".equals(v.type)) fourKLeg = v;
-            else if ("4k_leg_hybrid".equals(v.type)) hasExistingHybrid = true;
+        // Limpa versões híbridas sintetizadas anteriores para recalcular
+        for (int i = m.versions.size() - 1; i >= 0; i--) {
+            String t = m.versions.get(i).type;
+            if ("4k_leg_hybrid".equals(t) || "hybrid_dub".equals(t) || "hybrid_leg".equals(t)
+                    || "hybrid_dub_leg".equals(t) || "hybrid_4k_orig".equals(t)) {
+                m.versions.remove(i);
+            }
         }
-        if (fourKLeg == null && fourKDub != null && legVer != null && !hasExistingHybrid) {
-            Movie.MovieVersion hybridVer = new Movie.MovieVersion(
-                    "4k_leg_hybrid",
-                    "4K Legendado (Híbrido)",
+
+        Movie.MovieVersion dubVer = null;
+        Movie.MovieVersion legVer = null;
+        Movie.MovieVersion fourKDub = null;
+        Movie.MovieVersion fourKLeg = null;
+
+        for (Movie.MovieVersion v : m.versions) {
+            if ("dublado".equals(v.type)) dubVer = v;
+            else if ("legendado".equals(v.type)) legVer = v;
+            else if ("4k_dub".equals(v.type)) fourKDub = v;
+            else if ("4k_leg".equals(v.type)) fourKLeg = v;
+        }
+
+        // Híbrido 1: Imagem da versão legendada (com legenda impressa na tela) + Áudio da versão dublada (PT-BR)
+        Movie.MovieVersion legVideoSource = (fourKLeg != null) ? fourKLeg : legVer;
+        Movie.MovieVersion dubAudioSource = (dubVer != null) ? dubVer : fourKDub;
+        if (legVideoSource != null && dubAudioSource != null) {
+            Movie.MovieVersion h1 = new Movie.MovieVersion(
+                    "hybrid_dub_leg",
+                    "Híbrido (Áudio PT-BR + Legenda na Tela)",
+                    "HÍBRIDO DUB",
+                    "🔀",
+                    "Vídeo com Legenda Impressa • Áudio Dublado em Português",
+                    legVideoSource.streamId,
+                    legVideoSource.ext,
+                    legVideoSource.quality != null ? legVideoSource.quality : "1080p",
+                    legVideoSource.rawMovie
+            );
+            h1.isHybrid = true;
+            h1.audioStreamId = dubAudioSource.streamId;
+            h1.audioExt = dubAudioSource.ext;
+            m.versions.add(h1);
+        }
+
+        // Híbrido 2: Imagem da versão 4K (quando disponível) + Áudio da versão original em inglês
+        Movie.MovieVersion fourKVideoSource = (fourKDub != null) ? fourKDub : fourKLeg;
+        Movie.MovieVersion origAudioSource = (legVer != null) ? legVer : fourKLeg;
+        if (fourKVideoSource != null && origAudioSource != null && fourKVideoSource != origAudioSource) {
+            Movie.MovieVersion h2 = new Movie.MovieVersion(
+                    "hybrid_4k_orig",
+                    "4K Híbrido (Vídeo 4K + Áudio Original)",
                     "4K HÍBRIDO",
                     "✨",
-                    "Vídeo 4K Ultra HD • Áudio Original Legendado",
-                    fourKDub.streamId,
-                    fourKDub.ext,
-                    "4K Híbrido",
-                    fourKDub.rawMovie
+                    "Resolução 4K Ultra HD • Áudio Original em Inglês",
+                    fourKVideoSource.streamId,
+                    fourKVideoSource.ext,
+                    "4K",
+                    fourKVideoSource.rawMovie
             );
-            hybridVer.isHybrid = true;
-            hybridVer.audioStreamId = legVer.streamId;
-            hybridVer.audioExt = legVer.ext;
-            m.versions.add(hybridVer);
+            h2.isHybrid = true;
+            h2.audioStreamId = origAudioSource.streamId;
+            h2.audioExt = origAudioSource.ext;
+            m.versions.add(h2);
         }
 
         boolean has4k = false;
@@ -297,10 +331,10 @@ public class MediaVersionHelper {
         Movie.MovieVersion preferredVersion = null;
 
         for (Movie.MovieVersion v : m.versions) {
-            if ("4k_dub".equals(v.type) || "4k_leg".equals(v.type)) has4k = true;
-            if ("4k_leg_hybrid".equals(v.type) || "hybrid_dub".equals(v.type) || "hybrid_leg".equals(v.type)) hasHybrid = true;
-            if ("dublado".equals(v.type) || "4k_dub".equals(v.type) || "hybrid_dub".equals(v.type)) hasDub = true;
-            if ("legendado".equals(v.type) || "4k_leg".equals(v.type) || "hybrid_leg".equals(v.type)) hasLeg = true;
+            if ("4k_dub".equals(v.type) || "4k_leg".equals(v.type) || "hybrid_4k_orig".equals(v.type)) has4k = true;
+            if (v.isHybrid || (v.type != null && v.type.startsWith("hybrid"))) hasHybrid = true;
+            if ("dublado".equals(v.type) || "4k_dub".equals(v.type) || "hybrid_dub_leg".equals(v.type)) hasDub = true;
+            if ("legendado".equals(v.type) || "4k_leg".equals(v.type)) hasLeg = true;
 
             // Prioridade para versão padrão: Dublado comum > 4K Dublado > Legendado > qualquer
             if ("dublado".equals(v.type)) {
@@ -432,10 +466,10 @@ public class MediaVersionHelper {
         Series.SeriesVersion preferred = null;
 
         for (Series.SeriesVersion v : s.versions) {
-            if ("4k_dub".equals(v.type) || "4k_leg".equals(v.type)) has4k = true;
-            if ("hybrid_dub".equals(v.type) || "hybrid_leg".equals(v.type)) hasHybrid = true;
-            if ("dublado".equals(v.type) || "4k_dub".equals(v.type) || "hybrid_dub".equals(v.type)) hasDub = true;
-            if ("legendado".equals(v.type) || "4k_leg".equals(v.type) || "hybrid_leg".equals(v.type)) hasLeg = true;
+            if ("4k_dub".equals(v.type) || "4k_leg".equals(v.type) || "hybrid_4k_orig".equals(v.type)) has4k = true;
+            if (v.type != null && v.type.contains("hybrid")) hasHybrid = true;
+            if ("dublado".equals(v.type) || "4k_dub".equals(v.type) || "hybrid_dub_leg".equals(v.type)) hasDub = true;
+            if ("legendado".equals(v.type) || "4k_leg".equals(v.type)) hasLeg = true;
 
             // Prioridade: Dublado comum > 4K Dublado > Legendado > qualquer
             if ("dublado".equals(v.type)) {

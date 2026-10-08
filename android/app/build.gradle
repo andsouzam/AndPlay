@@ -10,8 +10,8 @@ android {
         applicationId 'com.andplay.app'
         minSdk 21
         targetSdk 34
-        versionCode 38
-        versionName '2.6.2'
+        versionCode 39
+        versionName '2.6.3'
 
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }

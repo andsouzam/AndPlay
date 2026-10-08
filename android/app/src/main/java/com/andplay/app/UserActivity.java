@@ -48,7 +48,7 @@ import java.util.Locale;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
-public class UserActivity extends Activity {
+public class UserActivity extends BaseActivity {
 
     public static final String EXTRA_MODE_CHANGED = "mode_changed";
 

@@ -41,7 +41,7 @@ import java.util.concurrent.Executors;
  * - Campeonatos sem tabela (ex: Libertadores, Copa do Brasil) não mostram o botão TABELA.
  * - Apertar VOLTAR dentro da tabela/calendário volta o seletor direto para a sidebar na liga atual.
  */
-public class SportsHubActivity extends Activity {
+public class SportsHubActivity extends BaseActivity {
 
     // ── Views ────────────────────────────────────────────────────────────────
     private RecyclerView leagueTabsRv;

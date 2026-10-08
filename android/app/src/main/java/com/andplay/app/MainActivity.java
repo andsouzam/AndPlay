@@ -66,6 +66,13 @@ import androidx.media3.common.Player;
 import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.Tracks;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
+import androidx.media3.exoplayer.Renderer;
+import androidx.media3.exoplayer.mediacodec.MediaCodecInfo;
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil;
+import androidx.media3.exoplayer.video.MediaCodecVideoRenderer;
+import androidx.media3.exoplayer.video.VideoRendererEventListener;
+import android.media.MediaFormat;
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.exoplayer.source.MediaSource;
 import androidx.media3.exoplayer.source.MergingMediaSource;
@@ -135,7 +142,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class MainActivity extends Activity {
+public class MainActivity extends BaseActivity {
 
     public enum ScreenMode {
         CENTRAL, FULLSCREEN, VOD, SERIES_DETAIL, MOVIE_DETAIL
@@ -149,6 +156,9 @@ public class MainActivity extends Activity {
     private PlayerView unifiedExoPlayerView;
     private WebView unifiedEmbedWebView;
     private ExoPlayer exoPlayer;
+    private boolean isHybridPlaybackActive = false;
+    private boolean hasRenderedFirstFrame = false;
+    private final Runnable blackScreenRecoveryRunnable = () -> checkAndRecoverFromBlackScreen();
 
     private FrameLayout pipPlayerHost;
     private FrameLayout fullscreenPlayerHost;
@@ -2475,14 +2485,102 @@ public class MainActivity extends Activity {
         DefaultMediaSourceFactory mediaSourceFactory = new DefaultMediaSourceFactory(this)
                 .setDataSourceFactory(httpDataSourceFactory);
 
-        DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(this)
-                .setEnableDecoderFallback(true)
-                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
+        DefaultRenderersFactory renderersFactory = new DefaultRenderersFactory(this) {
+            @Override
+            protected void buildVideoRenderers(
+                    Context context,
+                    @DefaultRenderersFactory.ExtensionRendererMode int extensionRendererMode,
+                    MediaCodecSelector mediaCodecSelector,
+                    boolean enableDecoderFallback,
+                    Handler eventHandler,
+                    VideoRendererEventListener eventListener,
+                    long allowedVideoJoiningTimeMs,
+                    ArrayList<Renderer> out) {
+                MediaCodecVideoRenderer videoRenderer = new MediaCodecVideoRenderer(
+                        context,
+                        getCodecAdapterFactory(),
+                        mediaCodecSelector,
+                        allowedVideoJoiningTimeMs,
+                        enableDecoderFallback,
+                        eventHandler,
+                        eventListener,
+                        MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY) {
+
+                    @Override
+                    protected List<MediaCodecInfo> getDecoderInfos(
+                            MediaCodecSelector mediaCodecSelector,
+                            Format format,
+                            boolean requiresSecureDecoder) throws MediaCodecUtil.DecoderQueryException {
+                        List<MediaCodecInfo> decoders = super.getDecoderInfos(mediaCodecSelector, format, requiresSecureDecoder);
+                        if (decoders == null || decoders.isEmpty()) return decoders;
+                        List<MediaCodecInfo> result = new ArrayList<>(decoders);
+
+                        boolean isHevc = "video/hevc".equalsIgnoreCase(format.sampleMimeType);
+                        boolean isHighRes = (format.width >= 3800 || format.height >= 2000);
+                        boolean is10Bit = (format.codecs != null && (format.codecs.contains("2.") || format.codecs.contains("hvc1.2")));
+
+                        if (isHevc || isHighRes || is10Bit) {
+                            int supportedIdx = -1;
+                            for (int i = 0; i < result.size(); i++) {
+                                MediaCodecInfo info = result.get(i);
+                                try {
+                                    if (info.isFormatSupported(format)) {
+                                        supportedIdx = i;
+                                        break;
+                                    }
+                                } catch (Exception ignored) {}
+                            }
+                            if (supportedIdx > 0) {
+                                MediaCodecInfo supported = result.remove(supportedIdx);
+                                result.add(0, supported);
+                                Log.i("EPlayPlayer", "4K HEVC: Decodificador plenamente compatível promovido: " + supported.name);
+                            }
+                        }
+                        return result;
+                    }
+
+                    @Override
+                    protected MediaFormat getMediaFormat(
+                            Format format,
+                            String codecMimeType,
+                            MediaCodecVideoRenderer.CodecMaxValues codecMaxValues,
+                            float codecOperatingRate,
+                            boolean deviceNeedsNoPostProcessWorkaround,
+                            int tunnelingAudioSessionId) {
+                        MediaFormat mediaFormat = super.getMediaFormat(
+                                format, codecMimeType, codecMaxValues, codecOperatingRate,
+                                deviceNeedsNoPostProcessWorkaround, tunnelingAudioSessionId);
+                        // Alinhamento de largura/altura para múltiplos de 16 em 4K (evita tela preta em chipsets Amlogic/MStar/Realtek/Allwinner)
+                        if (format.width > 0 && format.height > 0) {
+                            int w = format.width;
+                            int h = format.height;
+                            if ((w % 16 != 0 || h % 16 != 0) && (w >= 1920 || h >= 1080)) {
+                                int alignedW = ((w + 15) / 16) * 16;
+                                int alignedH = ((h + 15) / 16) * 16;
+                                mediaFormat.setInteger(MediaFormat.KEY_WIDTH, alignedW);
+                                mediaFormat.setInteger(MediaFormat.KEY_HEIGHT, alignedH);
+                                mediaFormat.setInteger("crop-left", 0);
+                                mediaFormat.setInteger("crop-top", 0);
+                                mediaFormat.setInteger("crop-right", w - 1);
+                                mediaFormat.setInteger("crop-bottom", h - 1);
+                                Log.i("EPlayPlayer", "4K alinhado para hardware: " + w + "x" + h + " -> " + alignedW + "x" + alignedH);
+                            }
+                        }
+                        return mediaFormat;
+                    }
+                };
+                out.add(videoRenderer);
+            }
+        };
+        renderersFactory.setEnableDecoderFallback(true);
+        renderersFactory.setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON);
 
         defaultTrackSelector = new DefaultTrackSelector(this);
         defaultTrackSelector.setParameters(
                 defaultTrackSelector.buildUponParameters()
                         .setExceedRendererCapabilitiesIfNecessary(true)
+                        .setAllowVideoMixedMimeTypeAdaptiveness(true)
+                        .setAllowVideoNonSeamlessAdaptiveness(true)
         );
 
         exoPlayer = new ExoPlayer.Builder(this)
@@ -2492,6 +2590,35 @@ public class MainActivity extends Activity {
                 .build();
         exoPlayer.setPlayWhenReady(true);
         exoPlayer.addListener(new Player.Listener() {
+            @Override
+            public void onTracksChanged(@NonNull Tracks tracks) {
+                if (isHybridPlaybackActive && exoPlayer != null) {
+                    List<Tracks.Group> audioGroups = new ArrayList<>();
+                    for (Tracks.Group group : tracks.getGroups()) {
+                        if (group.getType() == C.TRACK_TYPE_AUDIO) {
+                            audioGroups.add(group);
+                        }
+                    }
+                    if (audioGroups.size() >= 2) {
+                        Tracks.Group targetAudioGroup = audioGroups.get(1);
+                        TrackSelectionOverride audioOverride = new TrackSelectionOverride(targetAudioGroup.getMediaTrackGroup(), 0);
+                        exoPlayer.setTrackSelectionParameters(
+                                exoPlayer.getTrackSelectionParameters().buildUpon()
+                                        .setOverrideForType(audioOverride)
+                                        .build()
+                        );
+                        Log.i("EPlayHybrid", "Áudio secundário aplicado com sucesso para reprodução híbrida.");
+                    }
+                }
+            }
+
+            @Override
+            public void onRenderedFirstFrame() {
+                hasRenderedFirstFrame = true;
+                mainHandler.removeCallbacks(blackScreenRecoveryRunnable);
+                Log.i("EPlayPlayer", "Primeiro frame de vídeo renderizado com sucesso na tela.");
+            }
+
             @Override
             public void onPlaybackStateChanged(int playbackState) {
                 if (playbackState == Player.STATE_READY) {
@@ -2503,7 +2630,12 @@ public class MainActivity extends Activity {
                     if (exoPlayer.getPlayWhenReady()) {
                         mainHandler.post(() -> onPlaybackStarted());
                     }
+                    if (isPlayingVod && !hasRenderedFirstFrame) {
+                        mainHandler.removeCallbacks(blackScreenRecoveryRunnable);
+                        mainHandler.postDelayed(blackScreenRecoveryRunnable, 4000);
+                    }
                 } else if (playbackState == Player.STATE_ENDED) {
+                    mainHandler.removeCallbacks(blackScreenRecoveryRunnable);
                     mainHandler.post(() -> onPlaybackEnded());
                 }
             }
@@ -2517,6 +2649,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPlayerError(@NonNull PlaybackException error) {
+                mainHandler.removeCallbacks(blackScreenRecoveryRunnable);
                 Log.w("EPlayPlayer", "ExoPlayer erro: " + error.getMessage() + ", tentando contingência...");
                 if (currentChannelFallbacks != null && currentFallbackIdx + 1 < currentChannelFallbacks.size()) {
                     Log.i("EPlayPlayer", "Avançando automaticamente para o próximo servidor nativo do canal...");
@@ -2970,9 +3103,20 @@ public class MainActivity extends Activity {
             saveCurrentVodProgress();
         }
         stopVodProgressTicker();
+        isHybridPlaybackActive = false;
+        hasRenderedFirstFrame = false;
+        mainHandler.removeCallbacks(blackScreenRecoveryRunnable);
         if (exoPlayer != null) {
             exoPlayer.stop();
             exoPlayer.clearMediaItems();
+            try {
+                exoPlayer.setTrackSelectionParameters(
+                        exoPlayer.getTrackSelectionParameters().buildUpon()
+                                .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                                .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                                .build()
+                );
+            } catch (Exception ignored) {}
         }
         if (unifiedEmbedWebView != null) {
             unifiedEmbedWebView.stopLoading();
@@ -2980,6 +3124,15 @@ public class MainActivity extends Activity {
             unifiedEmbedWebView.clearHistory();
         }
         currentActiveStreamUrl = "";
+    }
+
+    private void checkAndRecoverFromBlackScreen() {
+        if (!isPlayingVod || hasRenderedFirstFrame || exoPlayer == null) return;
+        Log.w("EPlayPlayer", "Possível tela preta detectada em reprodução 4K/VOD: nenhum frame renderizado após 4s. Tentando contingência de avanço...");
+        try {
+            long currentPos = exoPlayer.getCurrentPosition();
+            exoPlayer.seekTo(Math.max(0, currentPos + 500));
+        } catch (Exception ignored) {}
     }
 
     private void initClock() {
@@ -6707,6 +6860,19 @@ public class MainActivity extends Activity {
 
     private void playStream(String url, boolean isEmbed, long startPositionMs) {
         isVideoPlaybackActive = false;
+        isHybridPlaybackActive = false;
+        hasRenderedFirstFrame = false;
+        mainHandler.removeCallbacks(blackScreenRecoveryRunnable);
+        if (exoPlayer != null) {
+            try {
+                exoPlayer.setTrackSelectionParameters(
+                        exoPlayer.getTrackSelectionParameters().buildUpon()
+                                .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                                .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                                .build()
+                );
+            } catch (Exception ignored) {}
+        }
         currentActiveStreamUrl = url;
         isPlayingEmbed = isEmbed;
         enforceMaxVolume();
@@ -8188,6 +8354,9 @@ public class MainActivity extends Activity {
         if (version == null) return;
         isVideoPlaybackActive = false;
         isPlayingEmbed = false;
+        isHybridPlaybackActive = true;
+        hasRenderedFirstFrame = false;
+        mainHandler.removeCallbacks(blackScreenRecoveryRunnable);
         enforceMaxVolume();
 
         unifiedEmbedWebView.stopLoading();
@@ -8216,8 +8385,10 @@ public class MainActivity extends Activity {
             }
             exoPlayer.prepare();
             exoPlayer.play();
+            Toast.makeText(this, "🔀 " + (version.label != null ? version.label : "Modo Híbrido") + " ativado", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
             Log.e("EPlay", "Erro ao inicializar stream híbrido: " + e.getMessage());
+            isHybridPlaybackActive = false;
             playStream(videoUrl, false, startPositionMs);
         }
     }

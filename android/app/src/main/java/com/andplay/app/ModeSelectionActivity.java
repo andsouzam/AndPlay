@@ -19,7 +19,7 @@ import com.andplay.app.view.DiagonalPaneView;
  * Banner Fullscreen com divisão diagonal entre Modo Cinema e Modo TV.
  * Exibido no primeiro login/acesso e quando invocado pelo Perfil do Usuário.
  */
-public class ModeSelectionActivity extends Activity {
+public class ModeSelectionActivity extends BaseActivity {
 
     public static final String EXTRA_IS_FIRST_ACCESS = "is_first_access";
     public static final String EXTRA_SELECTED_MODE = "selected_mode";
