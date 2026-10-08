@@ -2743,7 +2743,7 @@
         </LinearLayout>
 
         <!-- DUMMY STUB HERO PARA COMPATIBILIDADE COM FINDVIEWBYID (0dp x 0dp, GONE) -->
-        <View
+        <FrameLayout
             android:id="@+id/vodHeroLayout"
             android:layout_width="0dp"
             android:layout_height="0dp"

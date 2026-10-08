@@ -306,7 +306,8 @@ public class MainActivity extends Activity {
 
     private TextView vodHeroTitle, vodHeroRating, vodHeroYear, vodHeroGenre, vodHeroPlot;
     private TextView vodHeroVersionsBadge, vodHeroTypeBadge;
-    private FrameLayout vodHeroPosterCard, vodHeroLayout;
+    private FrameLayout vodHeroPosterCard;
+    private View vodHeroLayout;
     private ImageView vodHeroPoster, vodHeroBackdrop;
     private TextView btnVodHeroPlay, btnVodHeroDetails, btnVodHeroFav;
     private Movie activeVodHeroMovie;
