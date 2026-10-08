@@ -281,6 +281,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       contentSeriesPanel: document.getElementById('contentSeriesPanel'),
       contentSeriesHeading: document.getElementById('contentSeriesHeading'),
       contentSeasonSelect: document.getElementById('contentSeasonSelect'),
+      contentSeasonPills: document.getElementById('contentSeasonPills'),
       contentSeriesVersionSwitcher: document.getElementById('contentSeriesVersionSwitcher'),
       contentEpisodesList: document.getElementById('contentEpisodesList'),
       contentRelatedPanel: document.getElementById('contentRelatedPanel'),
@@ -547,6 +548,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       seriesYear: document.getElementById('seriesYear'),
       seriesPlot: document.getElementById('seriesPlot'),
       seasonSelect: document.getElementById('seasonSelect'),
+      modalSeasonPills: document.getElementById('modalSeasonPills'),
       seriesVersionSwitcher: document.getElementById('seriesVersionSwitcher'),
       episodesList: document.getElementById('episodesList')
     };
@@ -1454,7 +1456,12 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           }
         }
       });
-      elements.contentSeasonSelect?.addEventListener('change', (e) => renderSeasonEpisodes(e.target.value));
+      const handleSeasonSelectEvent = (e) => {
+        const val = e.target?.value;
+        if (val) switchSeason(val);
+      };
+      elements.contentSeasonSelect?.addEventListener('change', handleSeasonSelectEvent);
+      elements.contentSeasonSelect?.addEventListener('input', handleSeasonSelectEvent);
 
       // Video Modal
       elements.closeVideoModal.addEventListener('click', closePlayer);
@@ -1567,7 +1574,8 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
       elements.seriesModal.addEventListener('click', (e) => {
         if (e.target === elements.seriesModal) closeSeriesModal();
       });
-      elements.seasonSelect.addEventListener('change', (e) => renderSeasonEpisodes(e.target.value));
+      elements.seasonSelect?.addEventListener('change', handleSeasonSelectEvent);
+      elements.seasonSelect?.addEventListener('input', handleSeasonSelectEvent);
 
       // Movie Version Modal
       elements.closeMovieVersionModal.addEventListener('click', closeMovieVersionModal);
@@ -1882,7 +1890,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
             (s.versions && s.versions.some(v => String(v.seriesId) === targetId))
           );
           if (found) {
-            await openSeriesPage(found);
+            await openSeriesPage(found, route.season);
             const targetVer = found.versions?.[0] || found;
             const realSeriesId = targetVer.seriesId || targetVer.series_id || targetId;
             const data = await getOrFetchSeriesInfo(realSeriesId);
@@ -7773,7 +7781,7 @@ const CONFIG = window.ANDPLAY_PUBLIC_CONFIG || {
           return;
         }
 
-        await openSeriesPage(group);
+        await openSeriesPage(group, item.seasonNum);
         const seasonKey = String(item.seasonNum || '');
         const eps = currentSeriesData?.episodes?.[seasonKey] || [];
         const ep = eps.find(e => String(e.id) === String(item.id)) ||
@@ -15475,6 +15483,10 @@ function showHome(targetScroll = 0) {
         if (elements.contentPagePoster) elements.contentPagePoster.src = '';
         if (elements.contentMovieVersions) elements.contentMovieVersions.innerHTML = '';
         if (elements.contentEpisodesList) elements.contentEpisodesList.innerHTML = '';
+        if (elements.contentSeasonPills) {
+          elements.contentSeasonPills.innerHTML = '';
+          elements.contentSeasonPills.style.display = 'none';
+        }
       }
 
       if (!isHandlingPopstate) {
@@ -15635,7 +15647,7 @@ function showHome(targetScroll = 0) {
       elements.contentMovieVersions.appendChild(primaryBtn);
     }
 
-    async function openSeriesPage(seriesGroupOrItem) {
+    async function openSeriesPage(seriesGroupOrItem, preferredSeason = null) {
       if (!window.AndPlayAccount?.isSignedIn?.()) {
         showLoginScreen();
         return;
@@ -15661,6 +15673,10 @@ function showHome(targetScroll = 0) {
       elements.contentSeriesPanel.hidden = false;
       elements.contentSeriesHeading.textContent = seriesGroupOrItem?.name || seriesGroupOrItem?.title || 'Série';
       elements.contentEpisodesList.innerHTML = '<div class="eplay-page-loading"><div class="spinner"></div>Carregando episódios...</div>';
+      if (elements.contentSeasonPills) {
+        elements.contentSeasonPills.innerHTML = '';
+        elements.contentSeasonPills.style.display = 'none';
+      }
 
       const versions = seriesGroupOrItem?.versions || [{
         item: seriesGroupOrItem,
@@ -15670,7 +15686,7 @@ function showHome(targetScroll = 0) {
       const hasDublado = versions.some(v => v.versionInfo?.type === 'dublado');
       const pageVersion = hasDublado ? (versions.find(v => v.versionInfo?.type === 'dublado') || versions[0]) : versions[0];
       setupSeriesVersionSwitcher(versions);
-      await loadSeriesVersion(pageVersion);
+      await loadSeriesVersion(pageVersion, preferredSeason);
     }
 
     async function openSeriesModal(seriesGroupOrItem) {
@@ -15683,6 +15699,10 @@ function showHome(targetScroll = 0) {
       elements.seriesGenre.textContent = seriesGroupOrItem.genre || 'Série';
       elements.seriesYear.textContent = seriesGroupOrItem.releaseDate ? seriesGroupOrItem.releaseDate.substring(0, 4) : '';
       elements.seriesPlot.textContent = seriesGroupOrItem.plot || 'Sinopse não disponível.';
+      if (elements.modalSeasonPills) {
+        elements.modalSeasonPills.innerHTML = '';
+        elements.modalSeasonPills.style.display = 'none';
+      }
 
       const versions = seriesGroupOrItem.versions || [{
         item: seriesGroupOrItem,
@@ -15706,6 +15726,10 @@ function showHome(targetScroll = 0) {
       return elements.contentSeasonSelect || elements.seasonSelect;
     }
 
+    function getSeriesSeasonPillsElement() {
+      return elements.contentSeasonPills || elements.modalSeasonPills;
+    }
+
     function getSeriesEpisodesElement() {
       return elements.contentEpisodesList || elements.episodesList;
     }
@@ -15726,6 +15750,83 @@ function showHome(targetScroll = 0) {
       switcher.innerHTML = '';
     }
 
+    function renderSeasonPills(seasons, episodesBySeason, activeSeason) {
+      const pillsContainers = [elements.contentSeasonPills, elements.modalSeasonPills].filter(Boolean);
+      if (!pillsContainers.length) return;
+
+      const activeKey = String(activeSeason ?? '');
+      pillsContainers.forEach(container => {
+        container.innerHTML = '';
+        if (!seasons || seasons.length === 0) {
+          container.style.display = 'none';
+          return;
+        }
+
+        container.style.display = 'flex';
+        seasons.forEach(seasonNum => {
+          const sKey = String(seasonNum);
+          const count = episodesBySeason?.[sKey]?.length ?? episodesBySeason?.[seasonNum]?.length ?? 0;
+          const pill = document.createElement('button');
+          pill.type = 'button';
+          pill.className = 'eplay-season-pill' + (sKey === activeKey ? ' is-active' : '');
+          pill.dataset.season = sKey;
+          pill.setAttribute('role', 'tab');
+          pill.setAttribute('aria-selected', sKey === activeKey ? 'true' : 'false');
+          pill.innerHTML = `
+            <span class="eplay-season-pill-title">Temporada ${escapeHtml(seasonNum)}</span>
+            <span class="eplay-season-pill-badge">${count} ep</span>
+          `;
+
+          pill.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            switchSeason(sKey);
+          });
+
+          container.appendChild(pill);
+        });
+
+        const activePill = container.querySelector('.eplay-season-pill.is-active');
+        if (activePill) {
+          try {
+            activePill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+          } catch (_) {}
+        }
+      });
+    }
+
+    function updateSeasonPillsActive(activeSeason) {
+      const activeKey = String(activeSeason ?? '');
+      const pills = document.querySelectorAll('.eplay-season-pill');
+      pills.forEach(pill => {
+        const isActive = pill.dataset.season === activeKey;
+        pill.classList.toggle('is-active', isActive);
+        pill.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        if (isActive) {
+          try {
+            pill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+          } catch (_) {}
+        }
+      });
+    }
+
+    function switchSeason(seasonNum) {
+      if (seasonNum === null || seasonNum === undefined) return;
+      const seasonKey = String(seasonNum);
+      const select = getSeriesSeasonSelectElement();
+      if (select && select.value !== seasonKey) {
+        select.value = seasonKey;
+      }
+      if (elements.contentSeasonSelect && elements.contentSeasonSelect.value !== seasonKey) {
+        elements.contentSeasonSelect.value = seasonKey;
+      }
+      if (elements.seasonSelect && elements.seasonSelect.value !== seasonKey) {
+        elements.seasonSelect.value = seasonKey;
+      }
+      updateSeasonPillsActive(seasonKey);
+      renderSeasonEpisodes(seasonKey);
+    }
+
     let _seriesVersionLoadToken = 0;
     async function loadSeriesVersion(versionObj, preferredSeason = null) {
       // Se o usuário trocar de versão (dublado/legendado) de novo antes desta responder,
@@ -15736,7 +15837,7 @@ function showHome(targetScroll = 0) {
       const seriesEpisodesList = getSeriesEpisodesElement();
       const seriesSeasonSelect = getSeriesSeasonSelectElement();
       seriesEpisodesList.innerHTML = `<div class="eplay-page-loading"><div class="spinner"></div>Carregando episódios (${escapeHtml(versionObj.versionInfo.label)})...</div>`;
-      seriesSeasonSelect.innerHTML = '<option>Carregando...</option>';
+      if (seriesSeasonSelect) seriesSeasonSelect.innerHTML = '<option>Carregando...</option>';
 
       try {
         const data = await getOrFetchSeriesInfo(versionObj.seriesId);
@@ -15769,26 +15870,35 @@ function showHome(targetScroll = 0) {
           }
         }
 
-        const episodesBySeason = currentSeriesData.episodes || {};
+        const episodesBySeason = currentSeriesData?.episodes || {};
         const seasons = Object.keys(episodesBySeason).sort((a, b) => Number(a) - Number(b));
 
-        seriesSeasonSelect.innerHTML = '';
+        const selectsToPopulate = [elements.contentSeasonSelect, elements.seasonSelect].filter(Boolean);
+        selectsToPopulate.forEach(sel => { sel.innerHTML = ''; });
+
         if (seasons.length === 0) {
           if (myVersionToken !== _seriesVersionLoadToken) return;
+          renderSeasonPills([], {}, '');
           seriesEpisodesList.innerHTML = '<div class="eplay-page-empty">Nenhum episódio cadastrado nesta versão.</div>';
           return;
         }
 
-        seasons.forEach(seasonNum => {
-          const opt = document.createElement('option');
-          opt.value = seasonNum;
-          opt.textContent = `Temporada ${seasonNum} (${episodesBySeason[seasonNum].length} ep)`;
-          seriesSeasonSelect.appendChild(opt);
+        selectsToPopulate.forEach(sel => {
+          seasons.forEach(seasonNum => {
+            const opt = document.createElement('option');
+            opt.value = String(seasonNum);
+            opt.textContent = `Temporada ${seasonNum} (${episodesBySeason[seasonNum]?.length || 0} ep)`;
+            sel.appendChild(opt);
+          });
         });
 
         // Mantém a temporada que o usuário já estava assistindo ou a primeira
-        const targetSeason = (preferredSeason && seasons.includes(String(preferredSeason))) ? String(preferredSeason) : seasons[0];
-        seriesSeasonSelect.value = targetSeason;
+        const targetSeason = (preferredSeason && seasons.some(s => String(s) === String(preferredSeason)))
+          ? String(preferredSeason)
+          : String(seasons[0]);
+
+        selectsToPopulate.forEach(sel => { sel.value = targetSeason; });
+        renderSeasonPills(seasons, episodesBySeason, targetSeason);
         renderSeasonEpisodes(targetSeason);
       } catch (err) {
         if (myVersionToken !== _seriesVersionLoadToken) return;
@@ -15798,8 +15908,23 @@ function showHome(targetScroll = 0) {
 
     function renderSeasonEpisodes(seasonNum) {
       if (!currentSeriesData || !currentSeriesData.episodes) return;
-      const episodes = currentSeriesData.episodes[seasonNum] || [];
+      const seasonKey = String(seasonNum);
+      const epsMap = currentSeriesData.episodes;
+      const episodes = epsMap[seasonKey] || epsMap[seasonNum] || epsMap[Number(seasonNum)] || [];
       const seriesEpisodesList = elements.contentEpisodesList || elements.episodesList;
+
+      // Mantém selects e pills sincronizados se chamada externamente
+      const seriesSeasonSelect = getSeriesSeasonSelectElement();
+      if (seriesSeasonSelect && seriesSeasonSelect.value !== seasonKey) {
+        seriesSeasonSelect.value = seasonKey;
+      }
+      if (elements.contentSeasonSelect && elements.contentSeasonSelect.value !== seasonKey) {
+        elements.contentSeasonSelect.value = seasonKey;
+      }
+      if (elements.seasonSelect && elements.seasonSelect.value !== seasonKey) {
+        elements.seasonSelect.value = seasonKey;
+      }
+      updateSeasonPillsActive(seasonKey);
 
       seriesEpisodesList.innerHTML = '';
       if (episodes.length === 0) {
@@ -15865,9 +15990,13 @@ function showHome(targetScroll = 0) {
           </div>
         `;
 
-        epCard.querySelector('button').addEventListener('click', (e) => {
+        const startThisEp = () => playSeriesEpisode(ep, seasonKey);
+        epCard.querySelector('button')?.addEventListener('click', (e) => {
           e.stopPropagation();
-          playSeriesEpisode(ep, seasonNum);
+          startThisEp();
+        });
+        epCard.querySelector('.episode-card-main')?.addEventListener('click', () => {
+          startThisEp();
         });
 
         seriesEpisodesList.appendChild(epCard);

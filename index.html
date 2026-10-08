@@ -768,10 +768,11 @@
         </div>
         <div class="eplay-series-toolbar">
           <label for="contentSeasonSelect">Temporada</label>
-          <select id="contentSeasonSelect"></select>
+          <select id="contentSeasonSelect" aria-label="Selecionar temporada"></select>
           <div id="contentSeriesVersionSwitcher" class="eplay-series-versions"></div>
         </div>
       </div>
+      <div id="contentSeasonPills" class="eplay-season-pills" role="tablist" aria-label="Lista de Temporadas" style="display: none;"></div>
       <div id="contentEpisodesList" class="eplay-content-episodes">
         <div class="eplay-page-loading">Carregando episódios...</div>
       </div>
@@ -1273,10 +1274,11 @@
         style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <label for="seasonSelect" style="font-size: 14px; font-weight: 600;">Temporada:</label>
-          <select id="seasonSelect" style="min-width: 160px; padding: 6px 14px;"></select>
+          <select id="seasonSelect" style="min-width: 160px; padding: 6px 14px;" aria-label="Selecionar temporada"></select>
         </div>
         <div id="seriesVersionSwitcher" style="display: none; align-items: center; gap: 6px;"></div>
       </div>
+      <div id="modalSeasonPills" class="eplay-season-pills" role="tablist" aria-label="Lista de Temporadas" style="display: none; margin-bottom: 12px;"></div>
       <div class="episodes-list" id="episodesList">
         <div style="text-align: center; color: #888; padding: 30px;">Carregando episódios...</div>
       </div>
