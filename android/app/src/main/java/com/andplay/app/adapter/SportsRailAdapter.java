@@ -29,11 +29,18 @@ public class SportsRailAdapter extends RecyclerView.Adapter<SportsRailAdapter.Vi
     private final Context context;
     private final List<SportsEvent> events;
     private final OnSportsClickListener listener;
+    private final SimpleDateFormat dayFmt;
+    private final SimpleDateFormat shortDateFmt;
 
     public SportsRailAdapter(Context context, List<SportsEvent> events, OnSportsClickListener listener) {
         this.context = context;
         this.events = events;
         this.listener = listener;
+        TimeZone tz = TimeZone.getTimeZone("America/Sao_Paulo");
+        this.dayFmt = new SimpleDateFormat("yyyyMMdd", Locale.US);
+        this.dayFmt.setTimeZone(tz);
+        this.shortDateFmt = new SimpleDateFormat("dd/MM", Locale.US);
+        this.shortDateFmt.setTimeZone(tz);
     }
 
     @NonNull
@@ -81,19 +88,14 @@ public class SportsRailAdapter extends RecyclerView.Adapter<SportsRailAdapter.Vi
             String dayLabel = "HOJE";
             if (ev.startTimestamp > 0) {
                 try {
-                    TimeZone tz = TimeZone.getTimeZone("America/Sao_Paulo");
-                    SimpleDateFormat dayFmt = new SimpleDateFormat("yyyyMMdd", Locale.US);
-                    dayFmt.setTimeZone(tz);
-                    String eventDay = dayFmt.format(new Date(ev.startTimestamp * 1000L));
+                    Date evDate = new Date(ev.startTimestamp * 1000L);
+                    String eventDay = dayFmt.format(evDate);
                     String todayDay = dayFmt.format(new Date());
                     String tomorrowDay = dayFmt.format(new Date(System.currentTimeMillis() + 86400000L));
                     if (eventDay.equals(tomorrowDay)) {
                         dayLabel = "AMANHÃ";
                     } else if (!eventDay.equals(todayDay)) {
-                        // Além de amanhã: exibe a data resumida
-                        SimpleDateFormat shortDate = new SimpleDateFormat("dd/MM", Locale.US);
-                        shortDate.setTimeZone(tz);
-                        dayLabel = shortDate.format(new Date(ev.startTimestamp * 1000L));
+                        dayLabel = shortDateFmt.format(evDate);
                     }
                 } catch (Exception ignored) {}
             }
@@ -128,13 +130,14 @@ public class SportsRailAdapter extends RecyclerView.Adapter<SportsRailAdapter.Vi
         });
 
         holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
-            v.animate().scaleX(hasFocus ? 1.05f : 1.0f).scaleY(hasFocus ? 1.05f : 1.0f).setDuration(120).start();
+            v.animate().cancel();
+            v.animate().scaleX(hasFocus ? 1.05f : 1.0f).scaleY(hasFocus ? 1.05f : 1.0f).setDuration(110).start();
         });
     }
 
     @Override
     public int getItemCount() {
-        return events.size();
+        return events != null ? events.size() : 0;
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

@@ -35,12 +35,14 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
     private final List<Episode> episodes;
     private final OnEpisodeClickListener listener;
     private final OnEpisodeFocusListener focusListener;
+    private final SharedPreferences vodPrefs;
 
     public EpisodeAdapter(Context context, List<Episode> episodes, OnEpisodeClickListener listener, OnEpisodeFocusListener focusListener) {
         this.context = context;
         this.episodes = episodes;
         this.listener = listener;
         this.focusListener = focusListener;
+        this.vodPrefs = context.getSharedPreferences("vod_playback_progress_prefs", Context.MODE_PRIVATE);
     }
 
     public EpisodeAdapter(Context context, List<Episode> episodes, OnEpisodeClickListener listener) {
@@ -103,15 +105,18 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         long saved = 0;
         long totalDur = 0;
         try {
-            if (ep.id != null) {
-                SharedPreferences prefs = context.getSharedPreferences("vod_playback_progress_prefs", Context.MODE_PRIVATE);
-                saved = prefs.getLong("episode_" + ep.id, 0);
-                totalDur = prefs.getLong("episode_" + ep.id + "_dur", 0);
+            if (ep.id != null && vodPrefs != null) {
+                saved = vodPrefs.getLong("episode_" + ep.id, 0);
+                totalDur = vodPrefs.getLong("episode_" + ep.id + "_dur", 0);
+                if (saved <= 0) {
+                    saved = vodPrefs.getLong("series_" + ep.id, 0);
+                    totalDur = vodPrefs.getLong("series_" + ep.id + "_dur", 0);
+                }
             }
         } catch (Exception ignored) {}
 
         boolean isCompleted = totalDur > 0 && (saved >= totalDur - 30000 || saved >= (long) (totalDur * 0.95));
-        boolean isResuming = !isCompleted && saved > 10000;
+        boolean isResuming = !isCompleted && saved > 5000;
 
         if (holder.progressBar != null) {
             if (isCompleted) {
@@ -190,6 +195,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
 
         holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
             v.setSelected(hasFocus);
+            v.animate().cancel();
             v.animate().scaleX(hasFocus ? 1.02f : 1.0f).scaleY(hasFocus ? 1.02f : 1.0f).setDuration(100).start();
             v.setElevation(hasFocus ? 6f : 0f);
             if (hasFocus && focusListener != null) {

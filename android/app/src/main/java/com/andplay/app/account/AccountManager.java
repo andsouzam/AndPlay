@@ -54,7 +54,9 @@ public class AccountManager {
     private static final String KEY_VIEW_MODE = "pref_view_mode";
     private static final String KEY_HAS_CHOSEN_MODE = "has_chosen_initial_mode";
     private static final String KEY_FAVORITES_JSON = "cached_favorites_json";
+    private static final String KEY_PROGRESS_JSON = "cached_progress_json";
     private static final String KEY_LAST_SYNC = "last_sync_timestamp";
+    public static final String PREF_VOD_PROGRESS = "vod_playback_progress_prefs";
 
     private static AccountManager instance;
 
@@ -113,12 +115,30 @@ public class AccountManager {
         } catch (Exception e) {
             Log.w(TAG, "Erro ao carregar favoritos da memória: " + e.getMessage());
         }
+        try {
+            String progJson = prefs.getString(KEY_PROGRESS_JSON, "[]");
+            Type progType = new TypeToken<List<WatchProgressItem>>(){}.getType();
+            List<WatchProgressItem> pList = gson.fromJson(progJson, progType);
+            if (pList != null) {
+                memoryProgress.clear();
+                memoryProgress.addAll(pList);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Erro ao carregar progresso da memória: " + e.getMessage());
+        }
     }
 
     private void saveFavoritesToPrefs() {
         try {
             String json = gson.toJson(memoryFavorites);
             prefs.edit().putString(KEY_FAVORITES_JSON, json).apply();
+        } catch (Exception ignored) {}
+    }
+
+    private void saveProgressToPrefs() {
+        try {
+            String json = gson.toJson(memoryProgress);
+            prefs.edit().putString(KEY_PROGRESS_JSON, json).apply();
         } catch (Exception ignored) {}
     }
 
@@ -628,11 +648,12 @@ public class AccountManager {
                     }
                 }
             }
+            saveProgressToPrefs();
         }
 
-        // 2. Limpar SharedPreferences locais
+        // 2. Limpar SharedPreferences locais (tanto vod_playback_progress_prefs quanto legado)
         try {
-            SharedPreferences vodPrefs = appContext.getSharedPreferences("andplay_vod_progress", Context.MODE_PRIVATE);
+            SharedPreferences vodPrefs = appContext.getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE);
             SharedPreferences.Editor editor = vodPrefs.edit();
             if (normType.equals("series")) {
                 editor.remove("episode_" + id).remove("episode_" + id + "_dur").remove("episode_" + id + "_time");
@@ -814,11 +835,12 @@ public class AccountManager {
             found.episodeNum = episode;
             found.updatedAt = nowIso;
             memoryProgress.add(0, found);
+            saveProgressToPrefs();
         }
 
-        // 2. Salvar nos SharedPreferences locais compatíveis tanto com prefixo "episode_" quanto "series_" e "movie_"
+        // 2. Salvar nos SharedPreferences locais unificados (vod_playback_progress_prefs)
         try {
-            SharedPreferences vodPrefs = appContext.getSharedPreferences("andplay_vod_progress", Context.MODE_PRIVATE);
+            SharedPreferences vodPrefs = appContext.getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE);
             SharedPreferences.Editor editor = vodPrefs.edit();
             long now = System.currentTimeMillis();
             if (normType.equals("series")) {
@@ -1089,11 +1111,12 @@ public class AccountManager {
                             synchronized (AccountManager.this) {
                                 memoryProgress.clear();
                                 memoryProgress.addAll(remoteProg);
+                                saveProgressToPrefs();
                                 progCount = memoryProgress.size();
                             }
 
-                            // Sincroniza também no SharedPreferences local de VOD do app com chaves compatíveis
-                            SharedPreferences vodPrefs = appContext.getSharedPreferences("andplay_vod_progress", Context.MODE_PRIVATE);
+                            // Sincroniza no SharedPreferences unificado de VOD do app com chaves compatíveis
+                            SharedPreferences vodPrefs = appContext.getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE);
                             SharedPreferences.Editor editor = vodPrefs.edit();
                             for (WatchProgressItem item : remoteProg) {
                                 if (item.contentId != null && item.position > 0) {
@@ -1129,7 +1152,72 @@ public class AccountManager {
                     }
                 }
 
-                // 3. Sincroniza Preferências e Taste Profile (gêneros e afinidades)
+                // 3. Sincroniza Histórico de Assistidos (watch_history) com "andplay_recent_movies" e "andplay_recent_series"
+                try {
+                    Request histReq = new Request.Builder()
+                            .url(SUPABASE_URL + "/rest/v1/watch_history?select=content_type,content_id,updated_at&order=updated_at.desc&limit=300")
+                            .header("apikey", SUPABASE_ANON_KEY)
+                            .header("Authorization", "Bearer " + token)
+                            .get()
+                            .build();
+                    try (Response histResp = httpClient.newCall(histReq).execute()) {
+                        if (histResp.isSuccessful() && histResp.body() != null) {
+                            String hStr = histResp.body().string();
+                            JsonArray hArr = JsonParser.parseString(hStr).getAsJsonArray();
+                            List<String> mHist = new ArrayList<>();
+                            List<String> sHist = new ArrayList<>();
+                            for (int i = 0; i < hArr.size(); i++) {
+                                JsonObject row = hArr.get(i).getAsJsonObject();
+                                String cType = row.has("content_type") && !row.get("content_type").isJsonNull() ? row.get("content_type").getAsString() : "";
+                                String cId = row.has("content_id") && !row.get("content_id").isJsonNull() ? row.get("content_id").getAsString().trim() : "";
+                                if (cId.isEmpty()) continue;
+                                if ("series".equalsIgnoreCase(cType)) {
+                                    if (!sHist.contains(cId)) sHist.add(cId);
+                                } else {
+                                    if (!mHist.contains(cId)) mHist.add(cId);
+                                }
+                            }
+                            if (!mHist.isEmpty()) {
+                                SharedPreferences mPrefs = appContext.getSharedPreferences("andplay_recent_movies", Context.MODE_PRIVATE);
+                                String existingM = mPrefs.getString("history", "");
+                                if (!existingM.isEmpty()) {
+                                    for (String oldId : existingM.split(",")) {
+                                        String clean = oldId.trim();
+                                        if (!clean.isEmpty() && !mHist.contains(clean) && mHist.size() < 500) {
+                                            mHist.add(clean);
+                                        }
+                                    }
+                                }
+                                StringBuilder sbM = new StringBuilder();
+                                for (int i = 0; i < mHist.size(); i++) {
+                                    if (i > 0) sbM.append(",");
+                                    sbM.append(mHist.get(i));
+                                }
+                                mPrefs.edit().putString("history", sbM.toString()).apply();
+                            }
+                            if (!sHist.isEmpty()) {
+                                SharedPreferences sPrefs = appContext.getSharedPreferences("andplay_recent_series", Context.MODE_PRIVATE);
+                                String existingS = sPrefs.getString("history", "");
+                                if (!existingS.isEmpty()) {
+                                    for (String oldId : existingS.split(",")) {
+                                        String clean = oldId.trim();
+                                        if (!clean.isEmpty() && !sHist.contains(clean) && sHist.size() < 500) {
+                                            sHist.add(clean);
+                                        }
+                                    }
+                                }
+                                StringBuilder sbS = new StringBuilder();
+                                for (int i = 0; i < sHist.size(); i++) {
+                                    if (i > 0) sbS.append(",");
+                                    sbS.append(sHist.get(i));
+                                }
+                                sPrefs.edit().putString("history", sbS.toString()).apply();
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+
+                // 4. Sincroniza Preferências e Taste Profile (gêneros e afinidades)
                 try {
                     Request prefReq = new Request.Builder()
                             .url(SUPABASE_URL + "/rest/v1/user_preferences?select=preferences,updated_at&limit=1")

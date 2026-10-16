@@ -65,43 +65,51 @@
         android:layout_gravity="bottom"
         android:max="100"
         android:progress="0"
+        android:progressBackgroundTint="#66000000"
+        android:progressTint="#FFC107"
         android:visibility="gone" />
 
-    <!-- Badge de Favorito Salvo -->
-    <TextView
-        android:id="@+id/movieFavBadge"
+    <!-- Container superior direito para evitar sobreposição entre Favorito e Versão (4K/DUB) -->
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:layout_margin="4dp"
-        android:background="@drawable/badge_pill_dark"
-        android:paddingStart="5dp"
-        android:paddingTop="1.5dp"
-        android:paddingEnd="5dp"
-        android:paddingBottom="1.5dp"
-        android:text="★"
-        android:textColor="#FFC107"
-        android:textSize="9sp"
-        android:visibility="gone" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-    <!-- Badge de Versões Disponíveis (ex: 4K • DUB, DUB • LEG) -->
-    <TextView
-        android:id="@+id/movieVersionBadge"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_marginTop="4dp"
-        android:layout_marginEnd="4dp"
-        android:background="@drawable/badge_pill_dark"
-        android:paddingStart="6dp"
-        android:paddingTop="2dp"
-        android:paddingEnd="6dp"
-        android:paddingBottom="2dp"
-        android:text="4K • DUB"
-        android:textColor="#38BDF8"
-        android:textSize="7.5sp"
-        android:textStyle="bold"
-        android:visibility="gone" />
+        <!-- Badge de Favorito Salvo -->
+        <TextView
+            android:id="@+id/movieFavBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="3dp"
+            android:background="@drawable/badge_pill_dark"
+            android:paddingStart="5dp"
+            android:paddingTop="1.5dp"
+            android:paddingEnd="5dp"
+            android:paddingBottom="1.5dp"
+            android:text="★"
+            android:textColor="#FFC107"
+            android:textSize="8.5sp"
+            android:visibility="gone" />
+
+        <!-- Badge de Versões Disponíveis (ex: 4K • DUB, DUB • LEG) -->
+        <TextView
+            android:id="@+id/movieVersionBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/badge_pill_dark"
+            android:paddingStart="6dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="6dp"
+            android:paddingBottom="2dp"
+            android:text="4K • DUB"
+            android:textColor="#38BDF8"
+            android:textSize="7.5sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+    </LinearLayout>
 
     <!-- Badge de Tipo (Filme ou Série, estilo Web) -->
     <TextView

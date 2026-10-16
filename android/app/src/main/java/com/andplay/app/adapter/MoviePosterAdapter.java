@@ -28,16 +28,26 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
     private final List<Movie> movies;
     private final boolean isGrid;
     private final OnMovieActionListener listener;
+    private int maxPreloadedIndex = -1;
 
     public MoviePosterAdapter(Context context, List<Movie> movies, boolean isGrid, OnMovieActionListener listener) {
         this.context = context;
         this.movies = movies;
         this.isGrid = isGrid;
         this.listener = listener;
+        setHasStableIds(true);
     }
 
     public MoviePosterAdapter(Context context, List<Movie> movies, OnMovieActionListener listener) {
         this(context, movies, false, listener);
+    }
+
+    @Override
+    public long getItemId(int position) {
+        if (movies == null || position < 0 || position >= movies.size()) return position;
+        Movie m = movies.get(position);
+        String key = (m.isSeries ? "s_" : "m_") + (m.stream_id != null ? m.stream_id : (m.name != null ? m.name : position));
+        return ((long) key.hashCode() << 16) ^ position;
     }
 
     @NonNull
@@ -123,7 +133,8 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
         });
 
         holder.itemView.setOnFocusChangeListener((v, hasFocus) -> {
-            v.animate().scaleX(hasFocus ? 1.05f : 1.0f).scaleY(hasFocus ? 1.05f : 1.0f).setDuration(120).start();
+            v.animate().cancel();
+            v.animate().scaleX(hasFocus ? 1.05f : 1.0f).scaleY(hasFocus ? 1.05f : 1.0f).setDuration(110).start();
             v.setElevation(hasFocus ? 12f : 2f);
             if (hasFocus) {
                 int pos = holder.getBindingAdapterPosition() >= 0 ? holder.getBindingAdapterPosition() : position;
@@ -137,10 +148,12 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
 
     private void preloadUpcomingPosters(int currentPosition) {
         if (movies == null || movies.isEmpty() || currentPosition < 0) return;
-        // Pré-carrega capas até 5 linhas abaixo da selecionada (7 colunas x 5 linhas = 35 itens à frente no grid)
-        int itemsAhead = isGrid ? 35 : 15;
+        int itemsAhead = isGrid ? 14 : 6;
+        int startIdx = Math.max(currentPosition + 1, maxPreloadedIndex + 1);
         int targetEnd = Math.min(movies.size(), currentPosition + itemsAhead + 1);
-        for (int i = currentPosition + 1; i < targetEnd; i++) {
+        if (startIdx >= targetEnd) return;
+
+        for (int i = startIdx; i < targetEnd; i++) {
             Movie m = movies.get(i);
             String url = m.getPosterUrl();
             if (url != null && !url.isEmpty()) {
@@ -151,11 +164,12 @@ public class MoviePosterAdapter extends RecyclerView.Adapter<MoviePosterAdapter.
                         .preload(220, 300);
             }
         }
+        maxPreloadedIndex = targetEnd - 1;
     }
 
     @Override
     public int getItemCount() {
-        return movies.size();
+        return movies != null ? movies.size() : 0;
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

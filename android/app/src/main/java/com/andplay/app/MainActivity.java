@@ -4521,6 +4521,23 @@ public class MainActivity extends BaseActivity {
         return list;
     }
 
+    private final RecyclerView.RecycledViewPool sharedPosterPool = new RecyclerView.RecycledViewPool();
+    {
+        sharedPosterPool.setMaxRecycledViews(0, 36);
+    }
+
+    private void configureHorizontalPosterRail(RecyclerView rail) {
+        if (rail == null) return;
+        if (rail.getLayoutManager() == null) {
+            LinearLayoutManager lm = new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false);
+            lm.setInitialPrefetchItemCount(6);
+            rail.setLayoutManager(lm);
+        }
+        rail.setRecycledViewPool(sharedPosterPool);
+        rail.setItemViewCacheSize(8);
+        rail.setItemAnimator(null);
+    }
+
     private void setupMoviesRail() {
         if (cachedMovies == null || cachedMovies.isEmpty() || moviesRail == null) return;
         List<Movie> validMovies = new ArrayList<>();
@@ -4539,7 +4556,7 @@ public class MainActivity extends BaseActivity {
             m.isFavorite = AccountManager.getInstance(this).isFavorite("movie", m.stream_id);
         }
 
-        moviesRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        configureHorizontalPosterRail(moviesRail);
         moviesRail.setAdapter(new MoviePosterAdapter(this, orderedMovies, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
             public void onMovieClick(Movie movie) {
@@ -4611,7 +4628,7 @@ public class MainActivity extends BaseActivity {
 
         List<Movie> converted = HomeRailAlgorithm.sampleChaoticRailItems(allConverted, HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT);
 
-        seriesRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        configureHorizontalPosterRail(seriesRail);
         seriesRail.setAdapter(new MoviePosterAdapter(this, converted, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
             public void onMovieClick(Movie m) {
@@ -5190,7 +5207,7 @@ public class MainActivity extends BaseActivity {
             continueWatchingLayout.setVisibility(View.GONE);
         } else {
             continueWatchingLayout.setVisibility(View.VISIBLE);
-            continueWatchingRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+            configureHorizontalPosterRail(continueWatchingRail);
             continueWatchingRail.setAdapter(new MoviePosterAdapter(this, continueWatchingItems, new MoviePosterAdapter.OnMovieActionListener() {
                 @Override
                 public void onMovieClick(Movie m) {
@@ -5251,7 +5268,7 @@ public class MainActivity extends BaseActivity {
             newReleasesLayout.setVisibility(View.GONE);
         } else {
             newReleasesLayout.setVisibility(View.VISIBLE);
-            newReleasesRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+            configureHorizontalPosterRail(newReleasesRail);
             newReleasesRail.setAdapter(new MoviePosterAdapter(this, newReleaseItems, new MoviePosterAdapter.OnMovieActionListener() {
                 @Override
                 public void onMovieClick(Movie movie) {
@@ -5358,7 +5375,7 @@ public class MainActivity extends BaseActivity {
             forYouLayout.setVisibility(View.GONE);
         } else {
             forYouLayout.setVisibility(View.VISIBLE);
-            forYouRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+            configureHorizontalPosterRail(forYouRail);
             forYouRail.setAdapter(new MoviePosterAdapter(this, forYouItems, new MoviePosterAdapter.OnMovieActionListener() {
                 @Override
                 public void onMovieClick(Movie movie) {
@@ -5441,7 +5458,7 @@ public class MainActivity extends BaseActivity {
             favoritesLayout.setVisibility(View.GONE);
         } else {
             favoritesLayout.setVisibility(View.VISIBLE);
-            favoritesRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+            configureHorizontalPosterRail(favoritesRail);
             favoritesRail.setAdapter(new MoviePosterAdapter(this, favoriteItems, new MoviePosterAdapter.OnMovieActionListener() {
                 @Override
                 public void onMovieClick(Movie m) {
@@ -5592,8 +5609,7 @@ public class MainActivity extends BaseActivity {
                     : "Seus filmes e séries favoritos salvos na sua conta.");
         }
 
-        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, getVodGridSpanCount()));
-        vodGridRecycler.setAdapter(new MoviePosterAdapter(this, favoriteItems, true, new MoviePosterAdapter.OnMovieActionListener() {
+        setupVodGridRecycler(favoriteItems, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
             public void onMovieClick(Movie m) {
                 if (m.isSeries) {
@@ -5623,9 +5639,9 @@ public class MainActivity extends BaseActivity {
 
             @Override
             public void onMovieFocus(Movie movie) {
-                updateVodHero(movie);
+                debouncedUpdateVodHero(movie);
             }
-        }));
+        });
 
         if (!favoriteItems.isEmpty()) {
             updateVodHero(favoriteItems.get(0));
@@ -5795,8 +5811,7 @@ public class MainActivity extends BaseActivity {
                     : "Selecione um título para continuar assistindo de onde você parou.");
         }
 
-        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, getVodGridSpanCount()));
-        vodGridRecycler.setAdapter(new MoviePosterAdapter(this, watchedItems, true, new MoviePosterAdapter.OnMovieActionListener() {
+        setupVodGridRecycler(watchedItems, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
             public void onMovieClick(Movie m) {
                 if (m.isSeries) {
@@ -5826,9 +5841,9 @@ public class MainActivity extends BaseActivity {
 
             @Override
             public void onMovieFocus(Movie movie) {
-                updateVodHero(movie);
+                debouncedUpdateVodHero(movie);
             }
-        }));
+        });
 
         if (!watchedItems.isEmpty()) {
             updateVodHero(watchedItems.get(0));
@@ -9237,7 +9252,7 @@ public class MainActivity extends BaseActivity {
         if (vodRailNewReleasesLayout != null && vodRailNewReleasesRecycler != null) {
             if (newReleases.size() >= 3) {
                 vodRailNewReleasesLayout.setVisibility(View.VISIBLE);
-                vodRailNewReleasesRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+                configureHorizontalPosterRail(vodRailNewReleasesRecycler);
                 vodRailNewReleasesRecycler.setAdapter(new MoviePosterAdapter(this, newReleases, false, topRailListener));
                 vodRailNewReleasesRecycler.setOnKeyListener((v, keyCode, event) -> {
                     if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
@@ -9270,7 +9285,7 @@ public class MainActivity extends BaseActivity {
         if (vodRailTopRatedLayout != null && vodRailTopRatedRecycler != null) {
             if (topRated.size() >= 3) {
                 vodRailTopRatedLayout.setVisibility(View.VISIBLE);
-                vodRailTopRatedRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+                configureHorizontalPosterRail(vodRailTopRatedRecycler);
                 vodRailTopRatedRecycler.setAdapter(new MoviePosterAdapter(this, topRated, false, listener));
             } else {
                 vodRailTopRatedLayout.setVisibility(View.GONE);
@@ -9290,7 +9305,7 @@ public class MainActivity extends BaseActivity {
         if (vodRail4KLayout != null && vodRail4KRecycler != null) {
             if (fourKList.size() >= 3) {
                 vodRail4KLayout.setVisibility(View.VISIBLE);
-                vodRail4KRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+                configureHorizontalPosterRail(vodRail4KRecycler);
                 vodRail4KRecycler.setAdapter(new MoviePosterAdapter(this, fourKList, false, listener));
             } else {
                 vodRail4KLayout.setVisibility(View.GONE);
@@ -9310,7 +9325,7 @@ public class MainActivity extends BaseActivity {
         if (vodRailPopularLayout != null && vodRailPopularRecycler != null) {
             if (popularList.size() >= 3) {
                 vodRailPopularLayout.setVisibility(View.VISIBLE);
-                vodRailPopularRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+                configureHorizontalPosterRail(vodRailPopularRecycler);
                 vodRailPopularRecycler.setAdapter(new MoviePosterAdapter(this, popularList, false, listener));
             } else {
                 vodRailPopularLayout.setVisibility(View.GONE);
@@ -9845,7 +9860,7 @@ public class MainActivity extends BaseActivity {
         if (vodRailNewReleasesLayout != null && vodRailNewReleasesRecycler != null) {
             if (newSeriesMovies.size() >= 3) {
                 vodRailNewReleasesLayout.setVisibility(View.VISIBLE);
-                vodRailNewReleasesRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+                configureHorizontalPosterRail(vodRailNewReleasesRecycler);
                 vodRailNewReleasesRecycler.setAdapter(new MoviePosterAdapter(this, newSeriesMovies, false, seriesTopRailListener));
                 vodRailNewReleasesRecycler.setOnKeyListener((v, keyCode, event) -> {
                     if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
@@ -9882,7 +9897,7 @@ public class MainActivity extends BaseActivity {
         if (vodRailTopRatedLayout != null && vodRailTopRatedRecycler != null) {
             if (topRatedMovies.size() >= 3) {
                 vodRailTopRatedLayout.setVisibility(View.VISIBLE);
-                vodRailTopRatedRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+                configureHorizontalPosterRail(vodRailTopRatedRecycler);
                 vodRailTopRatedRecycler.setAdapter(new MoviePosterAdapter(this, topRatedMovies, false, seriesListener));
             } else {
                 vodRailTopRatedLayout.setVisibility(View.GONE);
@@ -9906,7 +9921,7 @@ public class MainActivity extends BaseActivity {
         if (vodRail4KLayout != null && vodRail4KRecycler != null) {
             if (multiVersionMovies.size() >= 3) {
                 vodRail4KLayout.setVisibility(View.VISIBLE);
-                vodRail4KRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+                configureHorizontalPosterRail(vodRail4KRecycler);
                 vodRail4KRecycler.setAdapter(new MoviePosterAdapter(this, multiVersionMovies, false, seriesListener));
             } else {
                 vodRail4KLayout.setVisibility(View.GONE);
@@ -9930,7 +9945,7 @@ public class MainActivity extends BaseActivity {
         if (vodRailPopularLayout != null && vodRailPopularRecycler != null) {
             if (popularMovies.size() >= 3) {
                 vodRailPopularLayout.setVisibility(View.VISIBLE);
-                vodRailPopularRecycler.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+                configureHorizontalPosterRail(vodRailPopularRecycler);
                 vodRailPopularRecycler.setAdapter(new MoviePosterAdapter(this, popularMovies, false, seriesListener));
             } else {
                 vodRailPopularLayout.setVisibility(View.GONE);
@@ -10142,7 +10157,7 @@ public class MainActivity extends BaseActivity {
 
                             @Override
                             public void onMovieFocus(Movie movie) {
-                                updateVodHero(movie);
+                                debouncedUpdateVodHero(movie);
                             }
                         });
                         vodGridRecycler.requestFocus();
@@ -10185,7 +10200,7 @@ public class MainActivity extends BaseActivity {
 
                             @Override
                             public void onMovieFocus(Movie movie) {
-                                updateVodHero(movie);
+                                debouncedUpdateVodHero(movie);
                             }
                         });
                         vodGridRecycler.requestFocus();
@@ -10212,7 +10227,13 @@ public class MainActivity extends BaseActivity {
 
     private void setupVodGridRecycler(List<Movie> list, MoviePosterAdapter.OnMovieActionListener listener) {
         if (vodGridRecycler == null) return;
-        vodGridRecycler.setLayoutManager(new GridLayoutManager(this, getVodGridSpanCount()));
+        int spanCount = getVodGridSpanCount();
+        GridLayoutManager glm = new GridLayoutManager(this, spanCount);
+        glm.setInitialPrefetchItemCount(spanCount * 2);
+        vodGridRecycler.setLayoutManager(glm);
+        vodGridRecycler.setItemViewCacheSize(16);
+        vodGridRecycler.setItemAnimator(null);
+        vodGridRecycler.setRecycledViewPool(sharedPosterPool);
         vodGridRecycler.setAdapter(new MoviePosterAdapter(this, list, true, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
             public void onMovieClick(Movie movie) {
@@ -10235,10 +10256,11 @@ public class MainActivity extends BaseActivity {
                 View itemView = focused != null ? vodGridRecycler.findContainingItemView(focused) : null;
                 int pos = itemView != null ? vodGridRecycler.getChildAdapterPosition(itemView) : -1;
                 if (pos >= 0 && pos < getVodGridSpanCount()) {
-                    if (btnVodModeAll != null && btnVodModeAll.getVisibility() == View.VISIBLE) {
+                    boolean controlsVisible = (vodControlsBar != null && vodControlsBar.getVisibility() == View.VISIBLE);
+                    if (controlsVisible && btnVodModeAll != null && btnVodModeAll.getVisibility() == View.VISIBLE) {
                         btnVodModeAll.requestFocus();
                         return true;
-                    } else if (btnVodModeHighlights != null && btnVodModeHighlights.getVisibility() == View.VISIBLE) {
+                    } else if (controlsVisible && btnVodModeHighlights != null && btnVodModeHighlights.getVisibility() == View.VISIBLE) {
                         btnVodModeHighlights.requestFocus();
                         return true;
                     } else if (vodCatsRecycler != null && vodCatsRecycler.getVisibility() == View.VISIBLE) {
