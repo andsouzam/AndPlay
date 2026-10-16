@@ -45,4 +45,17 @@ public class WatchProgressItem implements Serializable {
     public boolean isCompleted() {
         return getProgressPercent() >= 95;
     }
+
+    public long getUpdatedAtMs() {
+        if (updatedAt == null || updatedAt.trim().isEmpty()) return System.currentTimeMillis();
+        try {
+            java.text.SimpleDateFormat isoFmt = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.US);
+            isoFmt.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+            String clean = updatedAt.split("\\.")[0];
+            java.util.Date d = isoFmt.parse(clean);
+            return d != null ? d.getTime() : System.currentTimeMillis();
+        } catch (Exception ignored) {
+            return System.currentTimeMillis();
+        }
+    }
 }

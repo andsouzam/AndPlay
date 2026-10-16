@@ -24,6 +24,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -535,11 +536,15 @@ public class AccountManager {
 
         if (isSignedIn()) {
             final String token = getAccessToken();
+            final String userId = getUserId();
             executor.execute(() -> {
                 try {
                     if (newFavoriteState) {
                         JsonArray arr = new JsonArray();
                         JsonObject obj = new JsonObject();
+                        if (userId != null && !userId.isEmpty()) {
+                            obj.addProperty("user_id", userId);
+                        }
                         obj.addProperty("content_type", normType);
                         obj.addProperty("content_id", id);
                         obj.addProperty("title", title != null ? title : "");
@@ -557,24 +562,48 @@ public class AccountManager {
                         );
 
                         Request req = new Request.Builder()
-                                .url(SUPABASE_URL + "/rest/v1/user_favorites")
+                                .url(SUPABASE_URL + "/rest/v1/user_favorites?on_conflict=user_id,content_type,content_id")
                                 .header("apikey", SUPABASE_ANON_KEY)
                                 .header("Authorization", "Bearer " + token)
                                 .header("Prefer", "resolution=merge-duplicates")
                                 .post(body)
                                 .build();
                         try (Response resp = httpClient.newCall(req).execute()) {
-                            Log.d(TAG, "Supabase favorite add: " + resp.code());
+                            if (resp.code() == 401) {
+                                String fresh = refreshTokenSync();
+                                if (fresh != null) {
+                                    Request r2 = req.newBuilder().header("Authorization", "Bearer " + fresh).build();
+                                    try (Response resp2 = httpClient.newCall(r2).execute()) {
+                                        Log.d(TAG, "Supabase favorite add retry: " + resp2.code());
+                                    }
+                                }
+                            } else {
+                                Log.d(TAG, "Supabase favorite add: " + resp.code());
+                            }
                         }
                     } else {
+                        String delUrl = SUPABASE_URL + "/rest/v1/user_favorites?content_type=eq." + normType + "&content_id=eq." + id;
+                        if (userId != null && !userId.isEmpty()) {
+                            delUrl += "&user_id=eq." + userId;
+                        }
                         Request req = new Request.Builder()
-                                .url(SUPABASE_URL + "/rest/v1/user_favorites?content_type=eq." + normType + "&content_id=eq." + id)
+                                .url(delUrl)
                                 .header("apikey", SUPABASE_ANON_KEY)
                                 .header("Authorization", "Bearer " + token)
                                 .delete()
                                 .build();
                         try (Response resp = httpClient.newCall(req).execute()) {
-                            Log.d(TAG, "Supabase favorite remove: " + resp.code());
+                            if (resp.code() == 401) {
+                                String fresh = refreshTokenSync();
+                                if (fresh != null) {
+                                    Request r2 = req.newBuilder().header("Authorization", "Bearer " + fresh).build();
+                                    try (Response resp2 = httpClient.newCall(r2).execute()) {
+                                        Log.d(TAG, "Supabase favorite remove retry: " + resp2.code());
+                                    }
+                                }
+                            } else {
+                                Log.d(TAG, "Supabase favorite remove: " + resp.code());
+                            }
                         }
                     }
                 } catch (Exception e) {
@@ -584,24 +613,246 @@ public class AccountManager {
         }
     }
 
+    public void deleteRemoteProgress(String type, String id) {
+        if (id == null || id.isEmpty()) return;
+        final String normType = "series".equalsIgnoreCase(type) ? "series" : "movie";
+
+        // 1. Atualizar memória local imediatamente
+        synchronized (this) {
+            Iterator<WatchProgressItem> it = memoryProgress.iterator();
+            while (it.hasNext()) {
+                WatchProgressItem item = it.next();
+                if (normType.equalsIgnoreCase(item.contentType)) {
+                    if (id.equals(item.contentId) || (normType.equals("series") && id.equals(item.seriesId))) {
+                        it.remove();
+                    }
+                }
+            }
+        }
+
+        // 2. Limpar SharedPreferences locais
+        try {
+            SharedPreferences vodPrefs = appContext.getSharedPreferences("andplay_vod_progress", Context.MODE_PRIVATE);
+            SharedPreferences.Editor editor = vodPrefs.edit();
+            if (normType.equals("series")) {
+                editor.remove("episode_" + id).remove("episode_" + id + "_dur").remove("episode_" + id + "_time");
+                editor.remove("series_" + id).remove("series_" + id + "_dur").remove("series_" + id + "_time");
+            } else {
+                editor.remove("movie_" + id).remove("movie_" + id + "_dur").remove("movie_" + id + "_time");
+            }
+            editor.apply();
+        } catch (Exception ignored) {}
+
+        // 3. Deletar do banco Supabase em nuvem
+        if (!isSignedIn()) return;
+        final String userId = getUserId();
+        if (userId == null || userId.isEmpty()) return;
+
+        executor.execute(() -> {
+            try {
+                String token = getAccessToken();
+                String delUrl = SUPABASE_URL + "/rest/v1/watch_progress?content_type=eq." + normType + "&content_id=eq." + id + "&user_id=eq." + userId;
+                Request req = new Request.Builder()
+                        .url(delUrl)
+                        .header("apikey", SUPABASE_ANON_KEY)
+                        .header("Authorization", "Bearer " + token)
+                        .delete()
+                        .build();
+
+                try (Response resp = httpClient.newCall(req).execute()) {
+                    if (resp.code() == 401) {
+                        String fresh = refreshTokenSync();
+                        if (fresh != null) {
+                            Request retryReq = req.newBuilder().header("Authorization", "Bearer " + fresh).build();
+                            try (Response r2 = httpClient.newCall(retryReq).execute()) {
+                                Log.d(TAG, "Supabase delete progress retry: " + r2.code());
+                            }
+                        }
+                    } else {
+                        Log.d(TAG, "Supabase delete progress: " + resp.code());
+                    }
+                }
+
+                if (normType.equals("series")) {
+                    String sidUrl = SUPABASE_URL + "/rest/v1/watch_progress?content_type=eq.series&series_id=eq." + id + "&user_id=eq." + userId;
+                    Request req2 = new Request.Builder()
+                            .url(sidUrl)
+                            .header("apikey", SUPABASE_ANON_KEY)
+                            .header("Authorization", "Bearer " + token)
+                            .delete()
+                            .build();
+                    try (Response resp2 = httpClient.newCall(req2).execute()) {
+                        Log.d(TAG, "Supabase delete series_id progress: " + resp2.code());
+                    }
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Erro ao remover progresso remoto: " + e.getMessage());
+            }
+        });
+    }
+
+    public void recordWatchedHistory(String type, String id) {
+        if (id == null || id.isEmpty()) return;
+        final String normType = "series".equalsIgnoreCase(type) ? "series" : "movie";
+        if (!isSignedIn()) return;
+        final String userId = getUserId();
+        if (userId == null || userId.isEmpty()) return;
+
+        executor.execute(() -> {
+            try {
+                String token = getAccessToken();
+                SimpleDateFormat isoFmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+                isoFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+                String nowIso = isoFmt.format(new Date());
+
+                // 1. Tentar PATCH primeiro (idêntico ao Web assets/js/account.js)
+                JsonObject patchObj = new JsonObject();
+                patchObj.addProperty("sort_order", 0);
+                patchObj.addProperty("updated_at", nowIso);
+
+                RequestBody patchBody = RequestBody.create(
+                        patchObj.toString(),
+                        MediaType.parse("application/json; charset=utf-8")
+                );
+
+                String patchUrl = SUPABASE_URL + "/rest/v1/watch_history?content_type=eq." + normType + "&content_id=eq." + id + "&user_id=eq." + userId;
+                Request patchReq = new Request.Builder()
+                        .url(patchUrl)
+                        .header("apikey", SUPABASE_ANON_KEY)
+                        .header("Authorization", "Bearer " + token)
+                        .header("Prefer", "return=representation")
+                        .patch(patchBody)
+                        .build();
+
+                boolean updated = false;
+                try (Response patchResp = httpClient.newCall(patchReq).execute()) {
+                    if (patchResp.code() == 401) {
+                        String fresh = refreshTokenSync();
+                        if (fresh != null) {
+                            token = fresh;
+                            Request retryReq = patchReq.newBuilder().header("Authorization", "Bearer " + token).build();
+                            try (Response r2 = httpClient.newCall(retryReq).execute()) {
+                                if (r2.isSuccessful() && r2.body() != null) {
+                                    String body = r2.body().string();
+                                    updated = body.contains("content_id");
+                                }
+                            }
+                        }
+                    } else if (patchResp.isSuccessful() && patchResp.body() != null) {
+                        String body = patchResp.body().string();
+                        updated = body.contains("content_id");
+                    }
+                }
+
+                // 2. Se nenhuma linha existente foi atualizada, insere novo registro
+                if (!updated) {
+                    JsonObject insertObj = new JsonObject();
+                    insertObj.addProperty("user_id", userId);
+                    insertObj.addProperty("content_type", normType);
+                    insertObj.addProperty("content_id", id);
+                    insertObj.addProperty("sort_order", 0);
+                    insertObj.addProperty("updated_at", nowIso);
+
+                    RequestBody insertBody = RequestBody.create(
+                            insertObj.toString(),
+                            MediaType.parse("application/json; charset=utf-8")
+                    );
+
+                    Request insertReq = new Request.Builder()
+                            .url(SUPABASE_URL + "/rest/v1/watch_history")
+                            .header("apikey", SUPABASE_ANON_KEY)
+                            .header("Authorization", "Bearer " + token)
+                            .post(insertBody)
+                            .build();
+
+                    try (Response insertResp = httpClient.newCall(insertReq).execute()) {
+                        Log.d(TAG, "Supabase record watched history insert: " + insertResp.code());
+                    }
+                } else {
+                    Log.d(TAG, "Supabase record watched history patch: success");
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Erro ao registrar histórico remoto: " + e.getMessage());
+            }
+        });
+    }
+
     public void recordVodProgress(String type, String id, String title, String poster, long positionMs, long durationMs, String seriesId, int season, int episode) {
         if (id == null || id.isEmpty()) return;
         final String normType = "series".equalsIgnoreCase(type) ? "series" : "movie";
         final long posSec = Math.max(0, positionMs / 1000);
         final long durSec = Math.max(0, durationMs / 1000);
 
+        SimpleDateFormat isoFmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+        isoFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+        String nowIso = isoFmt.format(new Date());
+
+        // 1. Atualizar memória local imediatamente para continuidade instantânea na interface
+        synchronized (this) {
+            WatchProgressItem found = null;
+            for (WatchProgressItem item : memoryProgress) {
+                if (normType.equalsIgnoreCase(item.contentType)) {
+                    if (id.equals(item.contentId) || (normType.equals("series") && seriesId != null && seriesId.equals(item.seriesId))) {
+                        found = item;
+                        break;
+                    }
+                }
+            }
+            if (found != null) {
+                memoryProgress.remove(found);
+            } else {
+                found = new WatchProgressItem();
+            }
+            found.contentType = normType;
+            found.contentId = id;
+            found.position = posSec;
+            found.duration = durSec;
+            found.title = title != null ? title : "";
+            found.poster = poster != null ? poster : "";
+            found.seriesId = seriesId;
+            found.seasonNum = season;
+            found.episodeNum = episode;
+            found.updatedAt = nowIso;
+            memoryProgress.add(0, found);
+        }
+
+        // 2. Salvar nos SharedPreferences locais compatíveis tanto com prefixo "episode_" quanto "series_" e "movie_"
+        try {
+            SharedPreferences vodPrefs = appContext.getSharedPreferences("andplay_vod_progress", Context.MODE_PRIVATE);
+            SharedPreferences.Editor editor = vodPrefs.edit();
+            long now = System.currentTimeMillis();
+            if (normType.equals("series")) {
+                editor.putLong("episode_" + id, positionMs);
+                editor.putLong("episode_" + id + "_dur", durationMs);
+                editor.putLong("episode_" + id + "_time", now);
+                editor.putLong("series_" + id, positionMs);
+                editor.putLong("series_" + id + "_dur", durationMs);
+                editor.putLong("series_" + id + "_time", now);
+                if (seriesId != null && !seriesId.isEmpty()) {
+                    editor.putLong("series_" + seriesId, positionMs);
+                    editor.putLong("series_" + seriesId + "_dur", durationMs);
+                    editor.putLong("series_" + seriesId + "_time", now);
+                }
+            } else {
+                editor.putLong("movie_" + id, positionMs);
+                editor.putLong("movie_" + id + "_dur", durationMs);
+                editor.putLong("movie_" + id + "_time", now);
+            }
+            editor.apply();
+        } catch (Exception ignored) {}
+
         if (!isSignedIn()) return;
-        final String token = getAccessToken();
+        final String userId = getUserId();
+        if (userId == null || userId.isEmpty()) return;
 
         executor.execute(() -> {
             try {
-                SimpleDateFormat isoFmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
-                isoFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
-                String nowIso = isoFmt.format(new Date());
+                String token = getAccessToken();
 
-                // 1. Envia progresso para watch_progress
+                // 1. Envia progresso para watch_progress com user_id e on_conflict
                 JsonArray progArr = new JsonArray();
                 JsonObject progObj = new JsonObject();
+                progObj.addProperty("user_id", userId);
                 progObj.addProperty("content_type", normType);
                 progObj.addProperty("content_id", id);
                 progObj.addProperty("position", posSec);
@@ -622,7 +873,7 @@ public class AccountManager {
                 );
 
                 Request progReq = new Request.Builder()
-                        .url(SUPABASE_URL + "/rest/v1/watch_progress")
+                        .url(SUPABASE_URL + "/rest/v1/watch_progress?on_conflict=user_id,content_type,content_id")
                         .header("apikey", SUPABASE_ANON_KEY)
                         .header("Authorization", "Bearer " + token)
                         .header("Prefer", "resolution=merge-duplicates")
@@ -630,34 +881,23 @@ public class AccountManager {
                         .build();
 
                 try (Response resp = httpClient.newCall(progReq).execute()) {
-                    Log.d(TAG, "Supabase record progress: " + resp.code());
+                    if (resp.code() == 401) {
+                        String fresh = refreshTokenSync();
+                        if (fresh != null) {
+                            token = fresh;
+                            Request retryReq = progReq.newBuilder().header("Authorization", "Bearer " + token).build();
+                            try (Response r2 = httpClient.newCall(retryReq).execute()) {
+                                Log.d(TAG, "Supabase record progress retry: " + r2.code());
+                            }
+                        }
+                    } else {
+                        Log.d(TAG, "Supabase record progress: " + resp.code());
+                    }
                 }
 
                 // 2. Registra em watch_history
-                JsonArray histArr = new JsonArray();
-                JsonObject histObj = new JsonObject();
-                histObj.addProperty("content_type", normType);
-                histObj.addProperty("content_id", normType.equals("series") && seriesId != null ? seriesId : id);
-                histObj.addProperty("sort_order", 0);
-                histObj.addProperty("updated_at", nowIso);
-                histArr.add(histObj);
-
-                RequestBody histBody = RequestBody.create(
-                        histArr.toString(),
-                        MediaType.parse("application/json; charset=utf-8")
-                );
-
-                Request histReq = new Request.Builder()
-                        .url(SUPABASE_URL + "/rest/v1/watch_history")
-                        .header("apikey", SUPABASE_ANON_KEY)
-                        .header("Authorization", "Bearer " + token)
-                        .header("Prefer", "resolution=merge-duplicates")
-                        .post(histBody)
-                        .build();
-
-                try (Response resp = httpClient.newCall(histReq).execute()) {
-                    Log.d(TAG, "Supabase record history: " + resp.code());
-                }
+                String histContentId = (normType.equals("series") && seriesId != null && !seriesId.isEmpty()) ? seriesId : id;
+                recordWatchedHistory(normType, histContentId);
 
             } catch (Exception e) {
                 Log.w(TAG, "Erro ao gravar progresso VOD remoto: " + e.getMessage());
@@ -794,9 +1034,13 @@ public class AccountManager {
                             isoFmt.setTimeZone(TimeZone.getTimeZone("UTC"));
                             String nowIso = isoFmt.format(new Date());
 
+                            String uid = getUserId();
                             JsonArray upArr = new JsonArray();
                             for (FavoriteItem item : toUpload) {
                                 JsonObject obj = new JsonObject();
+                                if (uid != null && !uid.isEmpty()) {
+                                    obj.addProperty("user_id", uid);
+                                }
                                 obj.addProperty("content_type", item.contentType);
                                 obj.addProperty("content_id", item.contentId);
                                 obj.addProperty("title", item.title != null ? item.title : "");
@@ -810,7 +1054,7 @@ public class AccountManager {
                                     MediaType.parse("application/json; charset=utf-8")
                             );
                             Request upReq = new Request.Builder()
-                                    .url(SUPABASE_URL + "/rest/v1/user_favorites")
+                                    .url(SUPABASE_URL + "/rest/v1/user_favorites?on_conflict=user_id,content_type,content_id")
                                     .header("apikey", SUPABASE_ANON_KEY)
                                     .header("Authorization", "Bearer " + token)
                                     .header("Prefer", "resolution=merge-duplicates")
@@ -848,15 +1092,33 @@ public class AccountManager {
                                 progCount = memoryProgress.size();
                             }
 
-                            // Sincroniza também no SharedPreferences local de VOD do app para compatibilidade imediata
+                            // Sincroniza também no SharedPreferences local de VOD do app com chaves compatíveis
                             SharedPreferences vodPrefs = appContext.getSharedPreferences("andplay_vod_progress", Context.MODE_PRIVATE);
                             SharedPreferences.Editor editor = vodPrefs.edit();
                             for (WatchProgressItem item : remoteProg) {
                                 if (item.contentId != null && item.position > 0) {
-                                    String key = item.contentType + "_" + item.contentId;
-                                    editor.putLong(key, (long) (item.position * 1000L));
-                                    if (item.duration > 0) {
-                                        editor.putLong(key + "_dur", (long) (item.duration * 1000L));
+                                    long posMs = (long) (item.position * 1000L);
+                                    long durMs = (long) (item.duration * 1000L);
+                                    long timeMs = item.getUpdatedAtMs();
+
+                                    if ("series".equalsIgnoreCase(item.contentType)) {
+                                        editor.putLong("episode_" + item.contentId, posMs);
+                                        if (durMs > 0) editor.putLong("episode_" + item.contentId + "_dur", durMs);
+                                        if (timeMs > 0) editor.putLong("episode_" + item.contentId + "_time", timeMs);
+
+                                        editor.putLong("series_" + item.contentId, posMs);
+                                        if (durMs > 0) editor.putLong("series_" + item.contentId + "_dur", durMs);
+                                        if (timeMs > 0) editor.putLong("series_" + item.contentId + "_time", timeMs);
+
+                                        if (item.seriesId != null && !item.seriesId.isEmpty()) {
+                                            editor.putLong("series_" + item.seriesId, posMs);
+                                            if (durMs > 0) editor.putLong("series_" + item.seriesId + "_dur", durMs);
+                                            if (timeMs > 0) editor.putLong("series_" + item.seriesId + "_time", timeMs);
+                                        }
+                                    } else {
+                                        editor.putLong("movie_" + item.contentId, posMs);
+                                        if (durMs > 0) editor.putLong("movie_" + item.contentId + "_dur", durMs);
+                                        if (timeMs > 0) editor.putLong("movie_" + item.contentId + "_time", timeMs);
                                     }
                                 }
                             }
@@ -866,6 +1128,32 @@ public class AccountManager {
                         Log.w(TAG, "Supabase progress get falhou: HTTP " + progResp.code());
                     }
                 }
+
+                // 3. Sincroniza Preferências e Taste Profile (gêneros e afinidades)
+                try {
+                    Request prefReq = new Request.Builder()
+                            .url(SUPABASE_URL + "/rest/v1/user_preferences?select=preferences,updated_at&limit=1")
+                            .header("apikey", SUPABASE_ANON_KEY)
+                            .header("Authorization", "Bearer " + token)
+                            .get()
+                            .build();
+                    try (Response prefResp = httpClient.newCall(prefReq).execute()) {
+                        if (prefResp.isSuccessful() && prefResp.body() != null) {
+                            String pStr = prefResp.body().string();
+                            JsonArray pArr = JsonParser.parseString(pStr).getAsJsonArray();
+                            if (pArr.size() > 0) {
+                                JsonObject r = pArr.get(0).getAsJsonObject();
+                                if (r.has("preferences") && r.get("preferences").isJsonObject()) {
+                                    JsonObject pObj = r.getAsJsonObject("preferences");
+                                    if (pObj.has("taste_profile") && pObj.get("taste_profile").isJsonObject()) {
+                                        SharedPreferences tPrefs = appContext.getSharedPreferences("andplay_taste_profile", Context.MODE_PRIVATE);
+                                        tPrefs.edit().putString("taste_profile_json", pObj.get("taste_profile").toString()).apply();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
 
                 prefs.edit().putLong(KEY_LAST_SYNC, System.currentTimeMillis()).apply();
                 success = true;
@@ -880,5 +1168,23 @@ public class AccountManager {
                 if (callback != null) callback.onComplete(fSuccess, fFav, fProg);
             });
         });
+    }
+
+    public Map<String, Integer> getTasteProfileGenres() {
+        Map<String, Integer> map = new HashMap<>();
+        try {
+            SharedPreferences tPrefs = appContext.getSharedPreferences("andplay_taste_profile", Context.MODE_PRIVATE);
+            String raw = tPrefs.getString("taste_profile_json", "");
+            if (!raw.isEmpty()) {
+                JsonObject obj = JsonParser.parseString(raw).getAsJsonObject();
+                if (obj.has("genres") && obj.get("genres").isJsonObject()) {
+                    JsonObject gObj = obj.getAsJsonObject("genres");
+                    for (String k : gObj.keySet()) {
+                        map.put(k.toLowerCase(Locale.ROOT), gObj.get(k).getAsInt());
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return map;
     }
 }

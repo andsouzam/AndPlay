@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import com.andplay.app.account.AccountManager;
 import com.andplay.app.model.FavoriteItem;
+import com.andplay.app.model.HomeRailAlgorithm;
 import com.andplay.app.model.WatchProgressItem;
 import android.graphics.Typeface;
 import android.text.Editable;
@@ -197,6 +198,7 @@ public class MainActivity extends BaseActivity {
     private static final int REQ_SPORTS_HUB = 1001;
     private static final int REQ_USER_ACTIVITY = 1002;
     private static final int REQ_MODE_SELECTION = 1003;
+    private long lastResumeSyncAt = 0;
 
     // View Mode & Header Elements
     private LinearLayout btnHeaderUser;
@@ -2982,18 +2984,21 @@ public class MainActivity extends BaseActivity {
     private void saveVodProgress(String key, long positionMs, long durationMs) {
         if (key == null || key.isEmpty()) return;
         try {
-            SharedPreferences prefs = getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE);
-            // Se assistiu mais de 95% do vídeo ou restam menos de 30 segundos, considera concluído e limpa
+            // Se assistiu mais de 95% do vídeo ou restam menos de 30 segundos, considera concluído e limpa local + remoto
             if (durationMs > 0 && (positionMs >= durationMs - 30000 || positionMs >= (long) (durationMs * 0.95))) {
-                prefs.edit().remove(key).remove(key + "_dur").remove(key + "_time").apply();
-            } else if (positionMs > 5000) {
-                // Salva apenas se assistiu pelo menos 5 segundos
-                prefs.edit()
-                        .putLong(key, positionMs)
-                        .putLong(key + "_dur", durationMs)
-                        .putLong(key + "_time", System.currentTimeMillis())
-                        .apply();
+                clearVodProgress(key);
+                return;
             }
+            if (positionMs <= 5000) {
+                return;
+            }
+
+            SharedPreferences prefs = getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE);
+            prefs.edit()
+                    .putLong(key, positionMs)
+                    .putLong(key + "_dur", durationMs)
+                    .putLong(key + "_time", System.currentTimeMillis())
+                    .apply();
 
             // Sincroniza com Supabase através do AccountManager
             if (activeVodMovie != null) {
@@ -3060,6 +3065,29 @@ public class MainActivity extends BaseActivity {
         try {
             SharedPreferences prefs = getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE);
             prefs.edit().remove(key).remove(key + "_dur").remove(key + "_time").apply();
+
+            if (activeVodMovie != null) {
+                String mId = activeVodMovie.stream_id != null ? activeVodMovie.stream_id : key.replace("movie_", "");
+                AccountManager.getInstance(this).deleteRemoteProgress("movie", mId);
+                AccountManager.getInstance(this).recordWatchedHistory("movie", mId);
+            } else if (activeVodSeries != null) {
+                String epId = activeVodEpisode != null && activeVodEpisode.id != null
+                        ? activeVodEpisode.id
+                        : key.replace("episode_", "").replace("series_", "");
+                AccountManager.getInstance(this).deleteRemoteProgress("series", epId);
+                if (activeVodSeries.series_id != null && !activeVodSeries.series_id.isEmpty()) {
+                    AccountManager.getInstance(this).deleteRemoteProgress("series", activeVodSeries.series_id);
+                }
+                AccountManager.getInstance(this).recordWatchedHistory("series", epId);
+            } else if (key.startsWith("movie_")) {
+                String mId = key.substring("movie_".length());
+                AccountManager.getInstance(this).deleteRemoteProgress("movie", mId);
+                AccountManager.getInstance(this).recordWatchedHistory("movie", mId);
+            } else if (key.startsWith("episode_") || key.startsWith("series_")) {
+                String sId = key.replaceFirst("^(episode_|series_)", "");
+                AccountManager.getInstance(this).deleteRemoteProgress("series", sId);
+                AccountManager.getInstance(this).recordWatchedHistory("series", sId);
+            }
         } catch (Exception ignored) {}
     }
 
@@ -3101,6 +3129,7 @@ public class MainActivity extends BaseActivity {
     private void destroyCurrentStream() {
         if (isPlayingVod) {
             saveCurrentVodProgress();
+            mainHandler.post(() -> setupContinueWatchingRail());
         }
         stopVodProgressTicker();
         isHybridPlaybackActive = false;
@@ -4494,27 +4523,11 @@ public class MainActivity extends BaseActivity {
 
     private void setupMoviesRail() {
         if (cachedMovies == null || cachedMovies.isEmpty() || moviesRail == null) return;
-        List<Movie> orderedMovies = new ArrayList<>();
-        List<String> recentIds = getRecentMovieIds();
-        for (String id : recentIds) {
-            for (Movie m : cachedMovies) {
-                if (m.stream_id != null && m.stream_id.equals(id)) {
-                    if (!orderedMovies.contains(m)) {
-                        orderedMovies.add(m);
-                    }
-                    break;
-                }
-            }
-            if (orderedMovies.size() >= 5) break;
-        }
-
+        List<Movie> validMovies = new ArrayList<>();
         for (Movie m : cachedMovies) {
-            if (isDemoMovie(m)) continue;
-            if (!orderedMovies.contains(m)) {
-                orderedMovies.add(m);
-            }
-            if (orderedMovies.size() >= 30) break;
+            if (!isDemoMovie(m)) validMovies.add(m);
         }
+        List<Movie> orderedMovies = HomeRailAlgorithm.sampleChaoticRailItems(validMovies, HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT);
 
         for (Movie m : orderedMovies) {
             String key = "movie_" + m.stream_id;
@@ -4586,50 +4599,23 @@ public class MainActivity extends BaseActivity {
 
     private void setupSeriesRail() {
         if (seriesRail == null || cachedSeries == null || cachedSeries.isEmpty()) return;
-        List<Series> orderedSeries = new ArrayList<>();
-        List<String> recentIds = getRecentSeriesIds();
-        for (String id : recentIds) {
-            for (Series s : cachedSeries) {
-                if (s.series_id != null && s.series_id.equals(id)) {
-                    if (!orderedSeries.contains(s)) {
-                        orderedSeries.add(s);
-                    }
-                    break;
-                }
-            }
-            if (orderedSeries.size() >= 5) break;
-        }
-
+        List<Movie> allConverted = new ArrayList<>();
         for (Series s : cachedSeries) {
             String nameLow = s.name != null ? s.name.toLowerCase() : "";
             String titleLow = s.title != null ? s.title.toLowerCase() : "";
             if (nameLow.contains("demo") || titleLow.contains("demo")) continue;
-            if (!orderedSeries.contains(s)) {
-                orderedSeries.add(s);
-            }
-            if (orderedSeries.size() >= 30) break;
+            Movie pseudo = HomeRailAlgorithm.seriesToPseudoMovie(s);
+            pseudo.isFavorite = AccountManager.getInstance(this).isFavorite("series", s.series_id);
+            allConverted.add(pseudo);
         }
 
-        List<Movie> converted = new ArrayList<>();
-        for (Series s : orderedSeries) {
-            Movie pseudo = new Movie();
-            pseudo.stream_id = s.series_id;
-            pseudo.name = s.name;
-            pseudo.title = s.title;
-            pseudo.stream_icon = s.cover;
-            pseudo.plot = s.plot;
-            pseudo.rating = s.rating;
-            pseudo.genre = s.genre;
-            pseudo.isSeries = true;
-            pseudo.isFavorite = AccountManager.getInstance(this).isFavorite("series", s.series_id);
-            converted.add(pseudo);
-        }
+        List<Movie> converted = HomeRailAlgorithm.sampleChaoticRailItems(allConverted, HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT);
 
         seriesRail.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         seriesRail.setAdapter(new MoviePosterAdapter(this, converted, new MoviePosterAdapter.OnMovieActionListener() {
             @Override
             public void onMovieClick(Movie m) {
-                for (Series s : orderedSeries) {
+                for (Series s : cachedSeries) {
                     if (s.series_id != null && s.series_id.equals(m.stream_id)) {
                         openSeriesDetail(s);
                         break;
@@ -4726,53 +4712,10 @@ public class MainActivity extends BaseActivity {
 
     private void setupCinemaHero() {
         cinemaHeroItems.clear();
-        // Top rated movies
-        if (cachedMovies != null) {
-            for (Movie m : cachedMovies) {
-                if (isDemoMovie(m)) continue;
-                try {
-                    double r = m.rating != null && !m.rating.isEmpty() ? Double.parseDouble(m.rating.replace(",", ".")) : 0;
-                    if (r >= 7.8) {
-                        cinemaHeroItems.add(m);
-                    }
-                } catch (Exception ignored) {}
-                if (cinemaHeroItems.size() >= 5) break;
-            }
+        List<Movie> featured = HomeRailAlgorithm.buildFeaturedBannerItems(cachedMovies, cachedSeries, 10);
+        if (featured != null && !featured.isEmpty()) {
+            cinemaHeroItems.addAll(featured);
         }
-        // Top rated series
-        if (cachedSeries != null) {
-            int count = 0;
-            for (Series s : cachedSeries) {
-                try {
-                    double r = s.rating != null && !s.rating.isEmpty() ? Double.parseDouble(s.rating.replace(",", ".")) : 0;
-                    if (r >= 8.0) {
-                        Movie pseudo = new Movie();
-                        pseudo.stream_id = s.series_id;
-                        pseudo.name = s.name;
-                        pseudo.title = s.title;
-                        pseudo.stream_icon = s.cover;
-                        pseudo.plot = s.plot;
-                        pseudo.rating = s.rating;
-                        pseudo.genre = s.genre;
-                        pseudo.isSeries = true;
-                        cinemaHeroItems.add(pseudo);
-                        count++;
-                    }
-                } catch (Exception ignored) {}
-                if (count >= 5) break;
-            }
-        }
-        // Fallback se não encontrou com rating alto
-        if (cinemaHeroItems.isEmpty()) {
-            if (cachedMovies != null && !cachedMovies.isEmpty()) {
-                for (int i = 0; i < Math.min(5, cachedMovies.size()); i++) {
-                    if (!isDemoMovie(cachedMovies.get(i))) {
-                        cinemaHeroItems.add(cachedMovies.get(i));
-                    }
-                }
-            }
-        }
-
         if (!cinemaHeroItems.isEmpty()) {
             currentCinemaHeroIdx = 0;
             displayCinemaHero(0);
@@ -5294,60 +5237,14 @@ public class MainActivity extends BaseActivity {
 
     private void setupNewReleasesRail() {
         if (newReleasesRail == null || newReleasesLayout == null) return;
-        List<Movie> newReleaseItems = new ArrayList<>();
+        List<Movie> newReleaseItems = HomeRailAlgorithm.buildNewsRail(
+                cachedMovies,
+                cachedSeries,
+                HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT
+        );
 
-        // Coletar filmes recentes (ano >= 2024 ou ordenados por ano descendente)
-        List<Movie> recentMovies = new ArrayList<>();
-        if (cachedMovies != null) {
-            for (Movie m : cachedMovies) {
-                if (isDemoMovie(m)) continue;
-                recentMovies.add(m);
-            }
-        }
-        Collections.sort(recentMovies, (a, b) -> {
-            int ya = 0, yb = 0;
-            try { ya = Integer.parseInt(a.year != null ? a.year.trim() : "0"); } catch (Exception ignored) {}
-            try { yb = Integer.parseInt(b.year != null ? b.year.trim() : "0"); } catch (Exception ignored) {}
-            return Integer.compare(yb, ya);
-        });
-
-        // Coletar séries recentes
-        List<Series> recentSeries = new ArrayList<>();
-        if (cachedSeries != null) {
-            recentSeries.addAll(cachedSeries);
-        }
-        Collections.sort(recentSeries, (a, b) -> {
-            int ya = 0, yb = 0;
-            try { ya = Integer.parseInt(a.releaseDate != null && a.releaseDate.length() >= 4 ? a.releaseDate.trim().substring(0, 4) : "0"); } catch (Exception ignored) {}
-            try { yb = Integer.parseInt(b.releaseDate != null && b.releaseDate.length() >= 4 ? b.releaseDate.trim().substring(0, 4) : "0"); } catch (Exception ignored) {}
-            return Integer.compare(yb, ya);
-        });
-
-        int mi = 0, si = 0;
-        while (newReleaseItems.size() < 24 && (mi < recentMovies.size() || si < recentSeries.size())) {
-            if (mi < recentMovies.size()) {
-                Movie m = recentMovies.get(mi++);
-                if (!containsItem(newReleaseItems, m.stream_id)) {
-                    newReleaseItems.add(m);
-                }
-            }
-            if (si < recentSeries.size() && newReleaseItems.size() < 24) {
-                Series s = recentSeries.get(si++);
-                String sKey = s.series_id != null ? s.series_id : ("series_" + s.name);
-                if (!containsItem(newReleaseItems, sKey)) {
-                    Movie pseudo = new Movie();
-                    pseudo.stream_id = sKey;
-                    pseudo.name = s.getDisplayTitle();
-                    pseudo.title = pseudo.name;
-                    pseudo.stream_icon = s.cover;
-                    pseudo.plot = s.plot;
-                    pseudo.rating = s.rating;
-                    pseudo.year = (s.releaseDate != null && s.releaseDate.length() >= 4) ? s.releaseDate.substring(0, 4) : "";
-                    pseudo.genre = s.genre;
-                    pseudo.isSeries = true;
-                    newReleaseItems.add(pseudo);
-                }
-            }
+        for (Movie m : newReleaseItems) {
+            m.isFavorite = AccountManager.getInstance(this).isFavorite(m.isSeries ? "series" : "movie", m.stream_id);
         }
 
         if (newReleaseItems.isEmpty()) {
@@ -5394,10 +5291,11 @@ public class MainActivity extends BaseActivity {
 
     private void setupForYouRail() {
         if (forYouRail == null || forYouLayout == null) return;
-        List<Movie> forYouItems = new java.util.ArrayList<>();
 
-        // Identificar gêneros preferidos a partir de favoritos e catálogo
-        java.util.Set<String> preferredGenres = new java.util.HashSet<>();
+        Map<String, Integer> genreWeights = AccountManager.getInstance(this).getTasteProfileGenres();
+        if (genreWeights == null) genreWeights = new HashMap<>();
+
+        // Enriquecer perfil de gosto com os gêneros dos favoritos do usuário
         List<FavoriteItem> favs = AccountManager.getInstance(this).getFavorites();
         if (favs != null) {
             for (FavoriteItem f : favs) {
@@ -5406,8 +5304,11 @@ public class MainActivity extends BaseActivity {
                         for (Series s : cachedSeries) {
                             if (s.series_id != null && s.series_id.equals(f.contentId) && s.genre != null) {
                                 for (String g : s.genre.split("[,/•-]")) {
-                                    String clean = g.trim().toLowerCase();
-                                    if (!clean.isEmpty()) preferredGenres.add(clean);
+                                    String clean = g.trim().toLowerCase(Locale.ROOT);
+                                    if (!clean.isEmpty()) {
+                                        int cur = genreWeights.containsKey(clean) ? genreWeights.get(clean) : 0;
+                                        genreWeights.put(clean, cur + 3);
+                                    }
                                 }
                                 break;
                             }
@@ -5418,8 +5319,11 @@ public class MainActivity extends BaseActivity {
                         for (Movie m : cachedMovies) {
                             if (m.stream_id != null && m.stream_id.equals(f.contentId) && m.genre != null) {
                                 for (String g : m.genre.split("[,/•-]")) {
-                                    String clean = g.trim().toLowerCase();
-                                    if (!clean.isEmpty()) preferredGenres.add(clean);
+                                    String clean = g.trim().toLowerCase(Locale.ROOT);
+                                    if (!clean.isEmpty()) {
+                                        int cur = genreWeights.containsKey(clean) ? genreWeights.get(clean) : 0;
+                                        genreWeights.put(clean, cur + 3);
+                                    }
                                 }
                                 break;
                             }
@@ -5429,65 +5333,25 @@ public class MainActivity extends BaseActivity {
             }
         }
 
-        // Adicionar filmes bem avaliados (nota >= 7.8) preferindo gêneros curtidos
-        if (cachedMovies != null) {
-            for (Movie m : cachedMovies) {
-                if (isDemoMovie(m)) continue;
-                try {
-                    double r = m.rating != null && !m.rating.isEmpty() ? Double.parseDouble(m.rating.replace(",", ".")) : 0;
-                    if (r >= 7.8) {
-                        boolean matchGenre = preferredGenres.isEmpty();
-                        if (!matchGenre && m.genre != null) {
-                            for (String pg : preferredGenres) {
-                                if (m.genre.toLowerCase().contains(pg)) {
-                                    matchGenre = true;
-                                    break;
-                                }
-                            }
-                        }
-                        if (matchGenre && !containsItem(forYouItems, m.stream_id)) {
-                            forYouItems.add(m);
-                        }
-                    }
-                } catch (Exception ignored) {}
-                if (forYouItems.size() >= 12) break;
+        java.util.Set<String> watchedKeys = new java.util.HashSet<>();
+        List<WatchProgressItem> prog = AccountManager.getInstance(this).getMemoryProgress();
+        if (prog != null) {
+            for (WatchProgressItem pi : prog) {
+                if (pi.contentId != null && !pi.contentId.isEmpty()) watchedKeys.add(pi.contentId);
+                if (pi.seriesId != null && !pi.seriesId.isEmpty()) watchedKeys.add(pi.seriesId);
             }
         }
 
-        // Adicionar séries bem avaliadas
-        if (cachedSeries != null) {
-            for (Series s : cachedSeries) {
-                try {
-                    double r = s.rating != null && !s.rating.isEmpty() ? Double.parseDouble(s.rating.replace(",", ".")) : 0;
-                    if (r >= 8.0) {
-                        String sKey = s.series_id != null ? s.series_id : ("series_" + s.name);
-                        if (!containsItem(forYouItems, sKey)) {
-                            Movie pseudo = new Movie();
-                            pseudo.stream_id = sKey;
-                            pseudo.name = s.getDisplayTitle();
-                            pseudo.title = pseudo.name;
-                            pseudo.stream_icon = s.cover;
-                            pseudo.plot = s.plot;
-                            pseudo.rating = s.rating;
-                            pseudo.genre = s.genre;
-                            pseudo.isSeries = true;
-                            forYouItems.add(pseudo);
-                        }
-                    }
-                } catch (Exception ignored) {}
-                if (forYouItems.size() >= 24) break;
-            }
-        }
+        List<Movie> forYouItems = HomeRailAlgorithm.buildForYouRail(
+                cachedMovies,
+                cachedSeries,
+                genreWeights,
+                watchedKeys,
+                HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT
+        );
 
-        // Fallback: se tiver poucos itens, adicionar filmes bem avaliados sem filtro de gênero
-        if (forYouItems.size() < 6 && cachedMovies != null) {
-            for (Movie m : cachedMovies) {
-                if (isDemoMovie(m)) continue;
-                if (!containsItem(forYouItems, m.stream_id)) {
-                    forYouItems.add(m);
-                }
-                if (forYouItems.size() >= 15) break;
-            }
+        for (Movie m : forYouItems) {
+            m.isFavorite = AccountManager.getInstance(this).isFavorite(m.isSeries ? "series" : "movie", m.stream_id);
         }
 
         if (forYouItems.isEmpty()) {
@@ -9368,18 +9232,8 @@ public class MainActivity extends BaseActivity {
             }
         };
 
-        // 1. Novidades no Catálogo (ano mais recente)
-        List<Movie> newReleases = new ArrayList<>();
-        for (Movie m : allMovies) {
-            if (!isDemoMovie(m)) newReleases.add(m);
-        }
-        Collections.sort(newReleases, (a, b) -> {
-            int ya = 0, yb = 0;
-            try { ya = Integer.parseInt(a.year != null ? a.year.trim() : "0"); } catch (Exception ignored) {}
-            try { yb = Integer.parseInt(b.year != null ? b.year.trim() : "0"); } catch (Exception ignored) {}
-            return Integer.compare(yb, ya);
-        });
-        if (newReleases.size() > 25) newReleases = new ArrayList<>(newReleases.subList(0, 25));
+        // 1. Novidades no Catálogo (Distribuição Homogênea 35% + 65% Estratificada igual ao Web)
+        List<Movie> newReleases = HomeRailAlgorithm.buildNewsRail(allMovies, null, HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT);
         if (vodRailNewReleasesLayout != null && vodRailNewReleasesRecycler != null) {
             if (newReleases.size() >= 3) {
                 vodRailNewReleasesLayout.setVisibility(View.VISIBLE);
@@ -9403,15 +9257,16 @@ public class MainActivity extends BaseActivity {
             }
         }
 
-        // 2. Aclamados pela Crítica (IMDb 7.5+)
-        List<Movie> topRated = new ArrayList<>();
+        // 2. Aclamados pela Crítica (IMDb 7.5+ com amostragem estratificada igual ao Web)
+        List<Movie> topRatedCandidates = new ArrayList<>();
         for (Movie m : allMovies) {
             if (!isDemoMovie(m) && parseRatingNumber(m.rating) >= 7.5) {
-                topRated.add(m);
+                topRatedCandidates.add(m);
             }
         }
-        Collections.sort(topRated, (a, b) -> Double.compare(parseRatingNumber(b.rating), parseRatingNumber(a.rating)));
-        if (topRated.size() > 25) topRated = new ArrayList<>(topRated.subList(0, 25));
+        Collections.sort(topRatedCandidates, (a, b) -> Double.compare(parseRatingNumber(b.rating), parseRatingNumber(a.rating)));
+        if (topRatedCandidates.size() > 120) topRatedCandidates = new ArrayList<>(topRatedCandidates.subList(0, 120));
+        List<Movie> topRated = HomeRailAlgorithm.sampleChaoticRailItems(topRatedCandidates, HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT);
         if (vodRailTopRatedLayout != null && vodRailTopRatedRecycler != null) {
             if (topRated.size() >= 3) {
                 vodRailTopRatedLayout.setVisibility(View.VISIBLE);
@@ -9422,16 +9277,16 @@ public class MainActivity extends BaseActivity {
             }
         }
 
-        // 3. 4K Ultra HD
-        List<Movie> fourKList = new ArrayList<>();
+        // 3. 4K Ultra HD (amostragem caótica estratificada)
+        List<Movie> fourKCandidates = new ArrayList<>();
         for (Movie m : allMovies) {
             if (isDemoMovie(m)) continue;
             boolean is4K = (m.versionsSummary != null && m.versionsSummary.contains("4K"))
                     || (m.title != null && m.title.toLowerCase().contains("4k"))
                     || (m.name != null && m.name.toLowerCase().contains("4k"));
-            if (is4K) fourKList.add(m);
+            if (is4K) fourKCandidates.add(m);
         }
-        if (fourKList.size() > 25) fourKList = new ArrayList<>(fourKList.subList(0, 25));
+        List<Movie> fourKList = HomeRailAlgorithm.sampleChaoticRailItems(fourKCandidates, HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT);
         if (vodRail4KLayout != null && vodRail4KRecycler != null) {
             if (fourKList.size() >= 3) {
                 vodRail4KLayout.setVisibility(View.VISIBLE);
@@ -9442,16 +9297,16 @@ public class MainActivity extends BaseActivity {
             }
         }
 
-        // 4. Populares do Cinema / Ação & Aventura
-        List<Movie> popularList = new ArrayList<>();
+        // 4. Populares do Cinema / Ação & Aventura (amostragem caótica estratificada)
+        List<Movie> popularCandidates = new ArrayList<>();
         for (Movie m : allMovies) {
             if (isDemoMovie(m)) continue;
             String genre = m.genre != null ? m.genre.toLowerCase() : "";
             if (genre.contains("ação") || genre.contains("action") || genre.contains("aventura") || genre.contains("adventure") || parseRatingNumber(m.rating) >= 7.0) {
-                popularList.add(m);
+                popularCandidates.add(m);
             }
         }
-        if (popularList.size() > 25) popularList = new ArrayList<>(popularList.subList(0, 25));
+        List<Movie> popularList = HomeRailAlgorithm.sampleChaoticRailItems(popularCandidates, HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT);
         if (vodRailPopularLayout != null && vodRailPopularRecycler != null) {
             if (popularList.size() >= 3) {
                 vodRailPopularLayout.setVisibility(View.VISIBLE);
@@ -9985,21 +9840,8 @@ public class MainActivity extends BaseActivity {
             }
         };
 
-        // 1. Novas Séries no Catálogo (ano mais recente)
-        List<Series> newSeries = new ArrayList<>();
-        for (Series s : allSeries) {
-            String nameLow = s.name != null ? s.name.toLowerCase() : "";
-            if (!nameLow.contains("demo")) newSeries.add(s);
-        }
-        Collections.sort(newSeries, (a, b) -> {
-            int ya = 0, yb = 0;
-            try { ya = Integer.parseInt(a.releaseDate != null ? a.releaseDate.trim() : "0"); } catch (Exception ignored) {}
-            try { yb = Integer.parseInt(b.releaseDate != null ? b.releaseDate.trim() : "0"); } catch (Exception ignored) {}
-            if (ya != yb) return Integer.compare(yb, ya);
-            return Integer.compare(b.num, a.num);
-        });
-        if (newSeries.size() > 25) newSeries = new ArrayList<>(newSeries.subList(0, 25));
-        List<Movie> newSeriesMovies = convertSeriesToPseudoMovies(newSeries);
+        // 1. Novas Séries no Catálogo (Distribuição Homogênea 35% + 65% Estratificada igual ao Web)
+        List<Movie> newSeriesMovies = HomeRailAlgorithm.buildNewsRail(null, allSeries, HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT);
         if (vodRailNewReleasesLayout != null && vodRailNewReleasesRecycler != null) {
             if (newSeriesMovies.size() >= 3) {
                 vodRailNewReleasesLayout.setVisibility(View.VISIBLE);
@@ -10023,7 +9865,7 @@ public class MainActivity extends BaseActivity {
             }
         }
 
-        // 2. Séries Mais Bem Avaliadas (IMDb 8.0+)
+        // 2. Séries Mais Bem Avaliadas (IMDb 7.8+ com amostragem caótica estratificada)
         List<Series> topRated = new ArrayList<>();
         for (Series s : allSeries) {
             String nameLow = s.name != null ? s.name.toLowerCase() : "";
@@ -10032,8 +9874,11 @@ public class MainActivity extends BaseActivity {
             }
         }
         Collections.sort(topRated, (a, b) -> Double.compare(parseRatingNumber(b.rating), parseRatingNumber(a.rating)));
-        if (topRated.size() > 25) topRated = new ArrayList<>(topRated.subList(0, 25));
-        List<Movie> topRatedMovies = convertSeriesToPseudoMovies(topRated);
+        if (topRated.size() > 120) topRated = new ArrayList<>(topRated.subList(0, 120));
+        List<Movie> topRatedMovies = HomeRailAlgorithm.sampleChaoticRailItems(
+                convertSeriesToPseudoMovies(topRated),
+                HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT
+        );
         if (vodRailTopRatedLayout != null && vodRailTopRatedRecycler != null) {
             if (topRatedMovies.size() >= 3) {
                 vodRailTopRatedLayout.setVisibility(View.VISIBLE);
@@ -10044,7 +9889,7 @@ public class MainActivity extends BaseActivity {
             }
         }
 
-        // 3. Séries em Alta & Multiversão
+        // 3. Séries em Alta & Multiversão (amostragem caótica estratificada)
         List<Series> multiVersion = new ArrayList<>();
         for (Series s : allSeries) {
             String nameLow = s.name != null ? s.name.toLowerCase() : "";
@@ -10054,8 +9899,10 @@ public class MainActivity extends BaseActivity {
                     || (s.genre != null && (s.genre.toLowerCase().contains("ficção") || s.genre.toLowerCase().contains("sci-fi") || s.genre.toLowerCase().contains("mistério")));
             if (isMulti) multiVersion.add(s);
         }
-        if (multiVersion.size() > 25) multiVersion = new ArrayList<>(multiVersion.subList(0, 25));
-        List<Movie> multiVersionMovies = convertSeriesToPseudoMovies(multiVersion);
+        List<Movie> multiVersionMovies = HomeRailAlgorithm.sampleChaoticRailItems(
+                convertSeriesToPseudoMovies(multiVersion),
+                HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT
+        );
         if (vodRail4KLayout != null && vodRail4KRecycler != null) {
             if (multiVersionMovies.size() >= 3) {
                 vodRail4KLayout.setVisibility(View.VISIBLE);
@@ -10066,7 +9913,7 @@ public class MainActivity extends BaseActivity {
             }
         }
 
-        // 4. Populares em Séries (Drama & Ação)
+        // 4. Populares em Séries (Drama & Ação com amostragem caótica estratificada)
         List<Series> popular = new ArrayList<>();
         for (Series s : allSeries) {
             String nameLow = s.name != null ? s.name.toLowerCase() : "";
@@ -10076,8 +9923,10 @@ public class MainActivity extends BaseActivity {
                 popular.add(s);
             }
         }
-        if (popular.size() > 25) popular = new ArrayList<>(popular.subList(0, 25));
-        List<Movie> popularMovies = convertSeriesToPseudoMovies(popular);
+        List<Movie> popularMovies = HomeRailAlgorithm.sampleChaoticRailItems(
+                convertSeriesToPseudoMovies(popular),
+                HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT
+        );
         if (vodRailPopularLayout != null && vodRailPopularRecycler != null) {
             if (popularMovies.size() >= 3) {
                 vodRailPopularLayout.setVisibility(View.VISIBLE);
@@ -13512,6 +13361,17 @@ public class MainActivity extends BaseActivity {
         hideSystemUI();
         enforceMaxVolume();
         startSportsRefreshTicker();
+        if (AccountManager.getInstance(this).isSignedIn()) {
+            long now = System.currentTimeMillis();
+            if (now - lastResumeSyncAt > 30000) {
+                lastResumeSyncAt = now;
+                AccountManager.getInstance(this).syncAll((success, favCount, progCount) -> mainHandler.post(() -> {
+                    setupContinueWatchingRail();
+                    setupFavoritesRail();
+                    setupForYouRail();
+                }));
+            }
+        }
         if (isMosaicActive) {
             for (int i = 0; i < 4; i++) {
                 if (mosaicSlots[i] != null && mosaicSlots[i].exoPlayer != null) {
