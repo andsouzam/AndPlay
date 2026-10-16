@@ -438,11 +438,30 @@ public class MainActivity extends BaseActivity {
     private List<Channel> allChannels = new ArrayList<>();
     private List<SportsEvent> allSports = new ArrayList<>();
     private List<Movie> cachedMovies = new ArrayList<>();
+    private final Map<String, Movie> cachedMoviesById = new java.util.concurrent.ConcurrentHashMap<>();
     private List<Category> movieCategories = new ArrayList<>();
     private List<Series> cachedSeries = new ArrayList<>();
+    private final Map<String, Series> cachedSeriesById = new java.util.concurrent.ConcurrentHashMap<>();
     private List<Category> seriesCategories = new ArrayList<>();
     private volatile boolean isPreloadingMovies = false;
     private volatile boolean isPreloadingSeries = false;
+
+    private synchronized void setCachedMovies(List<Movie> movies) {
+        this.cachedMovies = movies != null ? movies : new ArrayList<>();
+        cachedMoviesById.clear();
+        for (Movie m : this.cachedMovies) {
+            if (m.stream_id != null) cachedMoviesById.put(m.stream_id, m);
+        }
+    }
+
+    private synchronized void setCachedSeries(List<Series> series) {
+        this.cachedSeries = series != null ? series : new ArrayList<>();
+        cachedSeriesById.clear();
+        for (Series s : this.cachedSeries) {
+            if (s.series_id != null) cachedSeriesById.put(s.series_id, s);
+        }
+    }
+
     private long lastDrawerOpenedAt = 0;
     private final List<Runnable> moviesReadyCallbacks = new ArrayList<>();
     private final List<Runnable> seriesReadyCallbacks = new ArrayList<>();
@@ -3477,7 +3496,7 @@ public class MainActivity extends BaseActivity {
             try {
                 movieCategories = ApiClient.getMovieCategories();
                 List<Movie> rawMovies = ApiClient.getMovies();
-                cachedMovies = MediaVersionHelper.groupMovies(rawMovies);
+                setCachedMovies(MediaVersionHelper.groupMovies(rawMovies));
                 mainHandler.post(() -> {
                     setupMoviesRail();
                     setupNewReleasesRail();
@@ -3500,7 +3519,7 @@ public class MainActivity extends BaseActivity {
             try {
                 seriesCategories = ApiClient.getSeriesCategories();
                 List<Series> rawSeries = ApiClient.getSeries();
-                cachedSeries = MediaVersionHelper.groupSeries(rawSeries);
+                setCachedSeries(MediaVersionHelper.groupSeries(rawSeries));
                 mainHandler.post(() -> {
                     setupSeriesRail();
                     setupNewReleasesRail();
@@ -5163,24 +5182,19 @@ public class MainActivity extends BaseActivity {
                     pseudo.isFavorite = AccountManager.getInstance(this).isFavorite("series", pseudo.stream_id);
                     continueWatchingItems.add(pseudo);
                 } else {
-                    if (cachedMovies != null) {
-                        for (Movie m : cachedMovies) {
-                            if (m.stream_id != null && m.stream_id.equals(item.contentId)) {
-                                if (containsItem(continueWatchingItems, m.stream_id)) break;
-                                Movie copy = new Movie();
-                                copy.stream_id = m.stream_id;
-                                copy.name = m.name;
-                                copy.title = m.title;
-                                copy.stream_icon = m.stream_icon;
-                                copy.plot = m.plot;
-                                copy.rating = m.rating;
-                                copy.genre = m.genre;
-                                copy.progressPercent = item.getProgressPercent();
-                                copy.isFavorite = AccountManager.getInstance(this).isFavorite("movie", m.stream_id);
-                                continueWatchingItems.add(copy);
-                                break;
-                            }
-                        }
+                    Movie m = cachedMoviesById.get(item.contentId);
+                    if (m != null && !containsItem(continueWatchingItems, m.stream_id)) {
+                        Movie copy = new Movie();
+                        copy.stream_id = m.stream_id;
+                        copy.name = m.name;
+                        copy.title = m.title;
+                        copy.stream_icon = m.stream_icon;
+                        copy.plot = m.plot;
+                        copy.rating = m.rating;
+                        copy.genre = m.genre;
+                        copy.progressPercent = item.getProgressPercent();
+                        copy.isFavorite = AccountManager.getInstance(this).isFavorite("movie", m.stream_id);
+                        continueWatchingItems.add(copy);
                     }
                 }
                 if (continueWatchingItems.size() >= 20) break;
@@ -5188,7 +5202,7 @@ public class MainActivity extends BaseActivity {
         }
 
         // Se a lista remota estiver vazia, verifica o histórico local de progresso
-        if (continueWatchingItems.isEmpty() && cachedMovies != null) {
+        if (continueWatchingItems.isEmpty()) {
             List<String> recentMovieIds = getRecentMovieIds();
             for (String id : recentMovieIds) {
                 if (containsItem(continueWatchingItems, id)) continue;
@@ -5196,21 +5210,19 @@ public class MainActivity extends BaseActivity {
                 long dur = getVodDuration(key);
                 long pos = getVodProgress(key);
                 if (dur > 0 && pos > 5000 && pos < (long)(dur * 0.95)) {
-                    for (Movie m : cachedMovies) {
-                        if (m.stream_id != null && m.stream_id.equals(id)) {
-                            Movie copy = new Movie();
-                            copy.stream_id = m.stream_id;
-                            copy.name = m.name;
-                            copy.title = m.title;
-                            copy.stream_icon = m.stream_icon;
-                            copy.plot = m.plot;
-                            copy.rating = m.rating;
-                            copy.genre = m.genre;
-                            copy.progressPercent = (int) Math.min(100, Math.max(0, (pos * 100) / dur));
-                            copy.isFavorite = AccountManager.getInstance(this).isFavorite("movie", m.stream_id);
-                            continueWatchingItems.add(copy);
-                            break;
-                        }
+                    Movie m = cachedMoviesById.get(id);
+                    if (m != null) {
+                        Movie copy = new Movie();
+                        copy.stream_id = m.stream_id;
+                        copy.name = m.name;
+                        copy.title = m.title;
+                        copy.stream_icon = m.stream_icon;
+                        copy.plot = m.plot;
+                        copy.rating = m.rating;
+                        copy.genre = m.genre;
+                        copy.progressPercent = (int) Math.min(100, Math.max(0, (pos * 100) / dur));
+                        copy.isFavorite = AccountManager.getInstance(this).isFavorite("movie", m.stream_id);
+                        continueWatchingItems.add(copy);
                     }
                 }
                 if (continueWatchingItems.size() >= 20) break;
@@ -5330,34 +5342,20 @@ public class MainActivity extends BaseActivity {
         List<FavoriteItem> favs = AccountManager.getInstance(this).getFavorites();
         if (favs != null) {
             for (FavoriteItem f : favs) {
+                String gStr = null;
                 if ("series".equalsIgnoreCase(f.contentType)) {
-                    if (cachedSeries != null) {
-                        for (Series s : cachedSeries) {
-                            if (s.series_id != null && s.series_id.equals(f.contentId) && s.genre != null) {
-                                for (String g : s.genre.split("[,/•-]")) {
-                                    String clean = g.trim().toLowerCase(Locale.ROOT);
-                                    if (!clean.isEmpty()) {
-                                        int cur = genreWeights.containsKey(clean) ? genreWeights.get(clean) : 0;
-                                        genreWeights.put(clean, cur + 3);
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                    }
+                    Series s = cachedSeriesById.get(f.contentId);
+                    if (s != null) gStr = s.genre;
                 } else {
-                    if (cachedMovies != null) {
-                        for (Movie m : cachedMovies) {
-                            if (m.stream_id != null && m.stream_id.equals(f.contentId) && m.genre != null) {
-                                for (String g : m.genre.split("[,/•-]")) {
-                                    String clean = g.trim().toLowerCase(Locale.ROOT);
-                                    if (!clean.isEmpty()) {
-                                        int cur = genreWeights.containsKey(clean) ? genreWeights.get(clean) : 0;
-                                        genreWeights.put(clean, cur + 3);
-                                    }
-                                }
-                                break;
-                            }
+                    Movie m = cachedMoviesById.get(f.contentId);
+                    if (m != null) gStr = m.genre;
+                }
+                if (gStr != null && !gStr.isEmpty()) {
+                    for (String g : gStr.split("[,/•-]")) {
+                        String clean = g.trim().toLowerCase(Locale.ROOT);
+                        if (!clean.isEmpty()) {
+                            int cur = genreWeights.containsKey(clean) ? genreWeights.get(clean) : 0;
+                            genreWeights.put(clean, cur + 3);
                         }
                     }
                 }
@@ -5423,15 +5421,7 @@ public class MainActivity extends BaseActivity {
         if (favList != null && !favList.isEmpty()) {
             for (FavoriteItem fav : favList) {
                 if ("series".equalsIgnoreCase(fav.contentType)) {
-                    Series found = null;
-                    if (cachedSeries != null) {
-                        for (Series s : cachedSeries) {
-                            if (s.series_id != null && s.series_id.equals(fav.contentId)) {
-                                found = s;
-                                break;
-                            }
-                        }
-                    }
+                    Series found = cachedSeriesById.get(fav.contentId);
                     Movie pseudo = new Movie();
                     pseudo.stream_id = fav.contentId;
                     pseudo.name = (found != null && found.name != null) ? found.name : fav.title;
@@ -5444,15 +5434,7 @@ public class MainActivity extends BaseActivity {
                     pseudo.isFavorite = true;
                     favoriteItems.add(pseudo);
                 } else {
-                    Movie found = null;
-                    if (cachedMovies != null) {
-                        for (Movie m : cachedMovies) {
-                            if (m.stream_id != null && m.stream_id.equals(fav.contentId)) {
-                                found = m;
-                                break;
-                            }
-                        }
-                    }
+                    Movie found = cachedMoviesById.get(fav.contentId);
                     Movie copy = new Movie();
                     copy.stream_id = fav.contentId;
                     copy.name = (found != null && found.name != null) ? found.name : fav.title;
@@ -6088,24 +6070,16 @@ public class MainActivity extends BaseActivity {
     }
 
     private Series findSeriesForProgressItem(WatchProgressItem item) {
-        if (item == null || cachedSeries == null || cachedSeries.isEmpty()) return null;
+        if (item == null) return null;
 
         if (item.seriesId != null && !item.seriesId.trim().isEmpty()) {
-            String sid = item.seriesId.trim();
-            for (Series s : cachedSeries) {
-                if (s.series_id != null && s.series_id.equals(sid)) {
-                    return s;
-                }
-            }
+            Series s = cachedSeriesById.get(item.seriesId.trim());
+            if (s != null) return s;
         }
 
         if (item.contentId != null && !item.contentId.trim().isEmpty()) {
-            String cid = item.contentId.trim();
-            for (Series s : cachedSeries) {
-                if (s.series_id != null && s.series_id.equals(cid)) {
-                    return s;
-                }
-            }
+            Series s = cachedSeriesById.get(item.contentId.trim());
+            if (s != null) return s;
         }
 
         String cleanTitle = cleanSeriesTitle(item.title);
@@ -10481,14 +10455,13 @@ public class MainActivity extends BaseActivity {
     }
 
     private Movie findRealMovie(Movie m) {
-        if (m == null || cachedMovies == null || cachedMovies.isEmpty()) return m;
-        for (Movie cand : cachedMovies) {
-            if (cand.stream_id != null && cand.stream_id.equals(m.stream_id)) {
-                return cand;
-            }
+        if (m == null) return null;
+        if (m.stream_id != null) {
+            Movie found = cachedMoviesById.get(m.stream_id);
+            if (found != null) return found;
         }
         String dTitle = m.getDisplayTitle();
-        if (dTitle != null && !dTitle.isEmpty()) {
+        if (dTitle != null && !dTitle.isEmpty() && cachedMovies != null) {
             for (Movie cand : cachedMovies) {
                 if (dTitle.equalsIgnoreCase(cand.getDisplayTitle()) || dTitle.equalsIgnoreCase(cand.cleanTitle)) {
                     return cand;
@@ -10846,14 +10819,13 @@ public class MainActivity extends BaseActivity {
     }
 
     private Series findRealSeries(Series s) {
-        if (s == null || cachedSeries == null || cachedSeries.isEmpty()) return s;
-        for (Series cand : cachedSeries) {
-            if (cand.series_id != null && cand.series_id.equals(s.series_id)) {
-                return cand;
-            }
+        if (s == null) return null;
+        if (s.series_id != null) {
+            Series found = cachedSeriesById.get(s.series_id);
+            if (found != null) return found;
         }
         String dTitle = s.getDisplayTitle();
-        if (dTitle != null && !dTitle.isEmpty()) {
+        if (dTitle != null && !dTitle.isEmpty() && cachedSeries != null) {
             for (Series cand : cachedSeries) {
                 if (dTitle.equalsIgnoreCase(cand.getDisplayTitle()) || dTitle.equalsIgnoreCase(cand.cleanTitle)) {
                     return cand;

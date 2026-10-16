@@ -34,23 +34,37 @@ public class HomeRailAlgorithm {
 
     public static int getItemYear(Movie item) {
         if (item == null) return 0;
-        if (item.year != null && !item.year.trim().isEmpty()) {
-            Matcher m = YEAR_PATTERN.matcher(item.year);
-            if (m.find()) {
-                try { return Integer.parseInt(m.group(1)); } catch (Exception ignored) {}
+        if (item.parsedYear >= 0) return item.parsedYear;
+        int y = parseFastYear(item.year);
+        if (y <= 0) y = parseFastYear(item.release_date);
+        if (y <= 0) y = parseFastYear(item.getRawTitle());
+        item.parsedYear = Math.max(0, y);
+        return item.parsedYear;
+    }
+
+    private static int parseFastYear(String s) {
+        if (s == null || s.length() < 4) return 0;
+        if (s.length() == 4) {
+            char c0 = s.charAt(0);
+            if ((c0 == '1' || c0 == '2') && Character.isDigit(s.charAt(1)) && Character.isDigit(s.charAt(2)) && Character.isDigit(s.charAt(3))) {
+                return (c0 - '0') * 1000 + (s.charAt(1) - '0') * 100 + (s.charAt(2) - '0') * 10 + (s.charAt(3) - '0');
             }
         }
-        if (item.release_date != null && !item.release_date.trim().isEmpty()) {
-            Matcher m = YEAR_PATTERN.matcher(item.release_date);
-            if (m.find()) {
-                try { return Integer.parseInt(m.group(1)); } catch (Exception ignored) {}
-            }
-        }
-        String raw = item.getRawTitle();
-        if (raw != null) {
-            Matcher m = YEAR_PATTERN.matcher(raw);
-            if (m.find()) {
-                try { return Integer.parseInt(m.group(1)); } catch (Exception ignored) {}
+        for (int i = 0; i <= s.length() - 4; i++) {
+            char c = s.charAt(i);
+            if (c == '1' || c == '2') {
+                char c1 = s.charAt(i + 1);
+                char c2 = s.charAt(i + 2);
+                char c3 = s.charAt(i + 3);
+                if (c == '1' && c1 == '9' && Character.isDigit(c2) && Character.isDigit(c3)) {
+                    boolean leftOk = (i == 0 || !Character.isDigit(s.charAt(i - 1)));
+                    boolean rightOk = (i + 4 == s.length() || !Character.isDigit(s.charAt(i + 4)));
+                    if (leftOk && rightOk) return 1900 + (c2 - '0') * 10 + (c3 - '0');
+                } else if (c == '2' && c1 == '0' && Character.isDigit(c2) && Character.isDigit(c3)) {
+                    boolean leftOk = (i == 0 || !Character.isDigit(s.charAt(i - 1)));
+                    boolean rightOk = (i + 4 == s.length() || !Character.isDigit(s.charAt(i + 4)));
+                    if (leftOk && rightOk) return 2000 + (c2 - '0') * 10 + (c3 - '0');
+                }
             }
         }
         return 0;
@@ -58,41 +72,58 @@ public class HomeRailAlgorithm {
 
     public static long getItemAddedTime(Movie item) {
         if (item == null || item.added == null || item.added.trim().isEmpty()) return 0;
+        if (item.parsedAddedTime >= 0) return item.parsedAddedTime;
         String raw = item.added.trim();
-        try {
-            long n = Long.parseLong(raw);
-            if (n > 100000000000L) return n; // já em milissegundos
-            if (n > 0) return n * 1000L;      // segundos para milissegundos
-        } catch (Exception ignored) {}
+        long val = 0;
 
-        try {
-            SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US);
-            fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
-            Date d = fmt.parse(raw);
-            if (d != null) return d.getTime();
-        } catch (Exception ignored) {}
+        boolean allDigits = true;
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (c < '0' || c > '9') {
+                allDigits = false;
+                break;
+            }
+        }
+        if (allDigits && raw.length() > 0) {
+            try {
+                long n = Long.parseLong(raw);
+                if (n > 100000000000L) val = n;
+                else if (n > 0) val = n * 1000L;
+            } catch (Exception ignored) {}
+        } else if (raw.length() >= 10 && raw.charAt(4) == '-' && raw.charAt(7) == '-') {
+            try {
+                int y = (raw.charAt(0) - '0') * 1000 + (raw.charAt(1) - '0') * 100 + (raw.charAt(2) - '0') * 10 + (raw.charAt(3) - '0');
+                int m = (raw.charAt(5) - '0') * 10 + (raw.charAt(6) - '0');
+                int d = (raw.charAt(8) - '0') * 10 + (raw.charAt(9) - '0');
+                int h = 0, min = 0, sec = 0;
+                if (raw.length() >= 19 && (raw.charAt(10) == ' ' || raw.charAt(10) == 'T')) {
+                    h = (raw.charAt(11) - '0') * 10 + (raw.charAt(12) - '0');
+                    min = (raw.charAt(14) - '0') * 10 + (raw.charAt(15) - '0');
+                    sec = (raw.charAt(17) - '0') * 10 + (raw.charAt(18) - '0');
+                }
+                val = ((long) y * 10000000000L) + ((long) m * 100000000L) + ((long) d * 1000000L) + (h * 10000L) + (min * 100L) + sec;
+            } catch (Exception ignored) {}
+        }
 
-        try {
-            SimpleDateFormat fmtIso = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US);
-            fmtIso.setTimeZone(TimeZone.getTimeZone("UTC"));
-            String clean = raw.split("\\.")[0];
-            Date d = fmtIso.parse(clean);
-            if (d != null) return d.getTime();
-        } catch (Exception ignored) {}
-
-        return 0;
+        item.parsedAddedTime = Math.max(0, val);
+        return item.parsedAddedTime;
     }
 
     public static double getItemRating(Movie item) {
         if (item == null) return 0.0;
+        if (item.parsedRating >= 0) return item.parsedRating;
         String r = item.rating;
         if (r == null || r.trim().isEmpty()) r = item.rating_5based;
-        if (r == null || r.trim().isEmpty()) return 0.0;
-        try {
-            return Double.parseDouble(r.replace(",", ".").trim());
-        } catch (Exception ignored) {
+        if (r == null || r.trim().isEmpty()) {
+            item.parsedRating = 0.0;
             return 0.0;
         }
+        double val = 0.0;
+        try {
+            val = Double.parseDouble(r.replace(",", ".").trim());
+        } catch (Exception ignored) {}
+        item.parsedRating = Math.max(0.0, val);
+        return item.parsedRating;
     }
 
     public static String getHomeDisplayKey(Movie item) {

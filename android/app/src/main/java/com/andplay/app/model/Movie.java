@@ -29,6 +29,11 @@ public class Movie implements Serializable {
     public boolean isSeries = false;
     public boolean isFavorite = false;
 
+    // Fast numeric caches for rail algorithms and sorting (transient)
+    public transient long parsedAddedTime = -1;
+    public transient double parsedRating = -1;
+    public transient int parsedYear = -1;
+
     // Versões agrupadas (Dublado, Legendado, 4K Dublado, 4K Legendado)
     public List<MovieVersion> versions = new ArrayList<>();
     public MovieVersion activeVersion;
