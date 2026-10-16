@@ -3491,21 +3491,43 @@ public class MainActivity extends BaseActivity {
                 }
             });
 
-            // Pré-carrega filmes e séries em segundo plano com agrupamento inteligente de versões
+            // Pré-carrega filmes e séries em segundo plano com agrupamento inteligente de versões e cache em disco
             isPreloadingMovies = true;
             try {
-                movieCategories = ApiClient.getMovieCategories();
-                List<Movie> rawMovies = ApiClient.getMovies();
-                setCachedMovies(MediaVersionHelper.groupMovies(rawMovies));
+                movieCategories = ApiClient.getMovieCategories(MainActivity.this, false);
+                List<Movie> rawMovies = ApiClient.getMovies(MainActivity.this, false);
+                List<Movie> groupedMovies = MediaVersionHelper.groupMovies(rawMovies);
+                setCachedMovies(groupedMovies);
+
+                List<Movie> validMovies = new ArrayList<>();
+                for (Movie m : groupedMovies) {
+                    if (!isDemoMovie(m)) validMovies.add(m);
+                }
+                List<Movie> orderedMovies = HomeRailAlgorithm.sampleChaoticRailItems(validMovies, HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT);
+                for (Movie m : orderedMovies) {
+                    String key = "movie_" + m.stream_id;
+                    long dur = getVodDuration(key);
+                    long pos = getVodProgress(key);
+                    if (dur > 0 && pos > 0) {
+                        m.progressPercent = (int) Math.min(100, Math.max(0, (pos * 100) / dur));
+                    }
+                    m.isFavorite = AccountManager.getInstance(MainActivity.this).isFavorite("movie", m.stream_id);
+                }
+
+                String curViewMode = AccountManager.getInstance(MainActivity.this).getViewMode();
+                boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(curViewMode);
+
                 mainHandler.post(() -> {
-                    setupMoviesRail();
-                    setupNewReleasesRail();
-                    setupForYouRail();
+                    applyMoviesRail(orderedMovies);
                     setupContinueWatchingRail();
                     setupFavoritesRail();
-                    setupCinemaHero();
+                    if (isCinema) {
+                        setupNewReleasesRail();
+                        setupForYouRail();
+                        setupCinemaHero();
+                    }
                     for (Runnable r : new ArrayList<>(moviesReadyCallbacks)) {
-                        r.run();
+                        try { r.run(); } catch (Exception ignored) {}
                     }
                     moviesReadyCallbacks.clear();
                 });
@@ -3513,22 +3535,44 @@ public class MainActivity extends BaseActivity {
                 Log.e("EPlay", "Erro ao pré-carregar filmes", t);
             } finally {
                 isPreloadingMovies = false;
+                mainHandler.post(() -> {
+                    for (Runnable r : new ArrayList<>(moviesReadyCallbacks)) {
+                        try { r.run(); } catch (Exception ignored) {}
+                    }
+                    moviesReadyCallbacks.clear();
+                });
             }
 
             isPreloadingSeries = true;
             try {
-                seriesCategories = ApiClient.getSeriesCategories();
-                List<Series> rawSeries = ApiClient.getSeries();
-                setCachedSeries(MediaVersionHelper.groupSeries(rawSeries));
+                seriesCategories = ApiClient.getSeriesCategories(MainActivity.this, false);
+                List<Series> rawSeries = ApiClient.getSeries(MainActivity.this, false);
+                List<Series> groupedSeries = MediaVersionHelper.groupSeries(rawSeries);
+                setCachedSeries(groupedSeries);
+
+                List<Movie> allConverted = new ArrayList<>();
+                for (Series s : groupedSeries) {
+                    String nameLow = s.name != null ? s.name.toLowerCase() : "";
+                    String titleLow = s.title != null ? s.title.toLowerCase() : "";
+                    if (nameLow.contains("demo") || titleLow.contains("demo")) continue;
+                    Movie pseudo = HomeRailAlgorithm.seriesToPseudoMovie(s);
+                    pseudo.isFavorite = AccountManager.getInstance(MainActivity.this).isFavorite("series", s.series_id);
+                    allConverted.add(pseudo);
+                }
+                List<Movie> orderedSeries = HomeRailAlgorithm.sampleChaoticRailItems(allConverted, HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT);
+
+                String curViewMode = AccountManager.getInstance(MainActivity.this).getViewMode();
+                boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(curViewMode);
+
                 mainHandler.post(() -> {
-                    setupSeriesRail();
-                    setupNewReleasesRail();
-                    setupForYouRail();
-                    setupContinueWatchingRail();
-                    setupFavoritesRail();
-                    setupCinemaHero();
+                    applySeriesRail(orderedSeries);
+                    if (isCinema) {
+                        setupNewReleasesRail();
+                        setupForYouRail();
+                        setupCinemaHero();
+                    }
                     for (Runnable r : new ArrayList<>(seriesReadyCallbacks)) {
-                        r.run();
+                        try { r.run(); } catch (Exception ignored) {}
                     }
                     seriesReadyCallbacks.clear();
                 });
@@ -3536,6 +3580,12 @@ public class MainActivity extends BaseActivity {
                 Log.e("EPlay", "Erro ao pré-carregar séries", t);
             } finally {
                 isPreloadingSeries = false;
+                mainHandler.post(() -> {
+                    for (Runnable r : new ArrayList<>(seriesReadyCallbacks)) {
+                        try { r.run(); } catch (Exception ignored) {}
+                    }
+                    seriesReadyCallbacks.clear();
+                });
             }
         });
     }
@@ -4571,6 +4621,20 @@ public class MainActivity extends BaseActivity {
         rail.setItemAnimator(null);
     }
 
+    private void applyMoviesRail(List<Movie> orderedMovies) {
+        if (moviesRail == null || orderedMovies == null) return;
+        configureHorizontalPosterRail(moviesRail);
+        moviesRail.setAdapter(new MoviePosterAdapter(this, orderedMovies, new MoviePosterAdapter.OnMovieActionListener() {
+            @Override
+            public void onMovieClick(Movie movie) {
+                openMovieDetails(movie);
+            }
+
+            @Override
+            public void onMovieFocus(Movie movie) {}
+        }));
+    }
+
     private void setupMoviesRail() {
         if (cachedMovies == null || cachedMovies.isEmpty() || moviesRail == null) return;
         List<Movie> validMovies = new ArrayList<>();
@@ -4589,16 +4653,7 @@ public class MainActivity extends BaseActivity {
             m.isFavorite = AccountManager.getInstance(this).isFavorite("movie", m.stream_id);
         }
 
-        configureHorizontalPosterRail(moviesRail);
-        moviesRail.setAdapter(new MoviePosterAdapter(this, orderedMovies, new MoviePosterAdapter.OnMovieActionListener() {
-            @Override
-            public void onMovieClick(Movie movie) {
-                openMovieDetails(movie);
-            }
-
-            @Override
-            public void onMovieFocus(Movie movie) {}
-        }));
+        applyMoviesRail(orderedMovies);
     }
 
     private static final String PREF_RECENT_SERIES = "andplay_recent_series";
@@ -4647,6 +4702,27 @@ public class MainActivity extends BaseActivity {
         return list;
     }
 
+    private void applySeriesRail(List<Movie> converted) {
+        if (seriesRail == null || converted == null) return;
+        configureHorizontalPosterRail(seriesRail);
+        seriesRail.setAdapter(new MoviePosterAdapter(this, converted, new MoviePosterAdapter.OnMovieActionListener() {
+            @Override
+            public void onMovieClick(Movie m) {
+                if (cachedSeries != null) {
+                    for (Series s : cachedSeries) {
+                        if (s.series_id != null && s.series_id.equals(m.stream_id)) {
+                            openSeriesDetail(s);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void onMovieFocus(Movie movie) {}
+        }));
+    }
+
     private void setupSeriesRail() {
         if (seriesRail == null || cachedSeries == null || cachedSeries.isEmpty()) return;
         List<Movie> allConverted = new ArrayList<>();
@@ -4660,22 +4736,7 @@ public class MainActivity extends BaseActivity {
         }
 
         List<Movie> converted = HomeRailAlgorithm.sampleChaoticRailItems(allConverted, HomeRailAlgorithm.HOME_RAIL_ITEM_LIMIT);
-
-        configureHorizontalPosterRail(seriesRail);
-        seriesRail.setAdapter(new MoviePosterAdapter(this, converted, new MoviePosterAdapter.OnMovieActionListener() {
-            @Override
-            public void onMovieClick(Movie m) {
-                for (Series s : cachedSeries) {
-                    if (s.series_id != null && s.series_id.equals(m.stream_id)) {
-                        openSeriesDetail(s);
-                        break;
-                    }
-                }
-            }
-
-            @Override
-            public void onMovieFocus(Movie movie) {}
-        }));
+        applySeriesRail(converted);
     }
 
     // =========================================================================
@@ -4761,6 +4822,11 @@ public class MainActivity extends BaseActivity {
     }
 
     private void setupCinemaHero() {
+        boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(AccountManager.getInstance(this).getViewMode());
+        if (!isCinema) {
+            if (cinemaHeroLayout != null) cinemaHeroLayout.setVisibility(View.GONE);
+            return;
+        }
         cinemaHeroItems.clear();
         List<Movie> featured = HomeRailAlgorithm.buildFeaturedBannerItems(cachedMovies, cachedSeries, 10);
         if (featured != null && !featured.isEmpty()) {
@@ -5280,6 +5346,11 @@ public class MainActivity extends BaseActivity {
 
     private void setupNewReleasesRail() {
         if (newReleasesRail == null || newReleasesLayout == null) return;
+        boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(AccountManager.getInstance(this).getViewMode());
+        if (!isCinema) {
+            newReleasesLayout.setVisibility(View.GONE);
+            return;
+        }
         List<Movie> newReleaseItems = HomeRailAlgorithm.buildNewsRail(
                 cachedMovies,
                 cachedSeries,
@@ -5334,6 +5405,11 @@ public class MainActivity extends BaseActivity {
 
     private void setupForYouRail() {
         if (forYouRail == null || forYouLayout == null) return;
+        boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(AccountManager.getInstance(this).getViewMode());
+        if (!isCinema) {
+            forYouLayout.setVisibility(View.GONE);
+            return;
+        }
 
         Map<String, Integer> genreWeights = AccountManager.getInstance(this).getTasteProfileGenres();
         if (genreWeights == null) genreWeights = new HashMap<>();
@@ -8870,10 +8946,10 @@ public class MainActivity extends BaseActivity {
         executor.execute(() -> {
             try {
                 if (movieCategories == null || movieCategories.isEmpty()) {
-                    movieCategories = ApiClient.getMovieCategories();
+                    movieCategories = ApiClient.getMovieCategories(this, false);
                 }
-                List<Movie> rawMovies = ApiClient.getMovies();
-                cachedMovies = MediaVersionHelper.groupMovies(rawMovies);
+                List<Movie> rawMovies = ApiClient.getMovies(this, false);
+                setCachedMovies(MediaVersionHelper.groupMovies(rawMovies));
                 mainHandler.post(() -> {
                     hideLoading();
                     renderVodContent(movieCategories, cachedMovies);
@@ -8906,10 +8982,10 @@ public class MainActivity extends BaseActivity {
         executor.execute(() -> {
             try {
                 if (seriesCategories == null || seriesCategories.isEmpty()) {
-                    seriesCategories = ApiClient.getSeriesCategories();
+                    seriesCategories = ApiClient.getSeriesCategories(this, false);
                 }
-                List<Series> rawSeries = ApiClient.getSeries();
-                cachedSeries = MediaVersionHelper.groupSeries(rawSeries);
+                List<Series> rawSeries = ApiClient.getSeries(this, false);
+                setCachedSeries(MediaVersionHelper.groupSeries(rawSeries));
                 mainHandler.post(() -> {
                     hideLoading();
                     renderSeriesContent(seriesCategories, cachedSeries);
@@ -8946,14 +9022,8 @@ public class MainActivity extends BaseActivity {
         // Preenche trilhos curados com o catálogo completo
         renderVodCuratedRails(currentVodBaseList);
 
-        String curViewMode = AccountManager.getInstance(this).getViewMode();
-        boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(curViewMode);
-        if (isCinema) {
-            currentVodGenreFilter = "ALL";
-            setVodViewMode(true);
-        } else {
-            filterMoviesByCat("ALL", currentVodBaseList);
-        }
+        currentVodGenreFilter = "ALL";
+        setVodViewMode(true);
     }
 
     private void onVodCategorySelected(String catId) {
@@ -9787,14 +9857,8 @@ public class MainActivity extends BaseActivity {
         // Preenche trilhos curados com o catálogo de séries
         renderSeriesCuratedRails(seriesList);
 
-        String curViewMode = AccountManager.getInstance(this).getViewMode();
-        boolean isCinema = AccountManager.VIEW_MODE_CINEMA.equals(curViewMode);
-        if (isCinema) {
-            currentVodGenreFilter = "ALL";
-            setVodViewMode(true);
-        } else {
-            filterSeriesByCat("ALL", seriesList);
-        }
+        currentVodGenreFilter = "ALL";
+        setVodViewMode(true);
     }
 
     private void renderSeriesCuratedRails(List<Series> allSeries) {

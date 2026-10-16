@@ -27,25 +27,67 @@ public class MediaVersionHelper {
 
     public static String cleanTitleKey(String title) {
         if (title == null || title.isEmpty()) return "";
-        String s = title;
-        if (s.length() > 0 && Character.isDigit(s.charAt(0))) {
-            s = LEADING_NUM_PATTERN.matcher(s).replaceAll("");
-        }
-        s = FOUR_K_PATTERN.matcher(s).replaceAll("");
-        s = BRACKETS_PATTERN.matcher(s).replaceAll("");
-        s = PARENS_PATTERN.matcher(s).replaceAll("");
-        return fastNormalizeAscii(s);
-    }
+        int n = title.length();
+        int i = 0;
 
-    private static String fastNormalizeAscii(String s) {
-        if (s == null || s.isEmpty()) return "";
-        StringBuilder sb = new StringBuilder(s.length());
+        // 1. Pula numeração inicial: "01 - ", "123 – ", etc.
+        if (Character.isDigit(title.charAt(0))) {
+            while (i < n && Character.isDigit(title.charAt(i))) i++;
+            while (i < n && title.charAt(i) == ' ') i++;
+            if (i < n && (title.charAt(i) == '-' || title.charAt(i) == '–' || title.charAt(i) == '—')) {
+                i++;
+                while (i < n && title.charAt(i) == ' ') i++;
+            } else {
+                i = 0; // Se não era formato de numeração com hífen, reinicia
+            }
+        }
+
+        StringBuilder sb = new StringBuilder(n - i);
         boolean lastWasSpace = false;
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
+        int bracketDepth = 0;
+        int parenDepth = 0;
+
+        while (i < n) {
+            char c = title.charAt(i);
+            if (c == '[') {
+                bracketDepth++;
+                i++;
+                continue;
+            } else if (c == ']') {
+                if (bracketDepth > 0) bracketDepth--;
+                i++;
+                continue;
+            } else if (c == '(') {
+                parenDepth++;
+                i++;
+                continue;
+            } else if (c == ')') {
+                if (parenDepth > 0) parenDepth--;
+                i++;
+                continue;
+            }
+
+            if (bracketDepth > 0 || parenDepth > 0) {
+                i++;
+                continue;
+            }
+
+            // Ignora a palavra "4k" isolada (word boundary)
+            if (c == '4' && i + 1 < n && (title.charAt(i + 1) == 'k' || title.charAt(i + 1) == 'K')) {
+                boolean prevOk = (i == 0 || !Character.isLetterOrDigit(title.charAt(i - 1)));
+                boolean nextOk = (i + 2 == n || !Character.isLetterOrDigit(title.charAt(i + 2)));
+                if (prevOk && nextOk) {
+                    i += 2;
+                    continue;
+                }
+            }
+
+            // Converte maiúsculas para minúsculas
             if (c >= 'A' && c <= 'Z') {
                 c = (char) (c + 32);
             }
+
+            // Normalização rápida de acentos ASCII
             switch (c) {
                 case 'á': case 'à': case 'ã': case 'â': case 'ä': c = 'a'; break;
                 case 'é': case 'è': case 'ê': case 'ë': c = 'e'; break;
@@ -55,6 +97,7 @@ public class MediaVersionHelper {
                 case 'ç': c = 'c'; break;
                 case 'ñ': c = 'n'; break;
             }
+
             if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
                 sb.append(c);
                 lastWasSpace = false;
@@ -64,7 +107,9 @@ public class MediaVersionHelper {
                     lastWasSpace = true;
                 }
             }
+            i++;
         }
+
         int len = sb.length();
         if (len > 0 && sb.charAt(len - 1) == ' ') {
             sb.setLength(len - 1);
@@ -74,12 +119,22 @@ public class MediaVersionHelper {
 
     public static String cleanDisplayTitle(String rawTitle) {
         if (rawTitle == null || rawTitle.isEmpty()) return "";
+        boolean hasBracket = rawTitle.indexOf('[') >= 0;
+        boolean hasDigitStart = Character.isDigit(rawTitle.charAt(0));
+        boolean has4k = rawTitle.contains("4k") || rawTitle.contains("4K");
+        if (!hasBracket && !hasDigitStart && !has4k) {
+            return rawTitle.trim();
+        }
         String s = rawTitle;
-        if (s.length() > 0 && Character.isDigit(s.charAt(0))) {
+        if (hasDigitStart) {
             s = LEADING_NUM_PATTERN.matcher(s).replaceAll("");
         }
-        s = FOUR_K_PATTERN.matcher(s).replaceAll("");
-        s = CLEAN_TAGS_PATTERN.matcher(s).replaceAll("");
+        if (has4k) {
+            s = FOUR_K_PATTERN.matcher(s).replaceAll("");
+        }
+        if (hasBracket) {
+            s = CLEAN_TAGS_PATTERN.matcher(s).replaceAll("");
+        }
         s = MULTI_SPACES_PATTERN.matcher(s).replaceAll(" ");
         return s.trim();
     }
@@ -89,13 +144,15 @@ public class MediaVersionHelper {
         String catId = item.category_id != null ? item.category_id : "";
 
         // Alinhado 100% com o index.html (web): tags [HDR], [DV], [Hybrid] ou '4k' ou categoria 765 identificam 4K
-        boolean is4K = "765".equals(catId) ||
-                FOUR_K_PATTERN.matcher(name).find() ||
-                HDR_DV_HYBRID_PATTERN.matcher(name).find();
+        boolean is4K = "765".equals(catId);
+        if (!is4K && name != null) {
+            is4K = FOUR_K_PATTERN.matcher(name).find() || HDR_DV_HYBRID_PATTERN.matcher(name).find();
+        }
 
-        boolean isLeg = "630".equals(catId) ||
-                LEG_BRACKETS_PATTERN.matcher(name).find() ||
-                LEGENDADO_WORD_PATTERN.matcher(name).find();
+        boolean isLeg = "630".equals(catId);
+        if (!isLeg && name != null) {
+            isLeg = LEG_BRACKETS_PATTERN.matcher(name).find() || LEGENDADO_WORD_PATTERN.matcher(name).find();
+        }
 
         String ext = (item.container_extension != null && !item.container_extension.isEmpty()) ? item.container_extension : "mp4";
 
@@ -122,13 +179,15 @@ public class MediaVersionHelper {
         String name = item.getRawTitle();
         String catId = item.category_id != null ? item.category_id : "";
 
-        boolean is4K = "765".equals(catId) ||
-                FOUR_K_PATTERN.matcher(name).find() ||
-                HDR_DV_HYBRID_PATTERN.matcher(name).find();
+        boolean is4K = "765".equals(catId);
+        if (!is4K && name != null) {
+            is4K = FOUR_K_PATTERN.matcher(name).find() || HDR_DV_HYBRID_PATTERN.matcher(name).find();
+        }
 
-        boolean isLeg = "671".equals(catId) ||
-                LEG_BRACKETS_PATTERN.matcher(name).find() ||
-                LEGENDADO_WORD_PATTERN.matcher(name).find();
+        boolean isLeg = "671".equals(catId);
+        if (!isLeg && name != null) {
+            isLeg = LEG_BRACKETS_PATTERN.matcher(name).find() || LEGENDADO_WORD_PATTERN.matcher(name).find();
+        }
 
         if (is4K) {
             if (isLeg) {
@@ -147,10 +206,21 @@ public class MediaVersionHelper {
     }
 
     private static String extractYear(String text, String defaultYear) {
-        if (text != null) {
-            Matcher m = YEAR_PATTERN.matcher(text);
-            if (m.find()) {
-                return m.group(1);
+        if (text != null && text.length() >= 6) {
+            int len = text.length();
+            for (int i = 0; i <= len - 6; i++) {
+                if (text.charAt(i) == '(' && text.charAt(i + 5) == ')') {
+                    char c1 = text.charAt(i + 1);
+                    char c2 = text.charAt(i + 2);
+                    char c3 = text.charAt(i + 3);
+                    char c4 = text.charAt(i + 4);
+                    if ((c1 == '1' || c1 == '2') &&
+                            (c1 == '1' ? (c2 == '9') : (c2 == '0')) &&
+                            c3 >= '0' && c3 <= '9' &&
+                            c4 >= '0' && c4 <= '9') {
+                        return text.substring(i + 1, i + 5);
+                    }
+                }
             }
         }
         if (defaultYear != null && defaultYear.trim().length() == 4) {
@@ -225,14 +295,12 @@ public class MediaVersionHelper {
                     Movie.MovieVersion ev = matchedGroup.versions.get(i);
                     if (ev.type != null && ev.type.equals(versionInfo.type)) {
                         exists = true;
-                        // Se o item existente veio de lançamento e este não, substitui pelo estável
                         break;
                     }
                 }
                 if (!exists) {
                     matchedGroup.versions.add(versionInfo);
                 }
-                buildMovieSummary(matchedGroup);
             } else {
                 // Cria novo grupo representativo
                 Movie groupMovie = item; // preserva referência original com metadados
@@ -242,7 +310,6 @@ public class MediaVersionHelper {
                 }
                 groupMovie.versions.clear();
                 groupMovie.versions.add(versionInfo);
-                buildMovieSummary(groupMovie);
 
                 int newIndex = groups.size();
                 groups.add(groupMovie);
@@ -252,6 +319,11 @@ public class MediaVersionHelper {
                 }
                 candidateIndices.add(newIndex);
             }
+        }
+
+        // Calcula sumário de versões uma única vez por grupo (elimina 33.000 chamadas redundantes)
+        for (int i = 0; i < groups.size(); i++) {
+            buildMovieSummary(groups.get(i));
         }
 
         return groups;
@@ -432,7 +504,6 @@ public class MediaVersionHelper {
                 if (!exists) {
                     matchedGroup.versions.add(versionInfo);
                 }
-                buildSeriesSummary(matchedGroup);
             } else {
                 Series groupSeries = item;
                 groupSeries.cleanTitle = cleanDisplayTitle(rawTitle);
@@ -441,7 +512,6 @@ public class MediaVersionHelper {
                 }
                 groupSeries.versions.clear();
                 groupSeries.versions.add(versionInfo);
-                buildSeriesSummary(groupSeries);
 
                 int newIndex = groups.size();
                 groups.add(groupSeries);
@@ -451,6 +521,11 @@ public class MediaVersionHelper {
                 }
                 candidateIndices.add(newIndex);
             }
+        }
+
+        // Calcula sumário de versões de séries uma única vez por grupo
+        for (int i = 0; i < groups.size(); i++) {
+            buildSeriesSummary(groups.get(i));
         }
 
         return groups;

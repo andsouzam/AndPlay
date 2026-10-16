@@ -34,7 +34,7 @@ public class Series implements Serializable {
         public String icon;    // "🔊", "💬"
         public String desc;
         public String seriesId;
-        public Series rawSeries;
+        public transient Series rawSeries;
 
         public SeriesVersion() {}
 

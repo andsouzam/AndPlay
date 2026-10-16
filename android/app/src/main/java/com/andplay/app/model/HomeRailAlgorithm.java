@@ -128,6 +128,7 @@ public class HomeRailAlgorithm {
 
     public static String getHomeDisplayKey(Movie item) {
         if (item == null) return "";
+        if (item.cachedDisplayKey != null) return item.cachedDisplayKey;
         String type = item.isSeries ? "series" : "movie";
         String clean = item.cleanTitle;
         if (clean == null || clean.isEmpty()) {
@@ -135,9 +136,11 @@ public class HomeRailAlgorithm {
         }
         String key = MediaVersionHelper.cleanTitleKey(clean);
         if (key != null && !key.isEmpty()) {
-            return type + ":title:" + key;
+            item.cachedDisplayKey = type + ":title:" + key;
+        } else {
+            item.cachedDisplayKey = type + ":id:" + (item.stream_id != null ? item.stream_id : "");
         }
-        return type + ":id:" + (item.stream_id != null ? item.stream_id : "");
+        return item.cachedDisplayKey;
     }
 
     public static <T> List<T> pickRandomSample(List<T> source, int count) {

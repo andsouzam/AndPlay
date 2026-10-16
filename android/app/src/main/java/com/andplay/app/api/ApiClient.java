@@ -16,11 +16,21 @@ import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 
+import android.util.Log;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 import java.text.Normalizer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -257,6 +267,16 @@ public class ApiClient {
         }
     }
 
+    private static final Map<String, String> STRING_POOL = new ConcurrentHashMap<>(1024);
+
+    public static String poolString(String s) {
+        if (s == null) return null;
+        if (s.isEmpty()) return "";
+        if (s.length() > 64) return s;
+        String existing = STRING_POOL.putIfAbsent(s, s);
+        return existing != null ? existing : s;
+    }
+
     private static Category readCategory(JsonReader reader) throws Exception {
         reader.beginObject();
         String catId = "";
@@ -264,7 +284,7 @@ public class ApiClient {
         while (reader.hasNext()) {
             String key = reader.nextName();
             if ("category_id".equals(key)) {
-                catId = nextStringValue(reader);
+                catId = poolString(nextStringValue(reader));
             } else if ("category_name".equals(key)) {
                 catName = nextStringValue(reader);
             } else {
@@ -297,10 +317,10 @@ public class ApiClient {
                     m.title = nextStringValue(reader);
                     break;
                 case "year":
-                    m.year = nextStringValue(reader);
+                    m.year = poolString(nextStringValue(reader));
                     break;
                 case "stream_type":
-                    m.stream_type = nextStringValue(reader);
+                    reader.skipValue();
                     break;
                 case "stream_id":
                     m.stream_id = nextStringValue(reader);
@@ -309,43 +329,35 @@ public class ApiClient {
                     m.stream_icon = nextStringValue(reader);
                     break;
                 case "rating":
-                    m.rating = nextStringValue(reader);
+                    m.rating = poolString(nextStringValue(reader));
                     break;
                 case "rating_5based":
-                    m.rating_5based = nextStringValue(reader);
+                    m.rating_5based = poolString(nextStringValue(reader));
                     break;
                 case "added":
-                    m.added = nextStringValue(reader);
+                    m.added = poolString(nextStringValue(reader));
                     break;
                 case "category_id":
-                    m.category_id = nextStringValue(reader);
+                    m.category_id = poolString(nextStringValue(reader));
                     break;
                 case "container_extension":
-                    m.container_extension = nextStringValue(reader);
+                    m.container_extension = poolString(nextStringValue(reader));
                     break;
                 case "custom_sid":
-                    m.custom_sid = nextStringValue(reader);
-                    break;
                 case "direct_source":
-                    m.direct_source = nextStringValue(reader);
+                case "cast":
+                case "director":
+                case "duration":
+                    reader.skipValue();
                     break;
                 case "plot":
                     m.plot = nextStringValue(reader);
                     break;
-                case "cast":
-                    m.cast = nextStringValue(reader);
-                    break;
-                case "director":
-                    m.director = nextStringValue(reader);
-                    break;
                 case "genre":
-                    m.genre = nextStringValue(reader);
+                    m.genre = poolString(nextStringValue(reader));
                     break;
                 case "release_date":
-                    m.release_date = nextStringValue(reader);
-                    break;
-                case "duration":
-                    m.duration = nextStringValue(reader);
+                    m.release_date = poolString(nextStringValue(reader));
                     break;
                 default:
                     reader.skipValue();
@@ -385,29 +397,27 @@ public class ApiClient {
                     s.plot = nextStringValue(reader);
                     break;
                 case "cast":
-                    s.cast = nextStringValue(reader);
-                    break;
                 case "director":
-                    s.director = nextStringValue(reader);
+                    reader.skipValue();
                     break;
                 case "genre":
-                    s.genre = nextStringValue(reader);
+                    s.genre = poolString(nextStringValue(reader));
                     break;
                 case "releaseDate":
                 case "release_date":
-                    s.releaseDate = nextStringValue(reader);
+                    s.releaseDate = poolString(nextStringValue(reader));
                     break;
                 case "last_modified":
-                    s.last_modified = nextStringValue(reader);
+                    s.last_modified = poolString(nextStringValue(reader));
                     break;
                 case "rating":
-                    s.rating = nextStringValue(reader);
+                    s.rating = poolString(nextStringValue(reader));
                     break;
                 case "rating_5based":
-                    s.rating_5based = nextStringValue(reader);
+                    s.rating_5based = poolString(nextStringValue(reader));
                     break;
                 case "category_id":
-                    s.category_id = nextStringValue(reader);
+                    s.category_id = poolString(nextStringValue(reader));
                     break;
                 default:
                     reader.skipValue();
@@ -418,148 +428,302 @@ public class ApiClient {
         return s;
     }
 
+    private static List<Category> parseCategoriesArray(JsonReader reader) throws Exception {
+        List<Category> list = new ArrayList<>();
+        reader.setLenient(true);
+        if (reader.peek() == JsonToken.BEGIN_ARRAY) {
+            reader.beginArray();
+            while (reader.hasNext()) {
+                if (reader.peek() == JsonToken.BEGIN_OBJECT) {
+                    Category c = readCategory(reader);
+                    if (c != null && c.category_name != null && !c.category_name.toLowerCase().contains("demo")) {
+                        list.add(c);
+                    }
+                } else {
+                    reader.skipValue();
+                }
+            }
+            reader.endArray();
+        }
+        return list;
+    }
+
+    private static List<Movie> parseMoviesArray(JsonReader reader) throws Exception {
+        List<Movie> clean = new ArrayList<>();
+        reader.setLenient(true);
+        if (reader.peek() == JsonToken.BEGIN_ARRAY) {
+            reader.beginArray();
+            while (reader.hasNext()) {
+                if (reader.peek() == JsonToken.BEGIN_OBJECT) {
+                    Movie m = readMovie(reader);
+                    if (m != null) {
+                        String nameLow = m.name != null ? m.name.toLowerCase() : "";
+                        String titleLow = m.title != null ? m.title.toLowerCase() : "";
+                        if (!nameLow.contains("demo") && !titleLow.contains("demo")) {
+                            clean.add(m);
+                        }
+                    }
+                } else {
+                    reader.skipValue();
+                }
+            }
+            reader.endArray();
+        }
+        return clean;
+    }
+
+    private static List<Series> parseSeriesArray(JsonReader reader) throws Exception {
+        List<Series> list = new ArrayList<>();
+        reader.setLenient(true);
+        if (reader.peek() == JsonToken.BEGIN_ARRAY) {
+            reader.beginArray();
+            while (reader.hasNext()) {
+                if (reader.peek() == JsonToken.BEGIN_OBJECT) {
+                    Series s = readSeries(reader);
+                    if (s != null) {
+                        String nameLow = s.name != null ? s.name.toLowerCase() : "";
+                        String titleLow = s.title != null ? s.title.toLowerCase() : "";
+                        if (!nameLow.contains("demo") && !titleLow.contains("demo")) {
+                            list.add(s);
+                        }
+                    }
+                } else {
+                    reader.skipValue();
+                }
+            }
+            reader.endArray();
+        }
+        return list;
+    }
+
     public static List<Category> getMovieCategories() throws Exception {
+        return getMovieCategories(null, true);
+    }
+
+    public static List<Category> getMovieCategories(Context context, boolean forceNetwork) throws Exception {
+        File cacheFile = (context != null && context.getCacheDir() != null) ? new File(context.getCacheDir(), "vod_categories.json") : null;
+        if (!forceNetwork && cacheFile != null && cacheFile.exists() && cacheFile.length() > 50) {
+            long age = System.currentTimeMillis() - cacheFile.lastModified();
+            if (age < 24 * 60 * 60 * 1000L) {
+                try (InputStream is = new BufferedInputStream(new FileInputStream(cacheFile));
+                     JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8)))) {
+                    List<Category> cachedList = parseCategoriesArray(reader);
+                    if (!cachedList.isEmpty()) return cachedList;
+                } catch (Exception ignored) {}
+            }
+        }
+
         String url = SERVER + "/player_api.php?username=" + USER + "&password=" + PASS + "&action=get_vod_categories";
         Request request = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "AndPlay Native Android TV 2.0")
                 .build();
 
-        List<Category> list = new ArrayList<>();
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) throw new Exception("HTTP " + response.code());
             ResponseBody body = response.body();
-            if (body == null) return list;
+            if (body == null) return new ArrayList<>();
 
-            try (JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8)))) {
-                reader.setLenient(true);
-                if (reader.peek() == JsonToken.BEGIN_ARRAY) {
-                    reader.beginArray();
-                    while (reader.hasNext()) {
-                        if (reader.peek() == JsonToken.BEGIN_OBJECT) {
-                            Category c = readCategory(reader);
-                            if (c != null && c.category_name != null && !c.category_name.toLowerCase().contains("demo")) {
-                                list.add(c);
-                            }
-                        } else {
-                            reader.skipValue();
-                        }
+            if (cacheFile != null) {
+                File tempFile = new File(context.getCacheDir(), "vod_categories.json.tmp");
+                try (InputStream in = body.byteStream();
+                     OutputStream out = new BufferedOutputStream(new FileOutputStream(tempFile))) {
+                    byte[] buf = new byte[8192];
+                    int len;
+                    while ((len = in.read(buf)) != -1) {
+                        out.write(buf, 0, len);
                     }
-                    reader.endArray();
+                    out.flush();
+                }
+                if (tempFile.exists() && tempFile.length() > 50) {
+                    if (cacheFile.exists()) cacheFile.delete();
+                    tempFile.renameTo(cacheFile);
+                }
+                try (InputStream is = new BufferedInputStream(new FileInputStream(cacheFile));
+                     JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8)))) {
+                    return parseCategoriesArray(reader);
+                }
+            } else {
+                try (JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8)))) {
+                    return parseCategoriesArray(reader);
                 }
             }
         }
-        return list;
     }
 
     public static List<Movie> getMovies() throws Exception {
+        return getMovies(null, true);
+    }
+
+    public static List<Movie> getMovies(Context context, boolean forceNetwork) throws Exception {
+        File cacheFile = (context != null && context.getCacheDir() != null) ? new File(context.getCacheDir(), "vod_streams.json.gz") : null;
+        if (!forceNetwork && cacheFile != null && cacheFile.exists() && cacheFile.length() > 1024) {
+            long age = System.currentTimeMillis() - cacheFile.lastModified();
+            if (age < 12 * 60 * 60 * 1000L) {
+                try (InputStream is = new GZIPInputStream(new BufferedInputStream(new FileInputStream(cacheFile)));
+                     JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8)))) {
+                    List<Movie> cachedList = parseMoviesArray(reader);
+                    if (!cachedList.isEmpty()) {
+                        Log.d("ApiClient", "Filmes carregados do cache local: " + cachedList.size() + " itens");
+                        return cachedList;
+                    }
+                } catch (Exception e) {
+                    Log.w("ApiClient", "Falha ao ler cache de filmes, buscando da rede", e);
+                }
+            }
+        }
+
         String url = SERVER + "/player_api.php?username=" + USER + "&password=" + PASS + "&action=get_vod_streams";
         Request request = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "AndPlay Native Android TV 2.0")
                 .build();
 
-        List<Movie> clean = new ArrayList<>();
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) throw new Exception("HTTP " + response.code());
             ResponseBody body = response.body();
-            if (body == null) return clean;
+            if (body == null) return new ArrayList<>();
 
-            try (JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8)))) {
-                reader.setLenient(true);
-                if (reader.peek() == JsonToken.BEGIN_ARRAY) {
-                    reader.beginArray();
-                    while (reader.hasNext()) {
-                        if (reader.peek() == JsonToken.BEGIN_OBJECT) {
-                            Movie m = readMovie(reader);
-                            if (m != null) {
-                                String nameLow = m.name != null ? m.name.toLowerCase() : "";
-                                String titleLow = m.title != null ? m.title.toLowerCase() : "";
-                                if (!nameLow.contains("demo") && !titleLow.contains("demo")) {
-                                    clean.add(m);
-                                }
-                            }
-                        } else {
-                            reader.skipValue();
-                        }
+            if (cacheFile != null) {
+                File tempFile = new File(context.getCacheDir(), "vod_streams.json.gz.tmp");
+                try (InputStream in = body.byteStream();
+                     OutputStream out = new GZIPOutputStream(new BufferedOutputStream(new FileOutputStream(tempFile)))) {
+                    byte[] buf = new byte[32768];
+                    int len;
+                    while ((len = in.read(buf)) != -1) {
+                        out.write(buf, 0, len);
                     }
-                    reader.endArray();
+                    out.flush();
+                }
+                if (tempFile.exists() && tempFile.length() > 1024) {
+                    if (cacheFile.exists()) cacheFile.delete();
+                    tempFile.renameTo(cacheFile);
+                }
+                try (InputStream is = new GZIPInputStream(new BufferedInputStream(new FileInputStream(cacheFile)));
+                     JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8)))) {
+                    return parseMoviesArray(reader);
+                }
+            } else {
+                try (JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8)))) {
+                    return parseMoviesArray(reader);
                 }
             }
         }
-        return clean;
     }
 
     public static List<Category> getSeriesCategories() throws Exception {
+        return getSeriesCategories(null, true);
+    }
+
+    public static List<Category> getSeriesCategories(Context context, boolean forceNetwork) throws Exception {
+        File cacheFile = (context != null && context.getCacheDir() != null) ? new File(context.getCacheDir(), "series_categories.json") : null;
+        if (!forceNetwork && cacheFile != null && cacheFile.exists() && cacheFile.length() > 50) {
+            long age = System.currentTimeMillis() - cacheFile.lastModified();
+            if (age < 24 * 60 * 60 * 1000L) {
+                try (InputStream is = new BufferedInputStream(new FileInputStream(cacheFile));
+                     JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8)))) {
+                    List<Category> cachedList = parseCategoriesArray(reader);
+                    if (!cachedList.isEmpty()) return cachedList;
+                } catch (Exception ignored) {}
+            }
+        }
+
         String url = SERVER + "/player_api.php?username=" + USER + "&password=" + PASS + "&action=get_series_categories";
         Request request = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "AndPlay Native Android TV 2.0")
                 .build();
 
-        List<Category> list = new ArrayList<>();
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) throw new Exception("HTTP " + response.code());
             ResponseBody body = response.body();
-            if (body == null) return list;
+            if (body == null) return new ArrayList<>();
 
-            try (JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8)))) {
-                reader.setLenient(true);
-                if (reader.peek() == JsonToken.BEGIN_ARRAY) {
-                    reader.beginArray();
-                    while (reader.hasNext()) {
-                        if (reader.peek() == JsonToken.BEGIN_OBJECT) {
-                            Category c = readCategory(reader);
-                            if (c != null && c.category_name != null && !c.category_name.toLowerCase().contains("demo")) {
-                                list.add(c);
-                            }
-                        } else {
-                            reader.skipValue();
-                        }
+            if (cacheFile != null) {
+                File tempFile = new File(context.getCacheDir(), "series_categories.json.tmp");
+                try (InputStream in = body.byteStream();
+                     OutputStream out = new BufferedOutputStream(new FileOutputStream(tempFile))) {
+                    byte[] buf = new byte[8192];
+                    int len;
+                    while ((len = in.read(buf)) != -1) {
+                        out.write(buf, 0, len);
                     }
-                    reader.endArray();
+                    out.flush();
+                }
+                if (tempFile.exists() && tempFile.length() > 50) {
+                    if (cacheFile.exists()) cacheFile.delete();
+                    tempFile.renameTo(cacheFile);
+                }
+                try (InputStream is = new BufferedInputStream(new FileInputStream(cacheFile));
+                     JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8)))) {
+                    return parseCategoriesArray(reader);
+                }
+            } else {
+                try (JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8)))) {
+                    return parseCategoriesArray(reader);
                 }
             }
         }
-        return list;
     }
 
     public static List<Series> getSeries() throws Exception {
+        return getSeries(null, true);
+    }
+
+    public static List<Series> getSeries(Context context, boolean forceNetwork) throws Exception {
+        File cacheFile = (context != null && context.getCacheDir() != null) ? new File(context.getCacheDir(), "series.json.gz") : null;
+        if (!forceNetwork && cacheFile != null && cacheFile.exists() && cacheFile.length() > 1024) {
+            long age = System.currentTimeMillis() - cacheFile.lastModified();
+            if (age < 12 * 60 * 60 * 1000L) {
+                try (InputStream is = new GZIPInputStream(new BufferedInputStream(new FileInputStream(cacheFile)));
+                     JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8)))) {
+                    List<Series> cachedList = parseSeriesArray(reader);
+                    if (!cachedList.isEmpty()) {
+                        Log.d("ApiClient", "Séries carregadas do cache local: " + cachedList.size() + " itens");
+                        return cachedList;
+                    }
+                } catch (Exception e) {
+                    Log.w("ApiClient", "Falha ao ler cache de séries, buscando da rede", e);
+                }
+            }
+        }
+
         String url = SERVER + "/player_api.php?username=" + USER + "&password=" + PASS + "&action=get_series";
         Request request = new Request.Builder()
                 .url(url)
                 .header("User-Agent", "AndPlay Native Android TV 2.0")
                 .build();
 
-        List<Series> list = new ArrayList<>();
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) throw new Exception("HTTP " + response.code());
             ResponseBody body = response.body();
-            if (body == null) return list;
+            if (body == null) return new ArrayList<>();
 
-            try (JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8)))) {
-                reader.setLenient(true);
-                if (reader.peek() == JsonToken.BEGIN_ARRAY) {
-                    reader.beginArray();
-                    while (reader.hasNext()) {
-                        if (reader.peek() == JsonToken.BEGIN_OBJECT) {
-                            Series s = readSeries(reader);
-                            if (s != null) {
-                                String nameLow = s.name != null ? s.name.toLowerCase() : "";
-                                String titleLow = s.title != null ? s.title.toLowerCase() : "";
-                                if (!nameLow.contains("demo") && !titleLow.contains("demo")) {
-                                    list.add(s);
-                                }
-                            }
-                        } else {
-                            reader.skipValue();
-                        }
+            if (cacheFile != null) {
+                File tempFile = new File(context.getCacheDir(), "series.json.gz.tmp");
+                try (InputStream in = body.byteStream();
+                     OutputStream out = new GZIPOutputStream(new BufferedOutputStream(new FileOutputStream(tempFile)))) {
+                    byte[] buf = new byte[32768];
+                    int len;
+                    while ((len = in.read(buf)) != -1) {
+                        out.write(buf, 0, len);
                     }
-                    reader.endArray();
+                    out.flush();
+                }
+                if (tempFile.exists() && tempFile.length() > 1024) {
+                    if (cacheFile.exists()) cacheFile.delete();
+                    tempFile.renameTo(cacheFile);
+                }
+                try (InputStream is = new GZIPInputStream(new BufferedInputStream(new FileInputStream(cacheFile)));
+                     JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8)))) {
+                    return parseSeriesArray(reader);
+                }
+            } else {
+                try (JsonReader reader = new JsonReader(new BufferedReader(new InputStreamReader(body.byteStream(), StandardCharsets.UTF_8)))) {
+                    return parseSeriesArray(reader);
                 }
             }
         }
-        return list;
     }
 
     public static Map<String, List<Episode>> getSeriesEpisodes(String seriesId) throws Exception {

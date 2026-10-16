@@ -33,6 +33,7 @@ public class Movie implements Serializable {
     public transient long parsedAddedTime = -1;
     public transient double parsedRating = -1;
     public transient int parsedYear = -1;
+    public transient String cachedDisplayKey = null;
 
     // Versões agrupadas (Dublado, Legendado, 4K Dublado, 4K Legendado)
     public List<MovieVersion> versions = new ArrayList<>();
@@ -49,7 +50,7 @@ public class Movie implements Serializable {
         public String streamId;
         public String ext;
         public String quality;
-        public Movie rawMovie;
+        public transient Movie rawMovie;
         public boolean isHybrid;
         public String audioStreamId;
         public String audioExt;
