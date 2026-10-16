@@ -106,6 +106,9 @@ public class RdCanaisResolver {
                 || u.contains(".seraquevaiter")
                 || u.contains(".pamonha")
                 || u.contains(".sbs")
+                || u.contains("dadinhodetapioca")
+                || u.contains(".fun")
+                || u.contains("tiktokcdn")
                 || u.contains("ourlawyermadeuschangethenameofthissongsowewouldntgetsued");
     }
 
@@ -164,7 +167,7 @@ public class RdCanaisResolver {
         String parentUrl = null;
         if (targetUrl.contains("rdembed")) {
             parentUrl = "https://reidosembeds.online/";
-        } else if (targetUrl.contains("rdcanais.org")) {
+        } else if (targetUrl.contains("rdcanais.org") || targetUrl.contains("reidoscanais") || targetUrl.contains("dadinhodetapioca")) {
             parentUrl = "https://rdcanais.org/";
         }
         String accumulatedCookies = null;

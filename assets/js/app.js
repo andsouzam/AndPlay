@@ -9895,7 +9895,8 @@ function showHome(targetScroll = 0) {
       // RDCanais é o player primário: mais leve, troca de canal mais rápida
       // rdembed.sbs fica como fallback caso rdcanais esteja instável
       const fallbacks = [
-        { name: 'HD', url: 'https://rdcanais.net/' + rdSlug, isEmbed: true },
+        { name: 'HD', url: 'https://rdcanais.org/' + rdSlug, isEmbed: true },
+        { name: 'HD 2', url: 'https://reidoscanais.si/canal/' + rdSlug, isEmbed: true },
         { name: 'Alternativo', url: raw.embed || ('https://v2.rdembed.sbs/' + rdSlug), isEmbed: true }
       ];
 
@@ -10256,7 +10257,7 @@ function showHome(targetScroll = 0) {
 
     async function fetchLiveSportsEvents() {
       const events = [];
-      const API = 'https://api.reidoscanais.st';
+      const API = 'https://api.reidoscanais.si';
 
       // 1. Busca todos os eventos esportivos da API oficial (ao vivo + jogos de hoje)
       try {
@@ -10301,13 +10302,13 @@ function showHome(targetScroll = 0) {
             // Fallback garantido com RDCanais HD (sem anúncios e 100% estável)
             const catLower = `${ev.category || ''} ${ev.competition || ''} ${title}`.toLowerCase();
             if (catLower.includes('ufc') || catLower.includes('mma') || catLower.includes('luta') || catLower.includes('boxe')) {
-              fallbacks.push({ name: 'Combate HD', url: 'https://rdcanais.net/combate', isEmbed: true });
+              fallbacks.push({ name: 'Combate HD', url: 'https://rdcanais.org/combate', isEmbed: true });
             } else if (catLower.includes('premier') || catLower.includes('champions') || catLower.includes('europa') || catLower.includes('la liga') || catLower.includes('espanh') || catLower.includes('portugal') || catLower.includes('ingl')) {
-              fallbacks.push({ name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true });
-              fallbacks.push({ name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true });
+              fallbacks.push({ name: 'ESPN HD', url: 'https://rdcanais.org/espn', isEmbed: true });
+              fallbacks.push({ name: 'TNT Sports', url: 'https://rdcanais.org/tnt', isEmbed: true });
             } else {
-              fallbacks.push({ name: 'Premiere HD', url: 'https://rdcanais.net/premiere', isEmbed: true });
-              fallbacks.push({ name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true });
+              fallbacks.push({ name: 'Premiere HD', url: 'https://rdcanais.org/premiere', isEmbed: true });
+              fallbacks.push({ name: 'SporTV HD', url: 'https://rdcanais.org/sportv', isEmbed: true });
             }
 
             const isLive = ev.status === 'live';
@@ -10364,8 +10365,8 @@ function showHome(targetScroll = 0) {
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere HD', url: 'https://rdcanais.net/premiere', isEmbed: true },
-              { name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true }
+              { name: 'Premiere HD', url: 'https://rdcanais.org/premiere', isEmbed: true },
+              { name: 'SporTV HD', url: 'https://rdcanais.org/sportv', isEmbed: true }
             ]
           },
           {
@@ -10384,8 +10385,8 @@ function showHome(targetScroll = 0) {
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere HD', url: 'https://rdcanais.net/premiere', isEmbed: true },
-              { name: 'SporTV HD', url: 'https://rdcanais.net/sportv', isEmbed: true }
+              { name: 'Premiere HD', url: 'https://rdcanais.org/premiere', isEmbed: true },
+              { name: 'SporTV HD', url: 'https://rdcanais.org/sportv', isEmbed: true }
             ]
           },
           {
@@ -10404,8 +10405,8 @@ function showHome(targetScroll = 0) {
             isLiveMatch: true,
             isLiveNow: true,
             fallbacks: [
-              { name: 'Premiere 2', url: 'https://rdcanais.net/premiere2', isEmbed: true },
-              { name: 'SporTV 2', url: 'https://rdcanais.net/sportv2', isEmbed: true }
+              { name: 'Premiere 2', url: 'https://rdcanais.org/premiere2', isEmbed: true },
+              { name: 'SporTV 2', url: 'https://rdcanais.org/sportv2', isEmbed: true }
             ]
           },
           {
@@ -10424,8 +10425,8 @@ function showHome(targetScroll = 0) {
             isLiveMatch: true,
             isLiveNow: false,
             fallbacks: [
-              { name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true },
-              { name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true }
+              { name: 'ESPN HD', url: 'https://rdcanais.org/espn', isEmbed: true },
+              { name: 'TNT Sports', url: 'https://rdcanais.org/tnt', isEmbed: true }
             ]
           },
           {
@@ -10444,8 +10445,8 @@ function showHome(targetScroll = 0) {
             isLiveMatch: true,
             isLiveNow: false,
             fallbacks: [
-              { name: 'ESPN HD', url: 'https://rdcanais.net/espn', isEmbed: true },
-              { name: 'TNT Sports', url: 'https://rdcanais.net/tnt', isEmbed: true }
+              { name: 'ESPN HD', url: 'https://rdcanais.org/espn', isEmbed: true },
+              { name: 'TNT Sports', url: 'https://rdcanais.org/tnt', isEmbed: true }
             ]
           }
         );
@@ -16570,7 +16571,7 @@ function showHome(targetScroll = 0) {
         const resumePosition = Number.isFinite(Number(startPosition)) ? Math.max(0, Number(startPosition)) : 0;
         const fallback = hasExplicitFallbacks
           ? ch.fallbacks[fallbackIdx]
-          : (fallbackIdx === 0 ? { url: 'https://rdcanais.net/' + (ch.channelSlug || ch.id), isEmbed: true } : null);
+          : (fallbackIdx === 0 ? { url: 'https://rdcanais.org/' + (ch.channelSlug || ch.id), isEmbed: true } : null);
 
         // Todos os servidores/fallbacks foram tentados e falharam
         if (!fallback) {

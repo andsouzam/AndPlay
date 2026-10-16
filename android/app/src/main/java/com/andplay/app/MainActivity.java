@@ -2193,16 +2193,25 @@ public class MainActivity extends BaseActivity {
                         InetAddress.getByName("172.67.158.120")
                 ));
                 CACHE.put("api.reidoscanais.st", Arrays.asList(
-                        InetAddress.getByName("104.21.4.193"),
-                        InetAddress.getByName("172.67.154.45")
+                        InetAddress.getByName("45.3.63.154")
+                ));
+                CACHE.put("api.reidoscanais.si", Arrays.asList(
+                        InetAddress.getByName("45.3.63.154")
+                ));
+                CACHE.put("reidoscanais.si", Arrays.asList(
+                        InetAddress.getByName("45.3.63.154")
+                ));
+                CACHE.put("cdn.reidoscanais.si", Arrays.asList(
+                        InetAddress.getByName("45.3.63.154")
                 ));
                 CACHE.put("rdcanais.org", Arrays.asList(
-                        InetAddress.getByName("104.21.4.193"),
-                        InetAddress.getByName("172.67.154.45")
+                        InetAddress.getByName("45.3.63.154")
+                ));
+                CACHE.put("dadinhodetapioca.fun", Arrays.asList(
+                        InetAddress.getByName("45.3.63.154")
                 ));
                 CACHE.put("pescaplay.store", Arrays.asList(
-                        InetAddress.getByName("104.21.4.193"),
-                        InetAddress.getByName("172.67.154.45")
+                        InetAddress.getByName("45.3.63.154")
                 ));
                 CACHE.put("esportesembed.net", Arrays.asList(
                         InetAddress.getByName("172.67.162.24"),
@@ -2336,7 +2345,8 @@ public class MainActivity extends BaseActivity {
                 List<InetAddress> ips = CACHE.get("reidosembeds.online");
                 if (ips != null) return ips;
             }
-            if (hostname.contains("rdcanais.org") || hostname.contains("pescaplay")) {
+            if (hostname.contains("rdcanais.org") || hostname.contains("pescaplay")
+                    || hostname.contains("dadinhodetapioca") || hostname.contains("reidoscanais")) {
                 List<InetAddress> ips = CACHE.get("rdcanais.org");
                 if (ips != null) return ips;
             }
@@ -2348,6 +2358,8 @@ public class MainActivity extends BaseActivity {
                     || hostname.endsWith(".lat")
                     || hostname.contains("esportesembed")
                     || hostname.contains("rdcanais")
+                    || hostname.contains("dadinhodetapioca")
+                    || hostname.contains("tiktokcdn")
                     || hostname.contains("rdembed")
                     || hostname.contains("repositoratacadao")
                     || hostname.contains("comeumamao")
@@ -2366,7 +2378,9 @@ public class MainActivity extends BaseActivity {
                     || hostname.endsWith(".fit")
                     || hostname.endsWith(".site")
                     || hostname.endsWith(".online")
-                    || hostname.endsWith(".st");
+                    || hostname.endsWith(".fun")
+                    || hostname.endsWith(".st")
+                    || hostname.endsWith(".si");
 
             // Para domínios frequentemente bloqueados por operadoras, consulta DoH prioritariamente
             if (isBlockedDomain) {

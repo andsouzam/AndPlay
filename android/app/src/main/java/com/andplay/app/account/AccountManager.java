@@ -53,10 +53,16 @@ public class AccountManager {
     private static final String KEY_AVATAR = "auth_avatar";
     private static final String KEY_VIEW_MODE = "pref_view_mode";
     private static final String KEY_HAS_CHOSEN_MODE = "has_chosen_initial_mode";
+    private static final String KEY_PREF_SKIP_INTRO = "pref_skip_intro";
+    private static final String KEY_PREF_AUTO_NEXT = "pref_auto_next";
+    private static final String KEY_PREF_ADULT = "pref_adult_content";
+    private static final String KEY_PREF_QUALITY = "pref_video_quality";
+    private static final String KEY_PREF_AUDIO = "pref_audio_track";
     private static final String KEY_FAVORITES_JSON = "cached_favorites_json";
     private static final String KEY_PROGRESS_JSON = "cached_progress_json";
     private static final String KEY_LAST_SYNC = "last_sync_timestamp";
     public static final String PREF_VOD_PROGRESS = "vod_playback_progress_prefs";
+    public static final String PREF_LIVE_HISTORY = "andplay_live_history";
 
     private static AccountManager instance;
 
@@ -172,6 +178,240 @@ public class AccountManager {
     public String getAvatarEmoji() {
         String av = prefs.getString(KEY_AVATAR, "");
         return (av != null && !av.trim().isEmpty()) ? av : "👤";
+    }
+
+    public void setAvatarEmoji(String avatar) {
+        if (avatar == null || avatar.trim().isEmpty()) avatar = "👤";
+        prefs.edit().putString(KEY_AVATAR, avatar).apply();
+        if (isSignedIn()) {
+            syncUserProfileMetadata(getDisplayName(), avatar);
+        }
+    }
+
+    public void setDisplayName(String name) {
+        if (name == null || name.trim().isEmpty()) return;
+        prefs.edit().putString(KEY_DISPLAY_NAME, name.trim()).apply();
+        if (isSignedIn()) {
+            syncUserProfileMetadata(name.trim(), getAvatarEmoji());
+        }
+    }
+
+    public void syncUserProfileMetadata(String name, String avatar) {
+        if (!isSignedIn()) return;
+        executor.execute(() -> {
+            try {
+                String token = getAccessToken();
+                JsonObject root = new JsonObject();
+                JsonObject data = new JsonObject();
+                data.addProperty("name", name);
+                data.addProperty("avatar", avatar);
+                root.add("data", data);
+
+                RequestBody body = RequestBody.create(root.toString(), MediaType.parse("application/json; charset=utf-8"));
+                Request req = new Request.Builder()
+                        .url(SUPABASE_URL + "/auth/v1/user")
+                        .header("apikey", SUPABASE_ANON_KEY)
+                        .header("Authorization", "Bearer " + token)
+                        .put(body)
+                        .build();
+                try (Response resp = httpClient.newCall(req).execute()) {
+                    Log.d(TAG, "Update user metadata: " + resp.code());
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Erro ao atualizar metadados do usuário: " + e.getMessage());
+            }
+        });
+    }
+
+    public boolean isSkipIntroEnabled() {
+        return prefs.getBoolean(KEY_PREF_SKIP_INTRO, false);
+    }
+
+    public void setSkipIntroEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_PREF_SKIP_INTRO, enabled).apply();
+    }
+
+    public boolean isAutoNextEnabled() {
+        return prefs.getBoolean(KEY_PREF_AUTO_NEXT, true);
+    }
+
+    public void setAutoNextEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_PREF_AUTO_NEXT, enabled).apply();
+    }
+
+    public boolean isAdultContentEnabled() {
+        return prefs.getBoolean(KEY_PREF_ADULT, false);
+    }
+
+    public void setAdultContentEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_PREF_ADULT, enabled).apply();
+    }
+
+    public String getVideoQualityPreference() {
+        return prefs.getString(KEY_PREF_QUALITY, "auto");
+    }
+
+    public void setVideoQualityPreference(String quality) {
+        prefs.edit().putString(KEY_PREF_QUALITY, quality).apply();
+    }
+
+    public String getAudioPreference() {
+        return prefs.getString(KEY_PREF_AUDIO, "dub");
+    }
+
+    public void setAudioPreference(String audio) {
+        prefs.edit().putString(KEY_PREF_AUDIO, audio).apply();
+    }
+
+    public String getWatchTimeFormatted() {
+        double totalSeconds = 0;
+        synchronized (this) {
+            for (WatchProgressItem item : memoryProgress) {
+                if (item.position > 0) {
+                    totalSeconds += item.position;
+                }
+            }
+        }
+        long sec = (long) totalSeconds;
+        long hours = sec / 3600;
+        long mins = (sec % 3600) / 60;
+        return String.format(Locale.getDefault(), "%dh %02dm", hours, mins);
+    }
+
+    public int getLiveChannelCount() {
+        try {
+            SharedPreferences lPrefs = appContext.getSharedPreferences(PREF_LIVE_HISTORY, Context.MODE_PRIVATE);
+            String raw = lPrefs.getString("channels", "");
+            if (!raw.isEmpty()) {
+                return raw.split(",").length;
+            }
+        } catch (Exception ignored) {}
+        return 0;
+    }
+
+    public void recordLiveChannelVisit(String channelId) {
+        if (channelId == null || channelId.trim().isEmpty()) return;
+        try {
+            SharedPreferences lPrefs = appContext.getSharedPreferences(PREF_LIVE_HISTORY, Context.MODE_PRIVATE);
+            String raw = lPrefs.getString("channels", "");
+            List<String> list = new ArrayList<>();
+            if (!raw.isEmpty()) {
+                String[] parts = raw.split(",");
+                for (String p : parts) {
+                    if (!p.equals(channelId)) list.add(p);
+                }
+            }
+            list.add(0, channelId);
+            if (list.size() > 100) list = list.subList(0, 100);
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < list.size(); i++) {
+                if (i > 0) sb.append(",");
+                sb.append(list.get(i));
+            }
+            lPrefs.edit().putString("channels", sb.toString()).apply();
+        } catch (Exception ignored) {}
+    }
+
+    public void deleteUserData(SimpleCallback callback) {
+        executor.execute(() -> {
+            try {
+                String token = getAccessToken();
+                String userId = getUserId();
+                if (isSignedIn() && !userId.isEmpty()) {
+                    String[] tables = {"user_favorites", "watch_history", "watch_progress", "user_preferences"};
+                    for (String tbl : tables) {
+                        try {
+                            Request req = new Request.Builder()
+                                    .url(SUPABASE_URL + "/rest/v1/" + tbl + "?user_id=eq." + userId)
+                                    .header("apikey", SUPABASE_ANON_KEY)
+                                    .header("Authorization", "Bearer " + token)
+                                    .delete()
+                                    .build();
+                            try (Response resp = httpClient.newCall(req).execute()) {
+                                Log.d(TAG, "Delete " + tbl + " response: " + resp.code());
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+
+                synchronized (this) {
+                    memoryFavorites.clear();
+                    memoryProgress.clear();
+                    prefs.edit()
+                            .remove(KEY_FAVORITES_JSON)
+                            .remove(KEY_PROGRESS_JSON)
+                            .remove(KEY_LAST_SYNC)
+                            .apply();
+                }
+
+                appContext.getSharedPreferences("andplay_recent_movies", Context.MODE_PRIVATE).edit().clear().apply();
+                appContext.getSharedPreferences("andplay_recent_series", Context.MODE_PRIVATE).edit().clear().apply();
+                appContext.getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE).edit().clear().apply();
+                appContext.getSharedPreferences(PREF_LIVE_HISTORY, Context.MODE_PRIVATE).edit().clear().apply();
+
+                mainHandler.post(() -> {
+                    if (callback != null) callback.onResult(true, "Dados apagados com sucesso.");
+                });
+            } catch (Exception e) {
+                mainHandler.post(() -> {
+                    if (callback != null) callback.onResult(false, e.getMessage());
+                });
+            }
+        });
+    }
+
+    public void deleteUserAccount(SimpleCallback callback) {
+        executor.execute(() -> {
+            try {
+                String token = getAccessToken();
+                String userId = getUserId();
+                if (isSignedIn() && !userId.isEmpty()) {
+                    String[] tables = {"user_favorites", "watch_history", "watch_progress", "user_preferences"};
+                    for (String tbl : tables) {
+                        try {
+                            Request req = new Request.Builder()
+                                    .url(SUPABASE_URL + "/rest/v1/" + tbl + "?user_id=eq." + userId)
+                                    .header("apikey", SUPABASE_ANON_KEY)
+                                    .header("Authorization", "Bearer " + token)
+                                    .delete()
+                                    .build();
+                            try (Response resp = httpClient.newCall(req).execute()) {}
+                        } catch (Exception ignored) {}
+                    }
+
+                    try {
+                        RequestBody empty = RequestBody.create(new byte[0], MediaType.parse("application/json"));
+                        Request rpcReq = new Request.Builder()
+                                .url(SUPABASE_URL + "/rest/v1/rpc/delete_user")
+                                .header("apikey", SUPABASE_ANON_KEY)
+                                .header("Authorization", "Bearer " + token)
+                                .post(empty)
+                                .build();
+                        try (Response resp = httpClient.newCall(rpcReq).execute()) {}
+                    } catch (Exception ignored) {}
+                }
+
+                signOut();
+
+                synchronized (this) {
+                    memoryFavorites.clear();
+                    memoryProgress.clear();
+                    prefs.edit().clear().apply();
+                }
+                appContext.getSharedPreferences("andplay_recent_movies", Context.MODE_PRIVATE).edit().clear().apply();
+                appContext.getSharedPreferences("andplay_recent_series", Context.MODE_PRIVATE).edit().clear().apply();
+                appContext.getSharedPreferences(PREF_VOD_PROGRESS, Context.MODE_PRIVATE).edit().clear().apply();
+                appContext.getSharedPreferences(PREF_LIVE_HISTORY, Context.MODE_PRIVATE).edit().clear().apply();
+
+                mainHandler.post(() -> {
+                    if (callback != null) callback.onResult(true, "Conta excluída permanentemente.");
+                });
+            } catch (Exception e) {
+                mainHandler.post(() -> {
+                    if (callback != null) callback.onResult(false, e.getMessage());
+                });
+            }
+        });
     }
 
     public String getViewMode() {

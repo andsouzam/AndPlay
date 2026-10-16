@@ -81,6 +81,8 @@ public class Channel implements Serializable {
                 String rdCleanSlug = getRdCanaisSlug(cleanSlug, id);
                 list.add(new StreamFallback("RDCanais (Nativo HD " + serverNum + ")", "https://rdcanais.org/" + rdCleanSlug, true));
                 serverNum++;
+                list.add(new StreamFallback("ReiDosCanais (HD " + serverNum + ")", "https://reidoscanais.si/canal/" + rdCleanSlug, true));
+                serverNum++;
             } else if (com.andplay.app.provider.ProviderManager.PROVIDER_RDEMBED.equals(prov)) {
                 if (embed != null && !embed.isEmpty()) {
                     list.add(new StreamFallback("RDEmbed (Nativo HD " + serverNum + ")", embed, true));
